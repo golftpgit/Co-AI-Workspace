@@ -51,23 +51,29 @@ private struct ChatScreen: View {
         NavigationSplitView {
             conversationList
         } detail: {
+            // Layout priority, not `fixedSize`. Header, banner and composer
+            // must always be on screen; the transcript is the one thing that
+            // can give up space, because it scrolls. `fixedSize` here did the
+            // opposite — it pinned the banner to its ideal height, the
+            // transcript kept its full content height too, and the stack asked
+            // for 1214pt inside a 772pt window. SwiftUI centred the overflow,
+            // so the header slid above the title bar and the banner and
+            // composer slid below the bottom edge: the approval was rendered
+            // and un-clickable, and the turn looked hung.
             VStack(spacing: 0) {
-                header
+                header.layoutPriority(1)
                 Divider()
-                transcript
+                transcript.frame(maxHeight: .infinity).layoutPriority(0)
                 if let request = model.pendingApproval {
                     Divider()
                     ApprovalBanner(request: request,
                                    edit: $model.approvalEdit,
                                    isEditing: $model.editingApproval,
                                    respond: model.respond)
-                        // Without this the banner and the transcript split the
-                        // leftover height between them; the banner should take
-                        // only what it needs and leave the rest to the messages.
-                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
                 }
                 Divider()
-                composer
+                composer.layoutPriority(1)
             }
         }
         .fileImporter(isPresented: $choosingFolder,

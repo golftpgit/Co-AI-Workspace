@@ -30,10 +30,10 @@ struct ApprovalBanner: View {
             // The verbatim action. A summary here is how a human approves
             // something they did not actually read.
             //
-            // `fixedSize` matters: a bare ScrollView takes every point it is
-            // offered, so a three-line command left the banner filling half
-            // the window with blank space. The banner hugs its text and only
-            // scrolls once there is genuinely too much of it.
+            // Bounded, never fixed: a bare ScrollView takes every point it is
+            // offered (the banner once filled half the window), and pinning it
+            // to its ideal height pushed the buttons off the bottom of the
+            // window entirely. A cap does both jobs without either failure.
             if isEditing {
                 TextEditor(text: $edit)
                     .font(.system(.callout, design: .monospaced))
@@ -47,8 +47,7 @@ struct ApprovalBanner: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxHeight: 200)
-                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxHeight: 160)
             }
 
             if let conflict = request.policyConflict {
