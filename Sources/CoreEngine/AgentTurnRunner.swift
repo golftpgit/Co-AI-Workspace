@@ -209,6 +209,12 @@ public actor AgentTurnRunner {
                     case .textDelta(let chunk):
                         text += chunk
                         emit(.assistantDelta(chunk))
+                    case .reasoningDelta:
+                        // Deliberately not part of the answer: it must never be
+                        // stored as the reply or parsed as structured output.
+                        // Showing it belongs to the Live Monitor's collapsed
+                        // step card (§14.2), which does not exist yet.
+                        break
                     case .toolCall(let call):
                         calls.append(call)
                     case .usage(let usage):

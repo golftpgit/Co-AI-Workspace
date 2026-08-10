@@ -120,6 +120,10 @@ public struct LLMUsage: Sendable, Equatable {
 
 public enum LLMEvent: Sendable {
     case textDelta(String)
+    /// Chain-of-thought from a reasoning model, kept apart from the answer.
+    /// Merging the two would corrupt structured output and store thinking as
+    /// if the user had been told it (ARCHITECTURE E.9, case 8c).
+    case reasoningDelta(String)
     case toolCall(LLMToolCall)
     case usage(LLMUsage)
     case finished(reason: String)
@@ -169,6 +173,9 @@ public enum LLMError: Error, CustomStringConvertible, Equatable {
 /// A completed, non-streaming response.
 public struct LLMCompletion: Sendable {
     public let text: String
+    /// What the model thought before answering, if it reports it separately.
+    /// Empty for models that do not reason out loud.
+    public let reasoning: String
     public let toolCalls: [LLMToolCall]
     public let usage: LLMUsage?
     public let finishReason: String
@@ -177,9 +184,11 @@ public struct LLMCompletion: Sendable {
     public let producedBy: String
     public let tier: ModelTier
 
-    public init(text: String, toolCalls: [LLMToolCall] = [], usage: LLMUsage? = nil,
+    public init(text: String, reasoning: String = "", toolCalls: [LLMToolCall] = [],
+                usage: LLMUsage? = nil,
                 finishReason: String = "stop", producedBy: String, tier: ModelTier) {
         self.text = text
+        self.reasoning = reasoning
         self.toolCalls = toolCalls
         self.usage = usage
         self.finishReason = finishReason
@@ -207,6 +216,7 @@ extension LLMExecutor {
     /// identically here rather than each inventing its own aggregation.
     public func complete(_ request: LLMRequest) async throws -> LLMCompletion {
         var text = ""
+        var reasoning = ""
         var calls: [LLMToolCall] = []
         var usage: LLMUsage?
         var reason = "stop"
@@ -214,12 +224,13 @@ extension LLMExecutor {
         for try await event in respond(to: request) {
             switch event {
             case .textDelta(let chunk): text += chunk
+            case .reasoningDelta(let chunk): reasoning += chunk
             case .toolCall(let call): calls.append(call)
             case .usage(let u): usage = u
             case .finished(let r): reason = r
             }
         }
-        return LLMCompletion(text: text, toolCalls: calls, usage: usage,
+        return LLMCompletion(text: text, reasoning: reasoning, toolCalls: calls, usage: usage,
                              finishReason: reason, producedBy: identifier, tier: tier)
     }
 
