@@ -2,8 +2,9 @@ import SwiftUI
 import Config
 import Sidecar
 
-/// P0 shell: proves the app launches, reads its config, creates its
-/// directories and reports sidecar health. Replaced by the Chat view in P1.10.
+/// System status: config, paths, sidecar health and whether the engine came
+/// up. Since P1.10 the app opens on Chat and this is what the toolbar toggle
+/// shows — and what the user sees instead of an empty window when boot fails.
 struct BootStatusView: View {
     let environment: AppEnvironment
 
@@ -16,6 +17,7 @@ struct BootStatusView: View {
                 pathsSection
                 configSection
                 sidecarSection
+                engineSection
                 if !environment.notes.isEmpty { notesSection }
             }
             .padding(28)
@@ -27,7 +29,7 @@ struct BootStatusView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Co-AI Workspace").font(.largeTitle.bold())
-            Text("Phase 0 — scaffold").foregroundStyle(.secondary)
+            Text("Phase 1 — walking skeleton").foregroundStyle(.secondary)
         }
     }
 
@@ -90,6 +92,28 @@ struct BootStatusView: View {
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("sidecar \(id): \(describe(status))")
                 }
+            }
+        }
+    }
+
+    /// Which models answered a readiness probe at boot. Without this, "why
+    /// can't it run commands" is invisible — tool calling needs a tier above
+    /// on-device (ARCHITECTURE §9.1).
+    private var engineSection: some View {
+        section("เอนจิน") {
+            if let engine = environment.engine {
+                labeled("ฐานข้อมูล", "เชื่อมต่อแล้ว")
+                ForEach(Array(engine.executorSummary.enumerated()), id: \.offset) { _, line in
+                    labeled("โมเดล", line)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    statusDot(.orange)
+                    Text(environment.engineError.map { "ยังเริ่มไม่สำเร็จ — \($0)" } ?? "กำลังเริ่ม…")
+                        .foregroundStyle(.secondary).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .combine)
             }
         }
     }

@@ -50,13 +50,21 @@ public enum Scope: Hashable, Sendable, Codable {
 
 /// Risk classification for a tool call. Drives the hook chain (§5.3) and,
 /// combined with the autonomy setting, whether a human must approve.
-public enum RiskLevel: Int, Sendable, Codable, Comparable, CaseIterable {
+public enum RiskLevel: Int, Sendable, Codable, Comparable, CaseIterable, CustomStringConvertible {
     case low = 0
     case medium = 1
     case high = 2
 
     public static func < (lhs: RiskLevel, rhs: RiskLevel) -> Bool {
         lhs.rawValue < rhs.rawValue
+    }
+
+    public var description: String {
+        switch self {
+        case .low: return "low"
+        case .medium: return "medium"
+        case .high: return "high"
+        }
     }
 }
 

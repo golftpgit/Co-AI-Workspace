@@ -23,6 +23,10 @@ public final class AppEnvironment {
     public private(set) var createdDirectories: [String] = []
     public private(set) var sidecarStatuses: [String: SidecarStatus] = [:]
     public private(set) var notes: [String] = []
+    /// Nil until the database answers. Chat is unavailable without it, and the
+    /// UI says which of the two happened rather than showing an empty panel.
+    private(set) var engine: Engine?
+    private(set) var engineError: String?
 
     private var sidecars: SidecarManager?
     private var statusPoll: Task<Void, Never>?
@@ -49,6 +53,7 @@ public final class AppEnvironment {
             self.sidecars = manager
             await startBundledSidecars(manager, config: config, paths: paths)
             startStatusPolling(manager)
+            await buildEngine(config: config, paths: paths)
 
             phase = .ready
             log.info("boot complete at \(paths.root.path(percentEncoded: false), privacy: .public)")
@@ -91,6 +96,27 @@ public final class AppEnvironment {
         }
     }
 
+    /// The database is a sidecar that has just been asked to start, so the
+    /// first connection attempt can legitimately lose the race. Retrying for a
+    /// few seconds is the difference between a working first launch and a
+    /// window that says "ต่อฐานข้อมูลไม่ได้" until the user restarts.
+    private func buildEngine(config: BootstrapConfig, paths: AppPaths) async {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(20))
+        while ContinuousClock.now < deadline {
+            do {
+                engine = try await Engine.build(config: config, paths: paths)
+                engineError = nil
+                log.info("engine ready")
+                return
+            } catch {
+                engineError = "\(error)"
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+        }
+        notes.append("เชื่อมต่อฐานข้อมูลไม่สำเร็จ จึงยังใช้หน้าแชทไม่ได้ — \(engineError ?? "ไม่ทราบสาเหตุ")")
+        log.error("engine unavailable: \(self.engineError ?? "unknown", privacy: .public)")
+    }
+
     private func startStatusPolling(_ manager: SidecarManager) {
         statusPoll?.cancel()
         statusPoll = Task { [weak self] in
@@ -105,6 +131,7 @@ public final class AppEnvironment {
     /// Must run before the process exits so no sidecar is left behind.
     public func shutdown() async {
         statusPoll?.cancel()
+        await engine?.shutdown()
         await sidecars?.stopAll()
         log.info("shutdown complete")
     }

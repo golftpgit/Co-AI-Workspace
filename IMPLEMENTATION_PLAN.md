@@ -64,7 +64,7 @@
 
 **เป้าหมาย**: คุยกับ agent ได้จริง 1 เส้นทาง ครบทุก invariant — นี่คือกระดูกสันหลังที่ทุก phase ต่อยอด
 
-**ความคืบหน้า**: P1.1 · P1.2 · P1.3 · P1.4 · P1.5 · P1.6 ✅ เสร็จแล้ว (2026-08-10) — **68 tests ผ่านหมด** โดย Persistence ทดสอบกับ SurrealDB จริง และ LLM ทดสอบกับโมเดลจริงทั้ง on-device และ endpoint
+**ความคืบหน้า**: **P1 ครบทั้ง 10 task ✅ (2026-08-10)** — **139 tests ผ่านหมด** โดย Persistence ทดสอบกับ SurrealDB จริง · LLM ทดสอบกับโมเดลจริงทั้ง on-device และ endpoint · Execution ทดสอบกับ process/สัญญาณ/seatbelt ของจริง · และมี **end-to-end test หนึ่งตัวที่วิ่งครบเส้นทาง** user → DB → router → tool call → hook chain → approval broker → `run_shell` จริง → span ([`WalkingSkeletonTests`](Tests/ToolBeltTests/WalkingSkeletonTests.swift))
 
 | Task | รายละเอียด | Done-when | สถานะ |
 |---|---|---|---|
@@ -74,10 +74,10 @@
 | **P1.6** Span store | ทุก step เขียน span เข้า DB — **แหล่งเดียว** ([ARCH §16](ARCHITECTURE.md#16-m12-observability--eval)) | สลับหน้าไปมาแล้ว event ไม่หาย (v1 bug B5); span ย้อนหลังอ่านได้หลัง restart | ✅ `SurrealSpanSink` + `SpanRecorder` ปิด span เสมอแม้ body throw; parent/child reassemble ได้ |
 | **P1.4** `LLMExecutor` + 2 impl | `OnDeviceExecutor` (Foundation Models) + `VLLMExecutor` (OpenAI-compatible) หลัง protocol เดียว ([ARCH §9.1](ARCHITECTURE.md#91-llm-abstraction-ของเราเอง-รองรับทั้งสองยุค)) | ทั้งสอง executor ผ่าน contract เดียวกันกับ backend จริง | ✅ **Tier 0 ทำ structured output ได้จริง** ผ่าน `DynamicGenerationSchema` (JSON Schema ของเรา → schema ของ Apple ตอน runtime); tool calling ประกาศว่าไม่รองรับตามตรง เพื่อให้ router ส่งขึ้น tier บนแทนที่จะพังกลางเทิร์น |
 | **P1.5** Model Router | เลือก tier จาก capability/impact/availability/latency + **fallback chain** + **refusal = escalate** ([ARCH §9.2](ARCHITECTURE.md#92-model-router-tier-0--05--1)) | test: บังคับให้ Tier 0 refuse → งานสำเร็จที่ tier ถัดไป **โดยไม่มี error โผล่ถึง caller** | ✅ 12 เทสคุมกติกา: refusal/overflow/offline escalate, decoding ไม่ escalate, งาน high-impact ข้าม Tier 0, **paid tier ต้องขอใช้ก่อนเสมอ**, streaming escalate ก่อน token แรก, เส้นทางที่ escalate ถูกบันทึกลง span |
-| **P1.7** Hook chain + Risk scorer | Critic → Risk → HITL รอบทุก tool call ([ARCH §5.3](ARCHITECTURE.md#53-hook-chain-gate-sub-module)) + risk classification ต่อ tool | test พิสูจน์ว่า **ไม่มีทางเรียก tool โดยไม่ผ่าน gate** (v1 ใช้ test แบบนี้จับ bug ได้จริง) | |
-| **P1.8** Approval Broker | broadcast ไปทุก channel, first-response-wins, กัน double-resolve ([ARCH §5.4](ARCHITECTURE.md#54-approval-broker-sub-module)) | test: 2 channel ตอบพร้อมกัน → resolve ครั้งเดียว, อีกฝั่งได้สถานะ "resolved แล้ว" | |
-| **P1.9** `run_shell` + Execution (แกน) | `Process` + sandbox profile + process registry + pause/stop ([ARCH §13](ARCHITECTURE.md#13-m9-execution)) | รันคำสั่งจริงได้, กด stop แล้วตายจริง, ไม่มี zombie | |
-| **P1.10** Chat UI (แกน) | หน้าคุย + streaming + conversation list + approval banner inline | คุยกับ agent จริงจนจบเทิร์นที่มี tool call + approval ได้ | |
+| **P1.7** Hook chain + Risk scorer | Critic → Risk → HITL รอบทุก tool call ([ARCH §5.3](ARCHITECTURE.md#53-hook-chain-gate-sub-module)) + risk classification ต่อ tool | test พิสูจน์ว่า **ไม่มีทางเรียก tool โดยไม่ผ่าน gate** (v1 ใช้ test แบบนี้จับ bug ได้จริง) | ✅ invariant บังคับด้วย**โครงสร้าง** ไม่ใช่วินัย: `ToolGateway` ถือ tool ไว้เป็น private และแจก `ToolAdvert` ที่เรียกไม่ได้ + `check.sh` fail ถ้า `.call(argumentsJSON` โผล่นอก `ToolGateway.swift` · เทสทุกสาขาที่ปฏิเสธยืนยันว่า **body ของ tool ไม่ถูกเรียก** ไม่ใช่แค่ค่าที่คืนมา · tool ลดความเสี่ยงของตัวเองไม่ได้ (declared เป็นพื้น ไม่ใช่เพดาน), tool ที่ไม่รู้จัก = High, policy hard stop ชนะ full-autonomous |
+| **P1.8** Approval Broker | broadcast ไปทุก channel, first-response-wins, กัน double-resolve ([ARCH §5.4](ARCHITECTURE.md#54-approval-broker-sub-module)) | test: 2 channel ตอบพร้อมกัน → resolve ครั้งเดียว, อีกฝั่งได้สถานะ "resolved แล้ว" | ✅ resolve ทุกทาง (ตอบ/หมดเวลา/ยกเลิก) ลอดผ่านจุดเดียว จึง "resolve ครั้งเดียว" เป็นสมบัติของ actor ไม่ใช่กติกาที่แต่ละ channel ต้องจำ · **ไม่มี channel = ปฏิเสธ ไม่ใช่ปล่อยผ่าน** และไม่ใช่รอค้าง · channel ที่ต่อเข้ามาทีหลังเห็นคำขอที่ค้างอยู่ |
+| **P1.9** `run_shell` + Execution (แกน) | `Process` + sandbox profile + process registry + pause/stop ([ARCH §13](ARCHITECTURE.md#13-m9-execution)) | รันคำสั่งจริงได้, กด stop แล้วตายจริง, ไม่มี zombie | ✅ ใช้ **`posix_spawn` แทน `Process`** เพราะต้องได้ process group ของลูกแบบ atomic — เทสยืนยันว่า `sleep` ที่ shell แตกออกมาตายไปด้วยตอนกด Stop · pause/resume/timeout/reap ครบ (SIGTERM ต้อง SIGCONT ก่อน ไม่งั้น process ที่ pause ไว้ฆ่าไม่ตาย) · **seatbelt ปิดจริงระดับ kernel** (เขียนนอก project root ไม่ได้, network ปิด) และรายงานตรงๆ เมื่อ profile ใช้ไม่ได้แทนที่จะแกล้งว่าใช้ |
+| **P1.10** Chat UI (แกน) | หน้าคุย + streaming + conversation list + approval banner inline | คุยกับ agent จริงจนจบเทิร์นที่มี tool call + approval ได้ | ✅ `AgentTurnRunner` วิ่งครบเทิร์น (user→DB→history จาก DB→router→stream→tool→gate→approval→DB) + Chat UI ครบ sidebar/streaming/3 สวิตช์/approval banner ที่แก้ argument ก่อนอนุมัติได้ · **เทิร์นที่มี tool call + approval พิสูจน์ด้วย end-to-end test กับ DB/process/broker ของจริง และขับผ่านหน้าจอจริงแล้ว** (Llama 3.1 8B ผ่าน LM Studio) — ขับจริง 3 รอบ เจอ 8 ข้อที่เทสไม่เห็น แก้ครบพร้อม regression test: การ์ด tool ขึ้นซ้ำ, แถบ approval บวมเต็มจอ, ขออนุมัติคำสั่งที่รันไม่ได้อยู่แล้ว, ถามซ้ำหลังกดไม่อนุมัติ, routing error กลืนสาเหตุจริง, **สถานะ "ไม่ได้รัน" หายตอนโหลด history** (ประวัติโกหกว่าทุกคำสั่งสำเร็จ), โมเดลเล็กมั่วชื่อ tool, **view model ถูกสร้างใหม่ทุก body pass จน approval ถูกส่งไปหา instance ที่ไม่มีใครแสดง → เทิร์นค้างโดยไม่มีแถบขึ้น** |
 
 **🎯 Milestone P1**: พิมพ์ "ดูไฟล์ในโฟลเดอร์นี้แล้วสรุปให้หน่อย" → agent เรียก tool → ขอ approval → รัน → ตอบ → ทุกอย่างถูกบันทึกและดูย้อนหลังได้
 
@@ -251,4 +251,6 @@
 
 1. **P0.1–P0.2** — ตั้งโครง project ให้ build/test ได้
 2. ~~**P2.1 (D-2 embedding)**~~ ✅ ปิดแล้ว — `bge-m3` @ 1024 มิติ
-3. **P1** ตามลำดับ — จบแล้วจะมีระบบที่ใช้งานได้จริงเป็นครั้งแรก (เหลือ P1.4, P1.5, P1.7–P1.10)
+3. ~~**P1**~~ ✅ ครบทั้ง 10 task — ระบบใช้งานได้จริงเป็นครั้งแรก
+4. ~~**ขับ Chat UI ด้วยมือหนึ่งรอบ**~~ ✅ ทำแล้ว — เจอ 5 ข้อที่เทสไม่เห็น แก้ครบ
+5. **P2.2** Chunker + Thai tokenizer — เริ่ม P2 Knowledge

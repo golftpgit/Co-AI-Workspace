@@ -33,10 +33,24 @@ let package = Package(
         // which tier serves a request (ARCHITECTURE §9).
         .target(name: "LLMProviders", dependencies: ["AgentKit", "Observability"]),
 
+        // M9 — every process the system runs: sandbox profile, process group
+        // signals, registry (ARCHITECTURE §13). Knows nothing about agents.
+        .target(name: "Execution", dependencies: ["AgentKit", "Observability", "Config"]),
+
+        // M6 — the tools themselves. Depends on Execution, never the reverse,
+        // and CoreEngine never depends on this: tools plug in via AgentTool.
+        .target(name: "ToolBelt", dependencies: ["AgentKit", "Observability", "Execution"]),
+
+        // M1 — hook chain, approval broker, tool gateway, agent loop. Every
+        // decision the system makes lives here (ARCHITECTURE §5).
+        .target(name: "CoreEngine",
+                dependencies: ["AgentKit", "Observability", "LLMProviders", "Persistence"]),
+
         // M13 — SwiftUI shell.
         .executableTarget(
             name: "CoAIWorkspaceApp",
-            dependencies: ["AgentKit", "Config", "Observability", "Sidecar", "Persistence", "LLMProviders"]
+            dependencies: ["AgentKit", "Config", "Observability", "Sidecar", "Persistence",
+                           "LLMProviders", "CoreEngine", "Execution", "ToolBelt"]
         ),
 
         .testTarget(name: "AgentKitTests", dependencies: ["AgentKit"]),
@@ -45,5 +59,11 @@ let package = Package(
         .testTarget(name: "SidecarTests", dependencies: ["Sidecar"]),
         .testTarget(name: "PersistenceTests", dependencies: ["Persistence", "Sidecar", "Config"]),
         .testTarget(name: "LLMProvidersTests", dependencies: ["LLMProviders"]),
+        .testTarget(name: "CoreEngineTests", dependencies: ["CoreEngine"]),
+        .testTarget(name: "ExecutionTests", dependencies: ["Execution", "Config"]),
+        // Also hosts the end-to-end walking-skeleton test, which needs a real
+        // database and a real sidecar alongside the tools and the gate.
+        .testTarget(name: "ToolBeltTests",
+                    dependencies: ["ToolBelt", "CoreEngine", "Persistence", "Sidecar", "Config"]),
     ]
 )

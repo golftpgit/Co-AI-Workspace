@@ -25,12 +25,21 @@
 ## เริ่มใช้งาน
 
 ```bash
-./scripts/check.sh        # build + test + structural rules
-./scripts/build-app.sh    # ประกอบและเซ็น .app พร้อม App Sandbox
+./scripts/fetch-helpers.sh   # ดึง sidecar binary (ครั้งเดียวต่อเครื่อง — vendor/ ไม่อยู่ใน git)
+./scripts/check.sh           # build + test + structural rules
+./scripts/build-app.sh       # ประกอบและเซ็น .app พร้อม App Sandbox
 ```
+
+**เครื่องใหม่**: ต้องรัน `fetch-helpers.sh` ก่อน ไม่งั้นเทสฝั่ง Persistence จะข้าม และแอปจะเริ่มฐานข้อมูลไม่ได้
+ส่วน endpoint ของ Tier 1 ตั้งใน `bootstrap.plist` ที่ `~/Library/Containers/com.coaiworkspace.app/Data/Library/Application Support/CoAIWorkspace/`
+(คีย์ `selfHostedEndpoint` + `selfHostedModel`) — เป็นค่าต่อเครื่อง ไม่ได้อยู่ใน repo
 
 ## สถานะ
 
-**P0 — Scaffold ✅ เสร็จแล้ว**: SwiftPM package, bootstrap config ที่ซ่อมตัวเองได้, sidecar manager (restart + reap orphan), App Sandbox, ชุดทดสอบ 30 ตัว
+**P1 — Walking Skeleton ✅ เสร็จแล้ว** (P0 ด้วย): เส้นทางบางที่สุดวิ่งครบแล้ว —
+Chat UI → Model Router (escalate ข้าม tier เอง) → tool call → hook chain (Critic → Risk → Policy → HITL) →
+Approval Broker (ตอบจากช่องทางไหนก็ได้) → `run_shell` ใน seatbelt sandbox → span + ข้อความ ลง SurrealDB
 
-ถัดไปคือ **P1 — Walking Skeleton**: เส้นทางบางที่สุดที่วิ่งครบ UI → Model Router → Tool → Hook chain → Approval → Span → DB
+ชุดทดสอบ **139 ตัว** รันกับของจริงทั้งหมด: SurrealDB จริง, โมเดลจริง (on-device + endpoint), process/สัญญาณ/sandbox จริง
+
+ถัดไปคือ **P2 — Knowledge**: chunker + Thai tokenizer, ingestion pipeline, hybrid search, provenance

@@ -37,6 +37,16 @@ else
   ok "no stray print() in library targets"
 fi
 
+# ARCHITECTURE §5.3: the hook chain must be unbypassable. ToolGateway is the
+# only place allowed to invoke a tool; anywhere else would be a second path
+# past Critic/Risk/Policy/HITL. v1 had exactly such a path, and it was a bug.
+GATE_CALLERS=$(grep -rln "\.call(argumentsJSON" Sources --include=*.swift | grep -v "Sources/CoreEngine/ToolGateway.swift" || true)
+if [ -n "$GATE_CALLERS" ]; then
+  fail "AgentTool.call invoked outside ToolGateway: $GATE_CALLERS"
+else
+  ok "tools are only reachable through the hook chain"
+fi
+
 if grep -rn ": \[String: Any\]" Sources --include=*.swift | grep -q "Sendable"; then
   fail "[String: Any] on a Sendable type (see ARCHITECTURE App. C)"
 else

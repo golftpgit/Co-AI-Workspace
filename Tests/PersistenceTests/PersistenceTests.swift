@@ -251,3 +251,47 @@ struct SpanSinkTests {
         #expect(Set(children.map(\.name)) == ["child-a", "child-b"])
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// Regression: v3 coerces a *bound* string shaped like `table:id` into a record
+// link, which then fails a `TYPE string` field (App. C.0). Our own ids avoid
+// the colon, but text we do not control cannot — and this was live: every span
+// the gate, the router and the broker emit is named `tool:run_shell`,
+// `llm:gx10`, `approval:run_shell`, so none of them were being stored at all.
+// ─────────────────────────────────────────────────────────────
+@Suite("Text that looks like a record id", .serialized)
+struct RecordShapedTextTests {
+    @Test("a message whose text looks like a record id is stored verbatim", .timeLimit(.minutes(2)))
+    func messageContentSurvives() async throws {
+        guard let server = try await makeServer(port: 18_411) else { return }
+        defer { Task { await server.shutdown() } }
+
+        let store = ConversationStore(client: await server.client)
+        let conversation = try await store.create(scope: .central, title: "note:1")
+        // Each of these is a shape v3 re-types when bound: record link, uuid.
+        let awkward = ["note:1", "table:id", "a487d755-9ec0-4b1a-9f8e-1c2b3d4e5f60", "ดู tool:run_shell สิ"]
+        for text in awkward {
+            try await store.append(conversationID: conversation.id, role: .user, content: text)
+        }
+
+        let history = try await store.history(conversationID: conversation.id)
+        #expect(history.map(\.content) == awkward)
+        #expect(try await store.list(scope: .central).first?.title == "note:1")
+    }
+
+    @Test("spans named after their tool are stored, not silently dropped", .timeLimit(.minutes(2)))
+    func spanNamesSurvive() async throws {
+        guard let server = try await makeServer(port: 18_412) else { return }
+        defer { Task { await server.shutdown() } }
+
+        let sink = SurrealSpanSink(client: await server.client)
+        var span = Span(name: "tool:run_shell", scope: .central, status: .succeeded)
+        span.endedAt = Date()
+        span.detail = "escalated past on-device:refused"
+        await sink.record(span)
+
+        let stored = try await sink.recent().first { $0.name == "tool:run_shell" }
+        #expect(stored?.detail == "escalated past on-device:refused")
+        #expect(stored?.status == .succeeded)
+    }
+}
