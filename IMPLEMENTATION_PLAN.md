@@ -22,7 +22,7 @@
 ## หลักการเรียงงาน
 
 1. **Walking skeleton ก่อน breadth** — P1 สร้างเส้นทางบางที่สุดที่วิ่งครบตั้งแต่ UI → Router → Tool → Hook chain → Approval → Span → DB **ให้ใช้งานได้จริงตั้งแต่สัปดาห์แรกๆ** แล้วค่อยขยายทีละ module ไม่ใช่สร้างทุก module ให้เสร็จแล้วค่อยต่อกันตอนท้าย (v1 เจอปัญหานี้: workflow execution ไม่เคยผ่าน gate เลยจนมาเจอตอน Phase F)
-2. **อะไรที่ spike แล้วเอาโค้ดมาใช้เลย** — [`spikes/`](spikes/) มีโค้ดที่รันผ่านจริงแล้ว 2 ชิ้น ไม่ต้องเริ่มจากศูนย์
+2. **อะไรที่ spike แล้วเอาโค้ดมาใช้เลย** — [`spikes/`](spikes/) มีโค้ดที่รันผ่านจริงแล้ว 3 ชิ้น ไม่ต้องเริ่มจากศูนย์
 3. **Invariant ก่อน feature** — hook chain, approval broker, span store ต้องมาก่อนสิ่งที่ต้องใช้มัน ไม่ใช่ตามมาแก้ทีหลัง (v1 bug B2: Telegram bridge ข้าม hook chain เพราะ bridge มาก่อน invariant)
 4. **ทุก Phase จบด้วยสิ่งที่ใช้งานได้** ไม่ใช่ half-built layer
 
@@ -37,7 +37,7 @@
 | VLLMExecutor (Tier 1) | ✅ พิสูจน์แล้ว ครบ streaming/tool/schema/cancel | [ARCH E.9](ARCHITECTURE.md#e9-vllmexecutor-spike--tier-1-ผ่าน-openai-compatible-endpoint) · [`spikes/LLMExecutor/`](spikes/LLMExecutor/) |
 | Guardrail refusal ~12.5% | ⚠️ ทราบแล้ว มีแผนรับมือ (escalate) | [ARCH E.7](ARCHITECTURE.md#e7-guardrail-characterization--โดเมนการแพทย์) |
 | Thai tokenization | ⚠️ ใช้ได้ ต้องมี dictionary layer | [ARCH E.3](ARCHITECTURE.md#e3-thai-tokenizer--รันจริงกับประโยคงานวิจัยการแพทย์) |
-| Embedding model | ❓ ยังไม่เลือก (D-2) | — |
+| Embedding model | ✅ **`bge-m3` @ 1024 มิติ** — ตัวเดียวที่ทำ cross-lingual ไทย↔อังกฤษได้ | [ARCH E.10](ARCHITECTURE.md#e10-d-2--เลือก-embedding-model-วัดจริง-ปิดแล้ว) · [`spikes/EmbeddingEval/`](spikes/EmbeddingEval/) |
 | macOS 27 API | ⏳ รอ ก.ย. 2026 — มี abstraction คั่นแล้ว | [ARCH §9.1](ARCHITECTURE.md#91-llm-abstraction-ของเราเอง-รองรับทั้งสองยุค) |
 
 **สภาพแวดล้อมที่ยืนยันแล้วบนเครื่อง**: macOS 26.6.1 · Swift 6.3.3 · Xcode 26.6 · Apple Intelligence `available` · LM Studio :1234 (Llama 3.1 8B + nomic-embed) · SurrealDB v3.2.0 binary
@@ -72,13 +72,12 @@
 | **P1.2** `SurrealClient` + schema | ย้ายโค้ดจาก spike เข้า target จริง + schema bootstrap แบบ **idempotent** | เปิดแอป 3 ครั้งติดกันไม่ error; test ครอบ reconnect + concurrent query | ✅ พร้อมแก้บั๊กจริง 5 ข้อที่เจอตอนเทสกับ engine ([ARCH C.0](ARCHITECTURE.md#c0-surrealdb-v320-quirks--ยืนยันซ้ำค้นพบใหม่จาก-spike-ฝั่ง-swift-2026-08-10)) — **3 ใน 5 เป็นบั๊กของเราเอง** |
 | **P1.3** Conversation persistence | ตาราง `conversation`/`message`, เขียน user message **ก่อน** เรียก LLM เสมอ, โหลด history จาก DB ทุกครั้ง | ปิดแอปกลางบทสนทนา → เปิดใหม่เห็นครบ; agent error → user message ยังอยู่ | ✅ เทสยืนยัน reconnect แล้ว history ครบ, ลำดับถูก, scope filter ไม่รั่ว, delete cascade |
 | **P1.6** Span store | ทุก step เขียน span เข้า DB — **แหล่งเดียว** ([ARCH §16](ARCHITECTURE.md#16-m12-observability--eval)) | สลับหน้าไปมาแล้ว event ไม่หาย (v1 bug B5); span ย้อนหลังอ่านได้หลัง restart | ✅ `SurrealSpanSink` + `SpanRecorder` ปิด span เสมอแม้ body throw; parent/child reassemble ได้ |
-| **P1.4** `LLMExecutor` + 2 impl | ย้ายโค้ดจาก [`spikes/LLMExecutor/`](spikes/LLMExecutor/) + เขียน `OnDeviceExecutor` ห่อ `LanguageModelSession` ([ARCH §9.1](ARCHITECTURE.md#91-llm-abstraction-ของเราเอง-รองรับทั้งสองยุค)) | ทั้งสอง executor ผ่าน test suite เดียวกัน (streaming, tool call, structured output, cancel) |
-| **P1.5** Model Router (แกน) | เลือก tier จาก 4 signal + **fallback chain** + **refusal = escalate** ([ARCH §9.2](ARCHITECTURE.md#92-model-router-tier-0--05--1)) — API ไม่มี overload ที่ไม่มี fallback | test: บังคับให้ Tier 0 refuse → งานสำเร็จที่ tier ถัดไป **โดยไม่มี error โผล่ถึง caller** |
-| **P1.6** Span store + Live Monitor (แกน) | ทุก step เขียน span เข้า DB (`span_id, parent, role, tool, status, ts, tokens`) — **แหล่งเดียว** ([ARCH §16](ARCHITECTURE.md#16-m12-observability--eval)) | สลับหน้าไปมาแล้ว event ไม่หาย (v1 bug B5); span ย้อนหลังอ่านได้หลัง restart |
-| **P1.7** Hook chain + Risk scorer | Critic → Risk → HITL รอบทุก tool call ([ARCH §5.3](ARCHITECTURE.md#53-hook-chain-gate-sub-module)) + risk classification ต่อ tool | test พิสูจน์ว่า **ไม่มีทางเรียก tool โดยไม่ผ่าน gate** (v1 ใช้ test แบบนี้จับ bug ได้จริง) |
-| **P1.8** Approval Broker | broadcast ไปทุก channel, first-response-wins, กัน double-resolve ([ARCH §5.4](ARCHITECTURE.md#54-approval-broker-sub-module)) | test: 2 channel ตอบพร้อมกัน → resolve ครั้งเดียว, อีกฝั่งได้สถานะ "resolved แล้ว" |
-| **P1.9** `run_shell` + Execution (แกน) | `Process` + sandbox profile + process registry + pause/stop ([ARCH §13](ARCHITECTURE.md#13-m9-execution)) | รันคำสั่งจริงได้, กด stop แล้วตายจริง, ไม่มี zombie |
-| **P1.10** Chat UI (แกน) | หน้าคุย + streaming + conversation list + approval banner inline | คุยกับ agent จริงจนจบเทิร์นที่มี tool call + approval ได้ |
+| **P1.4** `LLMExecutor` + 2 impl | ย้ายโค้ดจาก [`spikes/LLMExecutor/`](spikes/LLMExecutor/) + เขียน `OnDeviceExecutor` ห่อ `LanguageModelSession` ([ARCH §9.1](ARCHITECTURE.md#91-llm-abstraction-ของเราเอง-รองรับทั้งสองยุค)) | ทั้งสอง executor ผ่าน test suite เดียวกัน (streaming, tool call, structured output, cancel) | |
+| **P1.5** Model Router (แกน) | เลือก tier จาก 4 signal + **fallback chain** + **refusal = escalate** ([ARCH §9.2](ARCHITECTURE.md#92-model-router-tier-0--05--1)) — API ไม่มี overload ที่ไม่มี fallback | test: บังคับให้ Tier 0 refuse → งานสำเร็จที่ tier ถัดไป **โดยไม่มี error โผล่ถึง caller** | |
+| **P1.7** Hook chain + Risk scorer | Critic → Risk → HITL รอบทุก tool call ([ARCH §5.3](ARCHITECTURE.md#53-hook-chain-gate-sub-module)) + risk classification ต่อ tool | test พิสูจน์ว่า **ไม่มีทางเรียก tool โดยไม่ผ่าน gate** (v1 ใช้ test แบบนี้จับ bug ได้จริง) | |
+| **P1.8** Approval Broker | broadcast ไปทุก channel, first-response-wins, กัน double-resolve ([ARCH §5.4](ARCHITECTURE.md#54-approval-broker-sub-module)) | test: 2 channel ตอบพร้อมกัน → resolve ครั้งเดียว, อีกฝั่งได้สถานะ "resolved แล้ว" | |
+| **P1.9** `run_shell` + Execution (แกน) | `Process` + sandbox profile + process registry + pause/stop ([ARCH §13](ARCHITECTURE.md#13-m9-execution)) | รันคำสั่งจริงได้, กด stop แล้วตายจริง, ไม่มี zombie | |
+| **P1.10** Chat UI (แกน) | หน้าคุย + streaming + conversation list + approval banner inline | คุยกับ agent จริงจนจบเทิร์นที่มี tool call + approval ได้ | |
 
 **🎯 Milestone P1**: พิมพ์ "ดูไฟล์ในโฟลเดอร์นี้แล้วสรุปให้หน่อย" → agent เรียก tool → ขอ approval → รัน → ตอบ → ทุกอย่างถูกบันทึกและดูย้อนหลังได้
 
@@ -86,15 +85,15 @@
 
 ## P2 — Knowledge
 
-| Task | รายละเอียด | Done-when |
-|---|---|---|
-| **P2.1** เลือก embedding model (ปิด D-2) | เทียบ Core ML (sentence-transformer) vs nomic-embed ที่มีอยู่ vs Foundation Models built-in — วัด **recall@k** บนชุดเอกสารไทย+อังกฤษจริง | มีตัวเลขเทียบ 3 ทาง + บันทึกเหตุผลใน ARCH; **มิติถูกล็อกก่อนเริ่ม index** |
-| **P2.2** Chunker + Thai tokenizer | `NLTokenizer` + **dictionary merge layer** สำหรับคำทับศัพท์ ([ARCH E.3](ARCHITECTURE.md#e3-thai-tokenizer--รันจริงกับประโยคงานวิจัยการแพทย์)) | `โลจิสติก`/`โควิด` ไม่ถูกแตก; วัด BM25 recall เทียบก่อน/หลัง merge layer |
-| **P2.3** Ingestion pipeline | PDF/DOCX/PPTX/รูป → OCR (Vision) → chunk → dedup (sha256 + semantic) → entity/relation → embed → index | ingest ไฟล์สแกนจริงแล้วค้นเจอ; ingest ซ้ำ → ไม่เพิ่ม chunk ซ้ำ |
-| **P2.4** Hybrid search | BM25 + vector + RRF fusion (โค้ดมีแล้วจาก spike) + scope filter | ผลลัพธ์คืน provenance + tier ครบทุกแถว |
-| **P2.5** Provenance + credibility | `tier/origin/accessedAt/supersedes` ต่อ chunk ([ARCH §11.3](ARCHITECTURE.md#113-provenance--credibility-บังคับตั้งแต่-ingestion)) | ไม่มี chunk ไหนเข้า index ได้โดยไม่มี provenance (บังคับด้วย type ไม่ใช่ convention) |
-| **P2.6** Policy scope + Policy Gate | `scope: policy`, chunking atomic ต่อกฎ, `hard_constraint` → hard stop ใน hook chain | test: action ที่ขัด hard constraint ถูกหยุด **พร้อมแสดง chunk ที่ขัด** ไม่ใช่แค่ "เสี่ยง" |
-| **P2.7** KB UI | list, upload, graph view, edit/delete entity+relation, tier badge, export/import | แก้ entity แล้วผลค้นหาเปลี่ยนตามจริง |
+| Task | รายละเอียด | Done-when | สถานะ |
+|---|---|---|---|
+| **P2.1** เลือก embedding model ✅ | วัด 4 ตัวเลือกบนชุดไทย+อังกฤษเดียวกัน (recall@1/@3, MRR, cross-lingual) | มีตัวเลขเทียบ + บันทึกเหตุผลใน ARCH; **มิติถูกล็อกก่อนเริ่ม index** | ✅ **`bge-m3` @ 1024 มิติ** — 100% ทุกมิติ ([ARCH E.10](ARCHITECTURE.md#e10-d-2--เลือก-embedding-model-วัดจริง-ปิดแล้ว)); พบว่า embedding ของ Apple แยก vector space ตามสคริปต์ จึงทำ cross-lingual ไม่ได้เลย |
+| **P2.2** Chunker + Thai tokenizer | `NLTokenizer` + **dictionary merge layer** สำหรับคำทับศัพท์ ([ARCH E.3](ARCHITECTURE.md#e3-thai-tokenizer--รันจริงกับประโยคงานวิจัยการแพทย์)) | `โลจิสติก`/`โควิด` ไม่ถูกแตก; วัด BM25 recall เทียบก่อน/หลัง merge layer | |
+| **P2.3** Ingestion pipeline | PDF/DOCX/PPTX/รูป → OCR (Vision) → chunk → dedup (sha256 + semantic) → entity/relation → embed → index | ingest ไฟล์สแกนจริงแล้วค้นเจอ; ingest ซ้ำ → ไม่เพิ่ม chunk ซ้ำ | |
+| **P2.4** Hybrid search | BM25 + vector + RRF fusion (โค้ดมีแล้วจาก spike) + scope filter | ผลลัพธ์คืน provenance + tier ครบทุกแถว | |
+| **P2.5** Provenance + credibility | `tier/origin/accessedAt/supersedes` ต่อ chunk ([ARCH §11.3](ARCHITECTURE.md#113-provenance--credibility-บังคับตั้งแต่-ingestion)) | ไม่มี chunk ไหนเข้า index ได้โดยไม่มี provenance (บังคับด้วย type ไม่ใช่ convention) | |
+| **P2.6** Policy scope + Policy Gate | `scope: policy`, chunking atomic ต่อกฎ, `hard_constraint` → hard stop ใน hook chain | test: action ที่ขัด hard constraint ถูกหยุด **พร้อมแสดง chunk ที่ขัด** ไม่ใช่แค่ "เสี่ยง" | |
+| **P2.7** KB UI | list, upload, graph view, edit/delete entity+relation, tier badge, export/import | แก้ entity แล้วผลค้นหาเปลี่ยนตามจริง | |
 
 ---
 
@@ -251,5 +250,5 @@
 ## งานถัดไปทันที
 
 1. **P0.1–P0.2** — ตั้งโครง project ให้ build/test ได้
-2. **P2.1 (D-2 embedding)** — ทำขนานได้เลยตั้งแต่ต้น เพราะเป็น blocker ของ P2 ทั้ง phase และเปลี่ยนทีหลังแพงที่สุด
-3. **P1** ตามลำดับ — จบแล้วจะมีระบบที่ใช้งานได้จริงเป็นครั้งแรก
+2. ~~**P2.1 (D-2 embedding)**~~ ✅ ปิดแล้ว — `bge-m3` @ 1024 มิติ
+3. **P1** ตามลำดับ — จบแล้วจะมีระบบที่ใช้งานได้จริงเป็นครั้งแรก (เหลือ P1.4, P1.5, P1.7–P1.10)
