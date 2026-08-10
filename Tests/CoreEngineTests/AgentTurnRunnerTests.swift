@@ -120,7 +120,7 @@ struct AgentTurnRunnerTests {
                                               conversationID: "cv_1", scope: .central))
 
         #expect(await ran.value == 1)
-        #expect(events.contains { if case .toolCallFinished(_, _, let executed) = $0 { return executed }; return false })
+        #expect(events.contains { if case .toolCallFinished(_, _, _, let executed) = $0 { return executed }; return false })
         #expect(events.contains { if case .finished = $0 { return true }; return false })
 
         // user → assistant(asking) → tool result → assistant(final)
@@ -152,7 +152,7 @@ struct AgentTurnRunnerTests {
         // The model is told why, so it can offer something else instead of
         // calling the same tool again.
         let toolEvent = events.compactMap { event -> String? in
-            if case .toolCallFinished(_, let text, _) = event { return text }
+            if case .toolCallFinished(_, _, let text, _) = event { return text }
             return nil
         }.first
         #expect(toolEvent?.contains("ยังไม่ต้อง") == true)
@@ -242,4 +242,174 @@ struct AgentTurnRunnerTests {
         let tool = try #require(spans.first { $0.name == "tool:kb_search" })
         #expect(tool.parent == turn.id)
     }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Regressions from the first real session with Llama 3.1 8B (2026-08-10).
+// Everything here was seen on screen before it was a test.
+// ─────────────────────────────────────────────────────────────
+
+/// Refuses every call before it runs, the way `run_shell` does when no working
+/// directory has been chosen.
+private struct UnrunnableTool: AgentTool {
+    let name = "save_document"
+    let toolDescription = "บันทึกเอกสาร"
+    let riskLevel: RiskLevel = .medium
+    let parametersJSON = #"{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}"#
+    let ran: Counter
+
+    func precheck(argumentsJSON: String, context: ToolContext) throws {
+        throw ToolError.notPermitted("ยังไม่ได้เลือกโฟลเดอร์งาน")
+    }
+
+    func call(argumentsJSON: String, context: ToolContext) async throws -> ToolOutput {
+        await ran.increment()
+        return ToolOutput(text: "ไม่ควรมาถึงตรงนี้")
+    }
+}
+
+private struct RecordingApprover: ApprovalRequesting {
+    let decision: ApprovalDecision
+    let asked: Counter
+    func requestApproval(_ request: ApprovalRequest) async -> ApprovalDecision {
+        await asked.increment()
+        return decision
+    }
+}
+
+@Suite("What the first real session taught us")
+struct TurnRegressionTests {
+    /// Seen on screen: with no folder chosen, the model invented
+    /// `/path/to/project` and the user was asked to approve a command that
+    /// could never have run.
+    @Test("a call that cannot run is sent back instead of becoming an approval")
+    func impossibleCallNeverReachesTheHuman() async throws {
+        let ran = Counter(), asked = Counter()
+        let gateway = ToolGateway(approver: RecordingApprover(decision: .approved, asked: asked),
+                                  modes: OperatingModes(autonomy: .approvalRequired))
+        await gateway.register(UnrunnableTool(ran: ran))
+        let script = RoundScript([.toolCall(name: "save_document", argumentsJSON: #"{"q":"x"}"#),
+                                  .text("บอกผู้ใช้ให้เลือกโฟลเดอร์ก่อน")])
+        let runner = AgentTurnRunner(router: ModelRouter(executors: [ScriptedExecutor(script: script)]),
+                                     gateway: gateway, transcript: MemoryTranscript())
+
+        let events = await collect(runner.run(userText: "ลองดู", conversationID: "cv_r1", scope: .central))
+
+        #expect(await asked.value == 0, "the human was asked about an impossible call")
+        #expect(await ran.value == 0)
+        // And the model is told why, in words it can act on.
+        let text = events.compactMap { event -> String? in
+            if case .toolCallFinished(_, _, let text, _) = event { return text }
+            return nil
+        }.first
+        #expect(text?.contains("โฟลเดอร์") == true)
+    }
+
+    /// Also seen on screen: after a refusal the model called the identical
+    /// command again, and the banner came straight back.
+    @Test("the same refused call is not put in front of the human twice")
+    func deniedCallIsNotAskedAgain() async throws {
+        let ran = Counter(), asked = Counter()
+        let gateway = ToolGateway(approver: RecordingApprover(decision: .rejected(reason: "ไม่เอา"),
+                                                              asked: asked),
+                                  modes: OperatingModes(autonomy: .approvalRequired))
+        await gateway.register(EchoTool(name: "save_document", riskLevel: .medium, ran: ran))
+        let same = ScriptedExecutor.Round.toolCall(name: "save_document", argumentsJSON: #"{"q":"x"}"#)
+        let runner = AgentTurnRunner(router: ModelRouter(executors: [
+            ScriptedExecutor(script: RoundScript(Array(repeating: same, count: 5)))
+        ]), gateway: gateway, transcript: MemoryTranscript(), maxToolRounds: 5)
+
+        _ = await collect(runner.run(userText: "ลองซ้ำ", conversationID: "cv_r2", scope: .central))
+
+        let times = await asked.value
+        #expect(times == 1, "the human was asked \(times) times for one refusal")
+        #expect(await ran.value == 0)
+    }
+
+    /// A different command after a refusal is a new question, not the same one.
+    @Test("a different call still gets asked")
+    func differentCallStillAsks() async throws {
+        let ran = Counter(), asked = Counter()
+        let gateway = ToolGateway(approver: RecordingApprover(decision: .rejected(reason: "ไม่"),
+                                                              asked: asked),
+                                  modes: OperatingModes(autonomy: .approvalRequired))
+        await gateway.register(EchoTool(name: "save_document", riskLevel: .medium, ran: ran))
+        let runner = AgentTurnRunner(router: ModelRouter(executors: [
+            ScriptedExecutor(script: RoundScript([
+                .toolCall(name: "save_document", argumentsJSON: #"{"q":"หนึ่ง"}"#),
+                .toolCall(name: "save_document", argumentsJSON: #"{"q":"สอง"}"#),
+                .text("จบ"),
+            ]))
+        ]), gateway: gateway, transcript: MemoryTranscript(), maxToolRounds: 5)
+
+        _ = await collect(runner.run(userText: "ลอง", conversationID: "cv_r3", scope: .central))
+        #expect(await asked.value == 2)
+    }
+
+    /// Seen on screen as `apple-on-device(transport)` — a category word with
+    /// the actual failure thrown away.
+    @Test("a routing failure says what each tier actually reported")
+    func routingFailureIsLegible() async throws {
+        struct Broken: LLMExecutor {
+            let identifier = "apple-on-device"
+            let tier: ModelTier = .onDevice
+            let capabilities = LLMCapabilities(contextWindow: 8_000, supportsTools: false,
+                                               supportsStructuredOutput: true,
+                                               supportsStreaming: true, supportsVision: false)
+            func isAvailable() async -> Bool { true }
+            func respond(to request: LLMRequest) -> AsyncThrowingStream<LLMEvent, Error> {
+                AsyncThrowingStream { $0.finish(throwing: LLMError.transport("assets not loaded")) }
+            }
+        }
+
+        let runner = AgentTurnRunner(router: ModelRouter(executors: [Broken()]),
+                                     gateway: ToolGateway(), transcript: MemoryTranscript())
+        let events = await collect(runner.run(userText: "hi", conversationID: "cv_r4", scope: .central))
+
+        let failure = events.compactMap { event -> String? in
+            if case .failed(let text) = event { return text }
+            return nil
+        }.first
+        #expect(failure?.contains("assets not loaded") == true, "got: \(failure ?? "nothing")")
+        #expect(failure?.contains("apple-on-device") == true)
+    }
+
+    /// A model that is not told where it is will make somewhere up.
+    @Test("the system prompt says which folder commands run in")
+    func systemPromptCarriesTheWorkingDirectory() async throws {
+        let seen = PromptLog()
+        struct PromptSpy: LLMExecutor {
+            let identifier = "spy"
+            let tier: ModelTier = .selfHosted
+            let capabilities = LLMCapabilities(contextWindow: 32_000, supportsTools: true,
+                                               supportsStructuredOutput: true,
+                                               supportsStreaming: true, supportsVision: false)
+            let seen: PromptLog
+            func isAvailable() async -> Bool { true }
+            func respond(to request: LLMRequest) -> AsyncThrowingStream<LLMEvent, Error> {
+                AsyncThrowingStream { continuation in
+                    Task {
+                        await seen.record(request.messages.first?.content ?? "")
+                        continuation.yield(.textDelta("ok"))
+                        continuation.yield(.finished(reason: "stop"))
+                        continuation.finish()
+                    }
+                }
+            }
+        }
+
+        let runner = AgentTurnRunner(router: ModelRouter(executors: [PromptSpy(seen: seen)]),
+                                     gateway: ToolGateway(), transcript: MemoryTranscript())
+        _ = await collect(runner.run(userText: "hi", conversationID: "cv_r5", scope: .central,
+                                     workingDirectory: URL(fileURLWithPath: "/tmp/โปรเจกต์")))
+        #expect(await seen.last?.contains("/tmp/โปรเจกต์") == true)
+
+        _ = await collect(runner.run(userText: "hi", conversationID: "cv_r6", scope: .central))
+        #expect(await seen.last?.contains("ยังไม่ได้เลือกโฟลเดอร์งาน") == true)
+    }
+}
+
+private actor PromptLog {
+    private(set) var last: String?
+    func record(_ prompt: String) { last = prompt }
 }

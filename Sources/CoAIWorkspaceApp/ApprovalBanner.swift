@@ -29,19 +29,26 @@ struct ApprovalBanner: View {
 
             // The verbatim action. A summary here is how a human approves
             // something they did not actually read.
+            //
+            // `fixedSize` matters: a bare ScrollView takes every point it is
+            // offered, so a three-line command left the banner filling half
+            // the window with blank space. The banner hugs its text and only
+            // scrolls once there is genuinely too much of it.
             if isEditing {
                 TextEditor(text: $edit)
                     .font(.system(.callout, design: .monospaced))
-                    .frame(minHeight: 80, maxHeight: 200)
+                    .frame(height: 120)
                     .accessibilityLabel("แก้อาร์กิวเมนต์ก่อนอนุมัติ")
             } else {
                 ScrollView {
                     Text(request.detail)
                         .font(.system(.callout, design: .monospaced))
                         .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxHeight: 160)
+                .frame(maxHeight: 200)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             if let conflict = request.policyConflict {

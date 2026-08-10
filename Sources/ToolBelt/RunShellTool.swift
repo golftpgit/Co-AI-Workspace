@@ -43,26 +43,16 @@ public struct RunShellTool: AgentTool {
         self.allowNetwork = allowNetwork
     }
 
+    /// Everything that can be known without running anything. The gate calls
+    /// this before it asks a human, so a command with nowhere to run is sent
+    /// back to the model instead of becoming an approval prompt.
+    public func precheck(argumentsJSON: String, context: ToolContext) throws {
+        _ = try Self.resolve(argumentsJSON: argumentsJSON, context: context)
+    }
+
     public func call(argumentsJSON: String, context: ToolContext) async throws -> ToolOutput {
-        guard let data = argumentsJSON.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let command = object["command"] as? String,
-              !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw ToolError.invalidArguments("run_shell ต้องมี 'command' ที่ไม่ว่าง")
-        }
-
-        let requested = (object["working_directory"] as? String).map { URL(fileURLWithPath: $0) }
-        let workingDirectory = requested ?? context.workingDirectory
-        guard let workingDirectory else {
-            throw ToolError.invalidArguments("ไม่รู้ว่าจะรันในโฟลเดอร์ไหน — ระบุ working_directory หรือเปิดโปรเจกต์ก่อน")
-        }
-        // A path the user did not open is not ours to run in; the App Sandbox
-        // would refuse anyway, and failing here says why.
-        guard FileManager.default.fileExists(atPath: workingDirectory.path(percentEncoded: false)) else {
-            throw ToolError.notPermitted("ไม่มีโฟลเดอร์ \(workingDirectory.path(percentEncoded: false))")
-        }
-
-        let seconds = (object["timeout_seconds"] as? Int) ?? 120
+        let (command, workingDirectory, seconds) = try Self.resolve(argumentsJSON: argumentsJSON,
+                                                                    context: context)
         let spec = ProcessSpec.shell(command,
                                      workingDirectory: workingDirectory,
                                      timeout: .seconds(max(1, min(seconds, 1800))),
@@ -78,6 +68,44 @@ public struct RunShellTool: AgentTool {
         }
 
         return ToolOutput(text: Self.transcript(command: command, outcome: outcome))
+    }
+
+    /// One place that reads the arguments, so `precheck` and `call` can never
+    /// disagree about whether a call is runnable.
+    ///
+    /// The rejection messages are written for the model, not for a log: they
+    /// say what to do next, because this text is what goes back into the turn.
+    private static func resolve(argumentsJSON: String,
+                                context: ToolContext) throws -> (String, URL, Int) {
+        guard let data = argumentsJSON.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw ToolError.invalidArguments("อาร์กิวเมนต์ของ run_shell ไม่ใช่ JSON object")
+        }
+        guard let command = object["command"] as? String,
+              !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ToolError.invalidArguments("run_shell ต้องมี 'command' ที่ไม่ว่าง")
+        }
+
+        let requested = (object["working_directory"] as? String).map { URL(fileURLWithPath: $0) }
+        guard let workingDirectory = requested ?? context.workingDirectory else {
+            throw ToolError.notPermitted("""
+            ยังไม่มีโฟลเดอร์ที่รันคำสั่งได้ — ผู้ใช้ต้องกด "เลือกโฟลเดอร์งาน" ก่อน \
+            อย่าเดา path เอง ให้บอกผู้ใช้ว่าต้องเลือกโฟลเดอร์แทน
+            """)
+        }
+        // A path the user did not open is not ours to run in — the App Sandbox
+        // would refuse anyway, and saying so here beats a permission error
+        // after someone has already approved it.
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: workingDirectory.path(percentEncoded: false),
+                                             isDirectory: &isDirectory), isDirectory.boolValue else {
+            throw ToolError.notPermitted("""
+            ไม่มีโฟลเดอร์ \(workingDirectory.path(percentEncoded: false)) อยู่จริง \
+            — ใช้โฟลเดอร์ที่ผู้ใช้เลือกไว้ อย่าใส่ path สมมติ
+            """)
+        }
+
+        return (command, workingDirectory, (object["timeout_seconds"] as? Int) ?? 120)
     }
 
     /// Both streams, labelled, plus the exit code — the shape a model can act

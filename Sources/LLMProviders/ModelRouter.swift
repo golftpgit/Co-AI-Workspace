@@ -45,13 +45,28 @@ public struct RoutingAttempt: Sendable {
     public let executor: String
     public let tier: ModelTier
     public let outcome: String
+    /// What the tier actually said. `outcome` is a category for grouping;
+    /// this is the sentence someone needs to fix the problem — collapsing an
+    /// on-device failure to the single word "transport" told nobody anything.
+    public let detail: String?
+
+    public init(executor: String, tier: ModelTier, outcome: String, detail: String? = nil) {
+        self.executor = executor
+        self.tier = tier
+        self.outcome = outcome
+        self.detail = detail
+    }
 }
 
 public struct RoutingError: Error, CustomStringConvertible {
     public let attempts: [RoutingAttempt]
+
     public var description: String {
         "every tier declined or failed: "
-            + attempts.map { "\($0.executor)(\($0.outcome))" }.joined(separator: ", ")
+            + attempts.map { attempt in
+                attempt.detail.map { "\(attempt.executor)(\(attempt.outcome): \($0))" }
+                    ?? "\(attempt.executor)(\(attempt.outcome))"
+            }.joined(separator: ", ")
     }
 }
 
@@ -92,7 +107,7 @@ public actor ModelRouter {
                 return completion
             } catch let error as LLMError where error.isEscalatable {
                 attempts.append(.init(executor: executor.identifier, tier: executor.tier,
-                                      outcome: shortOutcome(error)))
+                                      outcome: shortOutcome(error), detail: error.description))
                 if case .unavailable = error { markUnavailable(executor) }
                 if case .transport = error { markUnavailable(executor) }
                 continue
@@ -136,7 +151,7 @@ public actor ModelRouter {
                 return (executor.identifier, executor.tier, stream)
             } catch let error as LLMError where error.isEscalatable {
                 attempts.append(.init(executor: executor.identifier, tier: executor.tier,
-                                      outcome: shortOutcome(error)))
+                                      outcome: shortOutcome(error), detail: error.description))
                 continue
             }
         }

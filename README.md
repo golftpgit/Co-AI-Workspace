@@ -35,6 +35,6 @@
 Chat UI → Model Router (escalate ข้าม tier เอง) → tool call → hook chain (Critic → Risk → Policy → HITL) →
 Approval Broker (ตอบจากช่องทางไหนก็ได้) → `run_shell` ใน seatbelt sandbox → span + ข้อความ ลง SurrealDB
 
-ชุดทดสอบ **128 ตัว** รันกับของจริงทั้งหมด: SurrealDB จริง, โมเดลจริง (on-device + endpoint), process/สัญญาณ/sandbox จริง
+ชุดทดสอบ **133 ตัว** รันกับของจริงทั้งหมด: SurrealDB จริง, โมเดลจริง (on-device + endpoint), process/สัญญาณ/sandbox จริง
 
 ถัดไปคือ **P2 — Knowledge**: chunker + Thai tokenizer, ingestion pipeline, hybrid search, provenance

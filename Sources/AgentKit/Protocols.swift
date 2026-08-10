@@ -68,7 +68,21 @@ public protocol AgentTool: Sendable {
     /// cannot lower its own risk to dodge the gate (§5.3, §12.2).
     var riskLevel: RiskLevel { get }
 
+    /// Cheap local validation the gate runs *before* it spends a human's
+    /// attention. A call that cannot possibly succeed — no working directory
+    /// chosen, a path that does not exist — belongs back with the model, not
+    /// in front of the user as an approval they are about to waste a click on.
+    ///
+    /// A tool may only *refuse* here. It cannot approve, cannot lower its own
+    /// risk and cannot skip the chain: throwing sends the call back, and
+    /// returning normally still leaves every decision to the gate (§5.3).
+    func precheck(argumentsJSON: String, context: ToolContext) throws
+
     func call(argumentsJSON: String, context: ToolContext) async throws -> ToolOutput
+}
+
+extension AgentTool {
+    public func precheck(argumentsJSON: String, context: ToolContext) throws {}
 }
 
 // MARK: - Channels

@@ -36,6 +36,10 @@ struct ChatView: View {
                                    edit: $model.approvalEdit,
                                    isEditing: $model.editingApproval,
                                    respond: model.respond)
+                        // Without this the banner and the transcript split the
+                        // leftover height between them; the banner should take
+                        // only what it needs and leave the rest to the messages.
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Divider()
                 composer
@@ -213,15 +217,22 @@ private struct BubbleView: View {
                 .padding(.top, 4)
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: bubble.blocked ? "hand.raised.fill" : "wrench.and.screwdriver")
-                Text(bubble.toolName ?? "tool").fontWeight(.medium)
-                if bubble.blocked {
-                    Text("ไม่ได้รัน").font(.caption).foregroundStyle(.secondary)
+                if bubble.running {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: bubble.blocked ? "hand.raised.fill" : "wrench.and.screwdriver")
                 }
+                Text(bubble.toolName ?? "tool").fontWeight(.medium)
+                Text(status).font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding(10)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
-        .accessibilityLabel("ผลจากเครื่องมือ \(bubble.toolName ?? "")")
+        .accessibilityLabel("เครื่องมือ \(bubble.toolName ?? "") — \(status)")
+    }
+
+    private var status: String {
+        if bubble.running { return "กำลังทำงาน…" }
+        return bubble.blocked ? "ไม่ได้รัน" : "เสร็จแล้ว"
     }
 }

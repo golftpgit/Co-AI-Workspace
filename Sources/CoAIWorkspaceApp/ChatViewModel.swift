@@ -23,6 +23,8 @@ final class ChatViewModel {
         let kind: Kind
         var text: String
         var toolName: String?
+        /// Still waiting on the gate, a human, or the process itself.
+        var running: Bool = false
         var blocked: Bool = false
     }
 
@@ -156,12 +158,21 @@ final class ChatViewModel {
             routedVia = "\(executor) · tier \(tier.rawValue)"
         case .assistantDelta(let chunk):
             appendToStreamingBubble(chunk)
-        case .toolCallStarted(let name, let arguments):
-            bubbles.append(Bubble(id: UUID().uuidString, kind: .tool,
-                                  text: arguments, toolName: name))
-        case .toolCallFinished(let name, let text, let executed):
-            bubbles.append(Bubble(id: UUID().uuidString, kind: .tool, text: text,
-                                  toolName: name, blocked: !executed))
+        // One call, one card. It appears with the arguments the moment the
+        // model asks, then becomes the result in place — appending a second
+        // card made every tool call look like it happened twice.
+        case .toolCallStarted(let id, let name, let arguments):
+            streamingBubbleID = nil
+            bubbles.append(Bubble(id: id, kind: .tool, text: arguments,
+                                  toolName: name, running: true))
+        case .toolCallFinished(let id, let name, let text, let executed):
+            let updated = Bubble(id: id, kind: .tool, text: text,
+                                 toolName: name, running: false, blocked: !executed)
+            if let index = bubbles.firstIndex(where: { $0.id == id }) {
+                bubbles[index] = updated
+            } else {
+                bubbles.append(updated)
+            }
         case .note(let text):
             bubbles.append(Bubble(id: UUID().uuidString, kind: .note, text: text))
         case .assistantMessageStored:

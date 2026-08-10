@@ -21,8 +21,10 @@ public enum TurnEvent: Sendable {
     case userMessageStored(StoredMessage)
     case routed(executor: String, tier: ModelTier)
     case assistantDelta(String)
-    case toolCallStarted(name: String, argumentsJSON: String)
-    case toolCallFinished(name: String, text: String, executed: Bool)
+    /// `id` is the model's own tool-call id, carried so the UI can update the
+    /// card it already drew instead of appending a second one.
+    case toolCallStarted(id: String, name: String, argumentsJSON: String)
+    case toolCallFinished(id: String, name: String, text: String, executed: Bool)
     /// Something the user should know that is not part of the answer.
     case note(String)
     case assistantMessageStored(StoredMessage)
@@ -69,8 +71,29 @@ public actor AgentTurnRunner {
     คุณคือผู้ช่วยของ Co-AI Workspace ทำงานบนเครื่อง Mac ของผู้ใช้ \
     ตอบเป็นภาษาไทยเว้นแต่ผู้ใช้จะใช้ภาษาอื่น กระชับและตรงประเด็น
     เมื่อจำเป็นต้องดูสถานะจริงของเครื่องหรือของโปรเจกต์ ให้เรียกเครื่องมือแทนการเดา \
-    เครื่องมือที่มีความเสี่ยงจะถูกส่งให้ผู้ใช้อนุมัติก่อนเสมอ ถ้าผู้ใช้ไม่อนุมัติ ให้เสนอทางเลือกอื่นแทนการเรียกซ้ำ
+    แต่คำถามที่ตอบได้เองอย่าเรียกเครื่องมือ \
+    เครื่องมือที่มีความเสี่ยงจะถูกส่งให้ผู้ใช้อนุมัติก่อนเสมอ ถ้าผู้ใช้ไม่อนุมัติ ให้เสนอทางเลือกอื่น ห้ามเรียกคำสั่งเดิมซ้ำ
+    ห้ามสมมติ path หรือชื่อไฟล์ที่ยังไม่เคยเห็น — ถ้าไม่รู้ ให้ใช้เครื่องมือดูก่อนหรือถามผู้ใช้
     """
+
+    /// Appended to the system prompt each turn. A model that is not told where
+    /// it is will invent somewhere: with no folder chosen, Llama 3.1 8B called
+    /// `run_shell` with `working_directory: "/path/to/project"` and the user
+    /// was asked to approve it.
+    private static func placeContext(_ workingDirectory: URL?) -> String {
+        guard let workingDirectory else {
+            return """
+
+            ตอนนี้ผู้ใช้ยังไม่ได้เลือกโฟลเดอร์งาน จึงรันคำสั่งใด ๆ ไม่ได้เลย \
+            ถ้างานต้องรันคำสั่ง ให้บอกผู้ใช้ให้กด "เลือกโฟลเดอร์งาน" ก่อน อย่าเดา path
+            """
+        }
+        return """
+
+        โฟลเดอร์งานปัจจุบันคือ \(workingDirectory.path(percentEncoded: false)) \
+        คำสั่งทั้งหมดรันที่นี่ ไม่ต้องส่ง working_directory มาเองเว้นแต่ต้องการโฟลเดอร์อื่นจริง ๆ
+        """
+    }
 
     /// Runs a turn. The stream finishes with `.finished` or `.failed`;
     /// cancelling the consuming task cancels the turn.
@@ -129,7 +152,8 @@ public actor AgentTurnRunner {
         var messages: [LLMMessage]
         do {
             let history = try await transcript.history(conversationID: conversationID, limit: 500)
-            messages = [LLMMessage(.system, systemPrompt)] + history.map(Self.llmMessage(from:))
+            let system = systemPrompt + Self.placeContext(workingDirectory)
+            messages = [LLMMessage(.system, system)] + history.map(Self.llmMessage(from:))
         } catch {
             emit(.failed("อ่านประวัติการสนทนาไม่สำเร็จ: \(error)"))
             await close(.failed, "load history: \(error)")
@@ -140,6 +164,8 @@ public actor AgentTurnRunner {
                                   workingDirectory: workingDirectory,
                                   conversationID: conversationID,
                                   role: role)
+        /// Calls the human has already refused this turn, by tool and arguments.
+        var denied = Set<String>()
         var tools = await gateway.adverts.map {
             LLMToolSpec(name: $0.name, description: $0.description, parametersJSON: $0.parametersJSON)
         }
@@ -163,6 +189,10 @@ public actor AgentTurnRunner {
                 emit(.note("โมเดลที่ใช้ได้ตอนนี้ไม่รองรับการเรียกเครื่องมือ — ตอบโดยไม่ใช้เครื่องมือ"))
                 tools = []
                 continue
+            } catch let error as RoutingError {
+                emit(.failed(Self.explain(error)))
+                await close(.failed, error.description)
+                return
             } catch {
                 emit(.failed("เรียกโมเดลไม่สำเร็จ: \(error)"))
                 await close(.failed, "\(error)")
@@ -210,7 +240,20 @@ public actor AgentTurnRunner {
             if !text.isEmpty { try? await store(text, in: conversationID, emit: emit) }
 
             for call in calls {
-                emit(.toolCallStarted(name: call.name, argumentsJSON: call.argumentsJSON))
+                emit(.toolCallStarted(id: call.id, name: call.name, argumentsJSON: call.argumentsJSON))
+
+                // Asking a second time about something the human already said
+                // no to is not diligence, it is nagging — and a model that
+                // retries the identical call would do it every round up to the
+                // cap. Observed with Llama 3.1 8B on the first real turn.
+                let fingerprint = "\(call.name)\u{1}\(call.argumentsJSON)"
+                if denied.contains(fingerprint) {
+                    let text = "ผู้ใช้ไม่อนุมัติคำสั่งนี้ไปแล้วในเทิร์นนี้ — ห้ามเรียกซ้ำ ให้เสนอวิธีอื่นหรือถามผู้ใช้"
+                    emit(.toolCallFinished(id: call.id, name: call.name, text: text, executed: false))
+                    messages.append(LLMMessage(.tool, text, toolCallID: call.id))
+                    continue
+                }
+
                 let resultText: String
                 var executed = false
                 do {
@@ -221,12 +264,13 @@ public actor AgentTurnRunner {
                                                          parentSpan: turnSpan.id)
                     resultText = outcome.transcriptText
                     executed = outcome.didExecute
+                    if case .denied = outcome { denied.insert(fingerprint) }
                 } catch {
                     // The tool itself failed. The model gets the error verbatim,
                     // because that is usually what tells it what to do next.
                     resultText = "เครื่องมือ '\(call.name)' ล้มเหลว: \(error)"
                 }
-                emit(.toolCallFinished(name: call.name, text: resultText, executed: executed))
+                emit(.toolCallFinished(id: call.id, name: call.name, text: resultText, executed: executed))
                 messages.append(LLMMessage(.tool, resultText, toolCallID: call.id))
                 _ = try? await transcript.append(conversationID: conversationID, role: .tool,
                                                  content: "\(call.name)\n\(resultText)")
@@ -236,6 +280,18 @@ public actor AgentTurnRunner {
         emit(.note("เรียกเครื่องมือครบ \(maxToolRounds) รอบแล้วยังไม่จบ — หยุดไว้ก่อนเพื่อไม่ให้วนไม่รู้จบ"))
         await close(.failed, "tool round cap reached")
         emit(.finished)
+    }
+
+    /// Routing errors are the one failure a user can usually act on — the
+    /// endpoint is down, nothing supports tools — so they are worth saying in
+    /// full rather than as a category word.
+    private static func explain(_ error: RoutingError) -> String {
+        let lines = error.attempts.map { attempt in
+            "• \(attempt.executor): \(attempt.detail ?? attempt.outcome)"
+        }
+        return (["ไม่มีโมเดลที่รับงานนี้ได้:"] + lines
+                + ["ลองตรวจว่า endpoint ที่ตั้งไว้เปิดอยู่ หรือเปิด Apple Intelligence"])
+            .joined(separator: "\n")
     }
 
     private func store(_ text: String, in conversationID: String,

@@ -124,6 +124,20 @@ public actor ToolGateway {
             return .unknownTool(name)
         }
 
+        // Before anything else, and specifically before a human is asked: a
+        // call the tool already knows cannot run goes back to the model.
+        // Measured in the app — a model with no working directory chosen
+        // invented `/path/to/project`, and the user was asked to approve a
+        // command that would have failed the moment they said yes.
+        do {
+            try tool.precheck(argumentsJSON: argumentsJSON, context: context)
+        } catch {
+            let reason = (error as? ToolError)?.description ?? "\(error)"
+            await record(name: name, context: context, parent: parentSpan,
+                         status: .failed, detail: "precheck: \(reason)")
+            return .sentBack(reason: reason)
+        }
+
         var pending = PendingToolCall(toolName: tool.name,
                                       toolDescription: tool.toolDescription,
                                       declaredRisk: tool.riskLevel,
