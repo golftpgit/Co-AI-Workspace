@@ -413,3 +413,100 @@ private actor PromptLog {
     private(set) var last: String?
     func record(_ prompt: String) { last = prompt }
 }
+
+@Suite("What survives a reload")
+struct TranscriptFidelityTests {
+    /// Seen on screen: after a reload, a call for a tool that does not exist
+    /// and a call the user refused both rendered as "เสร็จแล้ว".
+    @Test("a refused call still reads as refused after the conversation reloads")
+    func blockedStateSurvives() async throws {
+        let transcript = MemoryTranscript()
+        let gateway = ToolGateway(approver: Approver(decision: .rejected(reason: "ไม่เอา")),
+                                  modes: OperatingModes(autonomy: .approvalRequired))
+        await gateway.register(EchoTool(name: "save_document", riskLevel: .medium, ran: Counter()))
+        let runner = AgentTurnRunner(router: ModelRouter(executors: [
+            ScriptedExecutor(script: RoundScript([
+                .toolCall(name: "save_document", argumentsJSON: #"{"q":"x"}"#),
+                .text("งั้นตอบเองแทน"),
+            ]))
+        ]), gateway: gateway, transcript: transcript)
+
+        _ = await collect(runner.run(userText: "ลอง", conversationID: "cv_t1", scope: .central))
+
+        let stored = try #require(await transcript.messages.first { $0.role == .tool })
+        let entry = ToolTranscript.decode(stored.content)
+        #expect(entry.toolName == "save_document")
+        #expect(entry.executed == false, "the refusal was stored as a success")
+    }
+
+    @Test("a call that did run reads as having run")
+    func executedStateSurvives() async throws {
+        let transcript = MemoryTranscript()
+        let gateway = ToolGateway(modes: OperatingModes(autonomy: .fullAutonomous))
+        await gateway.register(EchoTool(ran: Counter()))
+        let runner = AgentTurnRunner(router: ModelRouter(executors: [
+            ScriptedExecutor(script: RoundScript([
+                .toolCall(name: "kb_search", argumentsJSON: #"{"q":"x"}"#), .text("เสร็จ"),
+            ]))
+        ]), gateway: gateway, transcript: transcript)
+
+        _ = await collect(runner.run(userText: "ลอง", conversationID: "cv_t2", scope: .central))
+        let stored = try #require(await transcript.messages.first { $0.role == .tool })
+        #expect(ToolTranscript.decode(stored.content).executed)
+    }
+
+    /// The next turn must not read a refusal as evidence that the work is done.
+    @Test("the model is replayed the refusal, not a result")
+    func replayKeepsTheRefusal() {
+        let encoded = ToolTranscript.encode(.init(toolName: "run_shell", executed: false,
+                                                  text: "ผู้ใช้ไม่อนุมัติ"))
+        let entry = ToolTranscript.decode(encoded)
+        #expect(entry.executed == false)
+        #expect(entry.toolName == "run_shell")
+        #expect(entry.text == "ผู้ใช้ไม่อนุมัติ")
+    }
+
+    /// Rows written before the marker existed still have to load.
+    @Test("an older row without the marker still decodes")
+    func legacyRowsDecode() {
+        let entry = ToolTranscript.decode("run_shell\n$ ls\n[exit 0]")
+        #expect(entry.toolName == "run_shell")
+        #expect(entry.executed)
+        #expect(entry.text.contains("[exit 0]"))
+    }
+
+    /// Llama 3.1 8B invented `list_files` and `open_project` before finding
+    /// `run_shell`. Naming the roster is cheap; three wasted rounds are not.
+    @Test("the system prompt names the tools that actually exist")
+    func systemPromptListsTools() async throws {
+        let seen = PromptLog()
+        let gateway = ToolGateway(modes: OperatingModes(autonomy: .fullAutonomous))
+        await gateway.register(EchoTool(ran: Counter()))
+
+        struct PromptSpy: LLMExecutor {
+            let identifier = "spy"
+            let tier: ModelTier = .selfHosted
+            let capabilities = LLMCapabilities(contextWindow: 32_000, supportsTools: true,
+                                               supportsStructuredOutput: true,
+                                               supportsStreaming: true, supportsVision: false)
+            let seen: PromptLog
+            func isAvailable() async -> Bool { true }
+            func respond(to request: LLMRequest) -> AsyncThrowingStream<LLMEvent, Error> {
+                AsyncThrowingStream { continuation in
+                    Task {
+                        await seen.record(request.messages.first?.content ?? "")
+                        continuation.yield(.textDelta("ok"))
+                        continuation.yield(.finished(reason: "stop"))
+                        continuation.finish()
+                    }
+                }
+            }
+        }
+
+        let runner = AgentTurnRunner(router: ModelRouter(executors: [PromptSpy(seen: seen)]),
+                                     gateway: gateway, transcript: MemoryTranscript())
+        _ = await collect(runner.run(userText: "hi", conversationID: "cv_t3", scope: .central))
+        #expect(await seen.last?.contains("kb_search") == true)
+        #expect(await seen.last?.contains("ห้ามเรียกชื่ออื่น") == true)
+    }
+}

@@ -149,10 +149,12 @@ public actor AgentTurnRunner {
         }
 
         // 2 — history comes from the database, not from the view.
+        let adverts = await gateway.adverts
         var messages: [LLMMessage]
         do {
             let history = try await transcript.history(conversationID: conversationID, limit: 500)
             let system = systemPrompt + Self.placeContext(workingDirectory)
+                + Self.toolRoster(adverts.map(\.name))
             messages = [LLMMessage(.system, system)] + history.map(Self.llmMessage(from:))
         } catch {
             emit(.failed("อ่านประวัติการสนทนาไม่สำเร็จ: \(error)"))
@@ -166,7 +168,7 @@ public actor AgentTurnRunner {
                                   role: role)
         /// Calls the human has already refused this turn, by tool and arguments.
         var denied = Set<String>()
-        var tools = await gateway.adverts.map {
+        var tools = adverts.map {
             LLMToolSpec(name: $0.name, description: $0.description, parametersJSON: $0.parametersJSON)
         }
 
@@ -251,6 +253,9 @@ public actor AgentTurnRunner {
                     let text = "ผู้ใช้ไม่อนุมัติคำสั่งนี้ไปแล้วในเทิร์นนี้ — ห้ามเรียกซ้ำ ให้เสนอวิธีอื่นหรือถามผู้ใช้"
                     emit(.toolCallFinished(id: call.id, name: call.name, text: text, executed: false))
                     messages.append(LLMMessage(.tool, text, toolCallID: call.id))
+                    _ = try? await transcript.append(
+                        conversationID: conversationID, role: .tool,
+                        content: ToolTranscript.encode(.init(toolName: call.name, executed: false, text: text)))
                     continue
                 }
 
@@ -272,14 +277,31 @@ public actor AgentTurnRunner {
                 }
                 emit(.toolCallFinished(id: call.id, name: call.name, text: resultText, executed: executed))
                 messages.append(LLMMessage(.tool, resultText, toolCallID: call.id))
-                _ = try? await transcript.append(conversationID: conversationID, role: .tool,
-                                                 content: "\(call.name)\n\(resultText)")
+                _ = try? await transcript.append(
+                    conversationID: conversationID, role: .tool,
+                    content: ToolTranscript.encode(.init(toolName: call.name,
+                                                         executed: executed, text: resultText)))
             }
         }
 
         emit(.note("เรียกเครื่องมือครบ \(maxToolRounds) รอบแล้วยังไม่จบ — หยุดไว้ก่อนเพื่อไม่ให้วนไม่รู้จบ"))
         await close(.failed, "tool round cap reached")
         emit(.finished)
+    }
+
+    /// Spelling out the roster costs a line and stops a small model inventing
+    /// members of it: Llama 3.1 8B called `list_files` and `open_project`,
+    /// neither of which exists, before settling on `run_shell`.
+    private static func toolRoster(_ names: [String]) -> String {
+        guard !names.isEmpty else {
+            return "\n\nตอนนี้ไม่มีเครื่องมือให้เรียกเลย ตอบจากความรู้ที่มี"
+        }
+        return """
+
+
+        เครื่องมือที่มีอยู่จริงมีเท่านี้: \(names.joined(separator: ", ")) \
+        ห้ามเรียกชื่ออื่นนอกรายการนี้ ถ้าไม่มีเครื่องมือที่ตรงงาน ให้บอกผู้ใช้ตามตรง
+        """
     }
 
     /// Routing errors are the one failure a user can usually act on — the
@@ -311,7 +333,10 @@ public actor AgentTurnRunner {
         case .system: return LLMMessage(.system, stored.content)
         case .user: return LLMMessage(.user, stored.content)
         case .assistant: return LLMMessage(.assistant, stored.content)
-        case .tool: return LLMMessage(.assistant, "[ผลจากเครื่องมือ]\n\(stored.content)")
+        case .tool:
+            let entry = ToolTranscript.decode(stored.content)
+            let outcome = entry.executed ? "ผลจากเครื่องมือ" : "เครื่องมือนี้ไม่ได้ถูกรัน"
+            return LLMMessage(.assistant, "[\(outcome) \(entry.toolName)]\n\(entry.text)")
         }
     }
 }

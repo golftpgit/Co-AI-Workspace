@@ -233,11 +233,11 @@ final class ChatViewModel {
         case .assistant: return Bubble(id: message.id, kind: .assistant, text: message.content)
         case .system: return Bubble(id: message.id, kind: .note, text: message.content)
         case .tool:
-            // Stored as "toolName\noutput" by the turn runner.
-            let parts = message.content.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
-            return Bubble(id: message.id, kind: .tool,
-                          text: parts.count > 1 ? String(parts[1]) : message.content,
-                          toolName: parts.first.map(String.init))
+            // Including whether it ran. Reading this back as "ran fine"
+            // turned every refusal in the history into a success.
+            let entry = ToolTranscript.decode(message.content)
+            return Bubble(id: message.id, kind: .tool, text: entry.text,
+                          toolName: entry.toolName, blocked: !entry.executed)
         }
     }
 }
