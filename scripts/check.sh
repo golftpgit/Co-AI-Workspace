@@ -27,7 +27,8 @@ echo "$TEST_OUT" | grep -q "Test run with .* passed" && ok "tests" || fail "test
 # to maintain is cheap to catch mechanically.
 step "structure"
 
-DUP_SCOPE=$(grep -rl "enum Scope" Sources --include=*.swift | wc -l | tr -d ' ')
+# Exact declaration only — "enum ScopeColumns" is a different, legitimate type.
+DUP_SCOPE=$(grep -rlE "enum Scope[[:space:]]*[:{]" Sources --include=*.swift | wc -l | tr -d ' ')
 [ "$DUP_SCOPE" -le 1 ] && ok "Scope declared once" || fail "Scope declared in $DUP_SCOPE files (v1 had 3)"
 
 if grep -rn "print(" Sources --include=*.swift | grep -v "^Sources/CoAIWorkspaceApp" | grep -q .; then

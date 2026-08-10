@@ -13,7 +13,8 @@ import os
 public struct SpanID: Hashable, Sendable, Codable, CustomStringConvertible {
     public let rawValue: String
     public init(_ rawValue: String) { self.rawValue = rawValue }
-    public init() { self.rawValue = UUID().uuidString }
+    /// Opaque and prefixed so the database never re-types it (AgentKit.OpaqueID).
+    public init() { self.rawValue = OpaqueID.make(OpaqueID.span) }
     public var description: String { rawValue }
 }
 

@@ -22,11 +22,16 @@ public enum Scope: Hashable, Sendable, Codable {
     public var isPolicy: Bool { self == .policy }
 
     /// Stable string form for database columns and config files.
+    ///
+    /// Used for config files and UI state. Never `:` as a separator —
+    /// SurrealDB v3 reads a *bound* string shaped like `table:id` as a record
+    /// link (ARCHITECTURE App. C.0). Database rows do not store this composite
+    /// form at all; they use primitive columns (see Persistence.ScopeColumns).
     public var storageKey: String {
         switch self {
         case .central: return "central"
         case .policy: return "policy"
-        case .project(let id): return "project:\(id.rawValue)"
+        case .project(let id): return "project/\(id.rawValue)"
         }
     }
 
@@ -35,8 +40,8 @@ public enum Scope: Hashable, Sendable, Codable {
         case "central": self = .central
         case "policy": self = .policy
         default:
-            guard storageKey.hasPrefix("project:") else { return nil }
-            let id = String(storageKey.dropFirst("project:".count))
+            guard storageKey.hasPrefix("project/") else { return nil }
+            let id = String(storageKey.dropFirst("project/".count))
             guard !id.isEmpty else { return nil }
             self = .project(ProjectID(id))
         }

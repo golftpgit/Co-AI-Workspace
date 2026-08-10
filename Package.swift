@@ -24,15 +24,21 @@ let package = Package(
         // Infrastructure shared by M7 (surreal) and M6/WebSearch (searxng).
         .target(name: "Sidecar", dependencies: ["Config", "Observability"]),
 
+        // SurrealDB access + everything durable: conversations, spans and
+        // (from P2) the knowledge base. Client written in-house — see
+        // ARCHITECTURE §11.5 for why not surrealdb.swift.
+        .target(name: "Persistence", dependencies: ["AgentKit", "Observability"]),
+
         // M13 — SwiftUI shell.
         .executableTarget(
             name: "CoAIWorkspaceApp",
-            dependencies: ["AgentKit", "Config", "Observability", "Sidecar"]
+            dependencies: ["AgentKit", "Config", "Observability", "Sidecar", "Persistence"]
         ),
 
         .testTarget(name: "AgentKitTests", dependencies: ["AgentKit"]),
         .testTarget(name: "ConfigTests", dependencies: ["Config"]),
         .testTarget(name: "ObservabilityTests", dependencies: ["Observability"]),
         .testTarget(name: "SidecarTests", dependencies: ["Sidecar"]),
+        .testTarget(name: "PersistenceTests", dependencies: ["Persistence", "Sidecar", "Config"]),
     ]
 )

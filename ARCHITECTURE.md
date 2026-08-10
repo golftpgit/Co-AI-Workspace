@@ -1036,6 +1036,18 @@ graph LR
 | `FULLTEXT ANALYZER ... BM25(k1,b) HIGHLIGHTS` | ✅ ยืนยันว่ายังจริง | ไม่ใช่ `SEARCH ANALYZER` |
 | HNSW `<\|k,ef\|>` + `vector::distance::knn()` | ✅ **ใช้ได้ทั้ง `$param` และ literal** | ครั้งแรกที่เห็นค่าเป็น `false` เกิดจากบั๊ก decoder ฝั่งเราเอง ไม่ใช่ของ SurrealDB (ดูแถวถัดไป) |
 
+**🆕 ค้นพบเพิ่มระหว่าง implement P1.2–P1.6 (2026-08-10) — ทุกข้อมี regression test คุมแล้ว**:
+
+| # | อาการ | สาเหตุจริง | วิธีแก้ที่ใช้ |
+|---|---|---|---|
+| 1 | bound string ที่มี `/` (path, URL) → **RPC ไม่ตอบกลับเลย ค้างจนหมด timeout** | 🔴 **บั๊กของเราเอง** — `JSONSerialization` escape `/` เป็น `\/` โดย default แล้ว WS parser ของ SurrealDB ค้างกับ escape นั้น | ใส่ `.withoutEscapingSlashes` ตอน serialize RPC frame — หลังแก้ path/URL/ไทย/colon ผ่านหมด ([`BindingShapeTests`](Tests/PersistenceTests/BindingShapeTests.swift) คุมไว้ 12 shape) |
+| 2 | bound string ที่หน้าตาเป็น UUID → กลายเป็น **ค่า UUID** (`u'…'`) ตกเงื่อนไข `TYPE string` | SurrealDB v3 เดาชนิดจากรูปร่างของ string ที่ bind มา | ใช้ `AgentKit.OpaqueID` (prefix + hex ไม่มี dash) เป็น id ทุกที่ — ไม่มีทางถูกตีความเป็นชนิดอื่น |
+| 3 | `UPDATE` บน record ที่ยังไม่มี → error ไม่ใช่ upsert | v3 แยก `UPDATE` กับ `UPSERT` ชัดเจน | ใช้ `UPSERT` สำหรับ span/schema_meta |
+| 4 | `NULL` ผ่าน `option<string>` ไม่ได้ | `NULL` ≠ `NONE` ใน v3 | `ContentBuilder` **ตัด field ที่เป็น nil ทิ้ง** แทนการ bind null |
+| 5 | client ค้างถาวรเมื่อยิง request ถี่ๆ | 🔴 **race ในโค้ดเรา** — ลงทะเบียน continuation ผ่าน `Task` แยก ทำให้ response ที่มาเร็วกว่าหา waiter ไม่เจอแล้วถูกทิ้ง | ลงทะเบียนแบบ synchronous ในบริบท actor ก่อนส่ง frame; timeout แยกเป็น task ที่ fail รายการใน `pending` (กัน double-resume ด้วย `removeValue`) |
+
+**บทเรียนรวม**: 3 ใน 5 ข้อที่ "ดูเหมือนบั๊กของ SurrealDB" **เป็นบั๊กของเราเอง** — การเทสกับ engine จริงตั้งแต่ต้นคือสิ่งเดียวที่ทำให้เจอ (mock จะผ่านหมดทุกข้อ)
+
 **🆕 กับดักฝั่ง Swift ที่ไม่เกี่ยวกับ SurrealDB แต่ทำให้ข้อมูลเพี้ยนเงียบๆ**:
 
 - **`x as? Bool` สำเร็จกับ `NSNumber` ทุกตัวใน Swift** — `0.8469` ถูกแปลงเป็น `true` เงียบๆ ตอน decode JSON ทำให้ score/distance กลายเป็น boolean โดยไม่มี error ใดๆ → **ต้องตรวจ `NSNumber` ก่อนเสมอ และตัดสินความเป็น boolean ด้วย `CFGetTypeID(n) == CFBooleanGetTypeID()`** ไม่ใช่ด้วยการ cast (ดูโค้ดจริงใน [`spikes/SurrealClient/SurrealClient.swift`](spikes/SurrealClient/SurrealClient.swift))
