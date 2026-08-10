@@ -64,7 +64,7 @@
 
 **เป้าหมาย**: คุยกับ agent ได้จริง 1 เส้นทาง ครบทุก invariant — นี่คือกระดูกสันหลังที่ทุก phase ต่อยอด
 
-**ความคืบหน้า**: P1.1 · P1.2 · P1.3 · P1.6 ✅ เสร็จแล้ว (2026-08-10) — **43 tests ผ่านหมด** โดย Persistence ทดสอบกับ SurrealDB จริงทุกตัว ไม่ใช่ mock
+**ความคืบหน้า**: P1.1 · P1.2 · P1.3 · P1.4 · P1.5 · P1.6 ✅ เสร็จแล้ว (2026-08-10) — **68 tests ผ่านหมด** โดย Persistence ทดสอบกับ SurrealDB จริง และ LLM ทดสอบกับโมเดลจริงทั้ง on-device และ endpoint
 
 | Task | รายละเอียด | Done-when | สถานะ |
 |---|---|---|---|
@@ -72,8 +72,8 @@
 | **P1.2** `SurrealClient` + schema | ย้ายโค้ดจาก spike เข้า target จริง + schema bootstrap แบบ **idempotent** | เปิดแอป 3 ครั้งติดกันไม่ error; test ครอบ reconnect + concurrent query | ✅ พร้อมแก้บั๊กจริง 5 ข้อที่เจอตอนเทสกับ engine ([ARCH C.0](ARCHITECTURE.md#c0-surrealdb-v320-quirks--ยืนยันซ้ำค้นพบใหม่จาก-spike-ฝั่ง-swift-2026-08-10)) — **3 ใน 5 เป็นบั๊กของเราเอง** |
 | **P1.3** Conversation persistence | ตาราง `conversation`/`message`, เขียน user message **ก่อน** เรียก LLM เสมอ, โหลด history จาก DB ทุกครั้ง | ปิดแอปกลางบทสนทนา → เปิดใหม่เห็นครบ; agent error → user message ยังอยู่ | ✅ เทสยืนยัน reconnect แล้ว history ครบ, ลำดับถูก, scope filter ไม่รั่ว, delete cascade |
 | **P1.6** Span store | ทุก step เขียน span เข้า DB — **แหล่งเดียว** ([ARCH §16](ARCHITECTURE.md#16-m12-observability--eval)) | สลับหน้าไปมาแล้ว event ไม่หาย (v1 bug B5); span ย้อนหลังอ่านได้หลัง restart | ✅ `SurrealSpanSink` + `SpanRecorder` ปิด span เสมอแม้ body throw; parent/child reassemble ได้ |
-| **P1.4** `LLMExecutor` + 2 impl | ย้ายโค้ดจาก [`spikes/LLMExecutor/`](spikes/LLMExecutor/) + เขียน `OnDeviceExecutor` ห่อ `LanguageModelSession` ([ARCH §9.1](ARCHITECTURE.md#91-llm-abstraction-ของเราเอง-รองรับทั้งสองยุค)) | ทั้งสอง executor ผ่าน test suite เดียวกัน (streaming, tool call, structured output, cancel) | |
-| **P1.5** Model Router (แกน) | เลือก tier จาก 4 signal + **fallback chain** + **refusal = escalate** ([ARCH §9.2](ARCHITECTURE.md#92-model-router-tier-0--05--1)) — API ไม่มี overload ที่ไม่มี fallback | test: บังคับให้ Tier 0 refuse → งานสำเร็จที่ tier ถัดไป **โดยไม่มี error โผล่ถึง caller** | |
+| **P1.4** `LLMExecutor` + 2 impl | `OnDeviceExecutor` (Foundation Models) + `VLLMExecutor` (OpenAI-compatible) หลัง protocol เดียว ([ARCH §9.1](ARCHITECTURE.md#91-llm-abstraction-ของเราเอง-รองรับทั้งสองยุค)) | ทั้งสอง executor ผ่าน contract เดียวกันกับ backend จริง | ✅ **Tier 0 ทำ structured output ได้จริง** ผ่าน `DynamicGenerationSchema` (JSON Schema ของเรา → schema ของ Apple ตอน runtime); tool calling ประกาศว่าไม่รองรับตามตรง เพื่อให้ router ส่งขึ้น tier บนแทนที่จะพังกลางเทิร์น |
+| **P1.5** Model Router | เลือก tier จาก capability/impact/availability/latency + **fallback chain** + **refusal = escalate** ([ARCH §9.2](ARCHITECTURE.md#92-model-router-tier-0--05--1)) | test: บังคับให้ Tier 0 refuse → งานสำเร็จที่ tier ถัดไป **โดยไม่มี error โผล่ถึง caller** | ✅ 12 เทสคุมกติกา: refusal/overflow/offline escalate, decoding ไม่ escalate, งาน high-impact ข้าม Tier 0, **paid tier ต้องขอใช้ก่อนเสมอ**, streaming escalate ก่อน token แรก, เส้นทางที่ escalate ถูกบันทึกลง span |
 | **P1.7** Hook chain + Risk scorer | Critic → Risk → HITL รอบทุก tool call ([ARCH §5.3](ARCHITECTURE.md#53-hook-chain-gate-sub-module)) + risk classification ต่อ tool | test พิสูจน์ว่า **ไม่มีทางเรียก tool โดยไม่ผ่าน gate** (v1 ใช้ test แบบนี้จับ bug ได้จริง) | |
 | **P1.8** Approval Broker | broadcast ไปทุก channel, first-response-wins, กัน double-resolve ([ARCH §5.4](ARCHITECTURE.md#54-approval-broker-sub-module)) | test: 2 channel ตอบพร้อมกัน → resolve ครั้งเดียว, อีกฝั่งได้สถานะ "resolved แล้ว" | |
 | **P1.9** `run_shell` + Execution (แกน) | `Process` + sandbox profile + process registry + pause/stop ([ARCH §13](ARCHITECTURE.md#13-m9-execution)) | รันคำสั่งจริงได้, กด stop แล้วตายจริง, ไม่มี zombie | |

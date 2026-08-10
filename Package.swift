@@ -29,10 +29,14 @@ let package = Package(
         // ARCHITECTURE §11.5 for why not surrealdb.swift.
         .target(name: "Persistence", dependencies: ["AgentKit", "Observability"]),
 
+        // M5 — every model behind one interface, plus the router that decides
+        // which tier serves a request (ARCHITECTURE §9).
+        .target(name: "LLMProviders", dependencies: ["AgentKit", "Observability"]),
+
         // M13 — SwiftUI shell.
         .executableTarget(
             name: "CoAIWorkspaceApp",
-            dependencies: ["AgentKit", "Config", "Observability", "Sidecar", "Persistence"]
+            dependencies: ["AgentKit", "Config", "Observability", "Sidecar", "Persistence", "LLMProviders"]
         ),
 
         .testTarget(name: "AgentKitTests", dependencies: ["AgentKit"]),
@@ -40,5 +44,6 @@ let package = Package(
         .testTarget(name: "ObservabilityTests", dependencies: ["Observability"]),
         .testTarget(name: "SidecarTests", dependencies: ["Sidecar"]),
         .testTarget(name: "PersistenceTests", dependencies: ["Persistence", "Sidecar", "Config"]),
+        .testTarget(name: "LLMProvidersTests", dependencies: ["LLMProviders"]),
     ]
 )
