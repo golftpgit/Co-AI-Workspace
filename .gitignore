@@ -4,3 +4,6 @@ vendor/
 .DS_Store
 *.xcuserdatad
 .claude/settings.local.json
+
+# xcodebuild derived data from the MLX spike
+.xcbuild/

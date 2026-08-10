@@ -1173,6 +1173,21 @@ graph LR
 
 แปลว่าสำหรับคลังเอกสารไทย `.accurate` ไม่ใช่ตัวเลือกเรื่องคุณภาพแต่เป็นทางเดียวที่ใช้ได้ · ถ้าเผลอตั้ง `.fast` เพื่อความเร็ว หน้าที่เป็นภาษาไทยจะคืนค่าว่างโดยไม่มี error → `TextRecognizer` ล็อก `.accurate` ไว้ตายตัวและ expose `supportedLanguages` ให้ UI บอกผู้ใช้ได้ว่าเครื่องนี้อ่านภาษาอะไรได้บ้าง
 
+### E.13 bge-m3 ในโปรเซสเราเอง — spike ตอบแล้ว: ติดที่ build ไม่ใช่โมเดล (2026-08-11)
+
+คำถาม: KB ต้องพึ่ง LM Studio ตลอดไปไหม หรือแอปเป็นเจ้าของโมเดล embedding เองได้เหมือนที่เป็นเจ้าของ `surreal` อยู่แล้ว ([spikes/EmbeddingRuntime/](../spikes/EmbeddingRuntime/FINDINGS.md))
+
+**ฝั่ง Swift พร้อมแล้ว** — `MLXEmbedders` ใน [`mlx-swift-lm`](https://github.com/ml-explore/mlx-swift-lm) 3.31.4 มี `EmbedderRegistry.bge_m3` เป็น configuration สำเร็จรูป + BERT port · น้ำหนักมีบน HF ครบทุก quantisation · downloader/tokenizer ที่ mlx-swift-lm จงใจไม่ให้มา เติมด้วย `Hub`/`Tokenizers` จาก swift-transformers ~40 บรรทัด · `swift build` ผ่าน
+
+**ที่ติดคือ build ไม่ใช่โค้ด** สองชั้น:
+
+1. **เครื่องนี้ไม่มี Metal Toolchain** — Xcode 26 แยกเป็น component ต้องโหลดเอง (`xcodebuild -showComponent MetalToolchain` → `uninstalled`) ทำให้ compile kernel ของ MLX ไม่ได้ และตอน runtime ตายที่ `Failed to load the default metallib` แก้ได้ด้วย `xcodebuild -downloadComponent MetalToolchain` แต่เป็นการติดตั้งระดับหลาย GB
+2. **ต่อให้มี toolchain ก็ยังชนกติกาของโปรเจกต์** — README ของ mlx-swift เขียนเองว่า *"SwiftPM (command line) cannot build the Metal shaders so the ultimate build has to be done via Xcode"* ขณะที่ `check.sh`/`build-app.sh` เป็น SwiftPM ล้วนโดยเจตนา (header ของ `build-app.sh` เขียนไว้ว่าเพื่อให้ reproducible จาก command line และใน CI)
+
+**ทางเลือก**: (A) bundle sidecar ของเราเอง (`llama-server` + bge-m3 GGUF) ผ่าน `SidecarManager` เหมือน `surreal` — ได้เป้าหมายจริง (โมเดลอยู่ใน container ของแอป เราล็อกเวอร์ชันเอง ไม่พึ่ง LM Studio) โดยไม่แตะวิธี build · (B) MLX in-process + ขั้น `xcodebuild` แยกไว้ทำ metallib — runtime ดีที่สุดแต่รื้อการตัดสินใจเรื่อง build · (C) อยู่กับ LM Studio ต่อ — **ตัดทิ้ง** เพราะ App Sandbox อ่านไฟล์ใน `~/.lmstudio` ไม่ได้เลย เหลือแค่ HTTP บน localhost และผู้ใช้ลบ/อัปเดตโมเดลเมื่อไหร่ก็ได้
+
+**แนะนำ A ก่อน** แล้วค่อยพิจารณา B ตอนที่คุ้มจะรื้อเรื่อง build
+
 ### E.4 สถานะ dependency หลัก (จาก GitHub API วันที่ตรวจ)
 
 | Dependency | ตัวเลขจริง | ประเมิน |
