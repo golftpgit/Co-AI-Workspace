@@ -23,11 +23,16 @@ private func servedEmbeddingModel() async -> String? {
     return rows.compactMap { $0["id"] as? String }.first { $0.lowercased().contains("embed") }
 }
 
+private func testProfile(_ model: String, dimensions: Int) -> EmbeddingProfile {
+    EmbeddingProfile(modelID: model, revision: "served", dimensions: dimensions)
+}
+
 /// Asking the endpoint rather than assuming: the same model is 768 dimensions
 /// in one build and 1024 in another, and guessing wrong is exactly the failure
 /// this client is supposed to catch.
 private func dimensions(of model: String) async -> Int? {
-    let probe = RemoteEmbedder(baseURL: endpoint, model: model, dimensions: 1)
+    let probe = RemoteEmbedder(baseURL: endpoint, model: model,
+                               profile: testProfile(model, dimensions: 1))
     do {
         _ = try await probe.embed("probe")
         return 1
@@ -42,14 +47,14 @@ private func dimensions(of model: String) async -> Int? {
 /// for anything outside Latin script.
 private struct ThaiBlindEmbedder: Embedder {
     let identifier = "thai-blind"
-    let dimensions = 8
+    let profile = EmbeddingProfile(modelID: "thai-blind", revision: "test", dimensions: 8)
 
     func embed(_ texts: [String]) async throws -> [[Float]] {
         texts.map { text in
             let isThai = text.unicodeScalars.contains { (0x0E00...0x0E7F).contains($0.value) }
-            if isThai { return [Float](repeating: 0.5, count: dimensions) }
-            var vector = [Float](repeating: 0, count: dimensions)
-            vector[text.count % dimensions] = 1
+            if isThai { return [Float](repeating: 0.5, count: 8) }
+            var vector = [Float](repeating: 0, count: 8)
+            vector[text.count % 8] = 1
             return vector
         }
     }
@@ -57,13 +62,13 @@ private struct ThaiBlindEmbedder: Embedder {
 
 private struct HonestEmbedder: Embedder {
     let identifier = "honest"
-    let dimensions = 8
+    let profile = EmbeddingProfile(modelID: "honest", revision: "test", dimensions: 8)
 
     func embed(_ texts: [String]) async throws -> [[Float]] {
         texts.map { text in
-            var vector = [Float](repeating: 0, count: dimensions)
+            var vector = [Float](repeating: 0, count: 8)
             for (offset, scalar) in text.unicodeScalars.enumerated() {
-                vector[Int(scalar.value) % dimensions] += Float(offset % 3 + 1)
+                vector[Int(scalar.value) % 8] += Float(offset % 3 + 1)
             }
             return vector
         }
@@ -79,7 +84,8 @@ struct EmbedderTests {
             Issue.record("skipped: no embedding model on :1234")
             return
         }
-        let embedder = RemoteEmbedder(baseURL: endpoint, model: model, dimensions: size)
+        let embedder = RemoteEmbedder(baseURL: endpoint, model: model,
+                                      profile: testProfile(model, dimensions: size))
         let vectors = try await embedder.embed(["การให้อินซูลินในผู้ป่วยเบาหวาน",
                                                 "insulin therapy in diabetic patients"])
         #expect(vectors.count == 2)
@@ -94,7 +100,8 @@ struct EmbedderTests {
         }
         // The failure P2.1 exists to prevent: a model whose dimension differs
         // from the one the index was built with must not quietly write rows.
-        let wrong = RemoteEmbedder(baseURL: endpoint, model: model, dimensions: size + 1)
+        let wrong = RemoteEmbedder(baseURL: endpoint, model: model,
+                                   profile: testProfile(model, dimensions: size + 1))
         await #expect(throws: EmbeddingError.self) { _ = try await wrong.embed("x") }
     }
 
@@ -109,7 +116,8 @@ struct EmbedderTests {
             Issue.record("skipped: no embedding model on :1234")
             return
         }
-        let embedder = RemoteEmbedder(baseURL: endpoint, model: model, dimensions: size)
+        let embedder = RemoteEmbedder(baseURL: endpoint, model: model,
+                                      profile: testProfile(model, dimensions: size))
         let diagnosis = try await diagnose(embedder)
 
         guard diagnosis.isUsable else {
@@ -142,7 +150,7 @@ struct EmbedderTests {
     @Test("a dead endpoint fails with a legible error", .timeLimit(.minutes(1)))
     func deadEndpoint() async {
         let dead = RemoteEmbedder(baseURL: URL(string: "http://127.0.0.1:9/v1")!,
-                                  model: "x", dimensions: 1024)
+                                  model: "x", profile: .bgeM3)
         await #expect(throws: EmbeddingError.self) { _ = try await dead.embed("x") }
     }
 }

@@ -112,12 +112,13 @@ public struct IngestionPipeline: Sendable {
                     page: document.pages.count > 1 ? pageNumber + 1 : nil,
                     section: document.usedOCR ? "OCR" : nil)
 
-                index.insert(IndexedChunk(
+                try index.insert(IndexedChunk(
                     id: "\(id)#p\(pageNumber + 1)c\(chunk.index)",
                     text: chunk.text,
                     scope: scope,
                     provenance: provenance,
                     embedding: embedding,
+                    embeddingProfileID: embedding == nil ? nil : embedder?.profile.id,
                     contentHash: hash,
                     entities: EntityExtractor().entities(in: chunk.text)))
                 added += 1

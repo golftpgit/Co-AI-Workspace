@@ -12,8 +12,14 @@ import Foundation
 
 public protocol Embedder: Sendable {
     var identifier: String { get }
-    var dimensions: Int { get }
+    /// Which vector space this produces. Required, not derived: an embedder
+    /// that cannot say what it is cannot be checked against an index.
+    var profile: EmbeddingProfile { get }
     func embed(_ texts: [String]) async throws -> [[Float]]
+}
+
+extension Embedder {
+    public var dimensions: Int { profile.dimensions }
 }
 
 extension Embedder {
@@ -91,16 +97,16 @@ public func cosineSimilarity(_ a: [Float], _ b: [Float]) -> Double {
 /// reason: one protocol, several places it can run.
 public struct RemoteEmbedder: Embedder {
     public let identifier: String
-    public let dimensions: Int
+    public let profile: EmbeddingProfile
     private let baseURL: URL
     private let model: String
     private let apiKey: String?
 
-    public init(baseURL: URL, model: String, dimensions: Int, apiKey: String? = nil) {
+    public init(baseURL: URL, model: String, profile: EmbeddingProfile, apiKey: String? = nil) {
         self.identifier = model
         self.baseURL = baseURL
         self.model = model
-        self.dimensions = dimensions
+        self.profile = profile
         self.apiKey = apiKey
     }
 

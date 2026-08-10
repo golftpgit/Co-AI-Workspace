@@ -24,17 +24,22 @@ public struct IndexedChunk: Sendable, Equatable {
     /// SHA-256 of the whitespace-normalised text — how re-ingesting the same
     /// document stays a no-op (P2.3).
     public let contentHash: String
+    /// Which vector space `embedding` belongs to. Present exactly when the
+    /// vector is: a vector that cannot name its model cannot be checked.
+    public let embeddingProfileID: String?
     /// People, places and organisations named in this chunk (§11.4).
     public let entities: [String]
 
     public init(id: String, text: String, scope: Scope,
                 provenance: Provenance, embedding: [Float]? = nil,
+                embeddingProfileID: String? = nil,
                 contentHash: String? = nil, entities: [String] = []) {
         self.id = id
         self.text = text
         self.scope = scope
         self.provenance = provenance
         self.embedding = embedding
+        self.embeddingProfileID = embeddingProfileID
         self.contentHash = contentHash ?? IngestionPipeline.contentHash(text)
         self.entities = entities
     }
@@ -60,19 +65,41 @@ public struct KnowledgeIndex: Sendable {
     private let tokenizer: Tokenizer
     private var chunks: [IndexedChunk] = []
 
-    public init(tokenizer: Tokenizer = Tokenizer(), rrfK: Double = 60) {
+    /// What this index's vectors mean. `nil` is a lexical-only index — legal,
+    /// and the state a machine with no embedding runtime works in — but it can
+    /// never hold a vector, because a vector with no profile is unverifiable.
+    public let profile: EmbeddingProfile?
+
+    public init(profile: EmbeddingProfile? = nil,
+                tokenizer: Tokenizer = Tokenizer(), rrfK: Double = 60) {
+        self.profile = profile
         self.tokenizer = tokenizer
         self.rrfK = rrfK
     }
 
     public var count: Int { chunks.count }
 
-    public mutating func insert(_ chunk: IndexedChunk) {
+    /// Throws rather than dropping the vector: an index that quietly accepts a
+    /// chunk without its vector looks healthy and answers worse, which is the
+    /// failure mode this whole file exists to prevent.
+    public mutating func insert(_ chunk: IndexedChunk) throws {
+        if chunk.embedding != nil {
+            guard let indexProfile = profile else {
+                throw IndexProfileError.lexicalIndexCannotHoldVectors
+            }
+            guard let chunkProfile = chunk.embeddingProfileID else {
+                throw IndexProfileError.vectorWithoutProfile
+            }
+            guard chunkProfile == indexProfile.id else {
+                throw IndexProfileError.foreignVector(indexProfile: indexProfile.id,
+                                                      chunkProfile: chunkProfile)
+            }
+        }
         chunks.append(chunk)
     }
 
-    public mutating func insert(contentsOf newChunks: [IndexedChunk]) {
-        chunks.append(contentsOf: newChunks)
+    public mutating func insert(contentsOf newChunks: [IndexedChunk]) throws {
+        for chunk in newChunks { try insert(chunk) }
     }
 
     /// Exact-duplicate check, scope-independent on purpose: the same passage
@@ -108,6 +135,17 @@ public struct KnowledgeIndex: Sendable {
     /// competes on the lexical side rather than disappearing.
     public func search(_ query: String, scope: Scope, embedder: some Embedder,
                        limit: Int = 10) async throws -> [SearchResult] {
+        // The query side of the same invariant: a question embedded by another
+        // model lands somewhere else in space, and the nearest neighbours it
+        // finds are arbitrary.
+        guard let indexProfile = profile else {
+            throw IndexProfileError.lexicalIndexCannotHoldVectors
+        }
+        guard embedder.profile.id == indexProfile.id else {
+            throw IndexProfileError.queriedWithAnotherModel(indexProfile: indexProfile.id,
+                                                            queryProfile: embedder.profile.id)
+        }
+
         let visible = chunks.filter { $0.scope == scope }
         guard !visible.isEmpty else { return [] }
 

@@ -10,6 +10,11 @@ import NaturalLanguage
 // ─────────────────────────────────────────────────────────────
 
 public struct Tokenizer: Sendable {
+    /// Bump whenever segmentation changes: the terms in an index were produced
+    /// by one version of this, and a query tokenised differently stops matching
+    /// them. Recorded in `EmbeddingProfile`.
+    public static let version = 1
+
     public let dictionary: TermDictionary
     /// Off only so tests can measure what the merge layer is worth.
     public let mergesDictionaryTerms: Bool

@@ -68,10 +68,13 @@ private func temporaryDirectory() throws -> URL {
 
 /// bge-m3 at 1024 dimensions is what P2.1 locked; the tests use whatever this
 /// machine serves under that name and skip loudly when it is absent.
+private let bgeProfile = EmbeddingProfile(modelID: "text-embedding-bge-m3",
+                                          revision: "gguf-q8_0", dimensions: 1_024)
+
 private func bgeEmbedder() async -> RemoteEmbedder? {
     let endpoint = URL(string: "http://127.0.0.1:1234/v1")!
     let embedder = RemoteEmbedder(baseURL: endpoint, model: "text-embedding-bge-m3",
-                                  dimensions: 1024)
+                                  profile: bgeProfile)
     return await embedder.isReachable() ? embedder : nil
 }
 
@@ -91,7 +94,7 @@ struct IngestionTests {
         let file = directory.appendingPathComponent("scan.pdf")
         try makeScannedPDF(at: file)
 
-        var index = KnowledgeIndex()
+        var index = KnowledgeIndex(profile: bgeProfile)
         let embedder = await bgeEmbedder()
         let report = try await IngestionPipeline().ingest(
             file, into: &index, scope: .central, tier: .t3, embedder: embedder)
@@ -129,7 +132,7 @@ struct IngestionTests {
         try makeScannedPDF(at: file)
 
         let embedder = await bgeEmbedder()
-        var index = KnowledgeIndex()
+        var index = KnowledgeIndex(profile: bgeProfile)
         let pipeline = IngestionPipeline()
 
         let first = try await pipeline.ingest(file, into: &index, scope: .central,
@@ -177,7 +180,7 @@ struct IngestionTests {
         try "วัคซีนชนิด mRNA กระตุ้นภูมิคุ้มกันในผู้สูงอายุได้ดี".write(to: file, atomically: true,
                                                                         encoding: .utf8)
 
-        var index = KnowledgeIndex()
+        var index = KnowledgeIndex(profile: bgeProfile)
         let report = try await IngestionPipeline().ingest(
             file, into: &index, scope: .project(ProjectID("vaccine")), tier: .t2)
 
@@ -198,7 +201,7 @@ struct IngestionTests {
         let file = directory.appendingPathComponent("note.txt")
         try "การให้อินซูลินในผู้ป่วยเบาหวาน".write(to: file, atomically: true, encoding: .utf8)
 
-        var index = KnowledgeIndex()
+        var index = KnowledgeIndex(profile: bgeProfile)
         await #expect(throws: IngestionError.self) {
             _ = try await IngestionPipeline().ingest(file, into: &index, scope: .central,
                                                      tier: .t3, embedder: ThaiBlindStub())
@@ -213,7 +216,7 @@ struct IngestionTests {
         let file = directory.appendingPathComponent("thing.xyz")
         try Data("x".utf8).write(to: file)
 
-        var index = KnowledgeIndex()
+        var index = KnowledgeIndex(profile: bgeProfile)
         await #expect(throws: IngestionError.self) {
             _ = try await IngestionPipeline().ingest(file, into: &index,
                                                      scope: .central, tier: .t3)
@@ -223,7 +226,7 @@ struct IngestionTests {
 
 private struct ThaiBlindStub: Embedder {
     let identifier = "blind"
-    let dimensions = 4
+    let profile = EmbeddingProfile(modelID: "blind", revision: "test", dimensions: 4)
     func embed(_ texts: [String]) async throws -> [[Float]] {
         texts.map { text in
             text.unicodeScalars.contains { (0x0E00...0x0E7F).contains($0.value) }

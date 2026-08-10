@@ -13,18 +13,19 @@ import AgentKit
 /// vocabulary" a real signal, and it never needs a server to be running.
 private struct BagOfWordsEmbedder: Embedder {
     let identifier = "bag-of-words"
-    let dimensions = 64
+    let profile = EmbeddingProfile(modelID: "bag-of-words", revision: "test",
+                                   dimensions: 64)
     private let tokenizer = Tokenizer()
 
     func embed(_ texts: [String]) async throws -> [[Float]] {
         texts.map { text in
-            var vector = [Float](repeating: 0, count: dimensions)
+            var vector = [Float](repeating: 0, count: 64)
             for token in tokenizer.tokens(text) {
                 var hash = 5381
                 for scalar in token.unicodeScalars { hash = (hash &* 33) &+ Int(scalar.value) }
                 // `magnitude`, not `abs`: the wraparound above can land on
                 // Int.min, and abs(Int.min) traps.
-                vector[Int(hash.magnitude % UInt(dimensions))] += 1
+                vector[Int(hash.magnitude % 64)] += 1
             }
             return vector
         }
@@ -40,16 +41,17 @@ private func chunk(_ id: String, _ text: String,
                    scope: Scope = .central, embedded: Bool = true) async throws -> IndexedChunk {
     let embedding = embedded ? try await BagOfWordsEmbedder().embed(text) : nil
     return IndexedChunk(id: id, text: text, scope: scope,
-                        provenance: provenance(id), embedding: embedding)
+                        provenance: provenance(id), embedding: embedding,
+                        embeddingProfileID: embedding == nil ? nil : BagOfWordsEmbedder().profile.id)
 }
 
 @Suite("Hybrid search")
 struct HybridSearchTests {
     @Test("every result carries provenance and a tier")
     func resultsAreCitable() async throws {
-        var index = KnowledgeIndex()
-        index.insert(try await chunk("a", "การให้อินซูลินช่วยคุมระดับน้ำตาลในเลือด"))
-        index.insert(try await chunk("b", "วัคซีนชนิด mRNA กระตุ้นภูมิคุ้มกันในผู้สูงอายุ"))
+        var index = KnowledgeIndex(profile: BagOfWordsEmbedder().profile)
+        try index.insert(try await chunk("a", "การให้อินซูลินช่วยคุมระดับน้ำตาลในเลือด"))
+        try index.insert(try await chunk("b", "วัคซีนชนิด mRNA กระตุ้นภูมิคุ้มกันในผู้สูงอายุ"))
 
         let results = try await index.search("อินซูลิน", scope: .central,
                                              embedder: BagOfWordsEmbedder())
@@ -83,13 +85,13 @@ struct HybridSearchTests {
 
     @Test("scope does not leak")
     func scopeIsolation() async throws {
-        var index = KnowledgeIndex()
-        index.insert(try await chunk("central", "การให้อินซูลินในผู้ป่วยเบาหวาน"))
-        index.insert(try await chunk("projectA", "การให้อินซูลินในโครงการวิจัย ก",
+        var index = KnowledgeIndex(profile: BagOfWordsEmbedder().profile)
+        try index.insert(try await chunk("central", "การให้อินซูลินในผู้ป่วยเบาหวาน"))
+        try index.insert(try await chunk("projectA", "การให้อินซูลินในโครงการวิจัย ก",
                                      scope: .project(ProjectID("A"))))
-        index.insert(try await chunk("projectB", "การให้อินซูลินในโครงการวิจัย ข",
+        try index.insert(try await chunk("projectB", "การให้อินซูลินในโครงการวิจัย ข",
                                      scope: .project(ProjectID("B"))))
-        index.insert(try await chunk("policy", "ห้ามให้อินซูลินโดยไม่มีคำสั่งแพทย์",
+        try index.insert(try await chunk("policy", "ห้ามให้อินซูลินโดยไม่มีคำสั่งแพทย์",
                                      scope: .policy))
 
         let inA = try await index.search("อินซูลิน", scope: .project(ProjectID("A")),
@@ -109,13 +111,13 @@ struct HybridSearchTests {
 
     @Test("fusion beats either half alone")
     func rrfPrefersAgreement() async throws {
-        var index = KnowledgeIndex()
+        var index = KnowledgeIndex(profile: BagOfWordsEmbedder().profile)
         // "both" is the only chunk that both halves like: it shares the query's
         // vocabulary *and* its wording. "lexicalOnly" repeats one query word
         // many times; "semanticOnly" paraphrases without repeating it.
-        index.insert(try await chunk("both", "วัคซีน mRNA กระตุ้นภูมิคุ้มกันในผู้สูงอายุ"))
-        index.insert(try await chunk("lexicalOnly", "วัคซีน วัคซีน วัคซีน วัคซีน วัคซีน"))
-        index.insert(try await chunk("semanticOnly", "การกระตุ้นภูมิคุ้มกันในผู้สูงอายุด้วยยา"))
+        try index.insert(try await chunk("both", "วัคซีน mRNA กระตุ้นภูมิคุ้มกันในผู้สูงอายุ"))
+        try index.insert(try await chunk("lexicalOnly", "วัคซีน วัคซีน วัคซีน วัคซีน วัคซีน"))
+        try index.insert(try await chunk("semanticOnly", "การกระตุ้นภูมิคุ้มกันในผู้สูงอายุด้วยยา"))
 
         let fused = try await index.search("วัคซีน mRNA กระตุ้นภูมิคุ้มกันในผู้สูงอายุ",
                                            scope: .central, embedder: BagOfWordsEmbedder())
@@ -127,9 +129,9 @@ struct HybridSearchTests {
 
     @Test("a chunk with no embedding still competes")
     func missingEmbeddingStillRanks() async throws {
-        var index = KnowledgeIndex()
-        index.insert(try await chunk("embedded", "การระบาดของโควิดในประเทศไทย"))
-        index.insert(try await chunk("plain", "มาตรการควบคุมโควิดของกระทรวงสาธารณสุข",
+        var index = KnowledgeIndex(profile: BagOfWordsEmbedder().profile)
+        try index.insert(try await chunk("embedded", "การระบาดของโควิดในประเทศไทย"))
+        try index.insert(try await chunk("plain", "มาตรการควบคุมโควิดของกระทรวงสาธารณสุข",
                                      embedded: false))
 
         let results = try await index.search("โควิด", scope: .central,
@@ -143,9 +145,9 @@ struct HybridSearchTests {
 
     @Test("lexical-only search works when no embedder is available")
     func lexicalFallback() async throws {
-        var index = KnowledgeIndex()
-        index.insert(try await chunk("a", "การระบาดของโควิดในประเทศไทย"))
-        index.insert(try await chunk("b", "การให้อินซูลินในผู้ป่วยเบาหวาน"))
+        var index = KnowledgeIndex(profile: BagOfWordsEmbedder().profile)
+        try index.insert(try await chunk("a", "การระบาดของโควิดในประเทศไทย"))
+        try index.insert(try await chunk("b", "การให้อินซูลินในผู้ป่วยเบาหวาน"))
 
         let results = index.search("โควิด", scope: .central)
         #expect(results.map(\.chunk.id) == ["a"], "got \(results.map(\.chunk.id))")

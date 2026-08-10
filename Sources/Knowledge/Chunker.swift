@@ -27,6 +27,12 @@ public struct Chunk: Sendable, Equatable {
 }
 
 public struct Chunker: Sendable {
+    /// Bump whenever boundaries change. Chunk ids are derived from position, so
+    /// a different split renames every chunk — which orphans the entity/relation
+    /// graph and every citation anchored to one. Recorded in
+    /// `EmbeddingProfile` so an index can refuse to mix the two.
+    public static let version = 1
+
     public let maxTokens: Int
     public let overlapTokens: Int
     private let tokenizer: Tokenizer
