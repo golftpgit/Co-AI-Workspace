@@ -1134,6 +1134,19 @@ graph LR
 
 เพิ่มเติม: language identification ภาษาไทยแม่นยำ (confidence 1.0) · **POS tagging ไม่รองรับไทย** (มีแค่ scheme `Language`/`Script`/`TokenType`) · เทียบข้อมูลภายนอก: `newmm` ที่ v1 ใช้ได้ **71.18%** บน BEST2010 (SOTA 95.60%) → NLTokenizer ไม่ได้ด้อยกว่าอย่างชัดเจน
 
+#### E.3.1 merge layer ให้ผลอะไรจริง — วัดตอน P2.2 (แก้ข้อสันนิษฐานเดิม)
+
+ตอนตั้ง P2.2 เขียน Done-when ไว้ว่า "วัด BM25 recall เทียบก่อน/หลัง merge layer" โดยสันนิษฐานว่า recall จะดีขึ้น **วัดจริงแล้วไม่ใช่** — บน corpus 10 เอกสาร / 5 query (`Tests/KnowledgeTests/RetrievalMeasurementTests.swift`):
+
+| | recall@1 | MRR |
+|---|---|---|
+| ไม่มี merge layer | **1.00** | **1.00** |
+| มี merge layer | **1.00** | **1.00** |
+
+เหตุผลคือสิ่งที่ E.3 เขียนไว้เองอยู่แล้ว: index กับ query ผ่าน tokenizer ตัวเดียวกัน `โลจิสติก` จึงแตกเป็น `โล|จิ|สติ|ก` เหมือนกันทั้งสองฝั่งและยังเจอเอกสารเดิม
+
+**สิ่งที่ merge layer แก้จริงคือ precision** — ค้น `สติ` (คำไทยแท้ แปลว่าความรู้สึกตัว) โดยไม่มี merge layer ได้เอกสารเรื่อง logistic regression ติดมาด้วย เพราะมันมี fragment `สติ` อยู่ข้างใน พอเปิด merge layer เอกสารนั้นหายไปและเหลือเฉพาะเอกสารที่พูดเรื่องสติจริงๆ · ตรวจเพิ่มด้วยว่า merge layer **ไม่เพิ่ม** ผลลัพธ์ที่ไม่มี merge layer หาไม่เจอ (subset check ทุก query)
+
 ### E.4 สถานะ dependency หลัก (จาก GitHub API วันที่ตรวจ)
 
 | Dependency | ตัวเลขจริง | ประเมิน |

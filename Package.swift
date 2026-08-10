@@ -41,6 +41,11 @@ let package = Package(
         // and CoreEngine never depends on this: tools plug in via AgentTool.
         .target(name: "ToolBelt", dependencies: ["AgentKit", "Observability", "Execution"]),
 
+        // M7 — the knowledge base's own logic: tokenisation, chunking and the
+        // lexical half of hybrid search (ARCHITECTURE §11). Deliberately free
+        // of storage and models so it can be measured on its own.
+        .target(name: "Knowledge", dependencies: ["AgentKit", "Observability"]),
+
         // M1 — hook chain, approval broker, tool gateway, agent loop. Every
         // decision the system makes lives here (ARCHITECTURE §5).
         .target(name: "CoreEngine",
@@ -60,6 +65,7 @@ let package = Package(
         .testTarget(name: "PersistenceTests", dependencies: ["Persistence", "Sidecar", "Config"]),
         .testTarget(name: "LLMProvidersTests", dependencies: ["LLMProviders"]),
         .testTarget(name: "CoreEngineTests", dependencies: ["CoreEngine"]),
+        .testTarget(name: "KnowledgeTests", dependencies: ["Knowledge"]),
         .testTarget(name: "ExecutionTests", dependencies: ["Execution", "Config"]),
         // Also hosts the end-to-end walking-skeleton test, which needs a real
         // database and a real sidecar alongside the tools and the gate.
