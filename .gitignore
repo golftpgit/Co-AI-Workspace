@@ -1,0 +1,6 @@
+.build/
+build/
+vendor/
+.DS_Store
+*.xcuserdatad
+.claude/settings.local.json
