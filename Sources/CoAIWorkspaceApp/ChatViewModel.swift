@@ -60,7 +60,22 @@ final class ChatViewModel {
     init(engine: Engine, scope: Scope = .central) {
         self.engine = engine
         self.scope = scope
-        subscribeToApprovals()
+    }
+
+    /// Subscribing is deliberately *not* done in `init`.
+    ///
+    /// SwiftUI evaluates a view's `init` on every body pass, so building the
+    /// view model there produced a new one each time — and each new one
+    /// subscribed a channel under the same id, replacing the last. The broker
+    /// then presented approvals to a view model nobody was rendering: no
+    /// banner appeared, and the turn waited for an answer that could never
+    /// come. Attaching from the view's `task`, on the instance `@State`
+    /// actually kept, is what ties the subscription to what is on screen.
+    func attach() async {
+        await engine.broker.subscribe(guiChannel())
+        // A request raised before the window was ready is still outstanding;
+        // the broker replays it on subscribe, so nothing is lost across a
+        // reopen either.
     }
 
     // MARK: - conversations
@@ -201,8 +216,8 @@ final class ChatViewModel {
 
     /// The GUI is just another channel (§5.4): it presents and it answers, and
     /// it is told when someone else answered first.
-    private func subscribeToApprovals() {
-        let channel = CallbackChannel(
+    private func guiChannel() -> CallbackChannel {
+        CallbackChannel(
             id: ChannelID("gui"),
             onPresent: { [weak self] request in
                 await MainActor.run {
@@ -216,7 +231,6 @@ final class ChatViewModel {
                     if self?.pendingApproval?.id == id { self?.pendingApproval = nil }
                 }
             })
-        Task { await engine.broker.subscribe(channel) }
     }
 
     func respond(_ decision: ApprovalDecision) {

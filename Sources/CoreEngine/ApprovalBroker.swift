@@ -53,6 +53,13 @@ public actor ApprovalBroker: ApprovalRequesting {
     // MARK: - channels
 
     public func subscribe(_ channel: any Channel) {
+        if channels[channel.id] != nil {
+            // Legitimate on reopen, and a bug when it happens mid-session: the
+            // replaced channel silently stops receiving. A GUI rebuilt on every
+            // body pass did exactly this, and approvals went to an instance
+            // nobody was rendering — the turn hung with no banner and no error.
+            log.warning("channel '\(channel.id.rawValue, privacy: .public)' re-subscribed; the previous one will stop receiving")
+        }
         channels[channel.id] = channel
         // A channel that connects mid-flight still sees what is waiting —
         // otherwise reopening the app hides a request that is still blocking

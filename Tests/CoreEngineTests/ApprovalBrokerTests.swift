@@ -127,6 +127,30 @@ struct ApprovalBrokerTests {
         #expect(await broker.outstandingRequests.isEmpty)
     }
 
+    /// What makes reattaching safe. The GUI resubscribes under the same id
+    /// when its window is rebuilt; the request it was waiting on has to reach
+    /// the new channel, or the turn hangs with nothing on screen — which is
+    /// exactly what happened before the view model was made to live longer
+    /// than one body pass.
+    @Test("resubscribing the same channel id replays what is still waiting")
+    func resubscribeReplaysOutstanding() async throws {
+        let first = Inbox(), second = Inbox()
+        let broker = ApprovalBroker()
+        await broker.subscribe(recorder("gui", into: first))
+
+        let pending = request()
+        let answering = Task { await broker.request(pending) }
+        try await waitUntil { await first.presentedCount == 1 }
+
+        // Same id, different object — the window was rebuilt.
+        await broker.subscribe(recorder("gui", into: second))
+        try await waitUntil { await second.presentedCount == 1 }
+
+        // And the new one can answer it.
+        #expect(await broker.submit(pending.id, decision: .approved, from: ChannelID("gui")))
+        #expect(await answering.value == .decided(.approved, by: ChannelID("gui")))
+    }
+
     @Test("a timeout resolves as a denial, never as an approval")
     func timeoutDenies() async throws {
         let gui = Inbox()

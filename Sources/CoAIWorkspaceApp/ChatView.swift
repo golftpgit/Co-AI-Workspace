@@ -14,13 +14,38 @@ import CoreEngine
 // across 16 buttons afterwards.
 // ─────────────────────────────────────────────────────────────
 
+/// Owns the one view model this window uses.
+///
+/// It is built in `task`, not in `init`: `init` runs on every body pass, and a
+/// view model built there subscribed a fresh approval channel each time under
+/// the same id. The broker kept the newest — an instance SwiftUI had already
+/// thrown away — so approvals were delivered to nothing and turns hung with no
+/// banner on screen. One instance, created once, attached once.
 struct ChatView: View {
-    @State private var model: ChatViewModel
-    @State private var choosingFolder = false
+    let engine: Engine
+    @State private var model: ChatViewModel?
 
-    init(engine: Engine) {
-        _model = State(initialValue: ChatViewModel(engine: engine))
+    var body: some View {
+        Group {
+            if let model {
+                ChatScreen(model: model)
+            } else {
+                ProgressView().controlSize(.small)
+            }
+        }
+        .task {
+            guard model == nil else { return }
+            let created = ChatViewModel(engine: engine)
+            model = created
+            await created.attach()
+            await created.load()
+        }
     }
+}
+
+private struct ChatScreen: View {
+    @Bindable var model: ChatViewModel
+    @State private var choosingFolder = false
 
     var body: some View {
         NavigationSplitView {
@@ -45,7 +70,6 @@ struct ChatView: View {
                 composer
             }
         }
-        .task { await model.load() }
         .fileImporter(isPresented: $choosingFolder,
                       allowedContentTypes: [.folder]) { result in
             // Picking the folder is what grants the sandbox access to it, so
@@ -132,7 +156,13 @@ struct ChatView: View {
                         Text(error).foregroundStyle(.red).font(.callout)
                     }
                     ForEach(model.bubbles) { bubble in
-                        BubbleView(bubble: bubble).id(bubble.id)
+                        // "กำลังทำงาน…" on a card that is really waiting for a
+                        // human tells the user nothing about why nothing is
+                        // happening. Say which of the two it is.
+                        BubbleView(bubble: bubble,
+                                   awaitingApproval: bubble.running
+                                       && model.pendingApproval?.toolName == bubble.toolName)
+                            .id(bubble.id)
                     }
                 }
                 .padding(20)
@@ -179,6 +209,7 @@ struct ChatView: View {
 
 private struct BubbleView: View {
     let bubble: ChatViewModel.Bubble
+    var awaitingApproval = false
 
     var body: some View {
         switch bubble.kind {
@@ -232,6 +263,7 @@ private struct BubbleView: View {
     }
 
     private var status: String {
+        if awaitingApproval { return "รออนุมัติจากคุณ" }
         if bubble.running { return "กำลังทำงาน…" }
         return bubble.blocked ? "ไม่ได้รัน" : "เสร็จแล้ว"
     }
