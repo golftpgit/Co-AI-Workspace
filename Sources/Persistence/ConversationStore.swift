@@ -61,10 +61,10 @@ public actor ConversationStore {
     public func create(scope: Scope, title: String? = nil) async throws -> Conversation {
         let id = OpaqueID.make(OpaqueID.conversation)
         var content = ContentBuilder()
-        content.set("uid", id)               // our own key; see note below
-        content.set("title", title)          // omitted when nil: NULL != NONE in v3
-        content.set("scope_kind", ScopeColumns.kind(scope))
-        content.set("project_id", ScopeColumns.projectID(scope))
+        content.setString("uid", id)               // our own key; see note below
+        content.setString("title", title)          // omitted when nil: NULL != NONE in v3
+        content.setString("scope_kind", ScopeColumns.kind(scope))
+        content.setString("project_id", ScopeColumns.projectID(scope))
         content.raw("created_at", "time::now()")
         content.raw("updated_at", "time::now()")
 
@@ -98,7 +98,7 @@ public actor ConversationStore {
 
     public func rename(_ id: String, title: String) async throws {
         try await client.exec("""
-        UPDATE conversation SET title = $title, updated_at = time::now() WHERE uid = $id
+        UPDATE conversation SET title = type::string($title), updated_at = time::now() WHERE uid = $id
         """, vars: ["id": id, "title": title])
     }
 
@@ -111,6 +111,12 @@ public actor ConversationStore {
 
     /// Appends and touches the conversation. Awaited, never fire-and-forget:
     /// the turn is not "done" until the write has actually landed.
+    ///
+    /// `content` goes through `type::string()` because it is the user's text
+    /// and we do not get to constrain its shape: a message that happens to
+    /// read `note:1` is bound as a record link otherwise, and the write fails
+    /// on a `TYPE string` field (App. C.0) — losing exactly the message P1.3
+    /// promises to keep.
     @discardableResult
     public func append(conversationID: String,
                        role: StoredMessage.Role,
@@ -118,7 +124,8 @@ public actor ConversationStore {
         let id = OpaqueID.make(OpaqueID.message)
         try await client.exec("""
         CREATE message CONTENT {
-            uid: $id, conversation_id: $cid, role: $role, content: $content, created_at: time::now()
+            uid: type::string($id), conversation_id: type::string($cid),
+            role: type::string($role), content: type::string($content), created_at: time::now()
         };
         UPDATE conversation SET updated_at = time::now() WHERE uid = $cid;
         """, vars: ["id": id, "cid": conversationID, "role": role.rawValue, "content": content])

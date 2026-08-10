@@ -23,18 +23,22 @@ public actor SurrealSpanSink: SpanSink {
         var content = ContentBuilder()
         // Optional fields are omitted rather than bound as NULL, and the
         // statement is UPSERT so the first write creates the row (App. C.0).
-        content.set("uid", span.id.rawValue)   // see identity note in ConversationStore
-        content.set("parent", span.parent?.rawValue)
-        content.set("name", span.name)
-        content.set("role", span.role?.rawValue)
-        content.set("scope_kind", span.scope.map(ScopeColumns.kind))
-        content.set("project_id", span.scope.flatMap(ScopeColumns.projectID))
-        content.set("status", span.status.rawValue)
+        content.setString("uid", span.id.rawValue)   // see identity note in ConversationStore
+        content.setString("parent", span.parent?.rawValue)
+        // Span names and details are `tool:run_shell`, `llm:gx10`, "escalated
+        // past on-device:refused" — exactly the shape v3 reads as a record
+        // link, so they must be pinned to `string` (App. C.0). Without this
+        // every span the gate, the router and the broker emit is dropped.
+        content.setString("name", span.name)
+        content.setString("role", span.role?.rawValue)
+        content.setString("scope_kind", span.scope.map(ScopeColumns.kind))
+        content.setString("project_id", span.scope.flatMap(ScopeColumns.projectID))
+        content.setString("status", span.status.rawValue)
         content.set("started_at", SurrealTime.string(from: span.startedAt))
         content.set("ended_at", span.endedAt.map(SurrealTime.string(from:)))
         content.set("prompt_tokens", span.promptTokens)
         content.set("completion_tokens", span.completionTokens)
-        content.set("detail", span.detail)
+        content.setString("detail", span.detail)
 
         do {
             try await client.exec(

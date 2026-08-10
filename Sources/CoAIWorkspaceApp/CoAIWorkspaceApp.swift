@@ -10,15 +10,40 @@ struct CoAIWorkspaceApp: App {
 
     var body: some Scene {
         WindowGroup("Co-AI Workspace") {
-            BootStatusView(environment: environment)
-                .frame(minWidth: 720, minHeight: 480)
+            RootView(environment: environment)
+                .frame(minWidth: 860, minHeight: 520)
                 .task {
                     appDelegate.environment = environment
                     await environment.boot()
                 }
         }
-        .defaultSize(width: 900, height: 620)
+        .defaultSize(width: 1_040, height: 700)
         .windowResizability(.contentMinSize)
+    }
+}
+
+/// Chat once the engine is up, boot status until then. Startup failures stay
+/// visible instead of leaving an empty window with no explanation (v1 bug B4).
+private struct RootView: View {
+    let environment: AppEnvironment
+    @State private var showingStatus = false
+
+    var body: some View {
+        Group {
+            if let engine = environment.engine, !showingStatus {
+                ChatView(engine: engine)
+            } else {
+                BootStatusView(environment: environment)
+            }
+        }
+        .toolbar {
+            if environment.engine != nil {
+                Toggle(isOn: $showingStatus) {
+                    Label("สถานะระบบ", systemImage: "heart.text.square")
+                }
+                .accessibilityLabel("สลับไปดูสถานะระบบ")
+            }
+        }
     }
 }
 

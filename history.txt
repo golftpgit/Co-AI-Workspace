@@ -1,0 +1,10 @@
+#V2
+SELECT version FROM schema_meta:current;
+INFO FOR DB;
+DEFINE TABLE IF NOT EXISTS probe SCHEMAFULL; DEFINE FIELD IF NOT EXISTS name ON probe TYPE string;
+CREATE probe:a CONTENT { name: "tool:run_shell" };
+CREATE probe:b CONTENT { name: type::string("tool:run_shell") };
+CREATE probe:c CONTENT { name: type::string("plain name") };
+CREATE probe:d CONTENT { name: type::string("a487d755-9ec0-4b1a-9f8e-1c2b3d4e5f60") };
+SELECT * FROM probe;
+REMOVE TABLE probe;

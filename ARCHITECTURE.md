@@ -1048,6 +1048,15 @@ graph LR
 | 4 | `NULL` ผ่าน `option<string>` ไม่ได้ | `NULL` ≠ `NONE` ใน v3 | `ContentBuilder` **ตัด field ที่เป็น nil ทิ้ง** แทนการ bind null |
 | 5 | client ค้างถาวรเมื่อยิง request ถี่ๆ | 🔴 **race ในโค้ดเรา** — ลงทะเบียน continuation ผ่าน `Task` แยก ทำให้ response ที่มาเร็วกว่าหา waiter ไม่เจอแล้วถูกทิ้ง | ลงทะเบียนแบบ synchronous ในบริบท actor ก่อนส่ง frame; timeout แยกเป็น task ที่ fail รายการใน `pending` (กัน double-resume ด้วย `removeValue`) |
 
+**🆕 ค้นพบเพิ่มระหว่าง implement P1.7–P1.10 (2026-08-10) — ต่อยอดจากข้อ 2 ข้างบน**:
+
+| # | อาการ | สาเหตุจริง | วิธีแก้ที่ใช้ |
+|---|---|---|---|
+| 6 | **span ทุกตัวที่ gate/router/broker/process ปล่อยออกมา หายไปเงียบๆ** ทั้งที่ span ชื่อ `turn` เข้า DB ปกติ | ข้อ 2 ในรูปแบบที่ร้ายกว่า: **bound string ที่มีรูปร่าง `table:id` ถูกตีเป็น record link** → `tool:run_shell`, `llm:gx10`, `approval:run_shell` ตกเงื่อนไข `TYPE string` ทั้งหมด (`Couldn't coerce value for field name … Expected string but found tool:run_shell`) — และ `SurrealSpanSink` กลืน error ลง console fallback ตามดีไซน์ จึงไม่มีใครเห็น | `ContentBuilder.setString()` bind ผ่าน **`type::string($x)`** สำหรับทุก field ที่เป็นข้อความซึ่งเราไม่ได้กำหนดรูปร่างเอง (span name/detail/parent, message content, conversation title) |
+| 7 | ผลข้างเคียงของข้อ 6 ที่ยังไม่ทันเกิด: **ข้อความของผู้ใช้ที่พิมพ์ว่า `note:1` จะบันทึกไม่ลง** | เหมือนกัน — user text ไม่มีทางบังคับรูปร่างได้ | `append()` bind `content` ผ่าน `type::string()` เช่นกัน ([`RecordShapedTextTests`](Tests/PersistenceTests/PersistenceTests.swift) คุมทั้งสองข้อ) |
+
+**หลักที่ได้**: id ของเราเลี่ยง `:` ได้ (OpaqueID) แต่ **ข้อความที่ module อื่นหรือผู้ใช้เป็นคนเลือก เลี่ยงไม่ได้** → ต้องปักชนิดด้วย `type::string()` ที่ขอบ persistence ไม่ใช่ไปห้ามคนตั้งชื่อ. อีกบทเรียน: **sink ที่ fail แบบเงียบเพื่อไม่ให้ล้ม turn จะซ่อนบั๊กชนิดนี้ได้นาน** — สิ่งที่จับได้คือ end-to-end test ที่อ่าน span กลับจาก DB จริง ไม่ใช่ unit test ที่ใช้ in-memory sink
+
 **บทเรียนรวม**: 3 ใน 5 ข้อที่ "ดูเหมือนบั๊กของ SurrealDB" **เป็นบั๊กของเราเอง** — การเทสกับ engine จริงตั้งแต่ต้นคือสิ่งเดียวที่ทำให้เจอ (mock จะผ่านหมดทุกข้อ)
 
 **🆕 กับดักฝั่ง Swift ที่ไม่เกี่ยวกับ SurrealDB แต่ทำให้ข้อมูลเพี้ยนเงียบๆ**:

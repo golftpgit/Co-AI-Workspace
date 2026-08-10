@@ -20,6 +20,12 @@ public struct BootstrapConfig: Codable, Sendable, Equatable {
     /// Overrides `AppPaths.standard()` when set — used by tests and by users
     /// who keep their workspace on another volume.
     public var dataDirectoryOverride: String?
+    /// One OpenAI-compatible endpoint for the tiers above on-device. Lives here
+    /// rather than in the database because the router is built during boot,
+    /// before a conversation exists. The full Endpoint Registry (§9.3) replaces
+    /// this pair in P5; until then it is what makes tool calling possible at all.
+    public var selfHostedEndpoint: String?
+    public var selfHostedModel: String?
 
     public static let currentSchemaVersion = 1
 
@@ -34,12 +40,16 @@ public struct BootstrapConfig: Codable, Sendable, Equatable {
                 surrealPort: Int,
                 searxngPort: Int,
                 logLevel: LogLevel,
-                dataDirectoryOverride: String? = nil) {
+                dataDirectoryOverride: String? = nil,
+                selfHostedEndpoint: String? = nil,
+                selfHostedModel: String? = nil) {
         self.schemaVersion = schemaVersion
         self.surrealPort = surrealPort
         self.searxngPort = searxngPort
         self.logLevel = logLevel
         self.dataDirectoryOverride = dataDirectoryOverride
+        self.selfHostedEndpoint = selfHostedEndpoint
+        self.selfHostedModel = selfHostedModel
     }
 }
 
@@ -47,12 +57,14 @@ public enum BootstrapError: Error, CustomStringConvertible, Equatable {
     case invalidPort(name: String, value: Int)
     case duplicatePorts(Int)
     case unreadable(String)
+    case invalidEndpoint(String)
 
     public var description: String {
         switch self {
         case .invalidPort(let n, let v): return "invalid \(n) port: \(v) (must be 1024–65535)"
         case .duplicatePorts(let p): return "surreal and searxng cannot share port \(p)"
         case .unreadable(let m): return "cannot read bootstrap file: \(m)"
+        case .invalidEndpoint(let e): return "invalid self-hosted endpoint: \(e)"
         }
     }
 }
@@ -68,6 +80,11 @@ extension BootstrapConfig {
         }
         guard surrealPort != searxngPort else {
             throw BootstrapError.duplicatePorts(surrealPort)
+        }
+        if let endpoint = selfHostedEndpoint, !endpoint.isEmpty {
+            guard let url = URL(string: endpoint), url.scheme != nil, url.host() != nil else {
+                throw BootstrapError.invalidEndpoint(endpoint)
+            }
         }
     }
 }
