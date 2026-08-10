@@ -21,14 +21,22 @@ public struct IndexedChunk: Sendable, Equatable {
     /// Not optional, and there is no initialiser that omits it.
     public let provenance: Provenance
     public let embedding: [Float]?
+    /// SHA-256 of the whitespace-normalised text — how re-ingesting the same
+    /// document stays a no-op (P2.3).
+    public let contentHash: String
+    /// People, places and organisations named in this chunk (§11.4).
+    public let entities: [String]
 
     public init(id: String, text: String, scope: Scope,
-                provenance: Provenance, embedding: [Float]? = nil) {
+                provenance: Provenance, embedding: [Float]? = nil,
+                contentHash: String? = nil, entities: [String] = []) {
         self.id = id
         self.text = text
         self.scope = scope
         self.provenance = provenance
         self.embedding = embedding
+        self.contentHash = contentHash ?? IngestionPipeline.contentHash(text)
+        self.entities = entities
     }
 }
 
@@ -65,6 +73,24 @@ public struct KnowledgeIndex: Sendable {
 
     public mutating func insert(contentsOf newChunks: [IndexedChunk]) {
         chunks.append(contentsOf: newChunks)
+    }
+
+    /// Exact-duplicate check, scope-independent on purpose: the same passage
+    /// filed under two scopes is two rows because they are answerable in
+    /// different contexts, but the same passage arriving twice into the same
+    /// index is one.
+    public func contains(contentHash: String) -> Bool {
+        chunks.contains { $0.contentHash == contentHash }
+    }
+
+    /// The re-scan case: same passage, different OCR noise, so the hash misses
+    /// it. Compared only within a scope, since crossing scopes is a leak.
+    public func containsNearDuplicate(of embedding: [Float], scope: Scope,
+                                      threshold: Double) -> Bool {
+        chunks.contains { chunk in
+            guard chunk.scope == scope, let existing = chunk.embedding else { return false }
+            return cosineSimilarity(existing, embedding) >= threshold
+        }
     }
 
     /// Lexical only — for callers with no embedder available, and the path the
