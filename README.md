@@ -25,9 +25,14 @@
 ## เริ่มใช้งาน
 
 ```bash
-./scripts/check.sh        # build + test + structural rules
-./scripts/build-app.sh    # ประกอบและเซ็น .app พร้อม App Sandbox
+./scripts/fetch-helpers.sh   # ดึง sidecar binary (ครั้งเดียวต่อเครื่อง — vendor/ ไม่อยู่ใน git)
+./scripts/check.sh           # build + test + structural rules
+./scripts/build-app.sh       # ประกอบและเซ็น .app พร้อม App Sandbox
 ```
+
+**เครื่องใหม่**: ต้องรัน `fetch-helpers.sh` ก่อน ไม่งั้นเทสฝั่ง Persistence จะข้าม และแอปจะเริ่มฐานข้อมูลไม่ได้
+ส่วน endpoint ของ Tier 1 ตั้งใน `bootstrap.plist` ที่ `~/Library/Containers/com.coaiworkspace.app/Data/Library/Application Support/CoAIWorkspace/`
+(คีย์ `selfHostedEndpoint` + `selfHostedModel`) — เป็นค่าต่อเครื่อง ไม่ได้อยู่ใน repo
 
 ## สถานะ
 
