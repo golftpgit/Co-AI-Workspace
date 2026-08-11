@@ -245,6 +245,50 @@ struct ScreenFlows {
             return "\(row.attempts) รอบ ตรงกับที่รันจริง"
         }
 
+        // §5.5's third switch. "Done" is read off the ledger, so the two kinds
+        // of unfinished work have to stay distinguishable: one is picked up
+        // again, the other is a decision to involve a person and must survive.
+        await check("[Run-until-done] ทำงานค้างต่อได้ แต่ไม่รื้องานที่ escalate ไปแล้ว") {
+            guard let server = try await TestDatabase.start(port: 18_498) else {
+                throw CheckFailure("เริ่มฐานข้อมูลไม่ได้")
+            }
+            defer { Task { await server.stop() } }
+
+            let store = TaskLedgerStore(client: server.client)
+            let criteria = [Criterion(text: "เทสผ่าน", evidenceRequired: "คำสั่งที่ exit code 0")]
+
+            // Cut short: the app closed mid-run, nobody decided anything.
+            try await store.record(LedgerRow(
+                assignmentID: OpaqueID.make(OpaqueID.assignment), role: .writer,
+                goal: "เขียนสรุปให้จบ", attempts: 1, passed: false, needsHuman: false,
+                findings: [], summary: nil,
+                acceptanceCriteria: criteria, deliverableType: "เอกสาร"), scope: .central)
+
+            // Escalated: the lead ran out of tries and asked for a person.
+            try await store.record(LedgerRow(
+                assignmentID: OpaqueID.make(OpaqueID.assignment), role: .engineer,
+                goal: "แก้เทสที่ตก", attempts: 3, passed: false, needsHuman: true,
+                findings: ["ไม่มีคำสั่งที่ exit code 0"], summary: nil,
+                acceptanceCriteria: criteria, deliverableType: "patch"), scope: .central)
+
+            guard try await store.unfinished(scope: .central).count == 2 else {
+                throw CheckFailure("ทั้งสองงานควรนับว่ายังไม่จบ")
+            }
+            let resumable = try await store.resumable(scope: .central)
+            guard resumable.count == 1, resumable.first?.role == .writer else {
+                throw CheckFailure("คาดว่าต่อได้งานเดียว (งานที่ถูกขัดจังหวะ) "
+                                   + "ได้ \(resumable.count) งาน — "
+                                   + "ถ้ารวมงานที่ escalate ด้วย แปลว่าเครื่องรื้อคำตัดสินที่จะให้คนดู")
+            }
+            // Resuming needs the criteria back, or there is nothing to review
+            // against and `Assignment` refuses to be rebuilt at all.
+            guard let rebuilt = resumable.first?.assignment,
+                  rebuilt.acceptanceCriteria.count == 1 else {
+                throw CheckFailure("สร้าง Assignment กลับจากบันทึกไม่ได้ — เกณฑ์ตรวจรับไม่ถูกเก็บ")
+            }
+            return "ต่อได้ 1 · กันไว้ให้คน 1"
+        }
+
         // The Team screen reads this table and nothing else. §2.2's promise is
         // that "who is doing what, and how did it go" survives the run — and
         // the moment someone asks is usually after leaving one unattended, so

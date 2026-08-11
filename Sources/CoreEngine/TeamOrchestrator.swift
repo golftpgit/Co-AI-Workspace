@@ -49,6 +49,10 @@ public enum TeamEvent: Sendable {
     /// The lead has stopped and wants a person. Carries why, because
     /// "ติดขัด" with no reason is the thing that made v1's loops unreadable.
     case escalated(assignmentID: String, attempts: Int, reasons: [String])
+    /// Run-until-done picked the ledger back up. Announced rather than silent:
+    /// work continuing without the user typing again is exactly the thing they
+    /// should be able to see happening.
+    case continuing(remaining: Int)
     case finished(deliverables: [Deliverable])
     case failed(String)
 }
@@ -93,6 +97,10 @@ public actor TeamOrchestrator {
         public let assignment: Assignment
         public var attempts: Int
         public var passed: Bool
+        /// The lead gave up and asked for a person (§2.5). Recorded separately
+        /// from `!passed` so run-until-done can tell an escalation from a run
+        /// that was merely cut short.
+        public var needsHuman: Bool = false
         public var findings: [String]
         public var deliverable: Deliverable?
     }
@@ -124,8 +132,11 @@ public actor TeamOrchestrator {
                 goal: entry.assignment.goal,
                 attempts: entry.attempts,
                 passed: entry.passed,
+                needsHuman: entry.needsHuman,
                 findings: entry.findings,
-                summary: entry.deliverable?.summary), scope: scope)
+                summary: entry.deliverable?.summary,
+                acceptanceCriteria: entry.assignment.acceptanceCriteria,
+                deliverableType: entry.assignment.deliverableType), scope: scope)
         } catch {
             // Was `try?`. A ledger that silently stops updating is
             // indistinguishable from one that is up to date, which is the worse
@@ -142,8 +153,15 @@ public actor TeamOrchestrator {
 
     // MARK: - running
 
+    /// How many times run-until-done may pick the ledger back up in one run.
+    /// A ceiling rather than a judgement: §5.5 asks for work that continues
+    /// without the user typing again, and the thing that makes that safe is
+    /// that it cannot continue forever.
+    public static let continuationCap = 3
+
     public func run(goal: String,
                     plan providedPlan: TeamPlan? = nil,
+                    runUntilDone: Bool = false,
                     emit: @Sendable (TeamEvent) -> Void = { _ in }) async -> [Deliverable] {
         let plan: TeamPlan
         do {
@@ -159,9 +177,35 @@ public actor TeamOrchestrator {
         }
         emit(.planned(plan))
 
+        var delivered = await work(through: plan.assignments, emit: emit)
+
+        // §5.5's third switch. "Done" is read off the ledger rather than asked
+        // of the model: what is left is a fact, and a model's opinion of
+        // whether it has finished is the thing v1's loops ran on.
+        if runUntilDone {
+            for _ in 0..<Self.continuationCap {
+                guard let ledgerStore else { break }
+                let resumable = (try? await ledgerStore.resumable(scope: scope)) ?? []
+                // Anything this run already handled is not picked up again;
+                // the retry budget inside `work` is what bounds those.
+                let pending = resumable.compactMap(\.assignment)
+                    .filter { ledger[$0.id] == nil }
+                guard !pending.isEmpty else { break }
+
+                emit(.continuing(remaining: pending.count))
+                delivered += await work(through: pending, emit: emit)
+            }
+        }
+
+        emit(.finished(deliverables: delivered))
+        return delivered
+    }
+
+    private func work(through assignments: [Assignment],
+                      emit: @Sendable (TeamEvent) -> Void) async -> [Deliverable] {
         var delivered: [Deliverable] = []
 
-        for assignment in plan.assignments {
+        for assignment in assignments {
             guard let specialist = specialists[assignment.role] else {
                 emit(.failed(TeamError.noSpecialist(assignment.role).description))
                 continue
@@ -219,6 +263,7 @@ public actor TeamOrchestrator {
                 // Bounded, and it ends by asking a person rather than by
                 // trying forever (§2.5).
                 ledger[assignment.id]?.findings = lastFindings
+                ledger[assignment.id]?.needsHuman = true
                 // The escalation is the state a person comes back to read, and
                 // it was the one state never written down: the run ended here
                 // and storage still described the first attempt.
@@ -228,7 +273,6 @@ public actor TeamOrchestrator {
             }
         }
 
-        emit(.finished(deliverables: delivered))
         return delivered
     }
 

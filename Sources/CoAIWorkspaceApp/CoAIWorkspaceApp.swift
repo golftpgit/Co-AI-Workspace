@@ -77,7 +77,8 @@ private struct RootView: View {
                 case .team:
                     TeamView(model: team)
                         .task { await team.attach(team: engine.team,
-                                                  ledger: engine.taskLedger) }
+                                                  ledger: engine.taskLedger,
+                                                  gateway: engine.gateway) }
                 }
             } else {
                 BootStatusView(environment: environment)

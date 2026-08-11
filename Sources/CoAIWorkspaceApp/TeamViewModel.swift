@@ -101,14 +101,20 @@ public final class TeamViewModel {
 
     private var team: TeamOrchestrator?
     private var ledger: TaskLedgerStore?
+    /// Read at start time, not stored: the switch lives on the chat header and
+    /// the gateway is where all three modes are already kept, so asking it is
+    /// how the team screen sees the same setting rather than a second copy.
+    private var gateway: ToolGateway?
     private var run: Task<Void, Never>?
     private let log = AppLog.logger("team-ui")
 
     public init() {}
 
-    public func attach(team: TeamOrchestrator, ledger: TaskLedgerStore) async {
+    public func attach(team: TeamOrchestrator, ledger: TaskLedgerStore,
+                       gateway: ToolGateway) async {
         self.team = team
         self.ledger = ledger
+        self.gateway = gateway
         await reload()
     }
 
@@ -220,10 +226,13 @@ public final class TeamViewModel {
         isRunning = true
         status = nil
 
+        let untilDone = await gateway?.currentModes.runUntilDone ?? false
+
         run = Task { [weak self] in
             // The orchestrator emits from its own actor; every event is hopped
             // back to the main actor before it touches view state.
-            let deliverables = await team.run(goal: goal, plan: approved) { event in
+            let deliverables = await team.run(goal: goal, plan: approved,
+                                              runUntilDone: untilDone) { event in
                 Task { @MainActor in self?.apply(event) }
             }
             await MainActor.run {
@@ -286,6 +295,10 @@ public final class TeamViewModel {
                 row.progress = .escalated
                 row.findings = reasons
             }
+
+        case .continuing(let remaining):
+            status = Status(message: "ทำต่อเองตาม Run-until-done — เหลืองานค้างในบันทึก \(remaining) งาน",
+                            isError: false)
 
         case .finished:
             isRunning = false

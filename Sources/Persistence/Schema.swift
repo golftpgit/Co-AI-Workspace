@@ -12,7 +12,11 @@ public enum Schema {
 
     /// Bumped whenever statements are added; recorded in `schema_meta` so a
     /// future migration can tell what the database was created with.
-    public static let version = 1
+    /// 2: `task` gained `needs_human`, so an escalation can be told apart from
+    /// an interrupted run — run-until-done resumes the second and never the
+    /// first. The criteria and deliverable type it needs to rebuild an
+    /// assignment ride along on the schemaless part of the row.
+    public static let version = 2
 
     /// Split into statements that are executed one at a time: a single
     /// failing statement should name itself, not abort a 40-line blob.
@@ -83,6 +87,7 @@ public enum Schema {
         "DEFINE FIELD IF NOT EXISTS scope_kind ON task TYPE string",
         "DEFINE FIELD IF NOT EXISTS project_id ON task TYPE option<string>",
         "DEFINE INDEX IF NOT EXISTS task_open ON task FIELDS passed",
+        "DEFINE FIELD IF NOT EXISTS needs_human ON task TYPE bool",
         "DEFINE FIELD IF NOT EXISTS updated_at ON task TYPE datetime",
 
         "DEFINE TABLE IF NOT EXISTS relation SCHEMALESS",
