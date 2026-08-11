@@ -23,6 +23,19 @@ public struct IngestionReport: Sendable, Equatable {
     public let pages: Int
 
     public var duplicatesSkipped: Int { exactDuplicatesSkipped + nearDuplicatesSkipped }
+
+    /// Public because ingestion has more than one front door: a file from
+    /// disk and a page from the web both report what they did the same way.
+    public init(documentID: String, chunksAdded: Int,
+                exactDuplicatesSkipped: Int, nearDuplicatesSkipped: Int,
+                usedOCR: Bool, pages: Int) {
+        self.documentID = documentID
+        self.chunksAdded = chunksAdded
+        self.exactDuplicatesSkipped = exactDuplicatesSkipped
+        self.nearDuplicatesSkipped = nearDuplicatesSkipped
+        self.usedOCR = usedOCR
+        self.pages = pages
+    }
 }
 
 public enum IngestionError: Error, CustomStringConvertible {
