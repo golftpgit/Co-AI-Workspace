@@ -57,7 +57,10 @@ private let goldens = [
 ]
 
 private func buildIndex(with embedder: some Embedder) async throws -> KnowledgeIndex {
-    var index = KnowledgeIndex(profile: embedder.profile)
+    // No similarity floor: the stubs below are bag-of-hashed-tokens vectors,
+    // and the shipped cutoff is a number measured on bge-m3. Holding a toy
+    // embedder to it would measure the constant, not the reindex gate.
+    var index = KnowledgeIndex(profile: embedder.profile, minimumSemanticSimilarity: 0)
     for document in corpus {
         let vector = try await embedder.embed(document.text)
         try index.insert(IndexedChunk(
@@ -154,7 +157,8 @@ struct ReindexTests {
         #expect(semantic.recallAt1 > 0, "\(semantic.summary)")
 
         // Same corpus, vectors that carry nothing: fused still looks perfect.
-        var dead = KnowledgeIndex(profile: DegradedEmbedder().profile)
+        var dead = KnowledgeIndex(profile: DegradedEmbedder().profile,
+                                  minimumSemanticSimilarity: 0)
         for chunk in index.allChunks {
             try dead.insert(IndexedChunk(
                 id: chunk.id, text: chunk.text, scope: chunk.scope,

@@ -24,6 +24,11 @@ struct Engine: Sendable {
     let spans: SurrealSpanSink
     /// Conflict cards, kept so a decision is made once (§11.6).
     let conflicts: ConflictStore
+    /// The half of §11.6 that *sees* a disagreement. Built here rather than
+    /// where it is used so that, like every other capability, it is on the
+    /// wiring diagram — a detector nothing constructs is a feature that cannot
+    /// happen (the same gap as D6's unreachable MCP client).
+    let conflictDetector: ConflictDetector
     /// Graph edges, and the model that reads them out of a sentence (§11.4).
     let relations: RelationStore
     let relationExtractor: RelationExtractor
@@ -99,6 +104,7 @@ struct Engine: Sendable {
 
         return Engine(client: client, conversations: conversations, spans: spans,
                       conflicts: ConflictStore(client: client),
+                      conflictDetector: ConflictDetector(router: router),
                       relations: RelationStore(client: client),
                       relationExtractor: RelationExtractor(router: router),
                       knowledge: knowledgeStore,

@@ -80,6 +80,22 @@ else
   ok "tools are only reachable through the hook chain"
 fi
 
+# The app target has no unit tests — it is an executable — so "built but never
+# connected" is invisible to `swift test`. It has happened twice: v1's MCP
+# client that no session could reach (D6), and ConflictDetector, which passed 7
+# tests while nothing in the app ever constructed it, leaving the Conflict
+# screen permanently empty. Each capability below must be reachable from the
+# wiring, not just from its own tests.
+UNWIRED=""
+for capability in ConflictDetector RelationExtractor; do
+  grep -rq "$capability(" Sources/CoAIWorkspaceApp --include=*.swift || UNWIRED="$UNWIRED $capability"
+done
+if [ -n "$UNWIRED" ]; then
+  fail "built but never wired into the app:$UNWIRED"
+else
+  ok "capabilities are reachable from the app, not just from tests"
+fi
+
 if grep -rn ": \[String: Any\]" Sources --include=*.swift | grep -q "Sendable"; then
   fail "[String: Any] on a Sendable type (see ARCHITECTURE App. C)"
 else

@@ -77,16 +77,14 @@ public final class ConflictViewModel {
         defer { isWorking = false }
 
         let decisionScope: Scope = asPrecedent ? .central : scope
-        var ledger = ConflictLedger()
-        // Rebuilt from what was stored rather than recomputed: the weights on
-        // this card are the ones the user is looking at.
-        let restored = ledger.record(question: conflict.question,
-                                     a: conflict.a, b: conflict.b, scope: decisionScope)
-        _ = ledger.decide(restored.id, resolution, scope: decisionScope)
-        guard let decided = ledger.all.first(where: { $0.id == restored.id }) else { return }
+        // Written straight against the stored row. Going back through
+        // `ConflictLedger.record` would re-weigh both sides and save the new
+        // numbers over the ones on the card the user just read.
+        let decision = ConflictDecision(resolution: resolution, scope: decisionScope,
+                                        decidedByHuman: true)
 
         do {
-            try await store.save(decided, scope: decisionScope)
+            try await store.recordDecision(decision, for: conflict.id)
             await reload()
             status = Status(message: asPrecedent
                             ? "บันทึกเป็นคำตัดสินกลาง — ใช้กับทุกโปรเจกต์"

@@ -260,10 +260,10 @@ public actor TeamOrchestrator {
             throw TeamError.planningFailed("\(error)")
         }
 
-        guard let data = completion.text.data(using: .utf8),
+        guard let data = completion.structuredText.data(using: .utf8),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let rows = root["assignments"] as? [[String: Any]] else {
-            throw TeamError.planningFailed("อ่านแผนไม่ได้: \(completion.text.prefix(160))")
+            throw TeamError.planningFailed("อ่านแผนไม่ได้: \(completion.structuredText.prefix(160))")
         }
 
         let assignments = rows.compactMap { row -> Assignment? in

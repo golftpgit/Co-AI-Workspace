@@ -84,7 +84,7 @@ public struct ConflictDetector: Sendable {
             // manufactures one, so the router keeps this off the smallest tier
             // (§9.2).
             let completion = try await router.complete(request, policy: .init(impact: .high))
-            guard let data = completion.text.data(using: .utf8),
+            guard let data = completion.structuredText.data(using: .utf8),
                   let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let contradicts = object["contradicts"] as? Bool else {
                 log.error("conflict check returned unparseable output")

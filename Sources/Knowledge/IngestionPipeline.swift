@@ -174,7 +174,21 @@ public struct IngestionPipeline: Sendable {
 public struct EntityExtractor: Sendable {
     public init() {}
 
+    /// Whether the tagger can name entities in this text at all.
+    ///
+    /// `NLTagger` publishes no `.nameType` scheme for Thai, so on a Thai
+    /// document `entities(in:)` returns an empty list that is indistinguishable
+    /// from "there are no people or places in here" — which is how a Thai
+    /// library ends up with no graph and nobody notices. Callers that have a
+    /// model available should ask it instead when this is false.
+    public func canTag(_ text: String) -> Bool {
+        guard let language = NLLanguageRecognizer.dominantLanguage(for: text) else { return false }
+        return NLTagger.availableTagSchemes(for: .word, language: language).contains(.nameType)
+    }
+
     public func entities(in text: String) -> [String] {
+        guard canTag(text) else { return [] }
+
         let tagger = NLTagger(tagSchemes: [.nameType])
         tagger.string = text
 

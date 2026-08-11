@@ -222,6 +222,31 @@ struct IngestionTests {
     }
 }
 
+// NLTagger publishes no `.nameType` scheme for Thai, so it cannot name a
+// person in a Thai document. That is allowed; returning [] as though it looked
+// and found none is not, because the caller then has no way to know it should
+// ask a model instead — which is how a Thai library ends up with no graph.
+@Suite("entity tagging says when it cannot read a language")
+struct EntityExtractorTests {
+    @Test("the tagger reports that it cannot name entities in Thai")
+    func abstainsOnThai() {
+        let extractor = EntityExtractor()
+        let thai = "ผู้รับผิดชอบแนวทางนี้คือ นพ.สมชาย ใจดี แห่งโรงพยาบาลสระบุรี"
+
+        #expect(extractor.canTag(thai) == false)
+        #expect(extractor.entities(in: thai).isEmpty)
+    }
+
+    @Test("and still tags the languages it does read")
+    func tagsEnglish() {
+        let extractor = EntityExtractor()
+        let english = "Issued by Somchai Jaidee, MD, Department of Surgery, Saraburi Hospital."
+
+        #expect(extractor.canTag(english))
+        #expect(!extractor.entities(in: english).isEmpty)
+    }
+}
+
 private struct ThaiBlindStub: Embedder {
     let identifier = "blind"
     let profile = EmbeddingProfile(modelID: "blind", revision: "test", dimensions: 4)

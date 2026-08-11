@@ -32,6 +32,28 @@ private struct ScriptedExecutor: LLMExecutor {
     }
 }
 
+/// A reasoning model as LM Studio actually serves one: the schema-constrained
+/// answer arrives in `reasoning_content` and `content` comes back empty, with
+/// nothing reported as an error.
+private struct ReasoningExecutor: LLMExecutor {
+    let identifier = "reasoning"
+    let tier: ModelTier = .selfHosted
+    let capabilities = LLMCapabilities(contextWindow: 32_000, supportsTools: false,
+                                       supportsStructuredOutput: true,
+                                       supportsStreaming: true, supportsVision: false)
+    let json: String
+
+    func isAvailable() async -> Bool { true }
+
+    func respond(to request: LLMRequest) -> AsyncThrowingStream<LLMEvent, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.yield(.reasoningDelta(json))
+            continuation.yield(.finished(reason: "stop"))
+            continuation.finish()
+        }
+    }
+}
+
 private struct DeadExecutor: LLMExecutor {
     let identifier = "dead"
     let tier: ModelTier = .selfHosted
@@ -59,6 +81,25 @@ struct ConflictDetectorTests {
 
         #expect(finding?.contradicts == true)
         #expect(finding?.question == "ขนาดยาที่แนะนำ")
+    }
+
+    // Found by driving the app against LM Studio: a real contradiction went
+    // unreported on every ingest because qwen3.5 returned the JSON in
+    // `reasoning_content` with `content` empty and `finish_reason: stop`.
+    // Nothing errored, so "the model put its answer elsewhere" was
+    // indistinguishable from "the model found no conflict" — and the same
+    // silence emptied relation extraction.
+    @Test("a reasoning model's answer is read, not mistaken for silence")
+    func reasoningModelAnswerIsRead() async {
+        let router = ModelRouter(executors: [ReasoningExecutor(json: #"""
+        {"contradicts":true,"question":"ให้ยาต่อนานแค่ไหน","confidence":0.9,
+         "explanation":"ฝั่งหนึ่งให้ต่อ 24 ชั่วโมง อีกฝั่งให้หยุดทันที"}
+        """#)])
+        let finding = await ConflictDetector(router: router)
+            .detect("ให้ยาต่ออีก 24 ชั่วโมง", "หยุดยาทันทีที่ปิดแผล")
+
+        #expect(finding?.contradicts == true)
+        #expect(finding?.question == "ให้ยาต่อนานแค่ไหน")
     }
 
     @Test("passages that merely differ are not a conflict")

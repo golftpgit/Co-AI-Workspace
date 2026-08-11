@@ -80,7 +80,7 @@ public struct RelationExtractor: Sendable {
 
         do {
             let completion = try await router.complete(request)
-            guard let data = completion.text.data(using: .utf8),
+            guard let data = completion.structuredText.data(using: .utf8),
                   let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let rows = root["relations"] as? [[String: Any]] else {
                 log.error("relation extraction returned unparseable output")

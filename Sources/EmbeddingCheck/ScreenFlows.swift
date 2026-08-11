@@ -74,6 +74,24 @@ struct ScreenFlows {
             return "\(fused.count) ผล"
         }
 
+        // Both directions of the same line. Only checking that nonsense returns
+        // nothing would pass with a floor so high the library answers nothing
+        // at all.
+        await check("[หน้าคลังความรู้] คำค้นที่ไม่เกี่ยวข้องต้องไม่คืนอะไรเลย") {
+            let relevant = try await index.search("การรักษาเบาหวานด้วยอินซูลิน", scope: .central,
+                                                  embedder: embedder)
+            guard !relevant.isEmpty else {
+                throw CheckFailure("เกณฑ์สูงเกินไป — คำค้นที่ตรงเรื่องยังไม่คืนผล")
+            }
+            let unrelated = try await index.search("ตารางเดินรถไฟฟ้าสายสีม่วงช่วงเช้า",
+                                                   scope: .central, embedder: embedder)
+            guard unrelated.isEmpty else {
+                throw CheckFailure("คำค้นคนละเรื่องยังได้ \(unrelated.count) ผล — "
+                                   + "คลังที่มีเอกสารเดียวจะตอบทุกคำถามด้วยเอกสารนั้น")
+            }
+            return "ตรงเรื่อง \(relevant.count) ผล · ไม่เกี่ยว 0 ผล"
+        }
+
         await check("[หน้าคลังความรู้] ลบเอกสารแล้วหายทั้งฉบับ") {
             let documentID = index.documents().first?.documentID ?? ""
             let removed = index.removeDocument(documentID)
@@ -174,6 +192,78 @@ struct ScreenFlows {
             guard case .bothInContext(let condition)? = restored?.decision?.resolution,
                   condition == "ต่างกันตามช่วงอายุ" else {
                 throw CheckFailure("เงื่อนไขของคำตัดสินหาย")
+            }
+            return ""
+        }
+
+        await check("[หน้าข้อขัดแย้ง] ตัดสินแล้วน้ำหนักและข้อเสนอบนการ์ดไม่ถูกเขียนทับ") {
+            guard let server = try await TestDatabase.start(port: 18_495) else {
+                throw CheckFailure("เริ่มฐานข้อมูลไม่ได้")
+            }
+            defer { Task { await server.stop() } }
+
+            let store = ConflictStore(client: server.client)
+            var ledger = ConflictLedger()
+            // Close enough that the ledger hands it to a human — an
+            // auto-decided pair never becomes a card anyone reads.
+            let a = ConflictSide(text: "ให้ยาต่ออีก 24 ชั่วโมง",
+                                 provenance: Provenance(documentID: "ก", title: "แนวทาง ก",
+                                                        origin: .upload(filename: "a.txt"),
+                                                        tier: .t2, year: 2024))
+            let b = ConflictSide(text: "หยุดยาทันทีที่ปิดแผล",
+                                 provenance: Provenance(documentID: "ข", title: "แนวทาง ข",
+                                                        origin: .upload(filename: "b.txt"),
+                                                        tier: .t2, year: 2025))
+            let conflict = ledger.record(question: "ให้ยาต่อนานแค่ไหน", a: a, b: b, scope: .central)
+            guard conflict.needsHuman else { throw CheckFailure("ควรยกให้คนตัดสิน") }
+            try await store.save(conflict, scope: .central)
+
+            // Stand in for a card filed long enough ago that re-weighing it
+            // today would not reproduce these numbers. Without this the check
+            // passes either way: a conflict saved and re-saved in the same
+            // second weighs the same both times, which is exactly why the bug
+            // survived — it only shows once time has passed.
+            _ = try await server.client.exec("""
+                UPDATE conflict SET score_a = 1.25, score_b = 9.75,
+                                    weight_a = $reason WHERE uid = $uid
+                """,
+                vars: ["uid": conflict.id, "reason": "ชั่งไว้ตอนยื่นเรื่อง ปี 2568"])
+
+            guard let card = try await store.open(scope: .central).first else {
+                throw CheckFailure("การ์ดที่รอตัดสินไม่โผล่")
+            }
+            guard card.scoreA == 1.25 else {
+                throw CheckFailure("ตั้งค่าเริ่มต้นของเทสไม่ติด")
+            }
+            // §11.6 puts the system's suggestion on the card. It was being
+            // written and never read back, so the card could not name a side.
+            guard card.proposal != nil else {
+                throw CheckFailure("ข้อเสนอของระบบหายระหว่างทาง — การ์ดบอกไม่ได้ว่าเสนอฝั่งไหน")
+            }
+            let (shownA, shownB) = (card.scoreA, card.scoreB)
+            let shownReasons = card.weightAReasons
+
+            try await store.recordDecision(
+                ConflictDecision(resolution: .preferB(reason: "ฉบับใหม่กว่า"),
+                                 scope: .central, decidedByHuman: true),
+                for: card.id)
+
+            guard try await store.open(scope: .central).isEmpty else {
+                throw CheckFailure("ตัดสินแล้วยังถามซ้ำ")
+            }
+            guard let after = try await store.load(scope: .central).first else {
+                throw CheckFailure("คำตัดสินหาย")
+            }
+            // The record has to keep what was weighed *then*. Deciding used to
+            // rebuild the conflict, which re-weighed both sides against the
+            // current date and saved those numbers over the ones on the card.
+            guard after.scoreA == shownA, after.scoreB == shownB,
+                  after.weightAReasons == shownReasons else {
+                throw CheckFailure("น้ำหนักถูกคำนวณใหม่ตอนบันทึก — บันทึกไม่ตรงกับการ์ดที่ผู้ใช้อ่าน "
+                                   + "(\(shownA)/\(shownB) → \(after.scoreA)/\(after.scoreB))")
+            }
+            guard after.proposal != nil else {
+                throw CheckFailure("ข้อเสนอของระบบหายหลังตัดสิน")
             }
             return ""
         }

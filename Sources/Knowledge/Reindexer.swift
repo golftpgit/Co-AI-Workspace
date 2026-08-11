@@ -183,7 +183,12 @@ public struct Reindexer: Sendable {
         let before = try await evaluate(index, against: goldens, embedder: previousEmbedder)
 
         let (rebuilt, _) = try await rebuild(index, using: embedder, progress: progress)
-        var candidate = KnowledgeIndex(profile: embedder.profile)
+        // Same retrieval settings as the index being replaced, including the
+        // similarity floor: scoring the candidate under a different cutoff
+        // would measure the settings rather than the model.
+        var candidate = KnowledgeIndex(
+            profile: embedder.profile,
+            minimumSemanticSimilarity: index.minimumSemanticSimilarity)
         try candidate.insert(contentsOf: rebuilt)
 
         let after = try await evaluate(candidate, against: goldens, embedder: embedder)

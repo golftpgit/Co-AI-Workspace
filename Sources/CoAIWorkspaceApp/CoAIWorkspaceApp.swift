@@ -65,6 +65,8 @@ private struct RootView: View {
                             await knowledge.attach(store: engine.knowledge)
                             await knowledge.attach(relations: engine.relations,
                                                    extractor: engine.relationExtractor)
+                            knowledge.attach(conflicts: engine.conflicts,
+                                             detector: engine.conflictDetector)
                         }
                 case .conflicts:
                     ConflictView(model: conflicts)

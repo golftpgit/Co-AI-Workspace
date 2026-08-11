@@ -16,6 +16,10 @@ struct KnowledgeView: View {
     @Bindable var model: KnowledgeViewModel
     @State private var selection: String?
     @State private var editingChunk: IndexedChunk?
+    /// Deleting takes the document, its chunks, its entities and its graph
+    /// edges, and the file it came from is not kept — so the menu item asks
+    /// first rather than doing it on the way past.
+    @State private var pendingDeletion: DocumentSummary?
 
     var body: some View {
         NavigationSplitView {
@@ -29,6 +33,18 @@ struct KnowledgeView: View {
                 Task { await model.updateEntities(chunkID: chunk.id, to: entities) }
             }
         }
+        .confirmationDialog("ลบ “\(pendingDeletion?.title ?? "")” ออกจากคลัง?",
+                            isPresented: .init(get: { pendingDeletion != nil },
+                                               set: { if !$0 { pendingDeletion = nil } }),
+                            presenting: pendingDeletion) { document in
+            Button("ลบเอกสาร", role: .destructive) {
+                Task { await model.delete(documentID: document.documentID) }
+            }
+            Button("ยกเลิก", role: .cancel) { pendingDeletion = nil }
+        } message: { document in
+            Text("ทั้ง \(document.chunkCount) ส่วน entity และความสัมพันธ์ในกราฟของเอกสารนี้"
+                 + "จะถูกลบไปด้วย และย้อนกลับไม่ได้ — ต้องเพิ่มไฟล์ต้นฉบับเข้ามาใหม่")
+        }
     }
 
     // MARK: - documents
@@ -38,8 +54,8 @@ struct KnowledgeView: View {
             List(model.documents, selection: $selection) { document in
                 DocumentRow(document: document)
                     .contextMenu {
-                        Button("ลบเอกสารนี้", role: .destructive) {
-                            Task { await model.delete(documentID: document.documentID) }
+                        Button("ลบเอกสารนี้…", role: .destructive) {
+                            pendingDeletion = document
                         }
                     }
             }
@@ -65,6 +81,11 @@ struct KnowledgeView: View {
                 ForEach(ScopeChoice.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
+            // A segmented picker still lays out its label, and the sidebar has
+            // no width to give it: "ขอบเขต" was being squeezed into a 20pt
+            // column and broken across three lines mid-word. The accessibility
+            // label below is what carries the name.
+            .labelsHidden()
             .accessibilityLabel("เลือกขอบเขตของคลังความรู้")
 
             HStack {

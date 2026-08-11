@@ -78,4 +78,30 @@ struct ChunkerTests {
         let chunks = Chunker(tokenizer: tokenizer).chunks(of: "การถดถอยโลจิสติก.")
         #expect(chunks[0].tokenCount == tokenizer.tokens(chunks[0].text).count)
     }
+
+    // §11.6 quotes stored passages back word for word, so anything the chunker
+    // adds is something the Conflict Card will attribute to the document.
+    // NLTokenizer reads the full stop in a Thai abbreviation as a sentence
+    // break; rejoining those pieces with a space rewrote "นพ.สมชาย" as
+    // "นพ. สมชาย" in the copy the library kept.
+    @Test("a Thai abbreviation keeps the spacing the document had")
+    func abbreviationsAreNotRespaced() {
+        let source = "ผู้รับผิดชอบคือ นพ.สมชาย ใจดี ปรับปรุงล่าสุด พ.ศ. 2562 ที่โรงพยาบาลสระบุรี"
+        let chunks = Chunker().chunks(of: source)
+
+        #expect(chunks.count == 1)
+        #expect(chunks[0].text == source)
+        #expect(!chunks[0].text.contains("นพ. สมชาย"))
+        #expect(!chunks[0].text.contains("พ. ศ."))
+    }
+
+    @Test("splitting across chunks still quotes the source verbatim")
+    func splitChunksStayVerbatim() {
+        let chunks = Chunker(maxTokens: 12, overlapTokens: 6).chunks(of: paragraph)
+        #expect(chunks.count > 1, "the budget did not force a split")
+        for chunk in chunks {
+            #expect(paragraph.contains(chunk.text),
+                    "chunk text is not a slice of the document: \(chunk.text)")
+        }
+    }
 }

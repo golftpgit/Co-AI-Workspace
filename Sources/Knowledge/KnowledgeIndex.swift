@@ -116,16 +116,38 @@ public struct KnowledgeIndex: Sendable {
     private let tokenizer: Tokenizer
     private var chunks: [IndexedChunk] = []
 
+    /// How close a chunk has to sit to the question before the vector half is
+    /// allowed to answer with it.
+    ///
+    /// Cosine similarity has no natural zero: bge-m3 scores two unrelated Thai
+    /// passages around 0.38 and two related ones around 0.76 (ARCH E.10), so a
+    /// filter at zero admits everything. Without a line between them there is
+    /// no "not found" — every query returns whatever is nearest, and a library
+    /// holding one document answers every question with that document.
+    ///
+    /// Set below the midpoint because the cost is asymmetric: a weak hit the
+    /// user can dismiss beats a real one silently withheld, and cross-lingual
+    /// pairs (Thai question, English source) sit lower than same-language ones.
+    ///
+    /// A number measured on one model, so it travels with the index rather than
+    /// being a constant every embedder is held to: a different model spreads
+    /// its scores differently, and 0.50 means nothing to it.
+    public static let bgeM3SemanticFloor = 0.50
+
+    public let minimumSemanticSimilarity: Double
+
     /// What this index's vectors mean. `nil` is a lexical-only index — legal,
     /// and the state a machine with no embedding runtime works in — but it can
     /// never hold a vector, because a vector with no profile is unverifiable.
     public let profile: EmbeddingProfile?
 
     public init(profile: EmbeddingProfile? = nil,
-                tokenizer: Tokenizer = Tokenizer(), rrfK: Double = 60) {
+                tokenizer: Tokenizer = Tokenizer(), rrfK: Double = 60,
+                minimumSemanticSimilarity: Double = KnowledgeIndex.bgeM3SemanticFloor) {
         self.profile = profile
         self.tokenizer = tokenizer
         self.rrfK = rrfK
+        self.minimumSemanticSimilarity = minimumSemanticSimilarity
     }
 
     public var count: Int { chunks.count }
@@ -243,7 +265,8 @@ public struct KnowledgeIndex: Sendable {
 
         let lexical = rankLexically(query, in: visible)
         let queryVector = try await embedder.embed(query)
-        let semantic = rankSemantically(queryVector, in: visible)
+        let semantic = rankSemantically(queryVector, in: visible,
+                                        floor: minimumSemanticSimilarity)
 
         var fused: [String: (chunk: IndexedChunk, score: Double, lex: Int?, sem: Int?)] = [:]
         for (index, entry) in lexical.enumerated() {
@@ -283,7 +306,11 @@ public struct KnowledgeIndex: Sendable {
         }
         let visible = chunks.filter { $0.scope == scope }
         let queryVector = try await embedder.embed(query)
-        return rankSemantically(queryVector, in: visible).prefix(limit).enumerated().map {
+        // No floor here on purpose: this exists to inspect the model, and a
+        // health check that cannot see weak scores cannot tell a broken model
+        // from an empty library.
+        return rankSemantically(queryVector, in: visible, floor: 0)
+            .prefix(limit).enumerated().map {
             SearchResult(chunk: $1.chunk, score: $1.score,
                          lexicalRank: nil, semanticRank: $0 + 1)
         }
@@ -302,14 +329,14 @@ public struct KnowledgeIndex: Sendable {
         }
     }
 
-    private func rankSemantically(_ queryVector: [Float],
-                                  in visible: [IndexedChunk]) -> [(chunk: IndexedChunk, score: Double)] {
+    private func rankSemantically(_ queryVector: [Float], in visible: [IndexedChunk],
+                                  floor: Double) -> [(chunk: IndexedChunk, score: Double)] {
         visible
             .compactMap { chunk -> (chunk: IndexedChunk, score: Double)? in
                 guard let embedding = chunk.embedding else { return nil }
                 return (chunk: chunk, score: cosineSimilarity(queryVector, embedding))
             }
-            .filter { $0.score > 0 }
+            .filter { $0.score >= floor }
             .sorted { $0.score == $1.score ? $0.chunk.id < $1.chunk.id : $0.score > $1.score }
     }
 }

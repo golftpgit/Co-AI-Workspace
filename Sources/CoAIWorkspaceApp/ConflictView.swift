@@ -29,6 +29,10 @@ struct ConflictView: View {
                     model.showsDecided ? "ยังไม่มีข้อขัดแย้งที่บันทึกไว้" : "ไม่มีข้อขัดแย้งที่รอตัดสิน",
                     systemImage: "checkmark.seal",
                     description: Text("ระบบจะยกขึ้นมาเองเมื่อพบว่าสองแหล่งตอบคำถามเดียวกันไม่ตรงกัน"))
+                    // Takes the space under the header so it centres there,
+                    // rather than leaving the stack short enough to be centred
+                    // as a whole.
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
@@ -40,6 +44,11 @@ struct ConflictView: View {
                 }
             }
         }
+        // Pinned to the top. `ContentUnavailableView` sizes to its content, so
+        // with an empty list the stack was shorter than the window and got
+        // centred — carrying the header and its divider down into the middle of
+        // the screen, which only looked right once a card was there to fill it.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .overlay { if model.isWorking { ProgressView().controlSize(.large) } }
         .sheet(item: $deciding) { conflict in
             DecisionSheet(conflict: conflict) { resolution, asPrecedent in
@@ -107,9 +116,10 @@ private struct ConflictCard: View {
                 DecisionSummary(decision: decision)
             } else {
                 // Marked as a suggestion, in words, because §11.6 says the
-                // system proposes and the human decides.
-                Label("ระบบเสนอให้ใช้ฝั่งที่น้ำหนักมากกว่า — เป็นข้อเสนอ ไม่ใช่ข้อสรุป",
-                      systemImage: "lightbulb")
+                // system proposes and the human decides — and it names the side
+                // and the reason, because "the heavier side" makes the user
+                // rebuild the proposal from two numbers.
+                Label(proposalText, systemImage: "lightbulb")
                     .font(.callout)
                     .foregroundStyle(.secondary)
 
@@ -121,6 +131,21 @@ private struct ConflictCard: View {
         .padding(16)
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
     }
+
+    /// Always ends by saying it is a proposal. A conflict filed before the
+    /// proposal was stored has none to show, and says that rather than
+    /// inventing one.
+    private var proposalText: String {
+        let suggestion: String? = switch conflict.proposal {
+        case .preferA(let reason): "ระบบเสนอให้ใช้ฝั่ง A — \(reason)"
+        case .preferB(let reason): "ระบบเสนอให้ใช้ฝั่ง B — \(reason)"
+        case .bothInContext(let condition): "ระบบเสนอว่าถูกทั้งคู่ในบริบทต่างกัน — \(condition)"
+        case .unresolved: "ระบบไม่เสนอฝั่งใด — น้ำหนักสองฝั่งใกล้กันเกินไป"
+        case nil: nil
+        }
+        guard let suggestion else { return "ยังไม่มีข้อเสนอของระบบสำหรับข้อขัดแย้งนี้" }
+        return suggestion + " (เป็นข้อเสนอ ไม่ใช่ข้อสรุป)"
+    }
 }
 
 private struct SideColumn: View {
@@ -128,6 +153,13 @@ private struct SideColumn: View {
     let side: ConflictSide
     let reasons: String
     let score: Double
+
+    /// Every string on this screen is Thai, so its dates are too. Left to the
+    /// default the two halves disagree: a Thai system locale supplies the
+    /// Buddhist era while the app's English localisation supplies the month
+    /// name and the separator, and the card reads "11 Aug 2569 BE at 17:00".
+    private static let accessed = Date.FormatStyle(date: .abbreviated, time: .shortened)
+        .locale(Locale(identifier: "th_TH"))
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -150,7 +182,7 @@ private struct SideColumn: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
-            Text("เข้าถึงเมื่อ \(side.provenance.accessedAt.formatted(date: .abbreviated, time: .shortened))")
+            Text("เข้าถึงเมื่อ \(side.provenance.accessedAt.formatted(Self.accessed))")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
 
@@ -218,14 +250,44 @@ private struct DecisionSheet: View {
     let save: (ConflictResolution, Bool) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var choice = Choice.a
+    @State private var choice: Choice
     @State private var condition = ""
     @State private var reason = ""
     @State private var asPrecedent = false
 
+    init(conflict: StoredConflict, save: @escaping (ConflictResolution, Bool) -> Void) {
+        self.conflict = conflict
+        self.save = save
+        // Opens on what the system proposed. It used to open on A whatever the
+        // card recommended, so the one-click answer was sometimes the opposite
+        // of the evidence the user had just read.
+        _choice = State(initialValue: Choice(proposal: conflict.proposal))
+
+        // Its wording comes along with it, so the user edits the reasoning
+        // rather than retyping it — and a proposed "both, in different
+        // contexts" arrives with the condition it depends on.
+        switch conflict.proposal {
+        case .preferA(let reason), .preferB(let reason): _reason = State(initialValue: reason)
+        case .bothInContext(let condition): _condition = State(initialValue: condition)
+        case .unresolved, nil: break
+        }
+    }
+
     private enum Choice: String, CaseIterable, Identifiable {
         case a, b, both, unresolved
         var id: String { rawValue }
+
+        init(proposal: ConflictResolution?) {
+            switch proposal {
+            case .preferA: self = .a
+            case .preferB: self = .b
+            case .bothInContext: self = .both
+            // No proposal is not a recommendation to pick A — it is the system
+            // having nothing to say, and the sheet says that too.
+            case .unresolved, nil: self = .unresolved
+            }
+        }
+
         var label: String {
             switch self {
             case .a: "ใช้ฝั่ง A"

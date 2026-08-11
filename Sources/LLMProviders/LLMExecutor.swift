@@ -184,6 +184,19 @@ public struct LLMCompletion: Sendable {
     public let producedBy: String
     public let tier: ModelTier
 
+    /// The answer to a schema-constrained request, wherever the model put it.
+    ///
+    /// Reasoning models served over the OpenAI-compatible API can return the
+    /// whole JSON object in `reasoning_content` and leave `content` empty, with
+    /// `finish_reason: stop` — nothing failed, the answer just arrived in the
+    /// other field. Reading only `text` there yields "", which every structured
+    /// caller reads as "the model said nothing", so conflict detection and
+    /// relation extraction return empty on every document and never say why.
+    ///
+    /// Only for callers that set `responseSchema`. For ordinary prose the two
+    /// fields mean different things and reasoning is not the answer.
+    public var structuredText: String { text.isEmpty ? reasoning : text }
+
     public init(text: String, reasoning: String = "", toolCalls: [LLMToolCall] = [],
                 usage: LLMUsage? = nil,
                 finishReason: String = "stop", producedBy: String, tier: ModelTier) {

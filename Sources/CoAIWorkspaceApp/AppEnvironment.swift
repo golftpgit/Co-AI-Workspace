@@ -149,6 +149,7 @@ public final class AppEnvironment {
             do {
                 engine = try await Engine.build(config: config, paths: paths)
                 engineError = nil
+                noteIfNoModelForHighImpactWork(config)
                 log.info("engine ready")
                 return
             } catch {
@@ -158,6 +159,23 @@ public final class AppEnvironment {
         }
         notes.append("เชื่อมต่อฐานข้อมูลไม่สำเร็จ จึงยังใช้หน้าแชทไม่ได้ — \(engineError ?? "ไม่ทราบสาเหตุ")")
         log.error("engine unavailable: \(self.engineError ?? "unknown", privacy: .public)")
+    }
+
+    /// Says so when the only model available is the on-device one.
+    ///
+    /// The router keeps high-impact work off it because its answers are not
+    /// stable enough to decide on (ARCH E.7) — so with no self-hosted endpoint
+    /// there is no model for that work *at all*, and conflict detection and
+    /// relation extraction return nothing on every document. Both fail quietly
+    /// by design (an unreachable model must not be read as "these sources
+    /// agree"), which is exactly why the boot screen has to be the one to
+    /// mention it. It already does this for searxngPython.
+    private func noteIfNoModelForHighImpactWork(_ config: BootstrapConfig) {
+        guard config.selfHostedEndpoint?.isEmpty ?? true else { return }
+        notes.append("ยังไม่ได้ตั้ง selfHostedEndpoint — มีแต่โมเดลบนเครื่อง "
+                     + "งานที่ต้องความแม่นสูงจึงไม่มีโมเดลรองรับ: "
+                     + "จะไม่พบข้อขัดแย้งและไม่สกัดความสัมพันธ์ให้กราฟเลย "
+                     + "(ตั้ง selfHostedEndpoint/selfHostedModel ใน bootstrap.plist)")
     }
 
     private func startStatusPolling(_ manager: SidecarManager) {

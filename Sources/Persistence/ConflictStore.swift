@@ -51,6 +51,25 @@ public actor ConflictStore {
                               vars: content.vars)
     }
 
+    /// Files a decision against a conflict that is already stored, touching
+    /// nothing else on the row.
+    ///
+    /// Deliberately not `save(_:scope:)` with a decided `Conflict`: rebuilding
+    /// one means re-weighing both sides, and the weights on a filed conflict
+    /// are the ones the user was reading when they decided. Re-deriving them at
+    /// save time replaces the record of that moment with today's arithmetic —
+    /// and because weighing is relative to `now`, the same decision would read
+    /// differently every year.
+    public func recordDecision(_ decision: ConflictDecision, for id: String) async throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let json = String(decoding: try encoder.encode(decision), as: UTF8.self)
+
+        try await client.exec(
+            "UPDATE conflict SET decided = true, decision = $decision WHERE uid = $uid",
+            vars: ["uid": id, "decision": json])
+    }
+
     /// Everything filed for a scope, decided and open alike. The decided ones
     /// are what stop the same question being asked twice; the open ones are
     /// the cards still waiting.
@@ -77,6 +96,11 @@ public actor ConflictStore {
 
             let decision = (row["decision"]?.stringValue)
                 .flatMap { try? decoder.decode(ConflictDecision.self, from: Data($0.utf8)) }
+            // Read back, not just written: §11.6 puts the system's suggestion on
+            // the card, and a suggestion the card cannot name is one the user
+            // has to reconstruct from two scores.
+            let proposal = (row["proposal"]?.stringValue)
+                .flatMap { try? decoder.decode(ConflictResolution.self, from: Data($0.utf8)) }
 
             return StoredConflict(
                 id: id, question: question, a: a, b: b,
@@ -85,6 +109,7 @@ public actor ConflictStore {
                 scoreA: row["score_a"]?.doubleValue ?? 0,
                 scoreB: row["score_b"]?.doubleValue ?? 0,
                 needsHuman: row["needs_human"]?.boolValue ?? false,
+                proposal: proposal,
                 decision: decision)
         } ?? []
     }
@@ -108,6 +133,10 @@ public struct StoredConflict: Sendable, Equatable, Identifiable {
     public let scoreA: Double
     public let scoreB: Double
     public let needsHuman: Bool
+    /// What the system would do, as it was proposed when the conflict was
+    /// filed. Kept beside the decision rather than folded into it: the card has
+    /// to be able to show a suggestion the human then overrode.
+    public let proposal: ConflictResolution?
     public let decision: ConflictDecision?
 
     public var isOpen: Bool { decision == nil }

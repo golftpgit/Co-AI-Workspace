@@ -45,6 +45,16 @@ public final class KnowledgeViewModel {
     private var relationStore: RelationStore?
     private var relationExtractor: RelationExtractor?
     public private(set) var relations: [StoredRelation] = []
+    private var conflictStore: ConflictStore?
+    private var conflictDetector: ConflictDetector?
+
+    /// How much of a newly ingested document is checked against the rest of the
+    /// library, and how wide each check looks. Both are small on purpose: every
+    /// pair is a high-impact model call (§9.2), and the chunks most likely to
+    /// contradict something are the ones stating the document's claims, which
+    /// is where a document starts.
+    private static let chunksReviewedPerIngest = 5
+    private static let neighboursPerChunk = 3
 
     public init(embedder: MLXEmbedder = MLXEmbedder()) {
         self.embedder = embedder
@@ -67,6 +77,14 @@ public final class KnowledgeViewModel {
         self.relationStore = relations
         self.relationExtractor = extractor
         await reloadRelations()
+    }
+
+    /// Conflict detection is optional in the same way relation extraction is:
+    /// it needs a model. Without one the library still works — it just never
+    /// raises a card.
+    public func attach(conflicts: ConflictStore, detector: ConflictDetector) {
+        self.conflictStore = conflicts
+        self.conflictDetector = detector
     }
 
     public func reloadRelations() async {
@@ -114,7 +132,7 @@ public final class KnowledgeViewModel {
         isWorking = true
         defer { isWorking = false }
 
-        var added = 0, skipped = 0, failed: [String] = []
+        var added = 0, skipped = 0, conflicts = 0, failed: [String] = []
         for url in urls {
             // A sandboxed app reaches a chosen file only inside this scope.
             let accessed = url.startAccessingSecurityScopedResource()
@@ -140,6 +158,7 @@ public final class KnowledgeViewModel {
                 }
                 if let store { try await store.save(newChunks) }
                 await extractRelations(from: newChunks)
+                conflicts += await reviewForConflicts(newChunks)
             } catch {
                 log.error("ingest \(url.lastPathComponent, privacy: .public): \(error)")
                 failed.append("\(url.lastPathComponent): \(error)")
@@ -148,7 +167,12 @@ public final class KnowledgeViewModel {
 
         refresh()
         if failed.isEmpty {
-            status = Status(message: "เพิ่ม \(added) ส่วน · ข้ามที่ซ้ำ \(skipped) ส่วน",
+            // A contradiction the user is not told about is one they find out
+            // from the answer instead of the library (§11.6).
+            let raised = conflicts > 0
+                ? " · พบความรู้ที่ขัดกัน \(conflicts) จุด ดูได้ที่แท็บข้อขัดแย้ง"
+                : ""
+            status = Status(message: "เพิ่ม \(added) ส่วน · ข้ามที่ซ้ำ \(skipped) ส่วน" + raised,
                             isError: false)
         } else {
             status = Status(message: failed.joined(separator: "\n"), isError: true)
@@ -242,6 +266,95 @@ public final class KnowledgeViewModel {
         } catch {
             log.error("saving relations: \(error)")
         }
+
+        await fillEntitiesWhereTaggerCannot(found, in: chunks)
+    }
+
+    /// Names the entities in documents `NLTagger` has no tagger for.
+    ///
+    /// It publishes no `.nameType` scheme for Thai, so a Thai document is
+    /// indexed with an empty entity list — the same result as a document with
+    /// no people or places in it. The model reading the same text for relations
+    /// has already named its subjects and objects, and those are entities
+    /// (§11.4), so they fill the gap without a second call.
+    ///
+    /// Only where the tagger abstained: where it works, its output is the one
+    /// the entity list was built around, and quietly widening it would change
+    /// what every existing document matches.
+    private func fillEntitiesWhereTaggerCannot(_ found: [Relation],
+                                               in chunks: [IndexedChunk]) async {
+        let tagger = EntityExtractor()
+        let namesByChunk = Dictionary(grouping: found, by: \.chunkID)
+
+        for chunk in chunks where !tagger.canTag(chunk.text) {
+            guard let relations = namesByChunk[chunk.id] else { continue }
+            var entities = chunk.entities
+            for name in relations.flatMap({ [$0.subject, $0.object] }) {
+                let cleaned = name.trimmingCharacters(in: .whitespaces)
+                if !cleaned.isEmpty, !entities.contains(cleaned) { entities.append(cleaned) }
+            }
+            guard entities != chunk.entities else { continue }
+
+            _ = index.updateEntities(of: chunk.id, to: entities)
+            do {
+                try await store?.updateEntities(chunkID: chunk.id, to: entities)
+            } catch {
+                log.error("persisting entities from relations: \(error)")
+            }
+        }
+    }
+
+    /// Checks what just arrived against what was already in the library, and
+    /// files the disagreements (§11.6, P3.6).
+    ///
+    /// Runs on ingest rather than on search: §11.6's promise is that the user
+    /// is *told* two sources disagree, and a check that only fires when someone
+    /// happens to search the right words is a check that a contradiction can
+    /// sit behind indefinitely.
+    ///
+    /// The detector is still only shown pairs a real retrieval put side by
+    /// side — each new chunk is searched for, and what came back with it is
+    /// what gets compared — so nothing here trawls the library for
+    /// disagreement nobody asked about.
+    private func reviewForConflicts(_ newChunks: [IndexedChunk]) async -> Int {
+        guard let conflictDetector, let conflictStore, !newChunks.isEmpty else { return 0 }
+
+        // Anything already filed is left alone. Re-filing would overwrite the
+        // weights on a card the user may have decided on, and re-open a
+        // question §11.6 says is answered once.
+        let alreadyFiled = Set(((try? await conflictStore.load(scope: scope)) ?? []).map(\.id))
+        var ledger = ConflictLedger()
+        var filed = 0
+
+        for chunk in newChunks.prefix(Self.chunksReviewedPerIngest) {
+            // The chunk itself ranks first; the rest are its neighbours, and
+            // `review` skips pairs from the same document.
+            guard let retrieved = try? await index.search(chunk.text, scope: scope,
+                                                          embedder: embedder,
+                                                          limit: Self.neighboursPerChunk + 1),
+                  retrieved.contains(where: {
+                      $0.provenance.documentID != chunk.provenance.documentID
+                  })
+            else { continue }
+
+            let found = await conflictDetector.review(
+                retrieved,
+                question: chunk.provenance.title,
+                scope: scope,
+                into: &ledger,
+                limit: Self.neighboursPerChunk + 1)
+
+            for conflict in found where !alreadyFiled.contains(conflict.id) {
+                do {
+                    try await conflictStore.save(conflict, scope: scope)
+                    filed += 1
+                } catch {
+                    log.error("filing conflict: \(error)")
+                }
+            }
+        }
+
+        return filed
     }
 
     // MARK: - export / import
