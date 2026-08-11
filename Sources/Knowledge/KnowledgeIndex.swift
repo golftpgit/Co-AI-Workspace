@@ -37,6 +37,15 @@ public struct IndexedChunk: Sendable, Equatable, Identifiable {
         entities.isEmpty ? text : text + " " + entities.joined(separator: " ")
     }
 
+    /// The same chunk with its vector dropped — for a row loaded from storage
+    /// whose vector was built by a model this index does not use. The text is
+    /// what a re-embed needs, and it is still searchable lexically meanwhile.
+    public func withoutEmbedding() -> IndexedChunk {
+        IndexedChunk(id: id, text: text, scope: scope, provenance: provenance,
+                     embedding: nil, embeddingProfileID: nil,
+                     contentHash: contentHash, entities: entities)
+    }
+
     /// The same chunk with different entities. Everything the graph and
     /// citations point at — id, text, provenance, vector — is carried over.
     public func withEntities(_ entities: [String]) -> IndexedChunk {

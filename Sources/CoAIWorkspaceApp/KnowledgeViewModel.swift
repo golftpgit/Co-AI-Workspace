@@ -5,6 +5,7 @@ import AgentKit
 import Knowledge
 import EmbeddingRuntime
 import Observability
+import Persistence
 
 // ─────────────────────────────────────────────────────────────
 // The knowledge base screen's state (ARCHITECTURE §14.2, P2.7).
@@ -37,10 +38,52 @@ public final class KnowledgeViewModel {
     private let embedder: MLXEmbedder
     private let pipeline = IngestionPipeline()
     private let log = AppLog.logger("knowledge")
+    /// Nil until the database is up. The screen still works without it — in
+    /// memory only — and says so, rather than pretending an ingest was saved.
+    private var store: KnowledgeStore?
 
     public init(embedder: MLXEmbedder = MLXEmbedder()) {
         self.embedder = embedder
         self.index = KnowledgeIndex(profile: embedder.profile)
+    }
+
+    /// Loads the scope from the database into the searchable index. Vectors
+    /// built by a different model are dropped rather than mixed in: they would
+    /// be accepted by nothing downstream and would rank nonsense if they were
+    /// (P2.8). Their text stays, so a re-embed can restore them.
+    public func attach(store: KnowledgeStore) async {
+        self.store = store
+        await reload()
+    }
+
+    public func reload() async {
+        guard let store else { return }
+        isWorking = true
+        defer { isWorking = false }
+
+        do {
+            let stored = try await store.load(scope: scope)
+            var rebuilt = KnowledgeIndex(profile: embedder.profile)
+            var foreign = 0
+            for chunk in stored {
+                if chunk.embedding != nil, chunk.embeddingProfileID != embedder.profile.id {
+                    foreign += 1
+                    try rebuilt.insert(chunk.withoutEmbedding())
+                } else {
+                    try rebuilt.insert(chunk)
+                }
+            }
+            index = rebuilt
+            refresh()
+            if foreign > 0 {
+                status = Status(message: "\(foreign) ส่วนถูกสร้าง vector ด้วยโมเดลอื่น "
+                                + "— ค้นได้เฉพาะแบบข้อความจนกว่าจะ re-embed",
+                                isError: true)
+            }
+        } catch {
+            log.error("loading knowledge: \(error)")
+            status = Status(message: "โหลดคลังจากฐานข้อมูลไม่สำเร็จ: \(error)", isError: true)
+        }
     }
 
     public var documentCount: Int { documents.count }
@@ -71,6 +114,14 @@ public final class KnowledgeViewModel {
                 index = working
                 added += report.chunksAdded
                 skipped += report.duplicatesSkipped
+
+                // Written through immediately: an ingest that is only in
+                // memory is one the user loses without ever being told.
+                if let store {
+                    try await store.save(index.allChunks.filter {
+                        $0.provenance.documentID == report.documentID
+                    })
+                }
             } catch {
                 log.error("ingest \(url.lastPathComponent, privacy: .public): \(error)")
                 failed.append("\(url.lastPathComponent): \(error)")
@@ -121,6 +172,13 @@ public final class KnowledgeViewModel {
             status = Status(message: "ส่วนนี้ไม่อยู่ในคลังแล้ว", isError: true)
             return
         }
+        do {
+            try await store?.updateEntities(chunkID: chunkID, to: cleaned)
+        } catch {
+            log.error("persisting entities: \(error)")
+            status = Status(message: "แก้ในหน้าจอแล้วแต่บันทึกไม่สำเร็จ: \(error)", isError: true)
+            return
+        }
         refresh()
         await search()
         status = Status(message: "แก้ entity แล้ว — ผลค้นหาอัปเดตตาม", isError: false)
@@ -128,6 +186,14 @@ public final class KnowledgeViewModel {
 
     public func delete(documentID: String) async {
         let removed = index.removeDocument(documentID)
+        do {
+            try await store?.deleteDocument(documentID)
+        } catch {
+            log.error("deleting document: \(error)")
+            status = Status(message: "ลบจากหน้าจอแล้วแต่ลบในฐานข้อมูลไม่สำเร็จ: \(error)",
+                            isError: true)
+            return
+        }
         refresh()
         await search()
         status = Status(message: "ลบเอกสารแล้ว (\(removed) ส่วน)", isError: false)
@@ -158,6 +224,7 @@ public final class KnowledgeViewModel {
             var working = index
             let added = try await working.importArchive(archive, embedder: embedder)
             index = working
+            try await store?.save(working.allChunks)
             refresh()
             status = Status(message: "นำเข้า \(added) ส่วน "
                             + "(ที่ซ้ำถูกข้าม, vector สร้างใหม่ด้วยโมเดลปัจจุบัน)",
@@ -175,7 +242,9 @@ public final class KnowledgeViewModel {
 
     public func changeScope(to scope: Scope) async {
         self.scope = scope
-        refresh()
+        // Each scope is its own body of knowledge, so switching means loading
+        // a different one rather than filtering the same index.
+        await reload()
         await search()
     }
 }

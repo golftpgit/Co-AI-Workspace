@@ -44,7 +44,9 @@ private struct RootView: View {
             if let engine = environment.engine, !showingStatus {
                 switch screen {
                 case .chat: ChatView(engine: engine)
-                case .knowledge: KnowledgeView(model: knowledge)
+                case .knowledge:
+                    KnowledgeView(model: knowledge)
+                        .task { await knowledge.attach(store: engine.knowledge) }
                 }
             } else {
                 BootStatusView(environment: environment)

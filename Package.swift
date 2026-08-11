@@ -35,7 +35,7 @@ let package = Package(
         // SurrealDB access + everything durable: conversations, spans and
         // (from P2) the knowledge base. Client written in-house — see
         // ARCHITECTURE §11.5 for why not surrealdb.swift.
-        .target(name: "Persistence", dependencies: ["AgentKit", "Observability"]),
+        .target(name: "Persistence", dependencies: ["AgentKit", "Observability", "Knowledge"]),
 
         // M5 — every model behind one interface, plus the router that decides
         // which tier serves a request (ARCHITECTURE §9).
@@ -91,7 +91,8 @@ let package = Package(
         .testTarget(name: "ConfigTests", dependencies: ["Config"]),
         .testTarget(name: "ObservabilityTests", dependencies: ["Observability"]),
         .testTarget(name: "SidecarTests", dependencies: ["Sidecar"]),
-        .testTarget(name: "PersistenceTests", dependencies: ["Persistence", "Sidecar", "Config"]),
+        .testTarget(name: "PersistenceTests",
+                    dependencies: ["Persistence", "Sidecar", "Config", "Knowledge"]),
         .testTarget(name: "LLMProvidersTests", dependencies: ["LLMProviders"]),
         .testTarget(name: "CoreEngineTests", dependencies: ["CoreEngine", "Knowledge"]),
         .testTarget(name: "KnowledgeTests", dependencies: ["Knowledge"]),

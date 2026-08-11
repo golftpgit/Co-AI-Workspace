@@ -48,6 +48,24 @@ public enum Schema {
         "DEFINE FIELD IF NOT EXISTS project_id ON span TYPE option<string>",
 
         // ── schema metadata ──
+        // Knowledge base (P2.7). Text and provenance are the source of truth;
+        // the vector is derived and can be rebuilt from them, which is why a
+        // model change is a re-embed rather than a migration (P2.8).
+        "DEFINE TABLE IF NOT EXISTS chunk SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON chunk TYPE string",
+        "DEFINE INDEX IF NOT EXISTS chunk_uid ON chunk FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS document_id ON chunk TYPE string",
+        "DEFINE INDEX IF NOT EXISTS chunk_document ON chunk FIELDS document_id",
+        "DEFINE FIELD IF NOT EXISTS content_hash ON chunk TYPE string",
+        // Re-ingesting the same passage must not add a second row, and the
+        // database is the last place that can still enforce it.
+        "DEFINE INDEX IF NOT EXISTS chunk_hash ON chunk FIELDS content_hash UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS scope_kind ON chunk TYPE string",
+        "DEFINE FIELD IF NOT EXISTS project_id ON chunk TYPE option<string>",
+        "DEFINE INDEX IF NOT EXISTS chunk_scope ON chunk FIELDS scope_kind, project_id",
+        "DEFINE FIELD IF NOT EXISTS embedding_profile ON chunk TYPE option<string>",
+        "DEFINE FIELD IF NOT EXISTS created_at ON chunk TYPE datetime",
+
         "DEFINE TABLE IF NOT EXISTS schema_meta SCHEMALESS",
     ]
 }

@@ -20,6 +20,10 @@ struct Engine: Sendable {
     let client: SurrealClient
     let conversations: ConversationStore
     let spans: SurrealSpanSink
+    /// The knowledge base's durable half. The screen keeps an in-memory index
+    /// for search and writes through to this, so closing the app does not
+    /// throw away what was ingested (P2.7).
+    let knowledge: KnowledgeStore
     let router: ModelRouter
     let processes: ProcessRegistry
     let gateway: ToolGateway
@@ -64,6 +68,7 @@ struct Engine: Sendable {
         }
 
         return Engine(client: client, conversations: conversations, spans: spans,
+                      knowledge: KnowledgeStore(client: client),
                       router: router, processes: processes, gateway: gateway,
                       broker: broker, runner: runner, executorSummary: summary)
     }
