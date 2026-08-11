@@ -20,6 +20,8 @@ struct Engine: Sendable {
     let client: SurrealClient
     let conversations: ConversationStore
     let spans: SurrealSpanSink
+    /// Conflict cards, kept so a decision is made once (§11.6).
+    let conflicts: ConflictStore
     /// The knowledge base's durable half. The screen keeps an in-memory index
     /// for search and writes through to this, so closing the app does not
     /// throw away what was ingested (P2.7).
@@ -68,6 +70,7 @@ struct Engine: Sendable {
         }
 
         return Engine(client: client, conversations: conversations, spans: spans,
+                      conflicts: ConflictStore(client: client),
                       knowledge: KnowledgeStore(client: client),
                       router: router, processes: processes, gateway: gateway,
                       broker: broker, runner: runner, executorSummary: summary)

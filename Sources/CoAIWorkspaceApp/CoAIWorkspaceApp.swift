@@ -31,12 +31,27 @@ private struct RootView: View {
     /// Owned here rather than built inside the view: a model recreated on each
     /// body pass loses whatever the user just did to it (P1.10's bug).
     @State private var knowledge = KnowledgeViewModel()
+    @State private var conflicts = ConflictViewModel()
 
     enum Screen: String, CaseIterable, Identifiable {
-        case chat, knowledge
+        case chat, knowledge, conflicts
         var id: String { rawValue }
-        var label: String { self == .chat ? "สนทนา" : "คลังความรู้" }
-        var icon: String { self == .chat ? "bubble.left.and.bubble.right" : "books.vertical" }
+
+        var label: String {
+            switch self {
+            case .chat: "สนทนา"
+            case .knowledge: "คลังความรู้"
+            case .conflicts: "ข้อขัดแย้ง"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .chat: "bubble.left.and.bubble.right"
+            case .knowledge: "books.vertical"
+            case .conflicts: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90"
+            }
+        }
     }
 
     var body: some View {
@@ -47,6 +62,9 @@ private struct RootView: View {
                 case .knowledge:
                     KnowledgeView(model: knowledge)
                         .task { await knowledge.attach(store: engine.knowledge) }
+                case .conflicts:
+                    ConflictView(model: conflicts)
+                        .task { await conflicts.attach(store: engine.conflicts) }
                 }
             } else {
                 BootStatusView(environment: environment)
