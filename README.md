@@ -25,12 +25,17 @@
 ## เริ่มใช้งาน
 
 ```bash
+xcodebuild -downloadComponent MetalToolchain   # ครั้งเดียวต่อเครื่อง (Xcode 26 แยกเป็น component)
 ./scripts/fetch-helpers.sh   # ดึง sidecar binary (ครั้งเดียวต่อเครื่อง — vendor/ ไม่อยู่ใน git)
-./scripts/check.sh           # build + test + structural rules
+./scripts/build-metallib.sh  # คอมไพล์ Metal kernel ของ MLX (ครั้งเดียว; rebuild ~4 วิ)
+./scripts/check.sh           # build + test + embedding model + structural rules
 ./scripts/build-app.sh       # ประกอบและเซ็น .app พร้อม App Sandbox
 ```
 
-**เครื่องใหม่**: ต้องรัน `fetch-helpers.sh` ก่อน ไม่งั้นเทสฝั่ง Persistence จะข้าม และแอปจะเริ่มฐานข้อมูลไม่ได้
+**เครื่องใหม่**: ต้องรัน `fetch-helpers.sh` ก่อน ไม่งั้นเทสฝั่ง Persistence จะข้าม และแอปจะเริ่มฐานข้อมูลไม่ได้ ·
+ต้องมี **Metal Toolchain** + รัน `build-metallib.sh` ไม่งั้นโมเดล embedding โหลดไม่ขึ้น
+(`Failed to load the default metallib`) — SwiftPM คอมไพล์ Metal shader ไม่ได้ จึงต้องมีขั้น `xcodebuild` แยกไว้ทำอย่างเดียว
+([ARCH E.13](ARCHITECTURE.md#e13-bge-m3-ในโปรเซสเราเอง--รันได้จริง--เจอกับดักสำคัญ-2026-08-11))
 ส่วน endpoint ของ Tier 1 ตั้งใน `bootstrap.plist` ที่ `~/Library/Containers/com.coaiworkspace.app/Data/Library/Application Support/CoAIWorkspace/`
 (คีย์ `selfHostedEndpoint` + `selfHostedModel`) — เป็นค่าต่อเครื่อง ไม่ได้อยู่ใน repo
 

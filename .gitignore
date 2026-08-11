@@ -7,3 +7,6 @@ vendor/
 
 # xcodebuild derived data from the MLX spike
 .xcbuild/
+
+# Metal kernels: built per machine by scripts/build-metallib.sh
+vendor/metal/

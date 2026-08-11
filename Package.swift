@@ -7,9 +7,17 @@ import PackageDescription
 let package = Package(
     name: "CoAIWorkspace",
     platforms: [.macOS(.v26)],
+    // MLX runs the embedding model in our own process rather than over HTTP to
+    // whatever the user happens to have installed (ARCHITECTURE E.13). Its
+    // Metal kernels cannot be built by SwiftPM — `scripts/build-metallib.sh`
+    // produces them once per machine, the same shape as the surreal binary.
     products: [
         .executable(name: "CoAIWorkspace", targets: ["CoAIWorkspaceApp"]),
         .library(name: "AgentKit", targets: ["AgentKit"]),
+    ],
+    dependencies: [
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "3.31.4"),
+        .package(url: "https://github.com/huggingface/swift-transformers", from: "1.0.0"),
     ],
     targets: [
         // M2 — shared types/protocols only, no logic. Everything may import this.
@@ -46,6 +54,25 @@ let package = Package(
         // of storage and models so it can be measured on its own.
         .target(name: "Knowledge", dependencies: ["AgentKit", "Observability"]),
 
+        // M5/M7 — the embedding model, in-process. Depends on Knowledge (which
+        // owns the `Embedder` protocol) and never the other way round, so the
+        // knowledge logic and its tests stay free of a heavy ML dependency.
+        .target(
+            name: "EmbeddingRuntime",
+            dependencies: [
+                "Knowledge", "Observability",
+                .product(name: "MLXEmbedders", package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
+            ]),
+
+        // Checks the embedding model against the real weights. An executable
+        // rather than a test target: MLX finds its Metal kernels through the
+        // main bundle, and under `swift test` that is SwiftPM's helper, which
+        // has no idea where ours are. Run by scripts/check.sh.
+        .executableTarget(name: "EmbeddingCheck", dependencies: ["EmbeddingRuntime", "Knowledge"]),
+
         // M1 — hook chain, approval broker, tool gateway, agent loop. Every
         // decision the system makes lives here (ARCHITECTURE §5).
         .target(name: "CoreEngine",
@@ -55,7 +82,8 @@ let package = Package(
         .executableTarget(
             name: "CoAIWorkspaceApp",
             dependencies: ["AgentKit", "Config", "Observability", "Sidecar", "Persistence",
-                           "LLMProviders", "CoreEngine", "Execution", "ToolBelt"]
+                           "LLMProviders", "CoreEngine", "Execution", "ToolBelt",
+                           "Knowledge", "EmbeddingRuntime"]
         ),
 
         .testTarget(name: "AgentKitTests", dependencies: ["AgentKit"]),
@@ -66,6 +94,7 @@ let package = Package(
         .testTarget(name: "LLMProvidersTests", dependencies: ["LLMProviders"]),
         .testTarget(name: "CoreEngineTests", dependencies: ["CoreEngine"]),
         .testTarget(name: "KnowledgeTests", dependencies: ["Knowledge"]),
+        .testTarget(name: "EmbeddingRuntimeTests", dependencies: ["EmbeddingRuntime"]),
         .testTarget(name: "ExecutionTests", dependencies: ["Execution", "Config"]),
         // Also hosts the end-to-end walking-skeleton test, which needs a real
         // database and a real sidecar alongside the tools and the gate.
