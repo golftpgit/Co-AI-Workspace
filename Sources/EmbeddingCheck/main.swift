@@ -129,4 +129,11 @@ await check("a document ingested with the real model is findable") {
     return "\(first.chunksAdded) chunks, re-ingest added 0"
 }
 
+// The screens' logic, driven the way a person drives it. Not a replacement
+// for using the app — it cannot see a view — but it covers the wiring half of
+// what P1.10 found by hand.
+print("")
+print("   — เส้นทางที่หน้าจอใช้จริง —")
+await ScreenFlows(embedder: embedder).run(check: { name, body in await check(name, body) })
+
 exit(Failures.shared.count == 0 ? 0 : 1)

@@ -75,7 +75,9 @@ let package = Package(
         // rather than a test target: MLX finds its Metal kernels through the
         // main bundle, and under `swift test` that is SwiftPM's helper, which
         // has no idea where ours are. Run by scripts/check.sh.
-        .executableTarget(name: "EmbeddingCheck", dependencies: ["EmbeddingRuntime", "Knowledge"]),
+        .executableTarget(name: "EmbeddingCheck",
+                          dependencies: ["EmbeddingRuntime", "Knowledge", "Persistence",
+                                         "Sidecar", "Config"]),
 
         // M1 — hook chain, approval broker, tool gateway, agent loop. Every
         // decision the system makes lives here (ARCHITECTURE §5).
