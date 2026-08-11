@@ -25,6 +25,19 @@ public struct FetchedPage: Sendable {
     public let provenance: Provenance
     public let contentType: String
     public var text: String { paragraphs.joined(separator: "\n\n") }
+
+    /// Public so a cached page, an archived one, or a stub can stand in for a
+    /// live fetch — the `PageReading` seam is worth nothing if only this file
+    /// can produce its result type.
+    public init(url: URL, finalURL: URL, title: String?, paragraphs: [String],
+                provenance: Provenance, contentType: String) {
+        self.url = url
+        self.finalURL = finalURL
+        self.title = title
+        self.paragraphs = paragraphs
+        self.provenance = provenance
+        self.contentType = contentType
+    }
 }
 
 public enum FetchError: Error, CustomStringConvertible, Equatable {

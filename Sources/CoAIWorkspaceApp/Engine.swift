@@ -7,6 +7,8 @@ import LLMProviders
 import CoreEngine
 import Execution
 import ToolBelt
+import Knowledge
+import EmbeddingRuntime
 
 // ─────────────────────────────────────────────────────────────
 // Everything the running system is made of, assembled once at boot.
@@ -56,7 +58,30 @@ struct Engine: Sendable {
                                   approver: broker,
                                   spanSink: spans,
                                   modes: .default)
-        await gateway.register(RunShellTool(registry: processes))
+        // Everything P2 and P3 built is only a feature once it is on the tool
+        // list — v1 shipped an MCP client that no session could reach (D6).
+        let knowledgeStore = KnowledgeStore(client: client)
+        let embedder = MLXEmbedder()
+        await gateway.register([
+            RunShellTool(registry: processes),
+            KBSearchTool(
+                index: { [knowledgeStore, embedder] in
+                    // Read at call time: documents are added while the app
+                    // runs, and a tool holding a snapshot answers from a
+                    // knowledge base that no longer exists.
+                    var index = KnowledgeIndex(profile: embedder.profile)
+                    for scope in [Scope.central, .policy] {
+                        let chunks = (try? await knowledgeStore.load(scope: scope)) ?? []
+                        try? index.insert(contentsOf: chunks.map {
+                            $0.embeddingProfileID == embedder.profile.id ? $0 : $0.withoutEmbedding()
+                        })
+                    }
+                    return index
+                },
+                embedder: embedder),
+            WebSearchTool(),
+            FetchPageTool(),
+        ])
 
         let runner = AgentTurnRunner(router: router,
                                      gateway: gateway,
@@ -71,7 +96,7 @@ struct Engine: Sendable {
 
         return Engine(client: client, conversations: conversations, spans: spans,
                       conflicts: ConflictStore(client: client),
-                      knowledge: KnowledgeStore(client: client),
+                      knowledge: knowledgeStore,
                       router: router, processes: processes, gateway: gateway,
                       broker: broker, runner: runner, executorSummary: summary)
     }

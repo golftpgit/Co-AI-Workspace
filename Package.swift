@@ -47,7 +47,9 @@ let package = Package(
 
         // M6 — the tools themselves. Depends on Execution, never the reverse,
         // and CoreEngine never depends on this: tools plug in via AgentTool.
-        .target(name: "ToolBelt", dependencies: ["AgentKit", "Observability", "Execution"]),
+        .target(name: "ToolBelt",
+                dependencies: ["AgentKit", "Observability", "Execution",
+                               "Knowledge", "WebSearch"]),
 
         // M7 — the knowledge base's own logic: tokenisation, chunking and the
         // lexical half of hybrid search (ARCHITECTURE §11). Deliberately free
@@ -109,6 +111,7 @@ let package = Package(
         // Also hosts the end-to-end walking-skeleton test, which needs a real
         // database and a real sidecar alongside the tools and the gate.
         .testTarget(name: "ToolBeltTests",
-                    dependencies: ["ToolBelt", "CoreEngine", "Persistence", "Sidecar", "Config"]),
+                    dependencies: ["ToolBelt", "CoreEngine", "Persistence", "Sidecar", "Config",
+                                   "Knowledge", "WebSearch"]),
     ]
 )
