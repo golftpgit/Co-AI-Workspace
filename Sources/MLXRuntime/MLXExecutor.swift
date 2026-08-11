@@ -76,10 +76,15 @@ public actor MLXExecutor: LLMExecutor {
     public var isResident: Bool { container != nil }
 
     public func unload() {
+        let wasResident = container != nil
         container = nil
         idleWatcher?.cancel()
         idleWatcher = nil
-        MLX.Memory.clearCache()
+        // Only when there was something to free. Touching MLX's allocator at
+        // all is what turns "no model was ever loaded" into a hard crash under
+        // `swift test`, where the Metal kernels cannot be found (E.13) — and
+        // an executor that was never used is exactly the case a test hits.
+        if wasResident { MLX.Memory.clearCache() }
     }
 
     // MARK: - generating

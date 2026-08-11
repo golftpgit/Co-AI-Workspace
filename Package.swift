@@ -136,7 +136,7 @@ let package = Package(
                     dependencies: ["LLMProviders", "ExecutorContract"]),
         // Everything about Tier 0.5 that does not need the weights. The rest
         // is MLXCheck.
-        .testTarget(name: "MLXRuntimeTests", dependencies: ["MLXRuntime"]),
+        .testTarget(name: "MLXRuntimeTests", dependencies: ["MLXRuntime", "LLMProviders"]),
         .testTarget(name: "CoreEngineTests", dependencies: ["CoreEngine", "Knowledge"]),
         .testTarget(name: "KnowledgeTests", dependencies: ["Knowledge"]),
         .testTarget(name: "WebSearchTests", dependencies: ["WebSearch", "Knowledge"]),

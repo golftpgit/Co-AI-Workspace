@@ -173,20 +173,37 @@ public final class AppEnvironment {
     /// the boot screen has to be the one to mention it.
     private func noteWhichModelsExist(_ config: BootstrapConfig, engine: Engine) {
         let hasEndpoint = !(config.selfHostedEndpoint?.isEmpty ?? true)
-        switch (engine.localModel, hasEndpoint) {
+        switch (engine.localTier.selected, hasEndpoint) {
         case (nil, false):
             notes.append("ไม่มีโมเดล MLX บนเครื่อง และยังไม่ได้ตั้ง selfHostedEndpoint — "
                          + "เหลือแต่โมเดล on-device ซึ่งงานที่ต้องความแม่นสูงใช้ไม่ได้: "
-                         + "จะไม่พบข้อขัดแย้งและไม่สกัดความสัมพันธ์ให้กราฟเลย")
+                         + "จะไม่พบข้อขัดแย้งและไม่สกัดความสัมพันธ์ให้กราฟเลย "
+                         + "(โหลดโมเดลได้ที่แท็บ \"โมเดล\")")
         case (nil, true):
             // §9.2 rule 4: the endpoint is not allowed to be the only path.
             notes.append("ไม่มีโมเดล MLX บนเครื่อง — Tier 0.5 ซึ่งเป็นพื้นรับประกันจึงหายไป "
-                         + "ถ้า endpoint ล่มหรือออฟไลน์ งานที่ต้องความแม่นสูงจะไม่มีที่รัน")
+                         + "ถ้า endpoint ล่มหรือออฟไลน์ งานที่ต้องความแม่นสูงจะไม่มีที่รัน "
+                         + "(โหลดโมเดลได้ที่แท็บ \"โมเดล\")")
         case (let model?, false):
             notes.append("ยังไม่ได้ตั้ง selfHostedEndpoint — งานที่ต้องความแม่นสูงจะรันบน "
                          + "\(model.name) บนเครื่องนี้ ซึ่งช้ากว่าแต่ทำงานได้")
         case (_?, true):
             break
+        }
+    }
+
+    /// Records a change made on the models screen. Bootstrap, not the
+    /// database: the router is built during boot, before the database is up,
+    /// so which model Tier 0.5 loads has to be readable from a flat file.
+    public func rememberLocalModel(_ name: String?) {
+        guard let paths, config.localModel != name else { return }
+        var updated = config
+        updated.localModel = name
+        do {
+            try BootstrapStore(paths: paths).save(updated)
+            config = updated
+        } catch {
+            log.error("saving local model choice: \(String(describing: error), privacy: .public)")
         }
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import MLXLLM
 
 // ─────────────────────────────────────────────────────────────
 // What is already on this machine (ARCHITECTURE §9.4, "ใช้โมเดลที่มีอยู่แล้ว").
@@ -78,11 +79,15 @@ public struct LocalModelCatalog: Sendable {
     }
 
     /// Every chat model found, in search-path order.
-    public func installed() -> [LocalModel] {
+    ///
+    /// Asynchronous because the last question — "can this runtime build that
+    /// architecture?" — is one only the library's own registry can answer, and
+    /// the registry is an actor.
+    public func installed() async -> [LocalModel] {
         var found: [LocalModel] = []
         var seen: Set<String> = []
         for root in searchPaths {
-            for directory in chatModelDirectories(under: root) {
+            for directory in await chatModelDirectories(under: root) {
                 let path = directory.standardizedFileURL.path(percentEncoded: false)
                 guard seen.insert(path).inserted else { continue }
                 if let model = describe(directory, relativeTo: root) { found.append(model) }
@@ -93,33 +98,77 @@ public struct LocalModelCatalog: Sendable {
 
     /// A named model, matched on the full name or the directory's own name so
     /// both `mlx-community/Qwen3-8B-4bit` and `Qwen3-8B-4bit` resolve.
-    public func model(named name: String) -> LocalModel? {
-        installed().first { $0.name == name || $0.directory.lastPathComponent == name }
+    public func model(named name: String) async -> LocalModel? {
+        await installed().first { $0.name == name || $0.directory.lastPathComponent == name }
     }
 
     /// What the runtime should load when nobody has chosen. Biggest wins:
     /// within a size class the larger model is the better one, and admission
     /// control against free RAM (P5.3) is what will stop this being naive.
-    public func preferred() -> LocalModel? {
-        installed().max { $0.sizeOnDisk < $1.sizeOnDisk }
+    public func preferred() async -> LocalModel? {
+        await installed().max { $0.sizeOnDisk < $1.sizeOnDisk }
     }
 
     // MARK: - what counts as a chat model
 
-    /// A directory holding weights, a tokenizer *and* a chat template.
+    /// A directory holding weights and a chat template, for an architecture
+    /// this runtime can actually build.
     ///
-    /// The chat template is the discriminator that matters: `bge-m3` in the
-    /// same cache has config.json, safetensors and a tokenizer too, and
-    /// loading an embedding model as a chat model fails deep inside generation
-    /// with an error about layer names. An embedding model has no chat
-    /// template, so this check keeps it out (see `MLXEmbedder`'s bridge, which
-    /// throws for exactly this reason).
-    func isChatModel(_ directory: URL) -> Bool {
-        let files = (try? fileManager.contentsOfDirectory(atPath: directory.path(percentEncoded: false)))
-            ?? []
+    /// Both halves are there because both have bitten:
+    ///
+    ///  • The chat template keeps embedding models out. `bge-m3` sits in the
+    ///    same cache with config.json, safetensors and a tokenizer; loaded as a
+    ///    chat model it fails deep inside generation. An embedding model has no
+    ///    chat template (see `MLXEmbedder`'s bridge, which throws for exactly
+    ///    this reason).
+    ///  • The type registry keeps unbuildable architectures out. LM Studio's
+    ///    `Qwen3-VL-4B-Instruct` has every file a chat model has and fails at
+    ///    load with `unsupportedModelType("qwen3_vl")` — offering it means the
+    ///    router picks a tier that cannot answer, and on a machine where it is
+    ///    the largest model, that is Tier 0.5 gone.
+    func isChatModel(_ directory: URL) async -> Bool {
+        guard hasChatModelFiles(directory) else { return false }
+        return await Self.runtimeCanBuild(Self.modelType(in: directory))
+    }
+
+    /// The half that is only about files: weights, all of them, and a chat
+    /// template.
+    ///
+    /// "All of them" is the part a cancelled download makes necessary. The
+    /// small files arrive first, so an interrupted 17 GB model can sit there
+    /// with its config, its template and one shard of six — and without the
+    /// shard list it reads as installed, right up until it fails at load.
+    func hasChatModelFiles(_ directory: URL) -> Bool {
+        let files = Set((try? fileManager.contentsOfDirectory(
+            atPath: directory.path(percentEncoded: false))) ?? [])
         guard files.contains("config.json"),
-              files.contains(where: { $0.hasSuffix(".safetensors") }) else { return false }
-        return chatTemplate(in: directory) != nil
+              files.contains(where: { $0.hasSuffix(".safetensors") }),
+              chatTemplate(in: directory) != nil else { return false }
+        return Self.shards(in: directory).isSubset(of: files)
+    }
+
+    /// The shards `model.safetensors.index.json` says this model is made of.
+    /// Empty for a single-file model, which then has nothing to check.
+    static func shards(in directory: URL) -> Set<String> {
+        guard let data = try? Data(contentsOf: directory.appending(path: "model.safetensors.index.json")),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let map = object["weight_map"] as? [String: String] else { return [] }
+        return Set(map.values)
+    }
+
+    /// The architecture name from config.json — what the factory dispatches on.
+    static func modelType(in directory: URL) -> String? {
+        guard let data = try? Data(contentsOf: directory.appending(path: "config.json")),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return object["model_type"] as? String
+    }
+
+    /// Asked of the library rather than guessed from a list we would have to
+    /// keep in step with it.
+    static func runtimeCanBuild(_ modelType: String?) async -> Bool {
+        guard let modelType else { return false }
+        return await LLMModelFactory.shared.typeRegistry.contains(modelType)
     }
 
     /// The template's text, wherever this export keeps it.
@@ -140,7 +189,7 @@ public struct LocalModelCatalog: Sendable {
         return nil
     }
 
-    private func chatModelDirectories(under root: URL) -> [URL] {
+    private func chatModelDirectories(under root: URL) async -> [URL] {
         guard fileManager.fileExists(atPath: root.path(percentEncoded: false)) else { return [] }
         var results: [URL] = []
         var frontier = [(url: root, depth: 0)]
@@ -150,9 +199,14 @@ public struct LocalModelCatalog: Sendable {
         let maximumDepth = 4
 
         while let entry = frontier.popLast() {
-            if isChatModel(entry.url) {
-                results.append(entry.url)
-                continue      // weights do not contain other models
+            if hasChatModelFiles(entry.url) {
+                // A directory of weights holds no other model, whether or not
+                // this runtime can build it — so stop descending either way,
+                // and only offer it if it can.
+                if await Self.runtimeCanBuild(Self.modelType(in: entry.url)) {
+                    results.append(entry.url)
+                }
+                continue
             }
             guard entry.depth < maximumDepth else { continue }
             let children = (try? fileManager.contentsOfDirectory(
@@ -245,7 +299,12 @@ public struct LocalModelCatalog: Sendable {
         let files = (try? fileManager.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: [.fileSizeKey])) ?? []
         return files.reduce(Int64(0)) { total, file in
-            let size = (try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+            // Followed, not measured as links: a Hugging Face cache snapshot is
+            // a directory of symlinks into `blobs/`, and reading the link
+            // itself reports 76 bytes for a 335 MB model — which then loses
+            // `preferred()` to any real file on disk.
+            let resolved = file.resolvingSymlinksInPath()
+            let size = (try? resolved.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
             return total + Int64(size)
         }
     }
