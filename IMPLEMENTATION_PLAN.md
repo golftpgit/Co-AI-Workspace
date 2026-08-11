@@ -55,7 +55,7 @@
 | **U3** | `.app` ที่อยู่ใน `build/` ล้าสมัย | build ล่าสุดทำก่อนงาน persistence | `./scripts/build-app.sh` ก่อนทดสอบ U1/U2 |
 | **U4** | **Graph view ของ entity/relation** | ยังไม่ได้ทำเลย | UI แสดง entity + relation แก้/ลบได้ (P2.7) |
 | **U9** | **หน้าจอ Conflict Card (P3.7) ยังไม่เคยถูกกดใช้** | โค้ดครบ, แอปเปิดได้ไม่ crash | กดตัดสินจริงสักใบแล้วดูว่าบันทึกและไม่ถามซ้ำ |
-| **U5** | **Relation extraction** | ยังไม่ได้ทำ — สกัดได้เฉพาะ entity ด้วย `NLTagger` (ยกยอดมาจาก P2.3) | ต้องใช้โมเดลอ่านประโยค (มี `LLMExecutor` + structured output พร้อมแล้ว) |
+| **U5** | **Relation extraction** | 🔶 **`RelationExtractor` เสร็จแล้ว (8 เทส)** — สกัดด้วยโมเดล + structured output และ **ทิ้งความสัมพันธ์ที่ปลายทั้งสองข้างไม่ปรากฏในข้อความจริง** (กันโมเดลเติมความรู้ที่เอกสารไม่ได้เขียน), ทุกความสัมพันธ์ผูกกับ chunk ที่รองรับมัน, โมเดลล่ม ≠ ไม่มีความสัมพันธ์ | **ค้าง**: ยังไม่ได้ต่อเข้า ingestion pipeline, ยังไม่ persist, ยังไม่มี graph view (U4) |
 | **U6** | `EmbeddingRuntime` ทดสอบผ่าน `swift test` ไม่ได้ | MLX หา metallib ผ่าน main bundle ซึ่งตอนรันเทสคือ helper ของ SwiftPM — ย้ายไปตรวจใน `Sources/EmbeddingCheck` ที่ `check.sh` เรียกแทน | ยอมรับข้อจำกัดนี้ หรือหาวิธี host bundle ให้ xctest เห็น |
 | **U7** | เทส Tier 1 (chat) ยังต้องพึ่ง LM Studio ที่ `:1234` | fail ดังๆ ถ้าไม่ได้เปิด — ตั้งใจไว้แบบนั้นเพราะยังเป็นทางหลักของ chat | จะหายไปเองเมื่อ P5.1 ทำ MLX chat runtime |
 | **U8** | KB โหลดทั้ง scope เข้า memory | พอสำหรับคลังส่วนตัว แต่ไม่ได้วัดว่าที่กี่หมื่น chunk จะเริ่มมีปัญหา | วัดจริงเมื่อมีข้อมูลจริงพอ แล้วค่อยตัดสินใจเรื่อง paging |
