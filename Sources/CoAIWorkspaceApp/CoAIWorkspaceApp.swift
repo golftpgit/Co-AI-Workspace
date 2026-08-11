@@ -61,7 +61,11 @@ private struct RootView: View {
                 case .chat: ChatView(engine: engine)
                 case .knowledge:
                     KnowledgeView(model: knowledge)
-                        .task { await knowledge.attach(store: engine.knowledge) }
+                        .task {
+                            await knowledge.attach(store: engine.knowledge)
+                            await knowledge.attach(relations: engine.relations,
+                                                   extractor: engine.relationExtractor)
+                        }
                 case .conflicts:
                     ConflictView(model: conflicts)
                         .task { await conflicts.attach(store: engine.conflicts) }

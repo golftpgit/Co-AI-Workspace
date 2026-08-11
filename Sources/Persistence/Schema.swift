@@ -69,6 +69,18 @@ public enum Schema {
         // Conflict ledger (P3.6). A decision that does not survive a restart
         // is a question the user gets asked again, which is the one thing
         // §11.6 promises will not happen.
+        // Knowledge graph edges (§11.4). Each one names the chunk that
+        // supports it, so a relation can always be checked against the text.
+        "DEFINE TABLE IF NOT EXISTS relation SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON relation TYPE string",
+        "DEFINE INDEX IF NOT EXISTS relation_uid ON relation FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS chunk_id ON relation TYPE string",
+        "DEFINE INDEX IF NOT EXISTS relation_chunk ON relation FIELDS chunk_id",
+        "DEFINE FIELD IF NOT EXISTS document_id ON relation TYPE string",
+        "DEFINE FIELD IF NOT EXISTS scope_kind ON relation TYPE string",
+        "DEFINE FIELD IF NOT EXISTS project_id ON relation TYPE option<string>",
+        "DEFINE FIELD IF NOT EXISTS created_at ON relation TYPE datetime",
+
         "DEFINE TABLE IF NOT EXISTS conflict SCHEMALESS",
         "DEFINE FIELD IF NOT EXISTS uid ON conflict TYPE string",
         "DEFINE INDEX IF NOT EXISTS conflict_uid ON conflict FIELDS uid UNIQUE",

@@ -6,6 +6,7 @@ import Knowledge
 import EmbeddingRuntime
 import Observability
 import Persistence
+import CoreEngine
 
 // ─────────────────────────────────────────────────────────────
 // The knowledge base screen's state (ARCHITECTURE §14.2, P2.7).
@@ -41,6 +42,9 @@ public final class KnowledgeViewModel {
     /// Nil until the database is up. The screen still works without it — in
     /// memory only — and says so, rather than pretending an ingest was saved.
     private var store: KnowledgeStore?
+    private var relationStore: RelationStore?
+    private var relationExtractor: RelationExtractor?
+    public private(set) var relations: [StoredRelation] = []
 
     public init(embedder: MLXEmbedder = MLXEmbedder()) {
         self.embedder = embedder
@@ -54,6 +58,20 @@ public final class KnowledgeViewModel {
     public func attach(store: KnowledgeStore) async {
         self.store = store
         await reload()
+    }
+
+    /// Relation extraction is optional: it needs a model, and a machine with
+    /// none should still be able to keep a knowledge base — it just has no
+    /// graph until one is available.
+    public func attach(relations: RelationStore, extractor: RelationExtractor) async {
+        self.relationStore = relations
+        self.relationExtractor = extractor
+        await reloadRelations()
+    }
+
+    public func reloadRelations() async {
+        guard let relationStore else { return }
+        relations = (try? await relationStore.load(scope: scope)) ?? []
     }
 
     public func reload() async {
@@ -117,11 +135,11 @@ public final class KnowledgeViewModel {
 
                 // Written through immediately: an ingest that is only in
                 // memory is one the user loses without ever being told.
-                if let store {
-                    try await store.save(index.allChunks.filter {
-                        $0.provenance.documentID == report.documentID
-                    })
+                let newChunks = index.allChunks.filter {
+                    $0.provenance.documentID == report.documentID
                 }
+                if let store { try await store.save(newChunks) }
+                await extractRelations(from: newChunks)
             } catch {
                 log.error("ingest \(url.lastPathComponent, privacy: .public): \(error)")
                 failed.append("\(url.lastPathComponent): \(error)")
@@ -188,6 +206,9 @@ public final class KnowledgeViewModel {
         let removed = index.removeDocument(documentID)
         do {
             try await store?.deleteDocument(documentID)
+            // Edges go with the document. One that outlives its evidence is
+            // still queried, with nothing behind it.
+            try await relationStore?.deleteDocument(documentID)
         } catch {
             log.error("deleting document: \(error)")
             status = Status(message: "ลบจากหน้าจอแล้วแต่ลบในฐานข้อมูลไม่สำเร็จ: \(error)",
@@ -197,6 +218,30 @@ public final class KnowledgeViewModel {
         refresh()
         await search()
         status = Status(message: "ลบเอกสารแล้ว (\(removed) ส่วน)", isError: false)
+    }
+
+    /// Reads the graph edges out of freshly ingested text. Failures here are
+    /// reported but never fatal: a document with no graph is still a document
+    /// that can be searched and cited.
+    private func extractRelations(from chunks: [IndexedChunk]) async {
+        guard let relationExtractor, let relationStore, !chunks.isEmpty else { return }
+
+        let found = await relationExtractor.relations(in: chunks)
+        guard !found.isEmpty else { return }
+
+        let documentOf = Dictionary(uniqueKeysWithValues:
+            chunks.map { ($0.id, $0.provenance.documentID) })
+        let stored = found.map { relation in
+            StoredRelation(subject: relation.subject, predicate: relation.predicate,
+                           object: relation.object, chunkID: relation.chunkID,
+                           documentID: documentOf[relation.chunkID] ?? "")
+        }
+        do {
+            try await relationStore.save(stored, scope: scope)
+            await reloadRelations()
+        } catch {
+            log.error("saving relations: \(error)")
+        }
     }
 
     // MARK: - export / import
