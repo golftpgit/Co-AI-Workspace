@@ -15,6 +15,11 @@ import Tokenizers
 //
 // Checks, in order of what would kill the idea:
 //   1. does bge-m3 load and run at all through MLXEmbedders
+//
+// Note: EmbedderRegistry.bge_m3 points at BAAI/bge-m3, whose safetensors use
+// Hugging Face's own layer names. The BERT port here expects MLX-converted
+// names (`encoder.layers.0.ln1.weight`), so the registry entry fails to load.
+// The mlx-community conversion is what actually works.
 //   2. does it read Thai — a model that returns one vector per script is
 //      useless to us (E.11)
 //   3. is it 1024 dimensions, the number P2.1 locked
@@ -106,7 +111,7 @@ var vectors: [[Float]] = []
 await step("load bge-m3 through MLXEmbedders") {
     let container = try await EmbedderModelFactory.shared.loadContainer(
         from: HubDownloader(), using: HubTokenizerLoader(),
-        configuration: EmbedderRegistry.bge_m3)
+        configuration: ModelConfiguration(id: "mlx-community/bge-m3-mlx-8bit"))
 
     let start = Date()
     vectors = await container.perform { context in
@@ -177,7 +182,7 @@ await step("agrees with the GGUF build LM Studio serves") {
 await step("throughput on a document-sized batch") {
     let container = try await EmbedderModelFactory.shared.loadContainer(
         from: HubDownloader(), using: HubTokenizerLoader(),
-        configuration: EmbedderRegistry.bge_m3)
+        configuration: ModelConfiguration(id: "mlx-community/bge-m3-mlx-8bit"))
     let batch = Array(repeating: thai[0], count: 32)
     let start = Date()
     _ = await container.perform { context in

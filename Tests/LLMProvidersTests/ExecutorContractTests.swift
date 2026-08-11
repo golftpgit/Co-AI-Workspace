@@ -122,9 +122,11 @@ struct VLLMExecutorTests {
             return
         }
         var request = LLMRequest(messages: [.init(.user, "Count from 1 to 10, comma separated.")])
-        // Enough room for a reasoning model to think *and* answer: at 80 the
-        // whole budget went to reasoning and the turn produced nothing.
-        request.maxTokens = 512
+        // Enough room for a reasoning model to think *and* answer. 80 produced
+        // nothing at all; 512 was still not always enough for qwen3.5 to finish
+        // thinking about counting to ten, which is a fact about reasoning
+        // models rather than about the executor.
+        request.maxTokens = 2_048
 
         var deltas = 0
         var thoughts = 0

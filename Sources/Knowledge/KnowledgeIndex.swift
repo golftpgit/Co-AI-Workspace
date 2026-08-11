@@ -79,6 +79,11 @@ public struct KnowledgeIndex: Sendable {
 
     public var count: Int { chunks.count }
 
+    /// The stored text and provenance — the part of the knowledge base that is
+    /// the source of truth rather than derived. A rebuild reads this and never
+    /// the original documents (P2.8).
+    public var allChunks: [IndexedChunk] { chunks }
+
     /// Throws rather than dropping the vector: an index that quietly accepts a
     /// chunk without its vector looks healthy and answers worse, which is the
     /// failure mode this whole file exists to prevent.
@@ -174,6 +179,27 @@ public struct KnowledgeIndex: Sendable {
             .prefix(limit)
             .map { SearchResult(chunk: $0.chunk, score: $0.score,
                                 lexicalRank: $0.lex, semanticRank: $0.sem) }
+    }
+
+    /// Vector half alone. Not for serving — fused results are better — but a
+    /// broken embedding model is invisible in a fused ranking that BM25 is
+    /// carrying, so anything checking the model's health has to look here
+    /// (P2.8's reindex gate).
+    public func searchSemantically(_ query: String, scope: Scope, embedder: some Embedder,
+                                   limit: Int = 10) async throws -> [SearchResult] {
+        guard let indexProfile = profile else {
+            throw IndexProfileError.lexicalIndexCannotHoldVectors
+        }
+        guard embedder.profile.id == indexProfile.id else {
+            throw IndexProfileError.queriedWithAnotherModel(indexProfile: indexProfile.id,
+                                                            queryProfile: embedder.profile.id)
+        }
+        let visible = chunks.filter { $0.scope == scope }
+        let queryVector = try await embedder.embed(query)
+        return rankSemantically(queryVector, in: visible).prefix(limit).enumerated().map {
+            SearchResult(chunk: $1.chunk, score: $1.score,
+                         lexicalRank: nil, semanticRank: $0 + 1)
+        }
     }
 
     // MARK: - the two halves

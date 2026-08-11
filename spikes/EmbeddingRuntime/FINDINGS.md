@@ -2,84 +2,67 @@
 
 **Question**: must the knowledge base depend on LM Studio, or can the app own its
 embedding model the way it already owns the SurrealDB sidecar?
-([ARCHITECTURE](../../ARCHITECTURE.md) line 1256 says it must be ours — nobody had
-checked whether that is possible in Swift today.)
 
-**Answer**: the Swift side is ready. The build is not — and the blocker is the
-*build system*, not the model.
+**Answer: yes, it runs — and the run turned up a trap worth more than the spike.**
 
-## What works
-
-| | |
-|---|---|
-| `MLXEmbedders` (in [`ml-explore/mlx-swift-lm`](https://github.com/ml-explore/mlx-swift-lm) 3.31.4, pushed 2026-08-10) | ships `EmbedderRegistry.bge_m3` and a BERT port — bge-m3 is a first-class configuration, not something we would port ourselves |
-| `mlx-community/bge-m3-mlx-*` on Hugging Face | fp16 / 8bit / 6bit / 4bit all published |
-| The adapter layer | mlx-swift-lm deliberately ships **no** downloader and **no** tokenizer — they are protocols the host supplies. `Hub` and `Tokenizers` from swift-transformers fill both in ~40 lines (`main.swift`), including a bridge between the two `Tokenizer` protocols |
-| Compiling our spike | `swift build` succeeds |
-
-## What blocks it
-
-**1. This machine has no Metal Toolchain.**
+## Results (measured, on this machine)
 
 ```
-$ xcodebuild -showComponent MetalToolchain
-Status: uninstalled
-
-$ xcrun metal --version
-error: cannot execute tool 'metal' due to missing Metal Toolchain;
-       use: xcodebuild -downloadComponent MetalToolchain
+== bge-m3 in-process spike ==
+  ok   load bge-m3 through MLXEmbedders (43.28s) 3 vectors, 1024 dims, embed took 1.26s
+  ok   dimensions are the 1024 P2.1 locked
+  ok   it can read Thai            related 0.764 vs unrelated 0.379
+  ok   agrees with the GGUF build LM Studio serves
+       cosine per sentence: -0.0008, -0.0068, 0.0512
+  ok   throughput                  32 chunks in 0.14s (232 chunks/s)
 ```
 
-Xcode 26 makes the Metal compiler a downloadable component. Without it MLX's
-kernels cannot be compiled, and at runtime MLX fails with
-`Failed to load the default metallib`. Fixable with one command — but it is a
-multi-gigabyte install, so it is the user's call, and it is now a documented
-prerequisite for anyone building this project with MLX in it.
+- **1024 dimensions**, matching what P2.1 locked.
+- **Reads Thai properly** — 0.764 for a related sentence against 0.379 for an
+  unrelated one, unlike the nomic build in E.11 that returned one constant vector.
+- **232 chunks/second**, so a 10,000-chunk re-embed is well under a minute of
+  compute. First load costs ~43s including the weight download.
 
-**2. Even with the toolchain, MLX cannot be built the way this project builds.**
+## The finding that matters
 
-mlx-swift's own README:
+**Two builds of "bge-m3" produce orthogonal vector spaces.** The MLX conversion
+and the GGUF build LM Studio serves agree on *nothing*: cosine −0.0008, −0.0068,
+0.0512 for the same three sentences. Not "slightly different" — unrelated.
 
-> SwiftPM (command line) cannot build the Metal shaders so the ultimate build
-> has to be done via Xcode.
+Anyone treating the model name as the thing that matters would swap one for the
+other, keep the same index, and destroy it silently: search would keep working
+and rank noise. This is exactly what `EmbeddingProfile.revision` exists to catch,
+and it is no longer a hypothetical.
 
-`scripts/check.sh` and `scripts/build-app.sh` are SwiftPM by an explicit
-architectural choice — `build-app.sh` says so in its header: *"Kept as a script
-(not an .xcodeproj) so the whole build is reproducible from the command line and
-in CI."* Adopting MLX in-process means giving that up, or carrying an
-`xcodebuild` step that exists only to produce one `.metallib`.
+## What it took to get there
 
-## Options, in the order they should be considered
+Three separate blockers, none of them the model:
 
-**A. Bundle our own inference sidecar** (`llama-server` + bge-m3 GGUF), managed by
-`SidecarManager` exactly like `surreal`. Gets the actual goal — the model lives in
-the app's container, we pin its version, LM Studio is gone — and changes nothing
-about how the project builds. Costs a second sidecar binary and an HTTP hop that
-`RemoteEmbedder` already speaks.
+1. **Metal Toolchain missing.** Xcode 26 makes the Metal compiler a downloadable
+   component. Without it MLX dies at `Failed to load the default metallib`.
+   `xcodebuild -downloadComponent MetalToolchain` fixes it — a build-machine
+   prerequisite now, for anyone building this project with MLX in it.
+2. **SwiftPM cannot build Metal shaders.** mlx-swift says so itself; the build has
+   to run through `xcodebuild`. `scripts/check.sh` and `scripts/build-app.sh` are
+   SwiftPM by an explicit architectural choice, so adopting MLX means carrying an
+   `xcodebuild` step whose only job is producing one `.metallib`.
+3. **`EmbedderRegistry.bge_m3` does not load.** It points at `BAAI/bge-m3`, whose
+   safetensors use Hugging Face layer names; the BERT port expects MLX-converted
+   ones and fails with `keyNotFound(["encoder","layers","0","ln2","weight"])`.
+   `mlx-community/bge-m3-mlx-8bit` works. The registry entry being wrong for the
+   model it names is worth knowing before trusting other entries in it.
 
-**B. MLX in-process, with an `xcodebuild` step** for the metallib, kept out of the
-main build. Best runtime story (no process, no HTTP, shared memory), but it
-reopens a decision that was made deliberately, and it needs the Metal Toolchain
-installed on every build machine.
-
-**C. Stay on LM Studio.** Rejected: the KB's correctness depends on a model owned
-by an app we do not control, which the user can update or delete, and which the
-App Sandbox forbids us from even reading off disk (only HTTP on localhost works).
-
-**Recommendation: A now, B when the sandbox and build story are worth revisiting.**
-Option A is a sidecar we already know how to run and reaches the same end state
-for the thing that actually matters: the embedding model becomes ours, pinned,
-and versioned with the index profile.
+The adapter layer mlx-swift-lm leaves to the host — a `Downloader` and a
+`TokenizerLoader` — is about forty lines over swift-transformers' `Hub` and
+`Tokenizers`, including a bridge between the two `Tokenizer` protocols. That code
+is in `main.swift` and is roughly what ships.
 
 ## Reproducing
 
 ```bash
+xcodebuild -downloadComponent MetalToolchain      # once per machine
 cd spikes/EmbeddingRuntime
-swift build                # compiles
-swift run EmbeddingRuntimeSpike   # fails: no default.metallib
+xcodebuild -scheme EmbeddingRuntimeSpike -destination 'platform=macOS,arch=arm64' \
+  -derivedDataPath .xcbuild -skipPackagePluginValidation -skipMacroValidation build
+./.xcbuild/Build/Products/Debug/EmbeddingRuntimeSpike
 ```
-
-The spike's five checks (load, 1024 dimensions, reads Thai, agrees with the GGUF
-build LM Studio serves, throughput) are written and compile — they have not been
-*run*, because none of them can execute without the Metal toolchain. Nothing in
-this file claims a measurement that was not taken.

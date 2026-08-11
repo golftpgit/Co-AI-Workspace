@@ -1173,20 +1173,27 @@ graph LR
 
 แปลว่าสำหรับคลังเอกสารไทย `.accurate` ไม่ใช่ตัวเลือกเรื่องคุณภาพแต่เป็นทางเดียวที่ใช้ได้ · ถ้าเผลอตั้ง `.fast` เพื่อความเร็ว หน้าที่เป็นภาษาไทยจะคืนค่าว่างโดยไม่มี error → `TextRecognizer` ล็อก `.accurate` ไว้ตายตัวและ expose `supportedLanguages` ให้ UI บอกผู้ใช้ได้ว่าเครื่องนี้อ่านภาษาอะไรได้บ้าง
 
-### E.13 bge-m3 ในโปรเซสเราเอง — spike ตอบแล้ว: ติดที่ build ไม่ใช่โมเดล (2026-08-11)
+### E.13 bge-m3 ในโปรเซสเราเอง — รันได้จริง + เจอกับดักสำคัญ (2026-08-11)
 
-คำถาม: KB ต้องพึ่ง LM Studio ตลอดไปไหม หรือแอปเป็นเจ้าของโมเดล embedding เองได้เหมือนที่เป็นเจ้าของ `surreal` อยู่แล้ว ([spikes/EmbeddingRuntime/](../spikes/EmbeddingRuntime/FINDINGS.md))
+รันจริงแล้วบนเครื่องนี้ ([spikes/EmbeddingRuntime/](../spikes/EmbeddingRuntime/FINDINGS.md)):
 
-**ฝั่ง Swift พร้อมแล้ว** — `MLXEmbedders` ใน [`mlx-swift-lm`](https://github.com/ml-explore/mlx-swift-lm) 3.31.4 มี `EmbedderRegistry.bge_m3` เป็น configuration สำเร็จรูป + BERT port · น้ำหนักมีบน HF ครบทุก quantisation · downloader/tokenizer ที่ mlx-swift-lm จงใจไม่ให้มา เติมด้วย `Hub`/`Tokenizers` จาก swift-transformers ~40 บรรทัด · `swift build` ผ่าน
+| เช็ค | ผล |
+|---|---|
+| โหลด bge-m3 ผ่าน `MLXEmbedders` | ✅ 1024 มิติ ตรงกับที่ P2.1 ล็อก |
+| อ่านภาษาไทย | ✅ ประโยคใกล้กัน 0.764 vs ไม่เกี่ยวกัน 0.379 (ต่างจาก nomic ใน [E.11](#e11-embedding-model-ที่-ตาบอดภาษาไทย--เจอตอน-p24-2026-08-11) ที่คืน vector เดียวกันหมด) |
+| ความเร็ว | ✅ **232 chunk/วินาที** → re-embed 10,000 chunk ใช้เวลาไม่ถึงนาที (โหลดครั้งแรก ~43 วิรวมดาวน์โหลด) |
 
-**ที่ติดคือ build ไม่ใช่โค้ด** สองชั้น:
+**🔴 กับดักที่เจอ — "bge-m3" สองบิลด์ให้ vector space ที่ตั้งฉากกัน**
 
-1. **เครื่องนี้ไม่มี Metal Toolchain** — Xcode 26 แยกเป็น component ต้องโหลดเอง (`xcodebuild -showComponent MetalToolchain` → `uninstalled`) ทำให้ compile kernel ของ MLX ไม่ได้ และตอน runtime ตายที่ `Failed to load the default metallib` แก้ได้ด้วย `xcodebuild -downloadComponent MetalToolchain` แต่เป็นการติดตั้งระดับหลาย GB
-2. **ต่อให้มี toolchain ก็ยังชนกติกาของโปรเจกต์** — README ของ mlx-swift เขียนเองว่า *"SwiftPM (command line) cannot build the Metal shaders so the ultimate build has to be done via Xcode"* ขณะที่ `check.sh`/`build-app.sh` เป็น SwiftPM ล้วนโดยเจตนา (header ของ `build-app.sh` เขียนไว้ว่าเพื่อให้ reproducible จาก command line และใน CI)
+เทียบ vector ของประโยคเดียวกันระหว่าง MLX conversion กับ GGUF ที่ LM Studio เสิร์ฟ: cosine = **−0.0008, −0.0068, 0.0512** ไม่ใช่ "ต่างกันนิดหน่อย" แต่คือ**ไม่เกี่ยวข้องกันเลย**
 
-**ทางเลือก**: (A) bundle sidecar ของเราเอง (`llama-server` + bge-m3 GGUF) ผ่าน `SidecarManager` เหมือน `surreal` — ได้เป้าหมายจริง (โมเดลอยู่ใน container ของแอป เราล็อกเวอร์ชันเอง ไม่พึ่ง LM Studio) โดยไม่แตะวิธี build · (B) MLX in-process + ขั้น `xcodebuild` แยกไว้ทำ metallib — runtime ดีที่สุดแต่รื้อการตัดสินใจเรื่อง build · (C) อยู่กับ LM Studio ต่อ — **ตัดทิ้ง** เพราะ App Sandbox อ่านไฟล์ใน `~/.lmstudio` ไม่ได้เลย เหลือแค่ HTTP บน localhost และผู้ใช้ลบ/อัปเดตโมเดลเมื่อไหร่ก็ได้
+ใครที่คิดว่าชื่อโมเดลคือสิ่งที่สำคัญ จะสลับสองอันนี้โดยใช้ index เดิม แล้ว**ทำลาย KB แบบเงียบสนิท** — ค้นได้ปกติ แต่จัดอันดับมั่ว นี่คือสิ่งที่ `EmbeddingProfile.revision` มีไว้ดัก และตอนนี้ไม่ใช่สมมติฐานอีกแล้ว
 
-**แนะนำ A ก่อน** แล้วค่อยพิจารณา B ตอนที่คุ้มจะรื้อเรื่อง build
+**อุปสรรค 3 ข้อที่ต้องผ่าน (ไม่มีข้อไหนเกี่ยวกับตัวโมเดล)**:
+
+1. **Metal Toolchain ไม่ได้ติดตั้ง** — Xcode 26 แยกเป็น component ต่างหาก ถ้าไม่มี MLX ตายที่ `Failed to load the default metallib` แก้ด้วย `xcodebuild -downloadComponent MetalToolchain` (ติดตั้งแล้วบนเครื่องนี้) → **เป็น prerequisite ของเครื่องที่ build โปรเจกต์นี้ตั้งแต่นี้ไป**
+2. **SwiftPM สร้าง Metal shader ไม่ได้** — README ของ mlx-swift เขียนเอง ต้อง build ผ่าน `xcodebuild` ขณะที่ `check.sh`/`build-app.sh` เป็น SwiftPM โดยเจตนา → ต้องมีขั้น `xcodebuild` เพิ่มเพื่อสร้าง `.metallib` อย่างเดียว
+3. **`EmbedderRegistry.bge_m3` โหลดไม่ขึ้น** — มันชี้ไป `BAAI/bge-m3` ที่ weight ใช้ชื่อ layer แบบ HF แต่ BERT port ต้องการชื่อแบบ MLX (`keyNotFound(["encoder","layers","0","ln2","weight"])`) ต้องใช้ `mlx-community/bge-m3-mlx-8bit` แทน — **entry ใน registry ผิดกับโมเดลที่มันตั้งชื่อไว้เอง** ควรระวัง entry อื่นด้วย
 
 ### E.4 สถานะ dependency หลัก (จาก GitHub API วันที่ตรวจ)
 
