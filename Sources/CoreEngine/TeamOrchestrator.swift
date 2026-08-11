@@ -2,6 +2,7 @@ import Foundation
 import AgentKit
 import LLMProviders
 import Observability
+import Persistence
 
 // ─────────────────────────────────────────────────────────────
 // The team lead (ARCHITECTURE §2.2, §2.4, §2.5, P4.2–P4.5).
@@ -68,6 +69,10 @@ public actor TeamOrchestrator {
     private let reviewer: QAReviewer
     private let maxFanOut: Int
     private let retryCap: Int
+    /// Optional: the team works without a database, it just cannot be asked
+    /// afterwards what happened.
+    private let ledgerStore: TaskLedgerStore?
+    private let scope: Scope
     private var ledger: [String: LedgerEntry] = [:]
     private let log = AppLog.logger("team")
 
@@ -85,12 +90,30 @@ public actor TeamOrchestrator {
                 specialists: [Role: any Specialist],
                 reviewer: QAReviewer = QAReviewer(),
                 maxFanOut: Int = 4,
-                retryCap: Int = 3) {
+                retryCap: Int = 3,
+                ledgerStore: TaskLedgerStore? = nil,
+                scope: Scope = .central) {
         self.router = router
         self.specialists = specialists
         self.reviewer = reviewer
         self.maxFanOut = maxFanOut
         self.retryCap = retryCap
+        self.ledgerStore = ledgerStore
+        self.scope = scope
+    }
+
+    /// Written on every state change, not once at the end: a run that is
+    /// interrupted is exactly when someone wants to read the ledger.
+    private func persist(_ id: String) async {
+        guard let ledgerStore, let entry = ledger[id] else { return }
+        try? await ledgerStore.record(LedgerRow(
+            assignmentID: entry.assignment.id,
+            role: entry.assignment.role,
+            goal: entry.assignment.goal,
+            attempts: entry.attempts,
+            passed: entry.passed,
+            findings: entry.findings,
+            summary: entry.deliverable?.summary), scope: scope)
     }
 
     public var entries: [LedgerEntry] {
@@ -132,6 +155,7 @@ public actor TeamOrchestrator {
             while attempt < retryCap {
                 attempt += 1
                 ledger[assignment.id]?.attempts = attempt
+                await persist(assignment.id)
                 emit(.assigned(assignment))
 
                 let deliverable: Deliverable
@@ -153,8 +177,11 @@ public actor TeamOrchestrator {
                 emit(.reviewed(assignmentID: assignment.id, passed: verdict.passed,
                                findings: verdict.findings))
 
+                await persist(assignment.id)
+
                 if verdict.passed {
                     ledger[assignment.id]?.passed = true
+                    await persist(assignment.id)
                     delivered.append(deliverable)
                     break
                 }

@@ -71,6 +71,20 @@ public enum Schema {
         // §11.6 promises will not happen.
         // Knowledge graph edges (§11.4). Each one names the chunk that
         // supports it, so a relation can always be checked against the text.
+        // Task ledger (§2.2). Who was asked to do what, how many tries it
+        // took, and what the reviewer said — answerable without replaying a
+        // session.
+        "DEFINE TABLE IF NOT EXISTS task SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON task TYPE string",
+        "DEFINE INDEX IF NOT EXISTS task_uid ON task FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS role ON task TYPE string",
+        "DEFINE FIELD IF NOT EXISTS passed ON task TYPE bool",
+        "DEFINE FIELD IF NOT EXISTS attempts ON task TYPE int",
+        "DEFINE FIELD IF NOT EXISTS scope_kind ON task TYPE string",
+        "DEFINE FIELD IF NOT EXISTS project_id ON task TYPE option<string>",
+        "DEFINE INDEX IF NOT EXISTS task_open ON task FIELDS passed",
+        "DEFINE FIELD IF NOT EXISTS updated_at ON task TYPE datetime",
+
         "DEFINE TABLE IF NOT EXISTS relation SCHEMALESS",
         "DEFINE FIELD IF NOT EXISTS uid ON relation TYPE string",
         "DEFINE INDEX IF NOT EXISTS relation_uid ON relation FIELDS uid UNIQUE",

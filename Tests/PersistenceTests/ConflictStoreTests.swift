@@ -49,6 +49,9 @@ struct ConflictStoreTests {
         // The reasons are stored as written, not recomputed — reopening this
         // in a year should show what was weighed then.
         #expect(restored.weightAReasons.contains("T2"))
+        // Regression: booleans decoded as false whatever was stored, because
+        // SurrealValue had no accessor for them and every caller guessed.
+        #expect(restored.needsHuman, "the card forgot that it needs a person")
     }
 
     @Test("a decision survives, so the question is not asked twice",

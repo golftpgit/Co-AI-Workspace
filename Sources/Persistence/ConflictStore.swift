@@ -84,8 +84,7 @@ public actor ConflictStore {
                 weightBReasons: row["weight_b"]?.stringValue ?? "",
                 scoreA: row["score_a"]?.doubleValue ?? 0,
                 scoreB: row["score_b"]?.doubleValue ?? 0,
-                needsHuman: (row["needs_human"]?.intValue ?? 0) != 0
-                    || row["needs_human"]?.stringValue == "true",
+                needsHuman: row["needs_human"]?.boolValue ?? false,
                 decision: decision)
         } ?? []
     }
