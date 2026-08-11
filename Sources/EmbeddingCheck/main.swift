@@ -89,4 +89,44 @@ await check("a dimension it does not produce is refused") {
     }
 }
 
+await check("a document ingested with the real model is findable") {
+    // P2.3's Done-when against the model that ships, not a stub: the unit tests
+    // prove the pipeline's logic, this proves the whole path holds together
+    // with 1024-dimension vectors from bge-m3.
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("coai-embedding-check-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let file = directory.appendingPathComponent("note.md")
+    try """
+    การให้อินซูลินแบบพื้นฐานร่วมกับยากินช่วยคุมระดับน้ำตาลในเลือดของผู้ป่วยเบาหวานชนิดที่ 2.
+    การปนเปื้อนโลหะหนักในแหล่งน้ำดิบส่งผลต่อสุขภาพของประชาชนในระยะยาว.
+    """.write(to: file, atomically: true, encoding: .utf8)
+
+    var index = KnowledgeIndex(profile: embedder.profile)
+    let pipeline = IngestionPipeline()
+    let first = try await pipeline.ingest(file, into: &index, scope: .central,
+                                          tier: .t3, embedder: embedder)
+    guard first.chunksAdded > 0 else { throw CheckFailure("nothing was indexed") }
+
+    // Asked in words the document does not use, so only the vector half can
+    // answer it.
+    let hits = try await index.search("การรักษาโรคเบาหวาน", scope: .central,
+                                      embedder: embedder)
+    guard hits.contains(where: { $0.semanticRank != nil }) else {
+        throw CheckFailure("nothing ranked semantically")
+    }
+    guard hits.allSatisfy({ $0.provenance.tier != nil }) else {
+        throw CheckFailure("a row came back with no tier")
+    }
+
+    let second = try await pipeline.ingest(file, into: &index, scope: .central,
+                                           tier: .t3, embedder: embedder)
+    guard second.chunksAdded == 0 else {
+        throw CheckFailure("re-ingest added \(second.chunksAdded) chunks")
+    }
+    return "\(first.chunksAdded) chunks, re-ingest added 0"
+}
+
 exit(Failures.shared.count == 0 ? 0 : 1)

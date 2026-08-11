@@ -76,7 +76,8 @@ let package = Package(
         // M1 — hook chain, approval broker, tool gateway, agent loop. Every
         // decision the system makes lives here (ARCHITECTURE §5).
         .target(name: "CoreEngine",
-                dependencies: ["AgentKit", "Observability", "LLMProviders", "Persistence"]),
+                dependencies: ["AgentKit", "Observability", "LLMProviders", "Persistence",
+                               "Knowledge"]),
 
         // M13 — SwiftUI shell.
         .executableTarget(
@@ -92,7 +93,7 @@ let package = Package(
         .testTarget(name: "SidecarTests", dependencies: ["Sidecar"]),
         .testTarget(name: "PersistenceTests", dependencies: ["Persistence", "Sidecar", "Config"]),
         .testTarget(name: "LLMProvidersTests", dependencies: ["LLMProviders"]),
-        .testTarget(name: "CoreEngineTests", dependencies: ["CoreEngine"]),
+        .testTarget(name: "CoreEngineTests", dependencies: ["CoreEngine", "Knowledge"]),
         .testTarget(name: "KnowledgeTests", dependencies: ["Knowledge"]),
         .testTarget(name: "EmbeddingRuntimeTests", dependencies: ["EmbeddingRuntime"]),
         .testTarget(name: "ExecutionTests", dependencies: ["Execution", "Config"]),

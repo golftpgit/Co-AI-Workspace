@@ -66,23 +66,29 @@ private func temporaryDirectory() throws -> URL {
     return url
 }
 
-/// bge-m3 at 1024 dimensions is what P2.1 locked; the tests use whatever this
-/// machine serves under that name and skip loudly when it is absent.
-private let bgeProfile = EmbeddingProfile(modelID: "text-embedding-bge-m3",
-                                          revision: "gguf-q8_0", dimensions: 1_024)
+/// The pipeline's logic is tested against a deterministic stub, not a model:
+/// what is under test here is reading, chunking and dedup. The real model runs
+/// end to end in `Sources/EmbeddingCheck`, which `scripts/check.sh` executes —
+/// MLX cannot load its Metal kernels under `swift test` at all (ARCH E.13).
+private struct StubEmbedder: Embedder {
+    let identifier = "stub"
+    let profile = EmbeddingProfile(modelID: "stub", revision: "test", dimensions: 16)
+    private let tokenizer = Tokenizer()
 
-private func bgeEmbedder() async -> RemoteEmbedder? {
-    let endpoint = URL(string: "http://127.0.0.1:1234/v1")!
-    let embedder = RemoteEmbedder(baseURL: endpoint, model: "text-embedding-bge-m3",
-                                  profile: bgeProfile)
-    return await embedder.isReachable() ? embedder : nil
-}
-
-private extension RemoteEmbedder {
-    func isReachable() async -> Bool {
-        (try? await embed("ping")) != nil
+    func embed(_ texts: [String]) async throws -> [[Float]] {
+        texts.map { text in
+            var vector = [Float](repeating: 0, count: 16)
+            for token in tokenizer.tokens(text) {
+                var hash = 5_381
+                for scalar in token.unicodeScalars { hash = (hash &* 33) &+ Int(scalar.value) }
+                vector[Int(hash.magnitude % 16)] += 1
+            }
+            return vector
+        }
     }
 }
+
+private let stubProfile = StubEmbedder().profile
 
 @Suite("Ingestion", .serialized)
 struct IngestionTests {
@@ -94,8 +100,8 @@ struct IngestionTests {
         let file = directory.appendingPathComponent("scan.pdf")
         try makeScannedPDF(at: file)
 
-        var index = KnowledgeIndex(profile: bgeProfile)
-        let embedder = await bgeEmbedder()
+        var index = KnowledgeIndex(profile: stubProfile)
+        let embedder = StubEmbedder()
         let report = try await IngestionPipeline().ingest(
             file, into: &index, scope: .central, tier: .t3, embedder: embedder)
 
@@ -109,19 +115,11 @@ struct IngestionTests {
         #expect(hits.first?.provenance.section == "OCR",
                 "a citation of OCR text should say it is OCR text")
 
-        // And findable through the vector half too, at the dimension P2.1
-        // locked — otherwise this test passes on the lexical path alone and
-        // says nothing about the embedder.
-        guard let embedder else {
-            Issue.record("skipped the vector half: no bge-m3 on :1234")
-            return
-        }
-        let fused = try await index.search("การรักษาโรคเบาหวาน", scope: .central,
-                                           embedder: embedder)
-        #expect(!fused.isEmpty)
+        // And through the vector half, so the test says something about the
+        // fused path rather than passing on BM25 alone.
+        let fused = try await index.search("อินซูลิน", scope: .central, embedder: embedder)
         #expect(fused.contains { $0.semanticRank != nil },
                 "nothing ranked semantically, so the vectors were never used")
-        #expect(fused.allSatisfy { ($0.chunk.embedding?.count ?? 0) == 1_024 })
     }
 
     @Test("ingesting the same document twice adds nothing", .timeLimit(.minutes(3)))
@@ -131,8 +129,8 @@ struct IngestionTests {
         let file = directory.appendingPathComponent("scan.pdf")
         try makeScannedPDF(at: file)
 
-        let embedder = await bgeEmbedder()
-        var index = KnowledgeIndex(profile: bgeProfile)
+        let embedder = StubEmbedder()
+        var index = KnowledgeIndex(profile: stubProfile)
         let pipeline = IngestionPipeline()
 
         let first = try await pipeline.ingest(file, into: &index, scope: .central,
@@ -180,7 +178,7 @@ struct IngestionTests {
         try "วัคซีนชนิด mRNA กระตุ้นภูมิคุ้มกันในผู้สูงอายุได้ดี".write(to: file, atomically: true,
                                                                         encoding: .utf8)
 
-        var index = KnowledgeIndex(profile: bgeProfile)
+        var index = KnowledgeIndex(profile: stubProfile)
         let report = try await IngestionPipeline().ingest(
             file, into: &index, scope: .project(ProjectID("vaccine")), tier: .t2)
 
@@ -201,7 +199,7 @@ struct IngestionTests {
         let file = directory.appendingPathComponent("note.txt")
         try "การให้อินซูลินในผู้ป่วยเบาหวาน".write(to: file, atomically: true, encoding: .utf8)
 
-        var index = KnowledgeIndex(profile: bgeProfile)
+        var index = KnowledgeIndex(profile: stubProfile)
         await #expect(throws: IngestionError.self) {
             _ = try await IngestionPipeline().ingest(file, into: &index, scope: .central,
                                                      tier: .t3, embedder: ThaiBlindStub())
@@ -216,7 +214,7 @@ struct IngestionTests {
         let file = directory.appendingPathComponent("thing.xyz")
         try Data("x".utf8).write(to: file)
 
-        var index = KnowledgeIndex(profile: bgeProfile)
+        var index = KnowledgeIndex(profile: stubProfile)
         await #expect(throws: IngestionError.self) {
             _ = try await IngestionPipeline().ingest(file, into: &index,
                                                      scope: .central, tier: .t3)
