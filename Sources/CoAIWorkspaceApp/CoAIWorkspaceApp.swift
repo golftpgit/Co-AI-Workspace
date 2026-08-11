@@ -27,16 +27,39 @@ struct CoAIWorkspaceApp: App {
 private struct RootView: View {
     let environment: AppEnvironment
     @State private var showingStatus = false
+    @State private var screen = Screen.chat
+    /// Owned here rather than built inside the view: a model recreated on each
+    /// body pass loses whatever the user just did to it (P1.10's bug).
+    @State private var knowledge = KnowledgeViewModel()
+
+    enum Screen: String, CaseIterable, Identifiable {
+        case chat, knowledge
+        var id: String { rawValue }
+        var label: String { self == .chat ? "สนทนา" : "คลังความรู้" }
+        var icon: String { self == .chat ? "bubble.left.and.bubble.right" : "books.vertical" }
+    }
 
     var body: some View {
         Group {
             if let engine = environment.engine, !showingStatus {
-                ChatView(engine: engine)
+                switch screen {
+                case .chat: ChatView(engine: engine)
+                case .knowledge: KnowledgeView(model: knowledge)
+                }
             } else {
                 BootStatusView(environment: environment)
             }
         }
         .toolbar {
+            if environment.engine != nil, !showingStatus {
+                Picker("หน้าจอ", selection: $screen) {
+                    ForEach(Screen.allCases) { screen in
+                        Label(screen.label, systemImage: screen.icon).tag(screen)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityLabel("สลับหน้าจอ")
+            }
             if environment.engine != nil {
                 Toggle(isOn: $showingStatus) {
                     Label("สถานะระบบ", systemImage: "heart.text.square")

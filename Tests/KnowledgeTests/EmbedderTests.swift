@@ -3,11 +3,21 @@ import Foundation
 @testable import Knowledge
 
 // ─────────────────────────────────────────────────────────────
-// The embedder against a real endpoint. Like the Tier 1 executor tests, the
-// model is a property of the machine: P2.1 locked `bge-m3` at 1024 dimensions
-// for the shipped system, but a machine serving any embedding model can still
-// prove the client speaks the protocol and enforces its dimension.
+// `RemoteEmbedder` against a real endpoint.
+//
+// This stopped being the primary path when the model moved in-process
+// (ARCHITECTURE E.13) — it now covers remote endpoints only, so the suite is
+// opt-in rather than failing whenever no server happens to be running:
+//
+//     COAI_TEST_REMOTE_EMBEDDER=1 swift test
+//
+// Opt-in, not silent: with the flag set and no endpoint, it still fails loudly,
+// because then the absence is a setup error rather than a machine that simply
+// does not use this path.
 // ─────────────────────────────────────────────────────────────
+
+private let remoteEmbedderTestsEnabled =
+    ProcessInfo.processInfo.environment["COAI_TEST_REMOTE_EMBEDDER"] == "1"
 
 private let endpoint = URL(string: "http://127.0.0.1:1234/v1")!
 
@@ -75,7 +85,8 @@ private struct HonestEmbedder: Embedder {
     }
 }
 
-@Suite("Remote embedder", .serialized)
+@Suite("Remote embedder", .serialized, .enabled(if: remoteEmbedderTestsEnabled,
+       "set COAI_TEST_REMOTE_EMBEDDER=1 — the shipped path is in-process MLX"))
 struct EmbedderTests {
     @Test("embeds text and reports the dimension it was told to expect",
           .timeLimit(.minutes(1)))

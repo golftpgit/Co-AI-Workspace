@@ -14,7 +14,7 @@ import AgentKit
 //    leak into each other.
 // ─────────────────────────────────────────────────────────────
 
-public struct IndexedChunk: Sendable, Equatable {
+public struct IndexedChunk: Sendable, Equatable, Identifiable {
     public let id: String
     public let text: String
     public let scope: Scope
@@ -27,8 +27,23 @@ public struct IndexedChunk: Sendable, Equatable {
     /// Which vector space `embedding` belongs to. Present exactly when the
     /// vector is: a vector that cannot name its model cannot be checked.
     public let embeddingProfileID: String?
-    /// People, places and organisations named in this chunk (§11.4).
+    /// People, places and organisations named in this chunk (§11.4). Indexed
+    /// alongside the text, so correcting one changes what the chunk answers —
+    /// which is the point of letting a user edit them at all (P2.7).
     public let entities: [String]
+
+    /// What BM25 actually sees.
+    var searchableText: String {
+        entities.isEmpty ? text : text + " " + entities.joined(separator: " ")
+    }
+
+    /// The same chunk with different entities. Everything the graph and
+    /// citations point at — id, text, provenance, vector — is carried over.
+    public func withEntities(_ entities: [String]) -> IndexedChunk {
+        IndexedChunk(id: id, text: text, scope: scope, provenance: provenance,
+                     embedding: embedding, embeddingProfileID: embeddingProfileID,
+                     contentHash: contentHash, entities: entities)
+    }
 
     public init(id: String, text: String, scope: Scope,
                 provenance: Provenance, embedding: [Float]? = nil,
@@ -43,6 +58,22 @@ public struct IndexedChunk: Sendable, Equatable {
         self.contentHash = contentHash ?? IngestionPipeline.contentHash(text)
         self.entities = entities
     }
+}
+
+/// A document as the knowledge base list shows it (§14.2).
+public struct DocumentSummary: Sendable, Equatable, Identifiable {
+    public let documentID: String
+    public let title: String
+    public let tier: SourceTier?
+    public let origin: Origin
+    public let scope: Scope
+    public let chunkCount: Int
+    public let entities: [String]
+    /// False when the document was indexed with no embedder available — the
+    /// list says so rather than letting the user wonder why search is weaker.
+    public let hasVectors: Bool
+
+    public var id: String { documentID }
 }
 
 public struct SearchResult: Sendable, Equatable {
@@ -105,6 +136,42 @@ public struct KnowledgeIndex: Sendable {
 
     public mutating func insert(contentsOf newChunks: [IndexedChunk]) throws {
         for chunk in newChunks { try insert(chunk) }
+    }
+
+    /// Corrects the entities on a chunk. Returns false when the chunk is gone,
+    /// so a UI editing a stale row finds out rather than silently doing nothing.
+    @discardableResult
+    public mutating func updateEntities(of chunkID: String, to entities: [String]) -> Bool {
+        guard let position = chunks.firstIndex(where: { $0.id == chunkID }) else { return false }
+        chunks[position] = chunks[position].withEntities(entities)
+        return true
+    }
+
+    /// Removes a whole document. Chunk-level deletion is deliberately not
+    /// offered: half a document in the index is a citation that leads nowhere.
+    @discardableResult
+    public mutating func removeDocument(_ documentID: String) -> Int {
+        let before = chunks.count
+        chunks.removeAll { $0.provenance.documentID == documentID }
+        return before - chunks.count
+    }
+
+    /// One row per ingested document, for the knowledge base list (§14.2).
+    public func documents(in scope: Scope? = nil) -> [DocumentSummary] {
+        let visible = scope.map { s in chunks.filter { $0.scope == s } } ?? chunks
+        return Dictionary(grouping: visible, by: { $0.provenance.documentID })
+            .map { id, chunks in
+                DocumentSummary(
+                    documentID: id,
+                    title: chunks[0].provenance.title,
+                    tier: chunks[0].provenance.tier,
+                    origin: chunks[0].provenance.origin,
+                    scope: chunks[0].scope,
+                    chunkCount: chunks.count,
+                    entities: Array(Set(chunks.flatMap(\.entities))).sorted(),
+                    hasVectors: chunks.contains { $0.embedding != nil })
+            }
+            .sorted { $0.title < $1.title }
     }
 
     /// Exact-duplicate check, scope-independent on purpose: the same passage
@@ -207,7 +274,7 @@ public struct KnowledgeIndex: Sendable {
     private func rankLexically(_ query: String,
                                in visible: [IndexedChunk]) -> [(chunk: IndexedChunk, score: Double)] {
         var index = BM25Index(tokenizer: tokenizer)
-        for chunk in visible { index.index(id: chunk.id, text: chunk.text) }
+        for chunk in visible { index.index(id: chunk.id, text: chunk.searchableText) }
 
         let byID = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, $0) })
         return index.search(query, limit: visible.count).compactMap { scored in
