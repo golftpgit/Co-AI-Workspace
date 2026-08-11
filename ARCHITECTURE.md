@@ -1195,6 +1195,30 @@ graph LR
 2. **SwiftPM สร้าง Metal shader ไม่ได้** — README ของ mlx-swift เขียนเอง ต้อง build ผ่าน `xcodebuild` ขณะที่ `check.sh`/`build-app.sh` เป็น SwiftPM โดยเจตนา → ต้องมีขั้น `xcodebuild` เพิ่มเพื่อสร้าง `.metallib` อย่างเดียว
 3. **`EmbedderRegistry.bge_m3` โหลดไม่ขึ้น** — มันชี้ไป `BAAI/bge-m3` ที่ weight ใช้ชื่อ layer แบบ HF แต่ BERT port ต้องการชื่อแบบ MLX (`keyNotFound(["encoder","layers","0","ln2","weight"])`) ต้องใช้ `mlx-community/bge-m3-mlx-8bit` แทน — **entry ใน registry ผิดกับโมเดลที่มันตั้งชื่อไว้เอง** ควรระวัง entry อื่นด้วย
 
+### E.14 MLX chat runtime (Tier 0.5) — รันจริงตอน P5.1 (2026-08-12)
+
+โมเดลสนทนาในโปรเซสเราเอง ผ่าน `LLMExecutor` ตัวเดียวกับอีกสอง tier วัดบน qwen3.5-9B-4bit (16 GB, LM Studio ปิด):
+
+| เช็ค (เคสเดียวกับ Tier 0/Tier 1) | ผล |
+|---|---|
+| สตรีมเป็นชิ้น | ✅ 29 text + 456 reasoning delta |
+| reasoning แยกจากคำตอบ | ✅ 676 ตัวอักษรของความคิด ไม่ปนเข้าคำตอบ |
+| structured output ถอด JSON ได้ | ✅ 1.3 วิ (ก่อนแก้: ล้มเหลว 102.7 วิ — ดูข้างล่าง) |
+| tool call ประกอบกลับเป็น JSON | ✅ `lookup_patient_count{"cohort":"diabetes"}` |
+| prompt เกิน context | ✅ ปฏิเสธก่อนยิง ไม่ใช่ไปพังตอนรัน |
+| โหลดค้างไว้ / ปลดตอน idle / โหลดกลับ | ✅ ทั้งสามข้อ |
+
+**สามข้อที่ tier นี้ต้องทำเอง เพราะไม่มีโปรโตคอลไหนทำให้**
+
+1. **`<think>` ที่ไม่มีแท็กเปิด** — chat template ของ Qwen ปิดท้าย generation prompt ด้วย `<think>\n` โมเดลจึงเริ่ม*กลาง*ความคิด และ output มีแต่ `</think>` ปลายทาง · splitter ที่รอแท็กเปิดจะรายงานความคิดทั้งก้อนเป็นคำตอบ = [E.9](#e9-vllmexecutor-spike--tier-1-ผ่าน-openai-compatible-endpoint) เคส 8c เวอร์ชัน local · แก้ด้วยการ **ถาม template** (render พรอมป์ต์ทดสอบแล้วดูว่า block ยังเปิดค้างอยู่ไหม) ไม่ใช่เดาจาก output — เดาไม่ทัน เพราะกว่า `</think>` จะมาถึง ความคิดก็ถูกสตรีมออกไปเป็นคำตอบแล้ว
+2. **ไม่มี guided generation ใน mlx-swift-lm** — ไม่มี grammar/logit-constraint API เลย (ต่างจาก Tier 0 ที่มี `@Generable` และ Tier 1 ที่มี `response_format`) · schema จึงเป็นคำสั่งใน prompt แล้วดึง JSON object แรกที่ balanced และ parse ผ่านออกมา · **ไม่มี JSON = error ที่ escalate ได้ ไม่ใช่สตริงว่าง** — สตริงว่างคือสิ่งที่ปลายทางอ่านว่า "ไม่พบข้อขัดแย้ง"
+3. **🔴 โมเดล reasoning + schema = คิดจนหมดเพดานแล้วไม่ตอบ** — ขอ routing object สองฟิลด์ ให้เพดาน 2,048 token: โมเดลใช้ทั้ง 2,048 ไปกับการคิด **102.7 วินาที ได้สตริงว่าง** · ปิด thinking ผ่าน `enable_thinking: false` ใน additionalContext ของ template → **1.3 วินาที** · ในงานที่คำตอบคือ "เติมสองช่องนี้" ไม่มีอะไรให้คิด และ tier ที่ทำงานได้เฉพาะตอนผู้เรียกใจกว้างเรื่องเพดาน ไม่ใช่พื้นรับประกันตาม [§9.2](#92-model-router-tier-0--05--1) ข้อ 4
+
+**สองข้อที่กระทบการออกแบบต่อไป**
+
+- **context window ที่ประกาศ ≠ ที่เครื่องรับไหว** — config บอก 262,144 แต่ประกาศแค่ 32,768 · router คัดผู้สมัครจากตัวเลขนี้ ตัวเลขที่ใจกว้างจึงเท่ากับเชิญพรอมป์ต์ที่ทำเครื่องล่มเข้ามาพอดี (วัดไว้: prompt 7.6k โทเคน 9B = ~7.4 GB) — P5.3 จะแทนด้วยการวัด RAM จริง
+- **sandbox ทำให้แอปกับ `check.sh` เห็นโมเดลคนละชุด** — `~/.lmstudio` และ `~/.cache/huggingface` อยู่นอก container จึงมองไม่เห็นจากในแอป (ที่เห็นคือ `Documents/huggingface/models` ของ container เอง ซึ่ง `HubApi` ใช้อยู่แล้ว) · แปลว่า "ใช้โมเดลที่มีอยู่แล้ว" ใน [§9.4](#94-mlx-local-tier-05--model-management) ต้องมาพร้อม open panel + security-scoped bookmark ไม่ใช่แค่ path ใน settings — งาน P5.2
+
 ### E.4 สถานะ dependency หลัก (จาก GitHub API วันที่ตรวจ)
 
 | Dependency | ตัวเลขจริง | ประเมิน |

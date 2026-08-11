@@ -50,6 +50,17 @@ if [ -f "vendor/metal/$BUNDLE/Contents/Resources/default.metallib" ]; then
   else
     fail "embedding model"
   fi
+
+  # Tier 0.5 (P5.1) — the executor contract against a model this process loads
+  # itself. Here rather than in `swift test` for the same Metal-kernel reason,
+  # and it is the only place the guaranteed floor is checked against real
+  # weights. Skips (exit 0) on a machine with no chat model installed.
+  step "local chat model (Tier 0.5)"
+  if swift run MLXCheck 2>&1 | tail -16; then
+    ok "local chat model"
+  else
+    fail "local chat model"
+  fi
 else
   fail "no metal kernels — run ./scripts/build-metallib.sh"
 fi
@@ -64,7 +75,8 @@ DUP_SCOPE=$(grep -rlE "enum Scope[[:space:]]*[:{]" Sources --include=*.swift | w
 # quiet. Executables are where output is the product — the app writes through
 # AppLog, and EmbeddingCheck's whole job is to print what it found.
 if grep -rn "print(" Sources --include=*.swift \
-   | grep -v "^Sources/CoAIWorkspaceApp" | grep -v "^Sources/EmbeddingCheck" | grep -q .; then
+   | grep -v "^Sources/CoAIWorkspaceApp" | grep -v "^Sources/EmbeddingCheck" \
+   | grep -v "^Sources/MLXCheck" | grep -q .; then
   fail "print() outside the app target — use AppLog/os.Logger"
 else
   ok "no stray print() in library targets"
@@ -87,7 +99,7 @@ fi
 # screen permanently empty. Each capability below must be reachable from the
 # wiring, not just from its own tests.
 UNWIRED=""
-for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer Researcher ContextManager; do
+for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer Researcher ContextManager MLXExecutor; do
   grep -rq "$capability(" Sources/CoAIWorkspaceApp --include=*.swift || UNWIRED="$UNWIRED $capability"
 done
 if [ -n "$UNWIRED" ]; then

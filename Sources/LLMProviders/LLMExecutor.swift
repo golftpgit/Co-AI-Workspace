@@ -249,7 +249,11 @@ extension LLMExecutor {
 
     /// Rejects work the executor has already declared it cannot do, so the
     /// router can move on instead of burning a round trip to find out.
-    func rejectIfUnsupported(_ request: LLMRequest) throws {
+    ///
+    /// Public because executors live in other modules now (Tier 0.5 is its own
+    /// target, since MLX must not be linked into everything that routes a
+    /// request): every implementation owes callers this same early rejection.
+    public func rejectIfUnsupported(_ request: LLMRequest) throws {
         if !request.tools.isEmpty && !capabilities.supportsTools {
             throw LLMError.unsupported("\(identifier) has no tool calling")
         }

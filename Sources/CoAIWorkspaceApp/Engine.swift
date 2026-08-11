@@ -9,6 +9,7 @@ import Execution
 import ToolBelt
 import Knowledge
 import EmbeddingRuntime
+import MLXRuntime
 
 // ─────────────────────────────────────────────────────────────
 // Everything the running system is made of, assembled once at boot.
@@ -50,6 +51,9 @@ struct Engine: Sendable {
     /// Which executors were actually reachable at boot — shown in the UI so
     /// "why is it slow / why can't it run commands" has a visible answer.
     let executorSummary: [String]
+    /// The Tier 0.5 model this machine has, if any (P5.1). Nil means the floor
+    /// §9.2 rule 4 promises is missing, which the boot screen has to say.
+    let localModel: LocalModel?
 
     static func build(config: BootstrapConfig, paths: AppPaths) async throws -> Engine {
         let client = SurrealClient(url: URL(string: "ws://127.0.0.1:\(config.surrealPort)/rpc")!)
@@ -60,6 +64,13 @@ struct Engine: Sendable {
         let conversations = ConversationStore(client: client)
 
         var executors: [any LLMExecutor] = [OnDeviceExecutor()]
+        // Tier 0.5 — the floor the rest of the chain falls back to (§9.2 rule
+        // 4). Found on disk rather than downloaded: boot must not depend on a
+        // network, and P5.2 is what installs a model when there is none.
+        let localModel = LocalModelCatalog
+            .standard(appModelsDirectory: paths.modelsDirectory)
+            .preferred()
+        if let localModel { executors.append(MLXExecutor(model: localModel)) }
         if let endpoint = config.selfHostedEndpoint, let model = config.selfHostedModel,
            let url = URL(string: endpoint) {
             executors.append(VLLMExecutor(baseURL: url, model: model))
@@ -144,7 +155,7 @@ struct Engine: Sendable {
                       router: router, processes: processes, gateway: gateway,
                       broker: broker, runner: runner,
                       team: team, taskLedger: taskLedger,
-                      executorSummary: summary)
+                      executorSummary: summary, localModel: localModel)
     }
 
     /// Nothing the engine started may outlive the app (§13).
