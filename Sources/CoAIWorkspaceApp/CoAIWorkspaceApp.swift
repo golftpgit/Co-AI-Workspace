@@ -32,9 +32,10 @@ private struct RootView: View {
     /// body pass loses whatever the user just did to it (P1.10's bug).
     @State private var knowledge = KnowledgeViewModel()
     @State private var conflicts = ConflictViewModel()
+    @State private var team = TeamViewModel()
 
     enum Screen: String, CaseIterable, Identifiable {
-        case chat, knowledge, conflicts
+        case chat, knowledge, conflicts, team
         var id: String { rawValue }
 
         var label: String {
@@ -42,6 +43,7 @@ private struct RootView: View {
             case .chat: "สนทนา"
             case .knowledge: "คลังความรู้"
             case .conflicts: "ข้อขัดแย้ง"
+            case .team: "ทีม"
             }
         }
 
@@ -50,6 +52,7 @@ private struct RootView: View {
             case .chat: "bubble.left.and.bubble.right"
             case .knowledge: "books.vertical"
             case .conflicts: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90"
+            case .team: "person.3"
             }
         }
     }
@@ -71,6 +74,10 @@ private struct RootView: View {
                 case .conflicts:
                     ConflictView(model: conflicts)
                         .task { await conflicts.attach(store: engine.conflicts) }
+                case .team:
+                    TeamView(model: team)
+                        .task { await team.attach(team: engine.team,
+                                                  ledger: engine.taskLedger) }
                 }
             } else {
                 BootStatusView(environment: environment)

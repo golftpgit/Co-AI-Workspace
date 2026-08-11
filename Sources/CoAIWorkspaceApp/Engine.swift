@@ -41,6 +41,12 @@ struct Engine: Sendable {
     let gateway: ToolGateway
     let broker: ApprovalBroker
     let runner: AgentTurnRunner
+    /// The team from P4, and the ledger it writes as it goes. Assembled here
+    /// for the same reason as everything else on this struct: four specialists
+    /// and an orchestrator with twenty passing tests were reachable from
+    /// nothing but those tests, which is the fourth time that has happened.
+    let team: TeamOrchestrator
+    let taskLedger: TaskLedgerStore
     /// Which executors were actually reachable at boot — shown in the UI so
     /// "why is it slow / why can't it run commands" has a visible answer.
     let executorSummary: [String]
@@ -96,6 +102,27 @@ struct Engine: Sendable {
                                      transcript: conversations,
                                      spanSink: spans)
 
+        // The specialists share the router and the same gateway the chat uses,
+        // so their tool calls go through the one hook chain (§5.3) rather than
+        // a second path around it. Each still sees only its own tools — that
+        // is enforced inside the specialist, not here.
+        let specialistEnvironment = SpecialistEnvironment(router: router, gateway: gateway)
+        let taskLedger = TaskLedgerStore(client: client)
+        let team = TeamOrchestrator(
+            router: router,
+            specialists: [
+                .researcher: Researcher(environment: specialistEnvironment),
+                .analyst: Analyst(environment: specialistEnvironment),
+                .engineer: Engineer(environment: specialistEnvironment),
+                .writer: Writer(environment: specialistEnvironment),
+            ],
+            // Spelled out rather than left to the default argument: review is
+            // the step that decides whether work is done (§2.5), and a default
+            // makes it look optional on the diagram that says what this app is
+            // made of.
+            reviewer: QAReviewer(),
+            ledgerStore: taskLedger)
+
         var summary: [String] = []
         for executor in executors {
             let reachable = await executor.isAvailable()
@@ -109,7 +136,9 @@ struct Engine: Sendable {
                       relationExtractor: RelationExtractor(router: router),
                       knowledge: knowledgeStore,
                       router: router, processes: processes, gateway: gateway,
-                      broker: broker, runner: runner, executorSummary: summary)
+                      broker: broker, runner: runner,
+                      team: team, taskLedger: taskLedger,
+                      executorSummary: summary)
     }
 
     /// Nothing the engine started may outlive the app (§13).

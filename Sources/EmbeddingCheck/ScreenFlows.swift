@@ -3,6 +3,8 @@ import AgentKit
 import Knowledge
 import Persistence
 import EmbeddingRuntime
+import CoreEngine
+import LLMProviders
 
 // ─────────────────────────────────────────────────────────────
 // Driving the screens' logic the way a person would, against the real
@@ -196,6 +198,91 @@ struct ScreenFlows {
             return ""
         }
 
+        // The gap that let the bug through: the orchestrator's own tests assert
+        // on its in-memory entries, which are correct. Nobody asked what
+        // reached storage — and storage still described the first attempt of a
+        // run that had since failed three times and escalated.
+        await check("[หน้าทีม] บันทึกใน DB ตรงกับสิ่งที่ทีมทำจริง ไม่ใช่แค่รอบแรก") {
+            guard let server = try await TestDatabase.start(port: 18_497) else {
+                throw CheckFailure("เริ่มฐานข้อมูลไม่ได้")
+            }
+            defer { Task { await server.stop() } }
+
+            let store = TaskLedgerStore(client: server.client)
+            let assignment = Assignment(
+                id: "eng-1", role: .engineer, goal: "แก้เทสที่ตก",
+                acceptanceCriteria: [Criterion(text: "เทสผ่าน",
+                                               evidenceRequired: "คำสั่งที่ exit code 0")],
+                deliverableType: "patch")
+            let team = TeamOrchestrator(
+                router: ModelRouter(executors: []),
+                specialists: [.engineer: AlwaysFailingEngineer()],
+                retryCap: 3,
+                ledgerStore: store,
+                scope: .central)
+
+            _ = await team.run(goal: "แก้เทสที่ตก",
+                               plan: TeamPlan(goal: "แก้เทสที่ตก", assignments: [assignment]))
+
+            let rows = try await store.rows(scope: .central)
+            guard let row = rows.first, rows.count == 1 else {
+                throw CheckFailure("คาดว่า 1 แถว ได้ \(rows.count)")
+            }
+            guard row.attempts == 3 else {
+                throw CheckFailure("DB บันทึกว่า \(row.attempts) รอบ แต่ทีมลองจริง 3 รอบ — "
+                                   + "คนที่กลับมาอ่านหลังปล่อยงานทิ้งไว้จะได้ภาพผิด")
+            }
+            guard !row.passed, !row.findings.isEmpty else {
+                throw CheckFailure("สถานะสุดท้ายหรือเหตุผลที่ต้องให้คนตัดสินไม่ถูกบันทึก")
+            }
+            guard try await store.unfinished(scope: .central).count == 1 else {
+                throw CheckFailure("งานที่ escalate แล้วไม่ถูกนับว่ายังไม่จบ")
+            }
+            return "\(row.attempts) รอบ ตรงกับที่รันจริง"
+        }
+
+        // The Team screen reads this table and nothing else. §2.2's promise is
+        // that "who is doing what, and how did it go" survives the run — and
+        // the moment someone asks is usually after leaving one unattended, so
+        // the reasons have to come back with the row.
+        await check("[หน้าทีม] งานที่ถูกตีกลับรอดข้ามการเปิดใหม่ พร้อมเหตุผล") {
+            guard let server = try await TestDatabase.start(port: 18_496) else {
+                throw CheckFailure("เริ่มฐานข้อมูลไม่ได้")
+            }
+            defer { Task { await server.stop() } }
+
+            let store = TaskLedgerStore(client: server.client)
+            // First write: the attempt has only just started.
+            try await store.record(LedgerRow(
+                assignmentID: "a1", role: .engineer, goal: "แก้บั๊ก parser",
+                attempts: 1, passed: false, findings: [], summary: nil), scope: .central)
+
+            // The orchestrator writes on every state change, so the second
+            // write has to replace the first. A ledger that only ever records
+            // the first attempt looks exactly like one that is up to date.
+            try await store.record(LedgerRow(
+                assignmentID: "a1", role: .engineer, goal: "แก้บั๊ก parser",
+                attempts: 3, passed: false,
+                findings: ["ไม่มีคำสั่งที่ exit code 0 ในทรานสคริปต์"],
+                summary: "แก้แล้วครับ ทุกอย่างผ่าน"), scope: .central)
+
+            let reopened = try await store.rows(scope: .central)
+            guard let row = reopened.first, reopened.count == 1 else {
+                throw CheckFailure("โหลดกลับได้ \(reopened.count) แถว")
+            }
+            guard row.attempts == 3, !row.passed else {
+                throw CheckFailure("จำนวนรอบหรือผลตรวจเพี้ยนหลังโหลดกลับ")
+            }
+            // "ถูกตีกลับ" with no reason is what made v1's loops unreadable.
+            guard row.findings.first?.contains("exit code 0") == true else {
+                throw CheckFailure("เหตุผลที่ QA ตีกลับหายไป เหลือแต่ผลลัพธ์")
+            }
+            guard try await store.unfinished(scope: .central).count == 1 else {
+                throw CheckFailure("งานที่ยังไม่จบไม่ถูกนับว่ายังไม่จบ")
+            }
+            return ""
+        }
+
         await check("[หน้าข้อขัดแย้ง] ตัดสินแล้วน้ำหนักและข้อเสนอบนการ์ดไม่ถูกเขียนทับ") {
             guard let server = try await TestDatabase.start(port: 18_495) else {
                 throw CheckFailure("เริ่มฐานข้อมูลไม่ได้")
@@ -267,5 +354,18 @@ struct ScreenFlows {
             }
             return ""
         }
+    }
+}
+
+/// Fails every time, so the lead runs its full retry budget and ends by
+/// escalating — the path whose final state was never written down.
+private actor AlwaysFailingEngineer: Specialist {
+    nonisolated let role = Role.engineer
+    nonisolated let definitionOfDone = [
+        Criterion(text: "เทสผ่าน", evidenceRequired: "คำสั่งที่ exit code 0"),
+    ]
+
+    func execute(_ assignment: Assignment) async throws -> Deliverable {
+        throw SpecialistError.modelUnavailable("โมเดลใช้ไม่ได้ในเทสนี้")
     }
 }

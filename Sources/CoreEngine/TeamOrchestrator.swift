@@ -27,6 +27,14 @@ import Persistence
 public struct TeamPlan: Sendable, Equatable {
     public let goal: String
     public let assignments: [Assignment]
+
+    /// Public because `run(goal:plan:)` takes one: a caller that wants to skip
+    /// the planning model — a check, or P4.6's hand-edited plan — could not
+    /// build the argument the public method asks for.
+    public init(goal: String, assignments: [Assignment]) {
+        self.goal = goal
+        self.assignments = assignments
+    }
 }
 
 public enum TeamEvent: Sendable {
@@ -106,14 +114,23 @@ public actor TeamOrchestrator {
     /// interrupted is exactly when someone wants to read the ledger.
     private func persist(_ id: String) async {
         guard let ledgerStore, let entry = ledger[id] else { return }
-        try? await ledgerStore.record(LedgerRow(
-            assignmentID: entry.assignment.id,
-            role: entry.assignment.role,
-            goal: entry.assignment.goal,
-            attempts: entry.attempts,
-            passed: entry.passed,
-            findings: entry.findings,
-            summary: entry.deliverable?.summary), scope: scope)
+        do {
+            try await ledgerStore.record(LedgerRow(
+                assignmentID: entry.assignment.id,
+                role: entry.assignment.role,
+                goal: entry.assignment.goal,
+                attempts: entry.attempts,
+                passed: entry.passed,
+                findings: entry.findings,
+                summary: entry.deliverable?.summary), scope: scope)
+        } catch {
+            // Was `try?`. A ledger that silently stops updating is
+            // indistinguishable from one that is up to date, which is the worse
+            // failure: §2.2's promise is that the ledger can be read after an
+            // interrupted run, and a stale row answers the question wrongly
+            // rather than admitting it cannot answer.
+            log.error("task ledger write failed for \(id, privacy: .public): \(error)")
+        }
     }
 
     public var entries: [LedgerEntry] {
@@ -164,6 +181,11 @@ public actor TeamOrchestrator {
                         reworked(assignment, attempt: attempt, findings: lastFindings))
                 } catch {
                     lastFindings = ["\(error)"]
+                    ledger[assignment.id]?.findings = lastFindings
+                    // Persisted here too: a specialist that threw is a state
+                    // change like any other, and skipping it left the stored
+                    // row claiming the attempt was still in its first round.
+                    await persist(assignment.id)
                     emit(.rework(assignmentID: assignment.id, attempt: attempt,
                                  reasons: lastFindings))
                     continue
@@ -193,6 +215,11 @@ public actor TeamOrchestrator {
             if ledger[assignment.id]?.passed != true {
                 // Bounded, and it ends by asking a person rather than by
                 // trying forever (§2.5).
+                ledger[assignment.id]?.findings = lastFindings
+                // The escalation is the state a person comes back to read, and
+                // it was the one state never written down: the run ended here
+                // and storage still described the first attempt.
+                await persist(assignment.id)
                 emit(.escalated(assignmentID: assignment.id, attempts: attempt,
                                 reasons: lastFindings))
             }
