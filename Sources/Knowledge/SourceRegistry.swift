@@ -158,6 +158,10 @@ extension SourceRegistry {
               disciplines: [.science, .engineering, .computing]),
         .init(domain: "iso.org", name: "ISO", tier: .t1, disciplines: [.engineering]),
         .init(domain: "ietf.org", name: "IETF RFC", tier: .t1, disciplines: [.computing]),
+        // Where ietf.org/rfc/* actually redirects to, and the canonical
+        // publisher. Found by fetching one (P3.4).
+        .init(domain: "rfc-editor.org", name: "RFC Editor", tier: .t1,
+              disciplines: [.computing]),
         .init(domain: "worldbank.org", name: "World Bank", tier: .t1,
               disciplines: [.statistics, .policy]),
         .init(domain: "oecd.org", name: "OECD", tier: .t1,

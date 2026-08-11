@@ -133,7 +133,7 @@ public struct IngestionPipeline: Sendable {
     /// Content-addressed, not path-addressed: the same file copied to a second
     /// folder is the same document, and a re-scan that changes one pixel is
     /// not (the near-duplicate check catches that case instead).
-    static func documentID(for url: URL) -> String {
+    public static func documentID(for url: URL) -> String {
         guard let data = try? Data(contentsOf: url) else {
             return "doc_" + Self.contentHash(url.path).prefix(16)
         }
@@ -142,8 +142,10 @@ public struct IngestionPipeline: Sendable {
     }
 
     /// Whitespace is normalised first so a reflowed paragraph is recognised as
-    /// the same text rather than indexed twice.
-    static func contentHash(_ text: String) -> String {
+    /// the same text rather than indexed twice. Public because anything that
+    /// creates content for the index — a fetched page, an imported archive —
+    /// has to hash it the same way or dedup silently stops working.
+    public static func contentHash(_ text: String) -> String {
         let normalised = text
             .components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }

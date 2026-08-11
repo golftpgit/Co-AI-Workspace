@@ -54,6 +54,10 @@ let package = Package(
         // of storage and models so it can be measured on its own.
         .target(name: "Knowledge", dependencies: ["AgentKit", "Observability"]),
 
+        // M6/WebSearch — reading the web (ARCHITECTURE §1.4). Search results
+        // are not evidence; anything worth citing is fetched and read.
+        .target(name: "WebSearch", dependencies: ["AgentKit", "Observability", "Knowledge"]),
+
         // M5/M7 — the embedding model, in-process. Depends on Knowledge (which
         // owns the `Embedder` protocol) and never the other way round, so the
         // knowledge logic and its tests stay free of a heavy ML dependency.
@@ -96,6 +100,7 @@ let package = Package(
         .testTarget(name: "LLMProvidersTests", dependencies: ["LLMProviders"]),
         .testTarget(name: "CoreEngineTests", dependencies: ["CoreEngine", "Knowledge"]),
         .testTarget(name: "KnowledgeTests", dependencies: ["Knowledge"]),
+        .testTarget(name: "WebSearchTests", dependencies: ["WebSearch", "Knowledge"]),
         .testTarget(name: "EmbeddingRuntimeTests", dependencies: ["EmbeddingRuntime"]),
         .testTarget(name: "ExecutionTests", dependencies: ["Execution", "Config"]),
         // Also hosts the end-to-end walking-skeleton test, which needs a real
