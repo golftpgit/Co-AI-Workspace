@@ -171,7 +171,7 @@ public struct Criterion: Sendable, Equatable, Codable {
     }
 }
 
-public struct Assignment: Sendable, Identifiable, Codable {
+public struct Assignment: Sendable, Identifiable, Codable, Equatable {
     public let id: String
     public let role: Role
     public let goal: String
@@ -216,7 +216,7 @@ public struct Evidence: Sendable, Equatable, Codable {
 
 /// What a specialist hands back — a summary plus pointers and evidence,
 /// never the full transcript (§2.3).
-public struct Deliverable: Sendable, Codable {
+public struct Deliverable: Sendable, Codable, Equatable {
     public let assignmentID: String
     public let summary: String
     public let artifacts: [String]
