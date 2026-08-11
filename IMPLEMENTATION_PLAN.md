@@ -120,11 +120,11 @@
 | Task | รายละเอียด | Done-when |
 |---|---|---|
 | **P3.1** SearXNG sidecar | ติดตั้ง native/binary + lifecycle ผ่าน `SidecarManager` ([ARCH §1.4](ARCHITECTURE.md#14-web-search--มีของฟรีถาวรไหม-apple-ให้ด้วยไหม)) | ค้นได้จริงจากในแอปโดย user ไม่ต้องติดตั้งอะไรเอง |
-| **P3.2** Source registry + tiering | T1–T5 ครอบทุกสาขา, แก้ผ่าน Settings ไม่ต้องแก้โค้ด | เพิ่มแหล่งใหม่ 1 แถว → agent ใช้ทันทีโดยไม่ recompile |
+| **P3.2** Source registry + tiering | T1–T5 ครอบทุกสาขา, แก้ผ่าน Settings ไม่ต้องแก้โค้ด | เพิ่มแหล่งใหม่ 1 แถว → agent ใช้ทันทีโดยไม่ recompile | ✅ `SourceRegistry` — 27 แหล่งตั้งต้นครบ T1–T5 ทุกสาขาตาม §1.4 · เลือกแหล่งจาก**หัวข้อของงาน** ไม่ใช่จาก role (v1 hardcode WHO/CDC/PubMed จนตอบคำถามเขียนโค้ดไม่ได้) · domain ที่ไม่รู้จัก = T5 ไม่ใช่ "ไม่มี tier" · match แบบ host/subdomain จริง (`notwho.int` ไม่ได้ T1) · rule ที่เจาะจงกว่าชนะ · ปิดแหล่งได้โดยไม่ลบแถว · JSON round-trip · 11 เทส |
 | **P3.3** Tier 1–3 API clients | PubMed E-utilities, medRxiv, OpenAlex, Crossref, Semantic Scholar | คืนผลพร้อม `{tier, url, accessedAt}` ครบ |
 | **P3.4** `fetch_page` | readability extraction (ตัด nav/ads), รองรับ PDF, provenance ระดับย่อหน้า | อ่านหน้าจริงได้ ≥5 เว็บที่โครงสร้างต่างกัน; agent อ้างอิงได้ระดับย่อหน้า |
 | **P3.5** `ingest_url` | ดึงหน้าเว็บเข้า KB ผ่าน pipeline เดียวกับ upload | หน้าที่ ingest แล้วค้นเจอใน KB พร้อม tier ที่ถูกต้อง |
-| **P3.6** Conflict Ledger | detect → ประเมินน้ำหนัก → auto/HITL → precedent ([ARCH §11.6](ARCHITECTURE.md#116-conflict-ledger--เมื่อความรู้ขัดกัน)) | test: ป้อนเอกสารขัดกัน 2 ฉบับ → เกิด Conflict Card; ตัดสินแล้วครั้งถัดไปไม่ถามซ้ำ; มีแหล่ง tier สูงกว่าเข้ามา → เปิด conflict ใหม่ |
+| **P3.6** Conflict Ledger | detect → ประเมินน้ำหนัก → auto/HITL → precedent ([ARCH §11.6](ARCHITECTURE.md#116-conflict-ledger--เมื่อความรู้ขัดกัน)) | test: ป้อนเอกสารขัดกัน 2 ฉบับ → เกิด Conflict Card; ตัดสินแล้วครั้งถัดไปไม่ถามซ้ำ; มีแหล่ง tier สูงกว่าเข้ามา → เปิด conflict ใหม่ | 🔶 **ตรรกะครบ 10 เทส ผ่าน Done-when ทั้ง 3 ข้อ** — ต่างกันชัด (T1/2026 vs T5/2019) ตัดสินเอง แต่ยัง**บันทึกว่าเคยขัดกัน**, ก้ำกึ่งยกให้คน, ตัดสินแล้วครั้งถัดไปคืนคำตัดสินเดิม, แหล่ง tier สูงกว่าเปิดใหม่ได้/แหล่งอ่อนกว่าเปิดไม่ได้ · น้ำหนักคืนเป็น**เหตุผลรายข้อ**ไม่ใช่แค่ตัวเลข · แหล่งอ่อน 10 แหล่งไม่ชนะ T1 หนึ่งแหล่ง และปีใหม่ไม่ชนะ tier · **ค้าง**: การ *detect* ว่าสอง chunk ขัดกัน (ต้องใช้โมเดล) — ตอนนี้ต้องป้อนคู่ที่ขัดกันเข้ามาเอง, และยังไม่ได้ persist ลง DB |
 | **P3.7** Conflict UI | Conflict Card (verbatim 2 ฝั่ง + ที่มา + น้ำหนัก + 4 ทางเลือก) + ประวัติที่กลับคำตัดสินได้ | ผู้ใช้ตัดสินได้โดยไม่ต้องเปิดเอกสารต้นฉบับเอง |
 
 ---
