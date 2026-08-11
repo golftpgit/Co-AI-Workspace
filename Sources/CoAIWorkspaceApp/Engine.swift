@@ -97,10 +97,16 @@ struct Engine: Sendable {
             FetchPageTool(),
         ])
 
+        // The budget is what this machine can actually serve, not what the
+        // endpoint advertises. VLLMExecutor declares a 32k window; measured on
+        // 16 GB, a 7.6k-token prompt to a 9B model took ~7.4 GB of unified
+        // memory and the server started answering 500 — so the transcript is
+        // kept well under that and compaction (§5.6) is what holds it there.
         let runner = AgentTurnRunner(router: router,
                                      gateway: gateway,
                                      transcript: conversations,
-                                     spanSink: spans)
+                                     spanSink: spans,
+                                     contextManager: ContextManager(budget: 16_384))
 
         // The specialists share the router and the same gateway the chat uses,
         // so their tool calls go through the one hook chain (§5.3) rather than
