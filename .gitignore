@@ -10,3 +10,6 @@ vendor/
 
 # Metal kernels: built per machine by scripts/build-metallib.sh
 vendor/metal/
+
+# SearXNG sidecar: installed per machine by scripts/fetch-searxng.sh
+vendor/searxng/

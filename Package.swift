@@ -82,6 +82,7 @@ let package = Package(
         .target(name: "CoreEngine",
                 dependencies: ["AgentKit", "Observability", "LLMProviders", "Persistence",
                                "Knowledge"]),
+        // Kept out of CoreEngine's own tests: this one needs a model.
 
         // M13 — SwiftUI shell.
         .executableTarget(

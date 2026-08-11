@@ -95,6 +95,17 @@ public struct SearchResult: Sendable, Equatable {
 
     public var provenance: Provenance { chunk.provenance }
     public var tier: SourceTier? { chunk.provenance.tier }
+
+    /// Public so anything that reviews retrieved results — the conflict
+    /// detector, a future re-ranker — can build one without going through a
+    /// search.
+    public init(chunk: IndexedChunk, score: Double,
+                lexicalRank: Int?, semanticRank: Int?) {
+        self.chunk = chunk
+        self.score = score
+        self.lexicalRank = lexicalRank
+        self.semanticRank = semanticRank
+    }
 }
 
 public struct KnowledgeIndex: Sendable {
