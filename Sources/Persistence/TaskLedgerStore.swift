@@ -58,7 +58,7 @@ public actor TaskLedgerStore {
         content.setString("project_id", ScopeColumns.projectID(scope))
         content.raw("updated_at", "time::now()")
 
-        try await client.exec("UPSERT task CONTENT \(content.content) WHERE uid = $uid",
+        try await client.exec("UPSERT task CONTENT \(content.content) WHERE uid = type::string($uid)",
                               vars: content.vars)
     }
 

@@ -17,6 +17,13 @@ import Foundation
 //     `type::string()` and the coercion has nothing to bite on.
 //  3. `UPDATE` does not upsert: it errors when the record (or table) does
 //     not exist yet. `UPSERT` is the create-or-replace statement.
+//  4. Quirk 2 applies to the WHERE clause as well, and that is easier to miss:
+//     `CONTENT` here is pinned, but `… WHERE uid = $uid` is not, so a
+//     UUID-shaped id bound into a comparison becomes a UUID value and never
+//     equals the string that was stored. Every `UPSERT` then finds no match,
+//     tries to create, and is rejected by the unique index — so the row keeps
+//     the values from its first write forever. Compare ids as
+//     `WHERE uid = type::string($uid)`.
 // ─────────────────────────────────────────────────────────────
 
 struct ContentBuilder {

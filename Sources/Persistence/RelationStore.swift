@@ -50,7 +50,7 @@ public actor RelationStore {
             content.setString("project_id", ScopeColumns.projectID(scope))
             content.raw("created_at", "time::now()")
 
-            try await client.exec("UPSERT relation CONTENT \(content.content) WHERE uid = $uid",
+            try await client.exec("UPSERT relation CONTENT \(content.content) WHERE uid = type::string($uid)",
                                   vars: content.vars)
         }
     }
@@ -78,7 +78,7 @@ public actor RelationStore {
     /// its evidence is worse than a missing edge: it is still queried, and
     /// nothing points at why it is there.
     public func deleteDocument(_ documentID: String) async throws {
-        try await client.exec("DELETE relation WHERE document_id = $id",
+        try await client.exec("DELETE relation WHERE document_id = type::string($id)",
                               vars: ["id": documentID])
     }
 

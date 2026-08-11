@@ -139,10 +139,11 @@ public final class TeamViewModel {
         case .planned(let teamPlan):
             plan = teamPlan
 
-        case .assigned(let assignment):
+        case .assigned(let assignment, let attempt):
             upsert(id: assignment.id) { row in
                 row.role = assignment.role
                 row.goal = assignment.goal
+                row.attempts = attempt
                 row.progress = .running
             }
 

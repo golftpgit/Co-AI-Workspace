@@ -61,7 +61,7 @@ public actor SurrealSpanSink: SpanSink {
 
     public func children(of parent: SpanID) async throws -> [Span] {
         let results = try await client.query(
-            "SELECT * FROM span WHERE parent = $parent ORDER BY started_at ASC",
+            "SELECT * FROM span WHERE parent = type::string($parent) ORDER BY started_at ASC",
             vars: ["parent": parent.rawValue])
         return (results.first?.rows ?? []).compactMap(Self.span(from:))
     }

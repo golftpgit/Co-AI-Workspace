@@ -39,7 +39,10 @@ public struct TeamPlan: Sendable, Equatable {
 
 public enum TeamEvent: Sendable {
     case planned(TeamPlan)
-    case assigned(Assignment)
+    /// Carries the attempt it is starting: a screen watching this stream has
+    /// no other way to know which round is running, and guessing from the
+    /// previous `rework` leaves it a full attempt behind the ledger.
+    case assigned(Assignment, attempt: Int)
     case delivered(Deliverable)
     case reviewed(assignmentID: String, passed: Bool, findings: [String])
     case rework(assignmentID: String, attempt: Int, reasons: [String])
@@ -173,7 +176,7 @@ public actor TeamOrchestrator {
                 attempt += 1
                 ledger[assignment.id]?.attempts = attempt
                 await persist(assignment.id)
-                emit(.assigned(assignment))
+                emit(.assigned(assignment, attempt: attempt))
 
                 let deliverable: Deliverable
                 do {

@@ -53,7 +53,7 @@ public actor KnowledgeStore {
         // UPSERT, not UPDATE: v3's UPDATE errors when the row is not there yet
         // (App. C.0), and re-saving an edited chunk has to work either way.
         try await client.exec(
-            "UPSERT chunk CONTENT \(content.content) WHERE uid = $uid",
+            "UPSERT chunk CONTENT \(content.content) WHERE uid = type::string($uid)",
             vars: content.vars)
     }
 
@@ -66,12 +66,12 @@ public actor KnowledgeStore {
     /// lie (P2.7).
     public func updateEntities(chunkID: String, to entities: [String]) async throws {
         try await client.exec(
-            "UPDATE chunk SET entities = $entities WHERE uid = $uid",
+            "UPDATE chunk SET entities = $entities WHERE uid = type::string($uid)",
             vars: ["uid": chunkID, "entities": entities])
     }
 
     public func deleteDocument(_ documentID: String) async throws {
-        try await client.exec("DELETE chunk WHERE document_id = $id",
+        try await client.exec("DELETE chunk WHERE document_id = type::string($id)",
                               vars: ["id": documentID])
     }
 

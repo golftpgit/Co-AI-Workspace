@@ -209,8 +209,12 @@ struct ScreenFlows {
             defer { Task { await server.stop() } }
 
             let store = TaskLedgerStore(client: server.client)
+            // A UUID-shaped id, because that is what `Assignment` generates by
+            // default and therefore what the app actually stores. The first
+            // version of this check used "eng-1" and passed while the app was
+            // failing — the shape of the id was the whole bug.
             let assignment = Assignment(
-                id: "eng-1", role: .engineer, goal: "แก้เทสที่ตก",
+                id: UUID().uuidString, role: .engineer, goal: "แก้เทสที่ตก",
                 acceptanceCriteria: [Criterion(text: "เทสผ่าน",
                                                evidenceRequired: "คำสั่งที่ exit code 0")],
                 deliverableType: "patch")

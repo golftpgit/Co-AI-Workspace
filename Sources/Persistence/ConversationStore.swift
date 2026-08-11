@@ -98,13 +98,13 @@ public actor ConversationStore {
 
     public func rename(_ id: String, title: String) async throws {
         try await client.exec("""
-        UPDATE conversation SET title = type::string($title), updated_at = time::now() WHERE uid = $id
+        UPDATE conversation SET title = type::string($title), updated_at = time::now() WHERE uid = type::string($id)
         """, vars: ["id": id, "title": title])
     }
 
     public func delete(_ id: String) async throws {
-        try await client.exec("DELETE message WHERE conversation_id = $id", vars: ["id": id])
-        try await client.exec("DELETE conversation WHERE uid = $id", vars: ["id": id])
+        try await client.exec("DELETE message WHERE conversation_id = type::string($id)", vars: ["id": id])
+        try await client.exec("DELETE conversation WHERE uid = type::string($id)", vars: ["id": id])
     }
 
     // MARK: - messages
@@ -127,7 +127,7 @@ public actor ConversationStore {
             uid: type::string($id), conversation_id: type::string($cid),
             role: type::string($role), content: type::string($content), created_at: time::now()
         };
-        UPDATE conversation SET updated_at = time::now() WHERE uid = $cid;
+        UPDATE conversation SET updated_at = time::now() WHERE uid = type::string($cid);
         """, vars: ["id": id, "cid": conversationID, "role": role.rawValue, "content": content])
 
         return StoredMessage(id: id, conversationID: conversationID,
@@ -156,7 +156,7 @@ public actor ConversationStore {
 
     public func messageCount(conversationID: String) async throws -> Int {
         let results = try await client.query("""
-        SELECT count() FROM message WHERE conversation_id = $cid GROUP ALL
+        SELECT count() FROM message WHERE conversation_id = type::string($cid) GROUP ALL
         """, vars: ["cid": conversationID])
         return results.first?.rows.first?["count"]?.intValue ?? 0
     }

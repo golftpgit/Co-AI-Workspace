@@ -47,7 +47,7 @@ public actor ConflictStore {
         }
         content.raw("created_at", "time::now()")
 
-        try await client.exec("UPSERT conflict CONTENT \(content.content) WHERE uid = $uid",
+        try await client.exec("UPSERT conflict CONTENT \(content.content) WHERE uid = type::string($uid)",
                               vars: content.vars)
     }
 
@@ -66,7 +66,7 @@ public actor ConflictStore {
         let json = String(decoding: try encoder.encode(decision), as: UTF8.self)
 
         try await client.exec(
-            "UPDATE conflict SET decided = true, decision = $decision WHERE uid = $uid",
+            "UPDATE conflict SET decided = true, decision = $decision WHERE uid = type::string($uid)",
             vars: ["uid": id, "decision": json])
     }
 
