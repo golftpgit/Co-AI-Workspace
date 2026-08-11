@@ -50,12 +50,54 @@ public final class TeamViewModel {
         public var summary: String?
     }
 
+    /// An assignment while it is still the user's to change (§2.6).
+    ///
+    /// A separate type from `Assignment` because the two have different rules:
+    /// `Assignment` cannot exist without acceptance criteria — the type has
+    /// refused that since P1.1 — but a draft the user is halfway through
+    /// writing obviously can. Converting is where the rule is enforced, so a
+    /// half-written row simply cannot be started rather than being started and
+    /// found unreviewable later.
+    public struct Draft: Identifiable, Equatable {
+        public var id = UUID()
+        public var role: Role = .researcher
+        public var goal: String = ""
+        public var deliverableType: String = "เอกสารสรุป"
+        /// One criterion per line, as `เกณฑ์ | หลักฐานที่ต้องเห็น`.
+        public var criteria: String = ""
+
+        var assignment: Assignment? {
+            let parsed = criteria.split(separator: "\n").compactMap { line -> Criterion? in
+                let parts = line.split(separator: "|", maxSplits: 1).map {
+                    $0.trimmingCharacters(in: .whitespaces)
+                }
+                guard let text = parts.first, !text.isEmpty else { return nil }
+                // Evidence is what makes a criterion reviewable (§2.5); a line
+                // with none is kept, and the standard says so in words rather
+                // than being silently dropped.
+                let evidence = parts.count > 1 && !parts[1].isEmpty
+                    ? parts[1] : "หลักฐานที่ตรวจได้จากสิ่งที่รันจริง"
+                return Criterion(text: text, evidenceRequired: evidence)
+            }
+            let trimmedGoal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedGoal.isEmpty, !parsed.isEmpty else { return nil }
+            return Assignment(role: role, goal: trimmedGoal,
+                              acceptanceCriteria: parsed,
+                              deliverableType: deliverableType)
+        }
+    }
+
     public private(set) var rows: [Row] = []
     public private(set) var plan: TeamPlan?
     public private(set) var isRunning = false
+    public private(set) var isPlanning = false
     public private(set) var status: Status?
     public var goal = ""
     public var scope: Scope = .central
+
+    /// Nothing runs while this is non-empty: the plan is the user's to change
+    /// first, whether the lead wrote it or they did (§2.6).
+    public var draft: [Draft] = []
 
     private var team: TeamOrchestrator?
     private var ledger: TaskLedgerStore?
@@ -88,25 +130,100 @@ public final class TeamViewModel {
         rows.count { $0.progress == .running || $0.progress == .escalated }
     }
 
+    // MARK: - planning (§2.6)
+
+    /// Asks the lead for a plan and stops there. What comes back is a draft the
+    /// user edits; approving it is a separate act.
+    public func propose() async {
+        guard let team else {
+            status = Status(message: "ยังต่อทีมไม่ได้ — เอนจินยังไม่พร้อม", isError: true)
+            return
+        }
+        let goal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !goal.isEmpty, !isRunning, !isPlanning else { return }
+
+        isPlanning = true
+        defer { isPlanning = false }
+        status = nil
+
+        do {
+            let proposed = try await team.propose(goal: goal)
+            draft = proposed.assignments.map { assignment in
+                Draft(role: assignment.role,
+                      goal: assignment.goal,
+                      deliverableType: assignment.deliverableType,
+                      criteria: assignment.acceptanceCriteria
+                        .map { "\($0.text) | \($0.evidenceRequired)" }
+                        .joined(separator: "\n"))
+            }
+            status = Status(message: "หัวหน้าทีมเสนอ \(draft.count) งาน — แก้ได้ก่อนเริ่ม",
+                            isError: false)
+        } catch {
+            status = Status(message: "วางแผนไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    /// Skips the lead entirely (§2.6): one role, one assignment, written by the
+    /// user. It still goes through the same draft, so the acceptance criteria
+    /// §2.5 requires are filled in by hand rather than waived.
+    public func draftDirect(role: Role) {
+        guard !isRunning else { return }
+        draft = [Draft(role: role,
+                       goal: goal.trimmingCharacters(in: .whitespacesAndNewlines))]
+        status = Status(message: "ข้ามหัวหน้าทีม — เขียนงานและเกณฑ์ตรวจรับเอง", isError: false)
+    }
+
+    public func addDraftAssignment() {
+        guard !isRunning else { return }
+        draft.append(Draft())
+    }
+
+    public func removeDraft(_ id: Draft.ID) {
+        draft.removeAll { $0.id == id }
+    }
+
+    public func discardDraft() {
+        draft = []
+        status = nil
+    }
+
+    /// What the lead would refuse about the draft as it stands, so §2.4's rule
+    /// is visible while it can still be fixed.
+    public func refusal() async -> String? {
+        let assignments = draft.compactMap(\.assignment)
+        guard let team, !assignments.isEmpty else { return nil }
+        return await team.refusal(for: TeamPlan(goal: goal, assignments: assignments))
+    }
+
+    public var draftIsRunnable: Bool {
+        !draft.isEmpty && draft.allSatisfy { $0.assignment != nil }
+    }
+
     // MARK: - running
 
+    /// Runs the plan the user approved. There is no path from a goal straight
+    /// to work: `propose` or `draftDirect` first, edit, then this.
     public func start() async {
         guard let team else {
             status = Status(message: "ยังต่อทีมไม่ได้ — เอนจินยังไม่พร้อม", isError: true)
             return
         }
         let goal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !goal.isEmpty, !isRunning else { return }
+        let assignments = draft.compactMap(\.assignment)
+        guard !goal.isEmpty, !isRunning, assignments.count == draft.count,
+              !assignments.isEmpty else { return }
+        let approved = TeamPlan(goal: goal, assignments: assignments)
 
         rows = []
         plan = nil
+        draft = []
         isRunning = true
         status = nil
 
         run = Task { [weak self] in
             // The orchestrator emits from its own actor; every event is hopped
             // back to the main actor before it touches view state.
-            let deliverables = await team.run(goal: goal) { event in
+            let deliverables = await team.run(goal: goal, plan: approved) { event in
                 Task { @MainActor in self?.apply(event) }
             }
             await MainActor.run {

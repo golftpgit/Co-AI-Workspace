@@ -20,17 +20,24 @@ import CoreEngine
 struct TeamView: View {
     @Bindable var model: TeamViewModel
 
+    private var hasNoGoal: Bool {
+        model.goal.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
 
-            if model.rows.isEmpty {
+            if !model.draft.isEmpty {
+                PlanEditor(model: model)
+            } else if model.rows.isEmpty {
                 ContentUnavailableView(
                     "ยังไม่มีงานของทีม",
                     systemImage: "person.3",
-                    description: Text("พิมพ์เป้าหมายด้านบนแล้วกด “เริ่มงาน” "
-                                      + "หัวหน้าทีมจะวางแผนและมอบหมายให้เอง"))
+                    description: Text("พิมพ์เป้าหมายด้านบน แล้วให้หัวหน้าทีมวางแผนให้ "
+                                      + "หรือข้ามหัวหน้าทีมแล้วสั่งผู้เชี่ยวชาญเอง — "
+                                      + "ไม่ว่าทางไหน แผนจะมาให้แก้ก่อนเริ่มเสมอ"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
@@ -63,7 +70,9 @@ struct TeamView: View {
                 TextField("เป้าหมายของงานนี้ เช่น สรุปแนวทางการให้ยาปฏิชีวนะก่อนผ่าตัด",
                           text: $model.goal)
                     .textFieldStyle(.roundedBorder)
-                    .onSubmit { Task { await model.start() } }
+                    // Enter asks for a plan; it never starts work, because
+                    // nothing starts before the user has seen the plan (§2.6).
+                    .onSubmit { Task { await model.propose() } }
                     .disabled(model.isRunning)
                     .accessibilityLabel("เป้าหมายที่จะให้ทีมทำ")
 
@@ -73,11 +82,24 @@ struct TeamView: View {
                     // says so afterwards rather than clearing the rows.
                     Button("หยุด") { model.cancel() }
                         .accessibilityLabel("หยุดการทำงานของทีม")
-                } else {
-                    Button("เริ่มงาน") { Task { await model.start() } }
+                } else if model.draft.isEmpty {
+                    if model.isPlanning { ProgressView().controlSize(.small) }
+                    Button("ให้หัวหน้าทีมวางแผน") { Task { await model.propose() } }
                         .buttonStyle(.borderedProminent)
-                        .disabled(model.goal.trimmingCharacters(in: .whitespaces).isEmpty)
-                        .accessibilityLabel("ให้ทีมเริ่มทำงานตามเป้าหมายนี้")
+                        .disabled(hasNoGoal || model.isPlanning)
+                        .accessibilityLabel("ให้หัวหน้าทีมเสนอแผนสำหรับเป้าหมายนี้")
+
+                    // §2.6's first row: the dropdown that skips the lead is
+                    // still here, and is not a fallback for when planning fails.
+                    Menu("ข้ามหัวหน้าทีม") {
+                        ForEach(Role.assignable, id: \.self) { role in
+                            Button(role.label) { model.draftDirect(role: role) }
+                        }
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .disabled(hasNoGoal || model.isPlanning)
+                    .accessibilityLabel("สั่งผู้เชี่ยวชาญคนเดียวโดยตรง")
                 }
             }
 
@@ -90,6 +112,101 @@ struct TeamView: View {
             }
         }
         .padding(12)
+    }
+}
+
+// MARK: - editing the plan before it runs (§2.6)
+
+/// The plan while it is still the user's. Nothing has been assigned yet, so
+/// every field is a text field and the refusal §2.4 would raise is shown here,
+/// where it can still be fixed, instead of arriving as an error after starting.
+private struct PlanEditor: View {
+    @Bindable var model: TeamViewModel
+    @State private var refusal: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("แผนนี้ยังไม่ได้เริ่ม — แก้ได้ทุกช่องก่อนกดอนุมัติ",
+                      systemImage: "square.and.pencil")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                if let refusal {
+                    Label(refusal, systemImage: "exclamationmark.triangle")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .textSelection(.enabled)
+                }
+
+                ForEach($model.draft) { $item in
+                    DraftCard(item: $item) { model.removeDraft(item.id) }
+                }
+
+                HStack {
+                    Button("เพิ่มงาน", systemImage: "plus") { model.addDraftAssignment() }
+                    Spacer()
+                    Button("ทิ้งแผนนี้", role: .destructive) { model.discardDraft() }
+                    Button("อนุมัติและเริ่ม") { Task { await model.start() } }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!model.draftIsRunnable || refusal != nil)
+                        .accessibilityLabel("อนุมัติแผนนี้แล้วให้ทีมเริ่มทำงาน")
+                }
+            }
+            .padding(16)
+        }
+        .task(id: model.draft) { refusal = await model.refusal() }
+    }
+}
+
+private struct DraftCard: View {
+    @Binding var item: TeamViewModel.Draft
+    let remove: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Picker("ผู้รับผิดชอบ", selection: $item.role) {
+                    ForEach(Role.assignable, id: \.self) { Text($0.label).tag($0) }
+                }
+                .labelsHidden()
+                .fixedSize()
+                .accessibilityLabel("เลือกผู้เชี่ยวชาญที่รับงานนี้")
+
+                TextField("ให้ทำอะไร", text: $item.goal)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("รายละเอียดงาน")
+
+                Button("ลบ", systemImage: "trash", action: remove)
+                    .labelStyle(.iconOnly)
+                    .accessibilityLabel("ลบงานนี้ออกจากแผน")
+            }
+
+            TextField("ผลงานที่ต้องส่ง เช่น เอกสารสรุป", text: $item.deliverableType)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel("ชนิดของผลงานที่ต้องส่ง")
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("เกณฑ์ตรวจรับ — บรรทัดละข้อ เขียนว่า  เกณฑ์ | หลักฐานที่ต้องเห็น")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                // Required, not optional: an assignment with no criteria cannot
+                // be reviewed, and §2.5 reviews evidence rather than opinions.
+                TextEditor(text: $item.criteria)
+                    .font(.callout)
+                    .frame(minHeight: 54)
+                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(.quaternary))
+                    .accessibilityLabel("เกณฑ์ตรวจรับของงานนี้ บรรทัดละหนึ่งข้อ")
+                if item.assignment == nil {
+                    Text("ยังเริ่มไม่ได้ — ต้องมีทั้งรายละเอียดงานและเกณฑ์ตรวจรับอย่างน้อยหนึ่งข้อ")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
@@ -160,15 +277,22 @@ private struct RoleChip: View {
     let role: Role
 
     var body: some View {
-        Text(label)
+        Text(role.label)
             .font(.caption2.weight(.semibold))
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(.secondary.opacity(0.18), in: Capsule())
-            .accessibilityLabel("บทบาท \(label)")
+            .accessibilityLabel("บทบาท \(role.label)")
     }
+}
 
-    private var label: String {
-        switch role {
+extension Role {
+    /// The roles a person can hand work to. The lead plans and QA reviews;
+    /// neither takes an assignment, so neither belongs in a picker of who
+    /// could do this piece of work.
+    static var assignable: [Role] { [.researcher, .analyst, .engineer, .writer] }
+
+    var label: String {
+        switch self {
         case .teamLead: "หัวหน้าทีม"
         case .researcher: "Researcher"
         case .analyst: "Analyst"

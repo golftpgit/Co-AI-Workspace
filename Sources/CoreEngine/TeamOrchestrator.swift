@@ -267,6 +267,28 @@ public actor TeamOrchestrator {
      "required":["assignments"]}
     """#
 
+    /// Plans without starting anything (§2.6).
+    ///
+    /// Deliberately does **not** validate: a plan that breaks §2.4 is exactly
+    /// the one a person needs to see and correct, and refusing to hand it over
+    /// leaves them with an error instead of something to edit. `run` still
+    /// validates, so an unedited bad plan cannot slip through.
+    public func propose(goal: String) async throws -> TeamPlan {
+        try await makePlan(for: goal)
+    }
+
+    /// Why this plan would be refused, in the words the user should read, or
+    /// `nil` if it would run. Lets the editor show the objection while it is
+    /// still fixable rather than after pressing start.
+    public func refusal(for plan: TeamPlan) -> String? {
+        do {
+            try validate(plan)
+            return nil
+        } catch {
+            return "\(error)"
+        }
+    }
+
     private func makePlan(for goal: String) async throws -> TeamPlan {
         var request = LLMRequest(messages: [
             .init(.system, """
