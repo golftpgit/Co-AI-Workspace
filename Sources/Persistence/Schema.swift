@@ -66,6 +66,19 @@ public enum Schema {
         "DEFINE FIELD IF NOT EXISTS embedding_profile ON chunk TYPE option<string>",
         "DEFINE FIELD IF NOT EXISTS created_at ON chunk TYPE datetime",
 
+        // Conflict ledger (P3.6). A decision that does not survive a restart
+        // is a question the user gets asked again, which is the one thing
+        // §11.6 promises will not happen.
+        "DEFINE TABLE IF NOT EXISTS conflict SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON conflict TYPE string",
+        "DEFINE INDEX IF NOT EXISTS conflict_uid ON conflict FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS question ON conflict TYPE string",
+        "DEFINE FIELD IF NOT EXISTS scope_kind ON conflict TYPE string",
+        "DEFINE FIELD IF NOT EXISTS project_id ON conflict TYPE option<string>",
+        "DEFINE FIELD IF NOT EXISTS decided ON conflict TYPE bool",
+        "DEFINE INDEX IF NOT EXISTS conflict_open ON conflict FIELDS decided",
+        "DEFINE FIELD IF NOT EXISTS created_at ON conflict TYPE datetime",
+
         "DEFINE TABLE IF NOT EXISTS schema_meta SCHEMALESS",
     ]
 }

@@ -94,6 +94,49 @@ public final class AppEnvironment {
         } catch {
             notes.append("เริ่ม sidecar 'surreal' ไม่สำเร็จ: \(error)")
         }
+
+        await startSearXNG(manager: manager, config: config)
+    }
+
+    /// Meta-search (§1.4, P3.1). Optional on purpose: everything except T5 web
+    /// search works without it, so a machine that has not installed it gets a
+    /// note rather than a failed boot.
+    ///
+    /// The interpreter is a configured path rather than something bundled,
+    /// because a Python virtualenv cannot be relocated — its scripts hold
+    /// absolute paths — so shipping one inside the .app is packaging work
+    /// (P9.6), not a copy step.
+    private func startSearXNG(manager: SidecarManager, config: BootstrapConfig) async {
+        guard let interpreter = config.searxngPython, !interpreter.isEmpty else {
+            notes.append("ยังไม่ได้ตั้ง searxngPython — ค้นเว็บทั่วไป (T5) จะใช้ไม่ได้ "
+                         + "(ติดตั้งด้วย scripts/fetch-searxng.sh แล้วตั้งค่าใน bootstrap.plist)")
+            return
+        }
+        guard FileManager.default.isExecutableFile(atPath: interpreter) else {
+            notes.append("searxngPython ชี้ไปที่ไฟล์ที่รันไม่ได้: \(interpreter)")
+            return
+        }
+
+        let settings = URL(fileURLWithPath: interpreter)
+            .deletingLastPathComponent()      // bin
+            .deletingLastPathComponent()      // venv
+            .deletingLastPathComponent()      // searxng
+            .appending(path: "config/settings.yml")
+
+        let spec = SidecarSpec(
+            id: "searxng",
+            executableURL: URL(fileURLWithPath: interpreter),
+            arguments: ["-m", "searx.webapp"],
+            healthURL: URL(string: "http://127.0.0.1:\(config.searxngPort)/"),
+            environment: ["SEARXNG_SETTINGS_PATH": settings.path(percentEncoded: false)],
+            // It loads ~70 engine definitions before it answers; the default
+            // 15 seconds is measured against a database, not this.
+            readinessTimeout: .seconds(45))
+        do {
+            try await manager.start(spec)
+        } catch {
+            notes.append("เริ่ม sidecar 'searxng' ไม่สำเร็จ: \(error)")
+        }
     }
 
     /// The database is a sidecar that has just been asked to start, so the

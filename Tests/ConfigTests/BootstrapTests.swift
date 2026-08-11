@@ -140,3 +140,38 @@ struct BootstrapStoreTests {
         #expect(throws: BootstrapError.self) { try BootstrapStore(paths: paths).save(config) }
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// P3.1: the meta-search sidecar is optional, and its interpreter is a
+// per-machine path because a Python venv cannot be relocated.
+// ─────────────────────────────────────────────────────────────
+
+@Suite("SearXNG configuration")
+struct SearXNGConfigTests {
+    @Test("the interpreter path survives a save and reload")
+    func searxngPythonRoundTrips() throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appending(path: "coai-searxng-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let paths = AppPaths(root: directory)
+        let store = BootstrapStore(paths: paths)
+
+        var config = BootstrapConfig.default
+        config.searxngPython = "/opt/coai/vendor/searxng/venv/bin/python"
+        try store.save(config)
+
+        let (reloaded, outcome) = try store.load()
+        #expect(outcome == .loaded)
+        #expect(reloaded.searxngPython == "/opt/coai/vendor/searxng/venv/bin/python")
+    }
+
+    @Test("no interpreter is a valid configuration, not an error")
+    func absentInterpreterIsValid() throws {
+        // Everything except general web search works without it, so a machine
+        // that has not installed SearXNG must still boot.
+        var config = BootstrapConfig.default
+        config.searxngPython = nil
+        #expect(throws: Never.self) { try config.validate() }
+    }
+}
