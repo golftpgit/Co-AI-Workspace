@@ -94,6 +94,49 @@ public final class AppEnvironment {
         } catch {
             notes.append("เริ่ม sidecar 'surreal' ไม่สำเร็จ: \(error)")
         }
+
+        await startSearXNG(manager: manager, config: config)
+    }
+
+    /// Meta-search (§1.4, P3.1). Optional on purpose: everything except T5 web
+    /// search works without it, so a machine that has not installed it gets a
+    /// note rather than a failed boot.
+    ///
+    /// The interpreter is a configured path rather than something bundled,
+    /// because a Python virtualenv cannot be relocated — its scripts hold
+    /// absolute paths — so shipping one inside the .app is packaging work
+    /// (P9.6), not a copy step.
+    private func startSearXNG(manager: SidecarManager, config: BootstrapConfig) async {
+        guard let interpreter = config.searxngPython, !interpreter.isEmpty else {
+            notes.append("ยังไม่ได้ตั้ง searxngPython — ค้นเว็บทั่วไป (T5) จะใช้ไม่ได้ "
+                         + "(ติดตั้งด้วย scripts/fetch-searxng.sh แล้วตั้งค่าใน bootstrap.plist)")
+            return
+        }
+        guard FileManager.default.isExecutableFile(atPath: interpreter) else {
+            notes.append("searxngPython ชี้ไปที่ไฟล์ที่รันไม่ได้: \(interpreter)")
+            return
+        }
+
+        let settings = URL(fileURLWithPath: interpreter)
+            .deletingLastPathComponent()      // bin
+            .deletingLastPathComponent()      // venv
+            .deletingLastPathComponent()      // searxng
+            .appending(path: "config/settings.yml")
+
+        let spec = SidecarSpec(
+            id: "searxng",
+            executableURL: URL(fileURLWithPath: interpreter),
+            arguments: ["-m", "searx.webapp"],
+            healthURL: URL(string: "http://127.0.0.1:\(config.searxngPort)/"),
+            environment: ["SEARXNG_SETTINGS_PATH": settings.path(percentEncoded: false)],
+            // It loads ~70 engine definitions before it answers; the default
+            // 15 seconds is measured against a database, not this.
+            readinessTimeout: .seconds(45))
+        do {
+            try await manager.start(spec)
+        } catch {
+            notes.append("เริ่ม sidecar 'searxng' ไม่สำเร็จ: \(error)")
+        }
     }
 
     /// The database is a sidecar that has just been asked to start, so the
@@ -106,6 +149,7 @@ public final class AppEnvironment {
             do {
                 engine = try await Engine.build(config: config, paths: paths)
                 engineError = nil
+                noteIfNoModelForHighImpactWork(config)
                 log.info("engine ready")
                 return
             } catch {
@@ -115,6 +159,23 @@ public final class AppEnvironment {
         }
         notes.append("เชื่อมต่อฐานข้อมูลไม่สำเร็จ จึงยังใช้หน้าแชทไม่ได้ — \(engineError ?? "ไม่ทราบสาเหตุ")")
         log.error("engine unavailable: \(self.engineError ?? "unknown", privacy: .public)")
+    }
+
+    /// Says so when the only model available is the on-device one.
+    ///
+    /// The router keeps high-impact work off it because its answers are not
+    /// stable enough to decide on (ARCH E.7) — so with no self-hosted endpoint
+    /// there is no model for that work *at all*, and conflict detection and
+    /// relation extraction return nothing on every document. Both fail quietly
+    /// by design (an unreachable model must not be read as "these sources
+    /// agree"), which is exactly why the boot screen has to be the one to
+    /// mention it. It already does this for searxngPython.
+    private func noteIfNoModelForHighImpactWork(_ config: BootstrapConfig) {
+        guard config.selfHostedEndpoint?.isEmpty ?? true else { return }
+        notes.append("ยังไม่ได้ตั้ง selfHostedEndpoint — มีแต่โมเดลบนเครื่อง "
+                     + "งานที่ต้องความแม่นสูงจึงไม่มีโมเดลรองรับ: "
+                     + "จะไม่พบข้อขัดแย้งและไม่สกัดความสัมพันธ์ให้กราฟเลย "
+                     + "(ตั้ง selfHostedEndpoint/selfHostedModel ใน bootstrap.plist)")
     }
 
     private func startStatusPolling(_ manager: SidecarManager) {

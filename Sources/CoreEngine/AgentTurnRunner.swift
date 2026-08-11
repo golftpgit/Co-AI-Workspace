@@ -52,19 +52,59 @@ public actor AgentTurnRunner {
     /// A cap, because a model that keeps calling tools without converging is a
     /// loop, not progress. Hitting it is reported, never silently swallowed.
     private let maxToolRounds: Int
+    /// Keeps a long conversation inside the window (§5.6). Built here rather
+    /// than where it is used, so it is on the wiring diagram like everything
+    /// else — a compactor nothing calls is the shape this project has already
+    /// shipped four times.
+    private let contextManager: ContextManager
 
     public init(router: ModelRouter,
                 gateway: ToolGateway,
                 transcript: any TurnTranscript,
                 spanSink: (any SpanSink)? = nil,
                 systemPrompt: String = AgentTurnRunner.defaultSystemPrompt,
-                maxToolRounds: Int = 6) {
+                maxToolRounds: Int = 6,
+                contextManager: ContextManager = ContextManager(budget: 16_384)) {
         self.router = router
         self.gateway = gateway
         self.transcript = transcript
         self.sink = spanSink
         self.systemPrompt = systemPrompt
         self.maxToolRounds = maxToolRounds
+        self.contextManager = contextManager
+    }
+
+    /// The narrative half of §5.6's handoff. Routed as low impact on purpose:
+    /// it runs on every compaction, and being approximately right about what
+    /// has been done is the job. The evidence half of the handoff is read off
+    /// the transcript and does not depend on this succeeding.
+    private static func narrate(_ digest: String,
+                                router: ModelRouter) async -> (completed: [String],
+                                                               remaining: [String]) {
+        var request = LLMRequest(messages: [
+            .init(.system, """
+            ย่อบทสนทนาเป็นสองรายการสั้นๆ: สิ่งที่ทำเสร็จแล้ว และสิ่งที่ยังเหลือ
+            เขียนเฉพาะสิ่งที่ปรากฏในบทสนทนาจริง ห้ามเดาสิ่งที่ยังไม่ได้ทำ
+            """),
+            .init(.user, digest),
+        ])
+        request.responseSchema = (name: "Handoff", schemaJSON: #"""
+        {"type":"object",
+         "properties":{
+           "completed":{"type":"array","items":{"type":"string"}},
+           "remaining":{"type":"array","items":{"type":"string"}}},
+         "required":["completed","remaining"]}
+        """#)
+        request.maxTokens = 512
+        request.temperature = 0
+
+        guard let completion = try? await router.complete(request, policy: .init(impact: .low)),
+              let data = completion.structuredText.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return ([], []) }
+
+        return (completed: (root["completed"] as? [String]) ?? [],
+                remaining: (root["remaining"] as? [String]) ?? [])
     }
 
     public static let defaultSystemPrompt = """
@@ -156,6 +196,21 @@ public actor AgentTurnRunner {
             let system = systemPrompt + Self.placeContext(workingDirectory)
                 + Self.toolRoster(adverts.map(\.name))
             messages = [LLMMessage(.system, system)] + history.map(Self.llmMessage(from:))
+
+            // 2a — compact before the window fills (§5.6, P4.9). The system
+            //      prompt and the place/tool context are the durable rules:
+            //      they were built for this turn and must not be summarised
+            //      away, which in v1 is exactly what happened to them.
+            if contextManager.shouldCompact(messages) {
+                let compaction = await contextManager.compact(
+                    messages.filter { $0.role != .system },
+                    goal: userText,
+                    durableRules: [system],
+                    narrate: { [router] digest in await Self.narrate(digest, router: router) })
+                messages = compaction.messages
+                emit(.note("ย่อบทสนทนาให้พอดีหน้าต่างบริบท "
+                           + "(\(compaction.tokensBefore) → \(compaction.tokensAfter) tokens)"))
+            }
         } catch {
             emit(.failed("อ่านประวัติการสนทนาไม่สำเร็จ: \(error)"))
             await close(.failed, "load history: \(error)")
@@ -209,6 +264,12 @@ public actor AgentTurnRunner {
                     case .textDelta(let chunk):
                         text += chunk
                         emit(.assistantDelta(chunk))
+                    case .reasoningDelta:
+                        // Deliberately not part of the answer: it must never be
+                        // stored as the reply or parsed as structured output.
+                        // Showing it belongs to the Live Monitor's collapsed
+                        // step card (§14.2), which does not exist yet.
+                        break
                     case .toolCall(let call):
                         calls.append(call)
                     case .usage(let usage):

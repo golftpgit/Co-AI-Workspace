@@ -45,17 +45,36 @@ struct ProcessExecutionTests {
 
     @Test("output streams while the command is still running")
     func streamsIncrementally() async throws {
+        let directory = scratch()
+        let flag = directory.appending(path: "first-chunk-was-delivered")
+            .path(percentEncoded: false)
         let registry = ProcessRegistry()
-        let chunks = ChunkLog()
+
+        // The command cannot reach its second write until the caller has
+        // *received* the first, so streaming is what lets this finish at all.
+        //
+        // It used to echo twice around a sleep and count callbacks after the
+        // fact, which measured machine load: under a busy CI or a full local
+        // suite the two writes arrive coalesced and the count is 1. There is
+        // nothing to tune here — either the first chunk came out mid-run or
+        // the second write never happened.
         let outcome = try await registry.run(
-            .shell("echo หนึ่ง; sleep 0.2; echo สอง", workingDirectory: scratch()),
+            .shell("""
+            echo หนึ่ง
+            for _ in $(seq 1 200); do [ -f "\(flag)" ] && break; sleep 0.05; done
+            [ -f "\(flag)" ] && echo สอง
+            """, workingDirectory: directory),
             label: "stream",
-            onOutput: { chunk in Task { await chunks.record(chunk) } })
+            onOutput: { chunk in
+                if chunk.text.contains("หนึ่ง") {
+                    FileManager.default.createFile(atPath: flag, contents: nil)
+                }
+            })
 
         #expect(outcome.succeeded)
-        // Two writes separated by a sleep must not arrive as one blob at the end.
-        try await Task.sleep(for: .milliseconds(100))
-        #expect(await chunks.count >= 2)
+        #expect(outcome.stdout.contains("หนึ่ง"))
+        #expect(outcome.stdout.contains("สอง"),
+                "the second write never ran — the first chunk did not reach the caller until the process had already exited")
     }
 
     @Test("stdin is piped in, for the notebook kernel path")
@@ -269,12 +288,6 @@ struct SandboxTests {
         #expect(!profile.profileText.contains("(deny network*)"))
         #expect(profile.profileText.contains("(deny file-write*)"))
     }
-}
-
-private actor ChunkLog {
-    private(set) var chunks: [OutputChunk] = []
-    func record(_ chunk: OutputChunk) { chunks.append(chunk) }
-    var count: Int { chunks.count }
 }
 
 private struct WaitTimedOut: Error {}

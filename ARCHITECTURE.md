@@ -1089,7 +1089,7 @@ graph LR
 | D-2 | Embedding ใช้ตัวไหน | ✅ **ปิดแล้ว — `bge-m3` @ 1024 มิติ** ([E.10](#e10-d-2--เลือก-embedding-model-วัดจริง-ปิดแล้ว)) | Apple ไม่มี sentence embedding ไทย และ `NLContextualEmbedding` แยก vector space ตามสคริปต์ → cross-lingual เป็นไปไม่ได้; bge-m3 ได้ 100% ทุกมิติบนชุดทดสอบ |
 | D-3 | ผูก GX10 เข้า `LanguageModelSession` ได้ไหม | ✅ **ตอบแล้ว — ยังไม่ได้ในวันนี้** ([E.2](#e2-foundation-models-api-surface-ที่มีจริงบนเครื่อง)) | API เป็นของ macOS 27 (ก.ย. 2026) → **แก้ด้วย `LLMExecutor` abstraction ของเราเอง** ([§9.1](#91-llm-abstraction-ของเราเอง-รองรับทั้งสองยุค)) ไม่ต้องรอ ไม่ต้องลง beta |
 | D-4 | DB connector ฝั่ง Swift ใช้อะไร | ✅ **ตรวจแล้ว** | DuckDB scanner เป็นหลัก (federated query ได้ด้วย) — PostgresNIO (ผ่าน SSWG) เป็นทางเลือกถ้าต้องการ native; MongoDB ใช้ `mongo-swift-driver` (wrap libmongoc) |
-| D-5 | Compaction handoff สกัดยังไง | 🔶 **ยังต้อง design** | เสนอ: Tier 0 summarize ตอน compact (ถูกพอทำทุกครั้ง) + heuristic จาก failed tool call/ไฟล์ที่แตะ — หนี้ค้างจาก v1 ที่ยังไม่มีใครแก้ |
+| D-5 | Compaction handoff สกัดยังไง | ✅ **ปิดแล้ว (P4.9)** | ทำตามที่เสนอ แต่แบ่งหน้าที่ชัดกว่า: **สามฟิลด์ที่ v1 ทำให้ไม่ว่างไม่ได้ (`key_decisions`/`open_issues`/`file_pointers`) สกัดจาก transcript ด้วย heuristic ล้วน ไม่ถามโมเดล** — การอนุมัติที่เกิดขึ้นจริง คำสั่งที่ล้มเหลว และ path ที่ถูกเปิด เป็นข้อเท็จจริงที่อยู่ในข้อความอยู่แล้ว ส่วนโมเดลที่ถูกถามว่า "ตัดสินอะไรไปบ้าง" จะแต่งคำตอบที่ฟังดูดี · Tier 0 ใช้เฉพาะ `completed_steps`/`remaining_steps` ที่ถูกคร่าวๆ ก็พอ และถ้าเรียกไม่ได้ ครึ่งที่เป็นหลักฐานยังมาครบ |
 | D-6 | SearXNG bundle ยังไง | ✅ **ตรวจแล้ว → ตัดสินใจใช้** | ติดตั้ง native บน macOS ได้ผ่าน Python venv หรือใช้ standalone binary ที่ build ไว้ให้แล้ว — `SidecarManager` ดูแล lifecycle เหมือน `surreal` |
 | D-7 | `@Generable` guided generation ทำงานจริงใน app target ไหม | ✅ **ปิดแล้ว — ทำงานได้ดี** ([E.6](#e6-d-7-spike--guided-generation-ใน-app-target-จริง)) | ใน NSApplication runloop ทำงานปกติ **0.6–0.9 วิ** (การค้างใน CLI เป็นข้อจำกัดของ command-line context จริง) tool-calling และ streaming ก็ผ่าน |
 | D-8 | latency ของ guided generation ยอมรับได้ไหม | ✅ **ปิดแล้ว — ยอมรับได้** | 0.7–1.8 วิ จาก 32 การเรียก, streaming เห็น snapshot แรกที่ **508ms** → ใช้กับงาน UX-critical ได้ |
@@ -1133,6 +1133,67 @@ graph LR
 | `ระบบตัวแทนปัญญาประดิษฐ์ทำงานร่วมกัน...` | `ระบบ \| ตัวแทน \| ปัญญาประดิษฐ์ \| ทำงาน \| ร่วมกัน \| ...` | ✅ ดี |
 
 เพิ่มเติม: language identification ภาษาไทยแม่นยำ (confidence 1.0) · **POS tagging ไม่รองรับไทย** (มีแค่ scheme `Language`/`Script`/`TokenType`) · เทียบข้อมูลภายนอก: `newmm` ที่ v1 ใช้ได้ **71.18%** บน BEST2010 (SOTA 95.60%) → NLTokenizer ไม่ได้ด้อยกว่าอย่างชัดเจน
+
+#### E.3.1 merge layer ให้ผลอะไรจริง — วัดตอน P2.2 (แก้ข้อสันนิษฐานเดิม)
+
+ตอนตั้ง P2.2 เขียน Done-when ไว้ว่า "วัด BM25 recall เทียบก่อน/หลัง merge layer" โดยสันนิษฐานว่า recall จะดีขึ้น **วัดจริงแล้วไม่ใช่** — บน corpus 10 เอกสาร / 5 query (`Tests/KnowledgeTests/RetrievalMeasurementTests.swift`):
+
+| | recall@1 | MRR |
+|---|---|---|
+| ไม่มี merge layer | **1.00** | **1.00** |
+| มี merge layer | **1.00** | **1.00** |
+
+เหตุผลคือสิ่งที่ E.3 เขียนไว้เองอยู่แล้ว: index กับ query ผ่าน tokenizer ตัวเดียวกัน `โลจิสติก` จึงแตกเป็น `โล|จิ|สติ|ก` เหมือนกันทั้งสองฝั่งและยังเจอเอกสารเดิม
+
+**สิ่งที่ merge layer แก้จริงคือ precision** — ค้น `สติ` (คำไทยแท้ แปลว่าความรู้สึกตัว) โดยไม่มี merge layer ได้เอกสารเรื่อง logistic regression ติดมาด้วย เพราะมันมี fragment `สติ` อยู่ข้างใน พอเปิด merge layer เอกสารนั้นหายไปและเหลือเฉพาะเอกสารที่พูดเรื่องสติจริงๆ · ตรวจเพิ่มด้วยว่า merge layer **ไม่เพิ่ม** ผลลัพธ์ที่ไม่มี merge layer หาไม่เจอ (subset check ทุก query)
+
+### E.11 embedding model ที่ "ตาบอดภาษาไทย" — เจอตอน P2.4 (2026-08-11)
+
+`text-embedding-nomic-embed-text-v1.5` ที่ LM Studio เสิร์ฟ **คืน vector ตัวเดียวกันเป๊ะทุกครั้งสำหรับ input ภาษาไทย** ไม่ว่าข้อความจะต่างกันแค่ไหน:
+
+| input | vector 3 ตัวแรก |
+|---|---|
+| `การให้อินซูลินในผู้ป่วยเบาหวาน` | `-0.00297, 0.00135, -0.15952` |
+| `การควบคุมระดับน้ำตาลในเลือด...` | `-0.00297, 0.00135, -0.15952` |
+| `การปนเปื้อนโลหะหนักในแหล่งน้ำดิบ` | `-0.00297, 0.00135, -0.15952` |
+| `insulin therapy in diabetic patients` | `0.00015, 0.06579, -0.14905` ✅ ต่างกันปกติ |
+
+ไม่ใช่ปัญหา batch — ยิงทีละ request ก็ได้ผลเดียวกัน · ภาษาอังกฤษทำงานปกติ → tokenizer ของโมเดลไม่รู้จักสคริปต์ไทยเลย
+
+**ทำไมอันตราย**: cosine ระหว่าง vector ที่เท่ากันคือ 1.0 ทุกคู่ ระบบจะ "ค้นเจอ" เสมอและจัดอันดับมั่วโดยไม่มี error ให้เห็น — เป็นการพังแบบเงียบที่แย่กว่าพังดังๆ · **ยืนยันการตัดสินใจของ P2.1 ([E.10](#e10-d-2--เลือก-embedding-model-วัดจริง-ปิดแล้ว)) ว่าทำไมต้อง `bge-m3`**
+
+**สิ่งที่ทำ**: `diagnose(_ embedder:)` ใน `Knowledge` ยิงประโยคที่ต่างกันชัดเจน 2 ประโยคต่อสคริปต์ (ไทย + ละติน) ถ้าได้ vector เท่ากันเป๊ะ = `.blind(to:)` ไม่ใช่ threshold แต่เทียบว่า "เท่ากันเป๊ะ" เพราะโมเดลที่แค่มองว่าสองประโยคคล้ายกันคือทำงานถูกแล้ว — P2.3 จะไม่ยอม index ผ่าน embedder ที่อยู่ในสถานะนี้
+
+### E.12 Vision OCR รองรับไทยแค่โหมดเดียว — ตรวจตอน P2.3 (2026-08-11)
+
+`VNRecognizeTextRequest.supportedRecognitionLanguages()` บนเครื่องนี้:
+
+- `.accurate` → **30 ภาษา รวม `th-TH`** ✅
+- `.fast` → `en-US, fr-FR, it-IT, de-DE, es-ES, pt-BR` เท่านั้น — **ไม่มีไทย**
+
+แปลว่าสำหรับคลังเอกสารไทย `.accurate` ไม่ใช่ตัวเลือกเรื่องคุณภาพแต่เป็นทางเดียวที่ใช้ได้ · ถ้าเผลอตั้ง `.fast` เพื่อความเร็ว หน้าที่เป็นภาษาไทยจะคืนค่าว่างโดยไม่มี error → `TextRecognizer` ล็อก `.accurate` ไว้ตายตัวและ expose `supportedLanguages` ให้ UI บอกผู้ใช้ได้ว่าเครื่องนี้อ่านภาษาอะไรได้บ้าง
+
+### E.13 bge-m3 ในโปรเซสเราเอง — รันได้จริง + เจอกับดักสำคัญ (2026-08-11)
+
+รันจริงแล้วบนเครื่องนี้ ([spikes/EmbeddingRuntime/](../spikes/EmbeddingRuntime/FINDINGS.md)):
+
+| เช็ค | ผล |
+|---|---|
+| โหลด bge-m3 ผ่าน `MLXEmbedders` | ✅ 1024 มิติ ตรงกับที่ P2.1 ล็อก |
+| อ่านภาษาไทย | ✅ ประโยคใกล้กัน 0.764 vs ไม่เกี่ยวกัน 0.379 (ต่างจาก nomic ใน [E.11](#e11-embedding-model-ที่-ตาบอดภาษาไทย--เจอตอน-p24-2026-08-11) ที่คืน vector เดียวกันหมด) |
+| ความเร็ว | ✅ **232 chunk/วินาที** → re-embed 10,000 chunk ใช้เวลาไม่ถึงนาที (โหลดครั้งแรก ~43 วิรวมดาวน์โหลด) |
+
+**🔴 กับดักที่เจอ — "bge-m3" สองบิลด์ให้ vector space ที่ตั้งฉากกัน**
+
+เทียบ vector ของประโยคเดียวกันระหว่าง MLX conversion กับ GGUF ที่ LM Studio เสิร์ฟ: cosine = **−0.0008, −0.0068, 0.0512** ไม่ใช่ "ต่างกันนิดหน่อย" แต่คือ**ไม่เกี่ยวข้องกันเลย**
+
+ใครที่คิดว่าชื่อโมเดลคือสิ่งที่สำคัญ จะสลับสองอันนี้โดยใช้ index เดิม แล้ว**ทำลาย KB แบบเงียบสนิท** — ค้นได้ปกติ แต่จัดอันดับมั่ว นี่คือสิ่งที่ `EmbeddingProfile.revision` มีไว้ดัก และตอนนี้ไม่ใช่สมมติฐานอีกแล้ว
+
+**อุปสรรค 3 ข้อที่ต้องผ่าน (ไม่มีข้อไหนเกี่ยวกับตัวโมเดล)**:
+
+1. **Metal Toolchain ไม่ได้ติดตั้ง** — Xcode 26 แยกเป็น component ต่างหาก ถ้าไม่มี MLX ตายที่ `Failed to load the default metallib` แก้ด้วย `xcodebuild -downloadComponent MetalToolchain` (ติดตั้งแล้วบนเครื่องนี้) → **เป็น prerequisite ของเครื่องที่ build โปรเจกต์นี้ตั้งแต่นี้ไป**
+2. **SwiftPM สร้าง Metal shader ไม่ได้** — README ของ mlx-swift เขียนเอง ต้อง build ผ่าน `xcodebuild` ขณะที่ `check.sh`/`build-app.sh` เป็น SwiftPM โดยเจตนา → ต้องมีขั้น `xcodebuild` เพิ่มเพื่อสร้าง `.metallib` อย่างเดียว
+3. **`EmbedderRegistry.bge_m3` โหลดไม่ขึ้น** — มันชี้ไป `BAAI/bge-m3` ที่ weight ใช้ชื่อ layer แบบ HF แต่ BERT port ต้องการชื่อแบบ MLX (`keyNotFound(["encoder","layers","0","ln2","weight"])`) ต้องใช้ `mlx-community/bge-m3-mlx-8bit` แทน — **entry ใน registry ผิดกับโมเดลที่มันตั้งชื่อไว้เอง** ควรระวัง entry อื่นด้วย
 
 ### E.4 สถานะ dependency หลัก (จาก GitHub API วันที่ตรวจ)
 

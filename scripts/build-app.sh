@@ -36,6 +36,18 @@ else
   echo "    helpers: none yet (vendor/helpers not present)"
 fi
 
+# MLX looks for its Metal kernels in the bundles it can see, and the app's
+# Resources directory is the one that will be there at runtime. Built
+# separately because SwiftPM cannot compile Metal (ARCHITECTURE E.13).
+METAL_BUNDLE="$ROOT/vendor/metal/mlx-swift_Cmlx.bundle"
+if [ -d "$METAL_BUNDLE" ]; then
+  cp -R "$METAL_BUNDLE" "$APP/Contents/Resources/"
+  echo "    metal kernels: bundled"
+else
+  echo "    WARNING: no metal kernels — run scripts/build-metallib.sh, or the"
+  echo "             app will fail to load its embedding model"
+fi
+
 echo "==> signing with App Sandbox entitlements"
 # Sign helpers first — nested code must be signed before the outer bundle.
 for helper in "$APP/Contents/Resources/Helpers/"*; do

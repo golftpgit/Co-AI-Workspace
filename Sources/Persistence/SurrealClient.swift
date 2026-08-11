@@ -41,6 +41,10 @@ public enum SurrealValue: Sendable, Equatable {
     }
 
     public var stringValue: String? { if case .string(let s) = self { return s }; return nil }
+    /// Missing this is why a stored `true` read back as `false`: `intValue`
+    /// and `stringValue` both return nil for a bool, so every caller silently
+    /// fell through to its default.
+    public var boolValue: Bool? { if case .bool(let b) = self { return b }; return nil }
     public var intValue: Int? {
         switch self { case .int(let i): return i; case .double(let d): return Int(d); default: return nil }
     }

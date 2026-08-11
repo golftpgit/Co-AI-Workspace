@@ -97,5 +97,27 @@ struct BindingShapeTests {
         // Ids therefore use AgentKit.OpaqueID, which cannot be re-typed.
         #expect(results["uuid"]?.hasPrefix("altered") == true,
                 "UUID coercion changed behaviour — revisit OpaqueID: \(results["uuid"] ?? "?")")
+
+        // The same coercion on the *other* side of a statement, which is where
+        // it actually cost us: a UUID-shaped id bound into a comparison is a
+        // UUID value and never equals the string that was stored. Every UPSERT
+        // then matched nothing, tried to create, was refused by the unique
+        // index, and the row kept its first values — a task ledger that
+        // recorded attempt 1 of a run that took three and escalated.
+        let matchable = UUID().uuidString
+        try await client.exec(
+            "CREATE probe CONTENT { label: type::string($l), payload: type::string($v) }",
+            vars: ["l": "where-probe", "v": matchable])
+
+        let bare = try await client.query("SELECT payload FROM probe WHERE payload = $v",
+                                          vars: ["v": matchable], timeout: 5)
+        let pinned = try await client.query(
+            "SELECT payload FROM probe WHERE payload = type::string($v)",
+            vars: ["v": matchable], timeout: 5)
+
+        #expect(bare.first?.rows.isEmpty == true,
+                "an unpinned UUID comparison now matches — every id comparison in the persistence layer is wrapped in type::string() because it did not")
+        #expect(pinned.first?.rows.count == 1,
+                "type::string() no longer rescues the comparison: \(pinned.first?.rows.count ?? -1)")
     }
 }

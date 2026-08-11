@@ -13,7 +13,7 @@ import Sidecar
 // skips loudly rather than pretending to pass.
 // ─────────────────────────────────────────────────────────────
 
-private func repoRoot() -> URL {
+func repoRoot() -> URL {
     // .../Tests/PersistenceTests/PersistenceTests.swift → repo root
     URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
@@ -21,14 +21,14 @@ private func repoRoot() -> URL {
         .deletingLastPathComponent()
 }
 
-private var surrealBinary: URL? {
+var surrealBinary: URL? {
     let url = repoRoot().appending(path: "vendor/helpers/surreal")
     return FileManager.default.isExecutableFile(atPath: url.path(percentEncoded: false)) ? url : nil
 }
 
 /// One live server per test, on its own port and storage, so tests cannot
 /// interfere with each other or with the developer's real workspace.
-private actor TestServer {
+actor TestServer {
     let manager: SidecarManager
     let paths: AppPaths
     let port: Int
@@ -64,10 +64,10 @@ private actor TestServer {
     }
 }
 
-private enum TestSkip: Error { case noBinary }
+enum TestSkip: Error { case noBinary }
 
 /// Ports are assigned per suite to keep parallel runs from colliding.
-private func makeServer(port: Int) async throws -> TestServer? {
+func makeServer(port: Int) async throws -> TestServer? {
     guard surrealBinary != nil else {
         Issue.record("skipped: vendor/helpers/surreal not present — run scripts/fetch-helpers.sh")
         return nil

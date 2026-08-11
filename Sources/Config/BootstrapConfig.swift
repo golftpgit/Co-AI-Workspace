@@ -26,6 +26,12 @@ public struct BootstrapConfig: Codable, Sendable, Equatable {
     /// this pair in P5; until then it is what makes tool calling possible at all.
     public var selfHostedEndpoint: String?
     public var selfHostedModel: String?
+    /// Interpreter of the SearXNG virtualenv. Per-machine, because a Python
+    /// venv cannot be moved — its scripts hold absolute paths — so it cannot
+    /// simply be copied into the app bundle (packaging is P9.6). Nil means the
+    /// meta-search sidecar is not started and T5 search is unavailable, which
+    /// the boot screen says rather than failing silently.
+    public var searxngPython: String?
 
     public static let currentSchemaVersion = 1
 
@@ -42,7 +48,8 @@ public struct BootstrapConfig: Codable, Sendable, Equatable {
                 logLevel: LogLevel,
                 dataDirectoryOverride: String? = nil,
                 selfHostedEndpoint: String? = nil,
-                selfHostedModel: String? = nil) {
+                selfHostedModel: String? = nil,
+                searxngPython: String? = nil) {
         self.schemaVersion = schemaVersion
         self.surrealPort = surrealPort
         self.searxngPort = searxngPort
@@ -50,6 +57,7 @@ public struct BootstrapConfig: Codable, Sendable, Equatable {
         self.dataDirectoryOverride = dataDirectoryOverride
         self.selfHostedEndpoint = selfHostedEndpoint
         self.selfHostedModel = selfHostedModel
+        self.searxngPython = searxngPython
     }
 }
 

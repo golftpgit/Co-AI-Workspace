@@ -171,7 +171,7 @@ public struct Criterion: Sendable, Equatable, Codable {
     }
 }
 
-public struct Assignment: Sendable, Identifiable, Codable {
+public struct Assignment: Sendable, Identifiable, Codable, Equatable {
     public let id: String
     public let role: Role
     public let goal: String
@@ -181,7 +181,12 @@ public struct Assignment: Sendable, Identifiable, Codable {
     public let acceptanceCriteria: [Criterion]
     public let deliverableType: String
 
-    public init(id: String = UUID().uuidString,
+    /// `OpaqueID`, not a raw UUID: SurrealDB v3 re-types a bound UUID-shaped
+    /// string into a UUID value, so an assignment id used in a comparison
+    /// stopped matching the string that was stored (ARCHITECTURE App. C.0).
+    /// The persistence layer pins every id comparison as well — this is the
+    /// other half of the same rule, applied where the id is made.
+    public init(id: String = OpaqueID.make(OpaqueID.assignment),
                 role: Role,
                 goal: String,
                 inputs: [String] = [],
@@ -216,7 +221,7 @@ public struct Evidence: Sendable, Equatable, Codable {
 
 /// What a specialist hands back — a summary plus pointers and evidence,
 /// never the full transcript (§2.3).
-public struct Deliverable: Sendable, Codable {
+public struct Deliverable: Sendable, Codable, Equatable {
     public let assignmentID: String
     public let summary: String
     public let artifacts: [String]

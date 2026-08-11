@@ -159,6 +159,15 @@ public struct VLLMExecutor: LLMExecutor {
                         if let text = delta["content"] as? String, !text.isEmpty {
                             continuation.yield(.textDelta(text))
                         }
+                        // Reasoning models spend their whole budget here before
+                        // saying a word: dropping these chunks makes the app look
+                        // frozen, and with a small max_tokens it answers nothing
+                        // at all. `reasoning_content` is LM Studio/vLLM/Qwen;
+                        // `reasoning` is the DeepSeek and OpenRouter spelling.
+                        if let thought = (delta["reasoning_content"] ?? delta["reasoning"]) as? String,
+                           !thought.isEmpty {
+                            continuation.yield(.reasoningDelta(thought))
+                        }
                         if let tcs = delta["tool_calls"] as? [[String: Any]] {
                             for tc in tcs {
                                 let idx = tc["index"] as? Int ?? 0

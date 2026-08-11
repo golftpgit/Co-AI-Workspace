@@ -27,16 +27,73 @@ struct CoAIWorkspaceApp: App {
 private struct RootView: View {
     let environment: AppEnvironment
     @State private var showingStatus = false
+    @State private var screen = Screen.chat
+    /// Owned here rather than built inside the view: a model recreated on each
+    /// body pass loses whatever the user just did to it (P1.10's bug).
+    @State private var knowledge = KnowledgeViewModel()
+    @State private var conflicts = ConflictViewModel()
+    @State private var team = TeamViewModel()
+
+    enum Screen: String, CaseIterable, Identifiable {
+        case chat, knowledge, conflicts, team
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .chat: "สนทนา"
+            case .knowledge: "คลังความรู้"
+            case .conflicts: "ข้อขัดแย้ง"
+            case .team: "ทีม"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .chat: "bubble.left.and.bubble.right"
+            case .knowledge: "books.vertical"
+            case .conflicts: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90"
+            case .team: "person.3"
+            }
+        }
+    }
 
     var body: some View {
         Group {
             if let engine = environment.engine, !showingStatus {
-                ChatView(engine: engine)
+                switch screen {
+                case .chat: ChatView(engine: engine)
+                case .knowledge:
+                    KnowledgeView(model: knowledge)
+                        .task {
+                            await knowledge.attach(store: engine.knowledge)
+                            await knowledge.attach(relations: engine.relations,
+                                                   extractor: engine.relationExtractor)
+                            knowledge.attach(conflicts: engine.conflicts,
+                                             detector: engine.conflictDetector)
+                        }
+                case .conflicts:
+                    ConflictView(model: conflicts)
+                        .task { await conflicts.attach(store: engine.conflicts) }
+                case .team:
+                    TeamView(model: team)
+                        .task { await team.attach(team: engine.team,
+                                                  ledger: engine.taskLedger,
+                                                  gateway: engine.gateway) }
+                }
             } else {
                 BootStatusView(environment: environment)
             }
         }
         .toolbar {
+            if environment.engine != nil, !showingStatus {
+                Picker("หน้าจอ", selection: $screen) {
+                    ForEach(Screen.allCases) { screen in
+                        Label(screen.label, systemImage: screen.icon).tag(screen)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityLabel("สลับหน้าจอ")
+            }
             if environment.engine != nil {
                 Toggle(isOn: $showingStatus) {
                     Label("สถานะระบบ", systemImage: "heart.text.square")
