@@ -1,4 +1,5 @@
 import Foundation
+import AgentKit
 
 // ─────────────────────────────────────────────────────────────
 // Bootstrap config (ARCHITECTURE §15) — the only settings kept in a flat
@@ -37,6 +38,15 @@ public struct BootstrapConfig: Codable, Sendable, Equatable {
     /// boot, before a conversation exists. Nil means "the largest installed",
     /// which is what a machine with exactly one model wants.
     public var localModel: String?
+    /// Every model above Tier 0.5 (§9.3, P5.5). Replaces the single
+    /// `selfHostedEndpoint`/`selfHostedModel` pair, which is kept for one more
+    /// version so an existing bootstrap.plist migrates itself rather than
+    /// losing the endpoint someone already configured.
+    public var endpointRegistry: EndpointRegistry?
+    /// The four ceilings (§9.5). Nil means the conservative default rather
+    /// than "no limit": an unset budget on a metered endpoint is the one
+    /// setting whose absence costs money.
+    public var budget: BudgetLimits?
     /// Ceiling on what downloaded models may occupy, in gigabytes. Models are
     /// the only thing in this app that can fill a disk — one 30B checkpoint is
     /// 17 GB — so the limit is a setting, not a constant (ARCH §9.4).
@@ -61,7 +71,9 @@ public struct BootstrapConfig: Codable, Sendable, Equatable {
                 selfHostedModel: String? = nil,
                 searxngPython: String? = nil,
                 localModel: String? = nil,
-                modelQuotaGigabytes: Int? = nil) {
+                modelQuotaGigabytes: Int? = nil,
+                endpointRegistry: EndpointRegistry? = nil,
+                budget: BudgetLimits? = nil) {
         self.schemaVersion = schemaVersion
         self.surrealPort = surrealPort
         self.searxngPort = searxngPort
@@ -72,6 +84,8 @@ public struct BootstrapConfig: Codable, Sendable, Equatable {
         self.searxngPython = searxngPython
         self.localModel = localModel
         self.modelQuotaGigabytes = modelQuotaGigabytes
+        self.endpointRegistry = endpointRegistry
+        self.budget = budget
     }
 }
 
@@ -110,11 +124,37 @@ extension BootstrapConfig {
                 throw BootstrapError.invalidEndpoint(endpoint)
             }
         }
+        for endpoint in endpointRegistry?.endpoints ?? [] {
+            guard let url = URL(string: endpoint.baseURL),
+                  url.scheme != nil, url.host() != nil else {
+                throw BootstrapError.invalidEndpoint(endpoint.baseURL)
+            }
+        }
         if let quota = modelQuotaGigabytes {
             // Zero would mean "no models allowed", which reads as a typo
             // rather than an intention, and would disable Tier 0.5 silently.
             guard quota >= 1 else { throw BootstrapError.invalidQuota(quota) }
         }
+    }
+}
+
+extension BootstrapConfig {
+    /// The registry, with the old single pair folded in.
+    ///
+    /// Migration rather than a breaking change: a file written before P5.5 has
+    /// `selfHostedEndpoint`/`selfHostedModel` and no registry, and silently
+    /// dropping the endpoint someone configured would look exactly like the
+    /// app forgetting its settings.
+    public var effectiveEndpoints: EndpointRegistry {
+        var registry = endpointRegistry ?? EndpointRegistry()
+        if registry.isEmpty,
+           let endpoint = selfHostedEndpoint, !endpoint.isEmpty,
+           let model = selfHostedModel, !model.isEmpty {
+            registry.upsert(InferenceEndpoint(
+                id: "migrated-self-hosted", name: "Self-hosted", baseURL: endpoint,
+                model: model, kind: .selfHosted))
+        }
+        return registry
     }
 }
 

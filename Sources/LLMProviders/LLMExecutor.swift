@@ -228,6 +228,10 @@ public protocol LLMExecutor: Sendable {
     var identifier: String { get }
     var tier: ModelTier { get }
     var capabilities: LLMCapabilities { get }
+    /// What a million tokens costs here, when anything does. Nil on every free
+    /// tier — and a metered executor with no price is one the Budget Governor
+    /// refuses to use, because it cannot estimate what it would spend (§9.5).
+    var price: TokenPrice? { get }
 
     /// Cheap readiness check — endpoint reachable, model loaded, assets present.
     func isAvailable() async -> Bool
@@ -236,6 +240,7 @@ public protocol LLMExecutor: Sendable {
 }
 
 extension LLMExecutor {
+    public var price: TokenPrice? { nil }
     public func prewarm() async {}
 
     /// Collects a stream into one completion. Shared so every executor behaves

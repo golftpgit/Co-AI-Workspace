@@ -103,7 +103,7 @@ fi
 # screen permanently empty. Each capability below must be reachable from the
 # wiring, not just from its own tests.
 UNWIRED=""
-for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer Researcher ContextManager LocalTier ModelInstaller; do
+for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer Researcher ContextManager LocalTier ModelInstaller BudgetGovernor EndpointProbe; do
   grep -rq "$capability(" Sources/CoAIWorkspaceApp --include=*.swift || UNWIRED="$UNWIRED $capability"
 done
 if [ -n "$UNWIRED" ]; then

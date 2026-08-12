@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import Config
+import AgentKit
 import Observability
 import Sidecar
 
@@ -204,6 +205,22 @@ public final class AppEnvironment {
             config = updated
         } catch {
             log.error("saving local model choice: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Records endpoints and ceilings from the settings screen. Same file and
+    /// same reason as the local model: the router is assembled during boot,
+    /// before the database is up.
+    public func rememberEndpoints(_ registry: EndpointRegistry, limits: BudgetLimits) {
+        guard let paths else { return }
+        var updated = config
+        updated.endpointRegistry = registry
+        updated.budget = limits
+        do {
+            try BootstrapStore(paths: paths).save(updated)
+            config = updated
+        } catch {
+            log.error("saving endpoints: \(String(describing: error), privacy: .public)")
         }
     }
 

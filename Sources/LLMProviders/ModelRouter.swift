@@ -78,9 +78,15 @@ public actor ModelRouter {
     private var availability: [String: (ok: Bool, checkedAt: ContinuousClock.Instant)] = [:]
     private let availabilityTTL: Duration
 
+    /// Guards the metered tier. Absent means there is nothing metered to
+    /// guard — a machine with only free endpoints never builds one.
+    private let governor: BudgetGovernor?
+
     public init(executors: [any LLMExecutor],
                 spanSink: (any SpanSink)? = nil,
+                governor: BudgetGovernor? = nil,
                 availabilityTTL: Duration = .seconds(30)) {
+        self.governor = governor
         // Cheapest first; escalation walks up the tiers.
         self.executors = executors.sorted { $0.tier < $1.tier }
         self.sink = spanSink
@@ -100,10 +106,19 @@ public actor ModelRouter {
                                       outcome: "unavailable"))
                 continue
             }
+            if let refusal = await budgetRefusal(for: executor, request: request) {
+                // Over the ceiling is a routing signal, not an error (§9.5):
+                // the work goes down a tier and carries on, and the reason is
+                // on the span rather than in the user's face.
+                attempts.append(.init(executor: executor.identifier, tier: executor.tier,
+                                      outcome: "over budget", detail: refusal))
+                continue
+            }
             do {
                 let completion = try await executor.complete(request)
                 await record(executor: executor, request: request, outcome: "ok",
                              usage: completion.usage, escalatedFrom: attempts)
+                await accountIfMetered(executor: executor, usage: completion.usage)
                 return completion
             } catch let error as LLMError where error.isEscalatable {
                 attempts.append(.init(executor: executor.identifier, tier: executor.tier,
@@ -136,6 +151,12 @@ public actor ModelRouter {
             guard await isAvailable(executor) else {
                 attempts.append(.init(executor: executor.identifier, tier: executor.tier,
                                       outcome: "unavailable"))
+                continue
+            }
+
+            if let refusal = await budgetRefusal(for: executor, request: request) {
+                attempts.append(.init(executor: executor.identifier, tier: executor.tier,
+                                      outcome: "over budget", detail: refusal))
                 continue
             }
 
@@ -210,6 +231,29 @@ public actor ModelRouter {
                 < (rhs.tier == .onDevice ? 1 : 0, rhs.tier.rawValue)
         }
         return eligible
+    }
+
+    // MARK: - money
+
+    /// Nil when this executor may run: free tiers always, metered ones only
+    /// with the governor's agreement.
+    private func budgetRefusal(for executor: any LLMExecutor,
+                               request: LLMRequest) async -> String? {
+        guard executor.tier.isMetered, let governor else { return nil }
+        let decision = await governor.mayspend(promptTokens: request.estimatedPromptTokens,
+                                               maxTokens: request.maxTokens,
+                                               price: executor.price)
+        return decision.isAllowed ? nil : decision.reason
+    }
+
+    /// The real cost, once the endpoint has said what it actually used.
+    private func accountIfMetered(executor: any LLMExecutor, usage: LLMUsage?) async {
+        guard executor.tier.isMetered, let governor, let usage else { return }
+        await governor.account(promptTokens: usage.promptTokens,
+                               completionTokens: usage.completionTokens,
+                               price: executor.price,
+                               endpoint: executor.identifier,
+                               model: executor.identifier)
     }
 
     /// Order for work that must not be got wrong (§9.2): the self-hosted model
