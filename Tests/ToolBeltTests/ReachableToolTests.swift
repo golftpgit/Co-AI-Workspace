@@ -136,7 +136,7 @@ struct ReachableToolTests {
         let outcome = try await gateway.call("save_document", argumentsJSON: """
         {"title": "บันทึกการประชุม",
          "filename": "meeting",
-         "authors": ["ภาณุพงศ์ ต."],
+         "authors": ["ผู้วิจัย ก."],
          "sections": [
            {"heading": "สรุป", "paragraphs": ["ที่ประชุมเห็นชอบตามที่เสนอ"]},
            {"heading": "งานที่ต้องทำ", "bullets": ["ตรวจข้อมูลซ้ำ", "ส่งร่างวันศุกร์"]}

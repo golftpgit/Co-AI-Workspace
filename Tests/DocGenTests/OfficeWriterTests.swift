@@ -96,7 +96,7 @@ private func draft() -> DocumentDraft {
                               origin: .agentSuggested, note: "โครงร่างไม่ได้ระบุ"))
     return DocumentDraft(
         title: "ผลของเมตฟอร์มินต่อระดับ HbA1c",
-        authors: ["ภาณุพงศ์ ต.", "R&D group"],
+        authors: ["ผู้วิจัย ก.", "R&D group"],
         sections: [
             Section(heading: "บทนำ", paragraphs: [
                 .plain("การศึกษานี้ทบทวนหลักฐานที่มีอยู่ <ทั้งหมด> & สรุปช่องว่าง"),
