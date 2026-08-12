@@ -87,6 +87,56 @@ public actor MCPRegistry {
         return (connected, failures)
     }
 
+    /// Connects one server after boot and returns the tools it brought, so the
+    /// caller can register them in the live gateway.
+    ///
+    /// This is P8.4's "ติดตั้งแล้วใช้ได้ทันที" in one method: a plugin that
+    /// needs a restart to become usable is a plugin whose install button lies.
+    public func connect(_ config: MCPServerConfig,
+                        handshakeTimeout: Duration = .seconds(20)) async throws
+        -> [any AgentTool] {
+        if connections[config.id] != nil { await disconnect(configID: config.id) }
+        failures.removeAll { $0.configID == config.id }
+        guard config.isReady else {
+            let reason = config.blockers.joined(separator: " · ")
+            failures.append(Failure(configID: config.id, name: config.name, reason: reason))
+            throw MCPServerError.notConnected(reason)
+        }
+        let before = advertisedTools.count
+        do {
+            let connection = try await MCPConnection.connect(config,
+                                                             handshakeTimeout: handshakeTimeout)
+            await adopt(connection, config: config)
+        } catch {
+            // Recorded here as well as in `connectAll`, and not only rethrown:
+            // the status screen reads `failures`, and a server that failed
+            // after boot would otherwise be a tool list that is silently
+            // shorter than the one the roster was validated against.
+            let reason = (error as? MCPServerError)?.description ?? "\(error)"
+            log.error("MCP '\(config.name, privacy: .public)' — \(reason, privacy: .public)")
+            failures.append(Failure(configID: config.id, name: config.name, reason: reason))
+            throw error
+        }
+        return Array(advertisedTools.dropFirst(before))
+    }
+
+    /// Stops one server and forgets what it offered. The names are returned
+    /// because the gateway is the thing that has to be told: a tool whose
+    /// server is gone must leave the tool list, or the next turn advertises a
+    /// tool that cannot run.
+    @discardableResult
+    public func disconnect(configID: String) async -> [String] {
+        guard let connection = connections.removeValue(forKey: configID) else { return [] }
+        await connection.disconnect()
+        let entry = connected.first { $0.configID == configID }
+        let names = entry?.toolNames ?? []
+        advertisedTools.removeAll { names.contains($0.name) }
+        connected.removeAll { $0.configID == configID }
+        failures.removeAll { $0.configID == configID }
+        if let name = entry?.name { prompts.removeAll { $0.server == name } }
+        return names
+    }
+
     private func adopt(_ connection: MCPConnection, config: MCPServerConfig) async {
         let namespace = config.namespace
         let serverName = await connection.serverName

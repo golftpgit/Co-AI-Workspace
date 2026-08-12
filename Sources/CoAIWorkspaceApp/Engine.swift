@@ -112,6 +112,10 @@ struct Engine: Sendable {
     /// nothing (D6). A registry on the engine, whose tools are registered in
     /// the gateway below, is what makes it a feature instead of a module.
     let mcpServers: MCPServerStore
+    /// §7.1 — packaged MCP servers installed from a folder (P8.4). Held so
+    /// installing one can connect it into the running gateway rather than
+    /// waiting for a restart, which is the whole of that task's Done-when.
+    let plugins: PluginRegistry
     let mcp: MCPRegistry
     let mcpConnected: [MCPRegistry.Connected]
     let mcpProblems: [String]
@@ -304,8 +308,13 @@ struct Engine: Sendable {
         // the namespace prevents it, and the order means it could not win
         // anyway.
         let mcpServers = MCPServerStore(file: paths.root.appending(path: "mcp-servers.json"))
+        // §7.1 — a plugin is a packaged MCP server, so it joins the same list
+        // rather than getting a second connection path. The difference between
+        // the two is where the package came from and who may delete it.
+        let plugins = PluginRegistry(directory: paths.pluginsDirectory)
         let mcp = MCPRegistry()
-        let mcpOutcome = await mcp.connectAll(mcpServers.load())
+        let mcpOutcome = await mcp.connectAll(
+            mcpServers.load() + plugins.installed().map(Self.server(for:)))
         await gateway.register(mcp.tools())
         let mcpProblems = mcpOutcome.failures.map { "MCP '\($0.name)': \($0.reason)" }
 
@@ -349,8 +358,22 @@ struct Engine: Sendable {
                       channelAccounts: channelAccounts, channelRouter: channelRouter,
                       appIntents: appIntents,
                       roster: roster, rosterProblems: rosterProblems,
-                      mcpServers: mcpServers, mcp: mcp,
+                      mcpServers: mcpServers, plugins: plugins, mcp: mcp,
                       mcpConnected: mcpOutcome.connected, mcpProblems: mcpProblems)
+    }
+
+    /// How an installed package becomes a server to launch (§7.1, P8.4).
+    ///
+    /// The whole join between M3 and M6, written once: Roster describes a
+    /// package and may not import MCPBridge — `MCPTool` is an `AgentTool`, and
+    /// the roster is no more allowed to reach one than a channel is.
+    static func server(for plugin: InstalledPlugin) -> MCPServerConfig {
+        MCPServerConfig(id: "plugin:\(plugin.id)",
+                        name: plugin.name,
+                        command: plugin.command,
+                        arguments: plugin.arguments,
+                        workingDirectory: plugin.workingDirectory,
+                        environmentVariables: plugin.environmentVariables)
     }
 
     /// Nothing the engine started may outlive the app (§13).
