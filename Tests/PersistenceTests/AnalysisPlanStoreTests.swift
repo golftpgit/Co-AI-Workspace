@@ -33,7 +33,12 @@ struct AnalysisPlanStoreTests {
         let store = AnalysisPlanStore(client: await server.client)
 
         var plan = settledPlan(title: "เมตฟอร์มินกับ HbA1c")
-        plan.confirm(plan.agentSuggestions[0].id, value: "Mann–Whitney U")
+        // Read the id out first: `confirm` takes the plan inout, so an
+        // argument that also reads the plan is two overlapping accesses to
+        // the same value — which is undefined behaviour, and which crashed
+        // this suite intermittently until it was found.
+        let suggestion = plan.agentSuggestions[0].id
+        plan.confirm(suggestion, value: "Mann–Whitney U")
         try plan.approve(by: "ผู้ใช้")
         try await store.save(plan)
 
@@ -81,7 +86,8 @@ struct AnalysisPlanStoreTests {
         let store = AnalysisPlanStore(client: await server.client)
 
         var plan = settledPlan(title: "แผนที่ถูกตีกลับ")
-        plan.confirm(plan.agentSuggestions[0].id)
+        let suggestion = plan.agentSuggestions[0].id
+        plan.confirm(suggestion)
         try plan.approve(by: "ผู้ใช้")
         plan.methodologyChanged(
             reason: "t-test ไม่ผ่านการตรวจการแจกแจงปกติ",

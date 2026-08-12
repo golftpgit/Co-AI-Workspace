@@ -741,6 +741,22 @@ private struct PlanPane: View {
                 ForEach(plan.decisions) { decision in
                     DecisionRow(model: model, decision: decision, locked: plan.isApproved)
                 }
+                // §14.1 reads this plan later to write the document's
+                // Limitations. Showing it here means an assumption is seen as
+                // the sentence it will become, while there is still time to
+                // change it.
+                if !model.limitationsPreview.isEmpty {
+                    Text("ข้อจำกัดที่จะขึ้นในเอกสารอัตโนมัติ (§14.1)").font(.subheadline).bold()
+                    ForEach(model.limitationsPreview.items) { item in
+                        Label(item.text, systemImage: "text.append")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(.quaternary.opacity(0.2),
+                                        in: RoundedRectangle(cornerRadius: 6))
+                    }
+                }
                 if !plan.revisions.isEmpty {
                     Text("ประวัติการถอนอนุมัติ").font(.subheadline).bold()
                     ForEach(Array(plan.revisions.enumerated()), id: \.offset) { _, reason in

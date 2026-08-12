@@ -3,6 +3,7 @@ import Observation
 import AgentKit
 import Analysis
 import CoreEngine
+import DocGen
 import Persistence
 import Observability
 
@@ -521,6 +522,14 @@ public final class AnalysisViewModel {
 
     /// Nil goes back to the proposal box — "new plan" is "read another
     /// proposal", because §12.4 does not have a blank plan in it.
+    /// What §14.1 will write into the document's Limitations section, from
+    /// this plan alone. Shown while the plan is still being settled, because
+    /// an assumption reads differently once you can see the sentence it turns
+    /// into.
+    public var limitationsPreview: LimitationsSection {
+        LimitationsBuilder.build(plan: plan)
+    }
+
     public func open(plan selected: AnalysisPlan?) {
         plan = selected
         if selected == nil { proposalText = ""; planTitle = ""; proposalDocumentID = nil }

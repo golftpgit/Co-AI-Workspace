@@ -112,8 +112,8 @@ struct ConnectorTests {
         // And through the real path: a connector whose secret is set but whose
         // host does not exist. The error that comes back is the one the user
         // sees, and it must not contain the password.
-        setenv("COAI_TEST_PGPASSWORD", "hunter2", 1)
-        defer { unsetenv("COAI_TEST_PGPASSWORD") }
+        SecretStore.override("COAI_TEST_PGPASSWORD", "hunter2")
+        defer { SecretStore.override("COAI_TEST_PGPASSWORD", nil) }
         let store = try AnalysisStore()
         do {
             try await store.attach(connector)

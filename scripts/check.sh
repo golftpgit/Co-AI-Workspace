@@ -108,8 +108,9 @@ fi
 # wiring, not just from its own tests.
 UNWIRED=""
 for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer Researcher ContextManager LocalTier ModelInstaller BudgetGovernor EndpointProbe AnalysisStore NotebookKernel NotebookRunner NotebookStore \
-                  StatTestTool GapDetector AnalysisPlanStore ConnectorStore; do
-  grep -rq "$capability(" Sources/CoAIWorkspaceApp --include=*.swift || UNWIRED="$UNWIRED $capability"
+                  StatTestTool GapDetector AnalysisPlanStore ConnectorStore \
+                  TelegramChannel ChannelRouter LimitationsBuilder; do
+  grep -rqE "$capability[(.]" Sources/CoAIWorkspaceApp --include=*.swift || UNWIRED="$UNWIRED $capability"
 done
 if [ -n "$UNWIRED" ]; then
   fail "built but never wired into the app:$UNWIRED"

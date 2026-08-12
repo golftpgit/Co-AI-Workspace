@@ -105,6 +105,13 @@ public struct AnalysisDecision: Sendable, Codable, Equatable, Identifiable {
     public internal(set) var origin: DecisionOrigin
     /// Why, where that is not obvious from the value.
     public internal(set) var note: String?
+    /// True when this started as the agent's idea, whatever it is now.
+    ///
+    /// `origin` moves to `human_confirmed` the moment a person agrees, which is
+    /// exactly what approval requires — but §14.1 needs the other fact: an
+    /// assumption the proposal never made belongs in Limitations even after
+    /// somebody signed off on it. Set once, never cleared.
+    public let wasAgentSuggested: Bool
 
     public init(id: String = OpaqueID.make("dec"),
                 question: String,
@@ -116,6 +123,7 @@ public struct AnalysisDecision: Sendable, Codable, Equatable, Identifiable {
         self.value = value
         self.origin = origin
         self.note = note
+        self.wasAgentSuggested = origin == .agentSuggested
     }
 }
 

@@ -80,7 +80,7 @@ private actor Answerer: ApprovalAnswering {
 }
 
 private func account(allowing chats: [String] = ["555"]) -> ChannelAccount {
-    setenv("COAI_TEST_TELEGRAM_TOKEN", "123456:SECRET-TOKEN", 1)
+    SecretStore.override("COAI_TEST_TELEGRAM_TOKEN", "123456:SECRET-TOKEN")
     return ChannelAccount(id: "acc1", platform: .telegram, name: "บอททดสอบ",
                           tokenVariable: "COAI_TEST_TELEGRAM_TOKEN",
                           allowedChats: chats)

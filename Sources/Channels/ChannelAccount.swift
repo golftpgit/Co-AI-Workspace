@@ -77,10 +77,7 @@ public struct ChannelAccount: Sendable, Codable, Equatable, Identifiable {
     /// The token, read at the moment it is needed. Nil when the variable is
     /// unset — reported as a state the screen can show rather than as a crash
     /// at the first poll.
-    public var token: String? {
-        let value = ProcessInfo.processInfo.environment[tokenVariable] ?? ""
-        return value.isEmpty ? nil : value
-    }
+    public var token: String? { SecretStore.value(tokenVariable) }
 
     public var isReady: Bool { isEnabled && token != nil && !allowedChats.isEmpty }
 

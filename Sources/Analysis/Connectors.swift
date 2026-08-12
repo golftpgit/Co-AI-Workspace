@@ -60,7 +60,7 @@ public struct DBConnector: Sendable, Codable, Equatable, Identifiable {
     /// not something the user learns from a driver error.
     public var secretIsAvailable: Bool {
         guard let secretVariable else { return true }
-        return !(ProcessInfo.processInfo.environment[secretVariable] ?? "").isEmpty
+        return SecretStore.has(secretVariable)
     }
 }
 
@@ -120,8 +120,9 @@ extension AnalysisStore {
     public func attach(_ connector: DBConnector) async throws -> AttachedDatabase {
         var secret: String?
         if let variable = connector.secretVariable {
-            let value = ProcessInfo.processInfo.environment[variable] ?? ""
-            guard !value.isEmpty else { throw ConnectorError.secretMissing(variable: variable) }
+            guard let value = SecretStore.value(variable) else {
+                throw ConnectorError.secretMissing(variable: variable)
+            }
             secret = value
         }
         let target = Self.connectionString(for: connector, secret: secret)

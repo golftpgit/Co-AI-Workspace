@@ -43,8 +43,8 @@ struct ChannelAccountTests {
     func tokensAreNotStored() throws {
         let file = temporaryFile()
         defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
-        setenv("COAI_TEST_BOT_TOKEN", "123456:SECRET-TOKEN", 1)
-        defer { unsetenv("COAI_TEST_BOT_TOKEN") }
+        SecretStore.override("COAI_TEST_BOT_TOKEN", "123456:SECRET-TOKEN")
+        defer { SecretStore.override("COAI_TEST_BOT_TOKEN", nil) }
 
         let store = ChannelAccountStore(file: file)
         try store.add(ChannelAccount(platform: .telegram, name: "บอท",
@@ -108,8 +108,8 @@ struct ChannelAccountTests {
 
     @Test("a disabled account is not ready even when everything else is set")
     func disabledAccountsDoNotRun() {
-        setenv("COAI_TEST_BOT_TOKEN", "x", 1)
-        defer { unsetenv("COAI_TEST_BOT_TOKEN") }
+        SecretStore.override("COAI_TEST_BOT_TOKEN", "x")
+        defer { SecretStore.override("COAI_TEST_BOT_TOKEN", nil) }
         let account = ChannelAccount(platform: .telegram, name: "ปิดไว้",
                                      tokenVariable: "COAI_TEST_BOT_TOKEN",
                                      allowedChats: ["111"], isEnabled: false)

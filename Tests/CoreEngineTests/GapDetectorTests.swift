@@ -206,7 +206,8 @@ struct AnalysisPlanTests {
         #expect(throws: PlanApprovalError.self) { try plan.approve(by: "ผู้ใช้") }
 
         // And the way back is a person agreeing to the new method.
-        plan.confirm(plan.agentSuggestions[0].id)
+        let suggestion = plan.agentSuggestions[0].id
+        plan.confirm(suggestion)
         try plan.approve(by: "ผู้ใช้")
         #expect(plan.isApproved)
         #expect(plan.revisions.count == 1)
