@@ -150,6 +150,10 @@ public final class AppEnvironment {
             do {
                 let engine = try await Engine.build(config: config, paths: paths)
                 self.engine = engine
+                // §14.3 — the one thing an App Intent can reach. An intent
+                // arrives without a view, so there is no environment for it to
+                // be handed; it has to be able to find this.
+                IntentBridge.shared.channel = engine.appIntents
                 engineError = nil
                 noteWhichModelsExist(config, engine: engine)
                 log.info("engine ready")

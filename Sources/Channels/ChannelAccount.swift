@@ -23,6 +23,10 @@ public enum ChannelPlatform: String, Sendable, Codable, CaseIterable, Identifiab
     case telegram
     case discord
     case line
+    /// Siri, Shortcuts and Spotlight (§14.3). A channel like the others — it
+    /// goes through the same core — but see `isLocal`: it is the only one
+    /// whose sender is already the owner of this machine.
+    case appIntents
 
     public var id: String { rawValue }
 
@@ -31,8 +35,21 @@ public enum ChannelPlatform: String, Sendable, Codable, CaseIterable, Identifiab
         case .telegram: "Telegram"
         case .discord: "Discord"
         case .line: "LINE"
+        case .appIntents: "Siri / Shortcuts"
         }
     }
+
+    /// Whether the sender is on this Mac.
+    ///
+    /// This is the *only* thing that may excuse a channel from the token and
+    /// the allow-list, and it is worth being precise about why. The allow-list
+    /// exists because a bot's id is public and its token is the single secret
+    /// standing between a stranger and `run_shell` (§8.2). An intent has no
+    /// remote sender at all: it is dispatched by macOS to this app, on behalf
+    /// of whoever is logged in, and someone who can run Shortcuts here can
+    /// already open the app. There is nothing an allow-list of chat ids would
+    /// be listing.
+    public var isLocal: Bool { self == .appIntents }
 }
 
 /// One bot on one platform. §8.2 asks for several per platform, so this is a
@@ -87,12 +104,20 @@ public struct ChannelAccount: Sendable, Codable, Equatable, Identifiable {
     /// at the first poll.
     public var token: String? { SecretStore.value(tokenVariable) }
 
-    public var isReady: Bool { isEnabled && token != nil && !allowedChats.isEmpty }
+    public var isReady: Bool {
+        guard isEnabled else { return false }
+        // Written as one condition rather than two so a future platform cannot
+        // become ready by having neither: `isLocal` is an exemption from the
+        // token *and* the allow-list together, and only for a sender that is
+        // already on this machine.
+        return platform.isLocal || (token != nil && !allowedChats.isEmpty)
+    }
 
     /// Why this account is not running, in the words the screen shows.
     public var blockers: [String] {
         var reasons: [String] = []
         if !isEnabled { reasons.append("ปิดอยู่") }
+        if platform.isLocal { return reasons }
         if token == nil { reasons.append("ยังไม่ได้ตั้งตัวแปร \(tokenVariable) ที่เก็บโทเคน") }
         if allowedChats.isEmpty {
             reasons.append("ยังไม่มี chat id ที่อนุญาต — รายการว่างแปลว่าไม่รับจากใครเลย")

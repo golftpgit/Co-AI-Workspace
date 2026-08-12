@@ -106,12 +106,17 @@ struct ChannelAccountTests {
         #expect(ChannelAccountStore(file: file).load().isEmpty)
     }
 
+    /// A variable of its own, not the one the test above uses. Overrides are
+    /// process-wide and suites run in parallel, so two tests sharing a name
+    /// means one's `defer` clears the other's value mid-assertion — which is a
+    /// failure that only appears when the machine is busy enough to interleave
+    /// them.
     @Test("a disabled account is not ready even when everything else is set")
     func disabledAccountsDoNotRun() {
-        SecretStore.override("COAI_TEST_BOT_TOKEN", "x")
-        defer { SecretStore.override("COAI_TEST_BOT_TOKEN", nil) }
+        SecretStore.override("COAI_TEST_DISABLED_BOT_TOKEN", "x")
+        defer { SecretStore.override("COAI_TEST_DISABLED_BOT_TOKEN", nil) }
         let account = ChannelAccount(platform: .telegram, name: "ปิดไว้",
-                                     tokenVariable: "COAI_TEST_BOT_TOKEN",
+                                     tokenVariable: "COAI_TEST_DISABLED_BOT_TOKEN",
                                      allowedChats: ["111"], isEnabled: false)
         #expect(!account.isReady)
         #expect(account.blockers == ["ปิดอยู่"])

@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import AgentKit
 import Config
 import Observability
@@ -91,6 +92,10 @@ struct Engine: Sendable {
     /// "every channel through the same core" true by construction.
     let channelAccounts: ChannelAccountStore
     let channelRouter: ChannelRouter
+    /// §14.3 — Siri, Shortcuts and Spotlight. Held so the intents in
+    /// `WorkspaceIntents.swift` have something to ask; an intent that finds no
+    /// channel is a Shortcut that fails without saying why.
+    let appIntents: AppIntentsChannel
     /// §7 — agents and skills loaded from files. Held with the errors beside
     /// them: a manifest that failed to load is the one thing about the roster
     /// worth putting on the boot screen, because otherwise a typo looks like a
@@ -260,11 +265,31 @@ struct Engine: Sendable {
             case .telegram: channel = TelegramChannel(account: account, answering: broker)
             case .discord: channel = DiscordChannel(account: account, answering: broker)
             case .line: channel = LINEChannel(account: account, answering: broker)
+            case .appIntents:
+                // Not configured in the file and not one of many: there is a
+                // single Siri, it is always on, and it is built below.
+                continue
             }
             await broker.subscribe(channel)
             await channelRouter.register(channel, for: account.id)
             await channel.start(handler: channelRouter)
         }
+
+        // §14.3 — Siri, Shortcuts and Spotlight. Always registered rather than
+        // configured: there is nothing to configure, and an intent that finds
+        // no channel is a Shortcut that fails with nothing to say.
+        let appIntents = AppIntentsChannel()
+        await broker.subscribe(appIntents)
+        await channelRouter.register(appIntents, for: AppIntentsChannel.accountID)
+        await appIntents.start(handler: channelRouter)
+
+        // §8.1 — the channel that only speaks. Subscribed to the broker so an
+        // approval reaches the person when the window is not the thing they
+        // are looking at; it can answer nothing, which is why it is safe to
+        // have it announce everything the others would.
+        let notifier = Notifier(delivery: UserNotificationDelivery(),
+                                userIsWatching: { await MainActor.run { NSApp.isActive } })
+        await broker.subscribe(notifier)
 
         // §6.2 — MCP servers, connected and put on the tool list. This runs
         // before the roster is read, and that order is the point: a manifest
@@ -315,6 +340,7 @@ struct Engine: Sendable {
                       plans: AnalysisPlanStore(client: client),
                       gapDetector: GapDetector(router: router),
                       channelAccounts: channelAccounts, channelRouter: channelRouter,
+                      appIntents: appIntents,
                       roster: roster, rosterProblems: rosterProblems,
                       mcpServers: mcpServers, mcp: mcp,
                       mcpConnected: mcpOutcome.connected, mcpProblems: mcpProblems)
@@ -330,6 +356,7 @@ struct Engine: Sendable {
         // Same rule, same reason: an MCP server is a child process, and it is
         // not in the registry either.
         await mcp.shutdown()
+        await appIntents.stop()
         await channelRouter.stopAll()
         await client.close()
     }
