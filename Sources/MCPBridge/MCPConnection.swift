@@ -91,22 +91,33 @@ public actor MCPConnection {
         let seconds = Int(handshakeTimeout.components.seconds)
         let handshake: Initialize.Result
         do {
-            handshake = try await withDeadline(handshakeTimeout, onTimeout: {
-                // Not decoration — this is what makes the deadline a deadline.
-                // A client waiting on `initialize` is suspended on a
-                // continuation that only ever resumes when the server answers,
-                // and cancellation does not reach it. `disconnect` resumes the
-                // pending request with an error, which is what lets the
-                // handshake unwind instead of being waited on forever.
-                await client.disconnect()
-            }) {
-                try await client.connect(transport: transport)
-            }
+            handshake = try await withDeadline(
+                handshakeTimeout,
+                // The server exiting is the other way this ends, and it is
+                // knowable the moment it happens.
+                abortWhen: { await child.waitForExit() },
+                stop: {
+                    // Not decoration — this is what makes a watchdog work at
+                    // all. A client waiting on `initialize` is suspended on a
+                    // continuation that only ever resumes when the server
+                    // answers, and cancellation does not reach it.
+                    // `disconnect` resumes the pending request with an error,
+                    // which is what lets the handshake unwind instead of being
+                    // waited on forever.
+                    await client.disconnect()
+                }) {
+                    try await client.connect(transport: transport)
+                }
         } catch is DeadlineExceeded {
             await transport.disconnect()
             child.terminate()
             throw MCPServerError.handshakeTimedOut(seconds: seconds,
                                                    stderr: child.standardErrorText())
+        } catch is ServerExited {
+            await transport.disconnect()
+            child.terminate()
+            throw MCPServerError.handshakeFailed("เซิร์ฟเวอร์ปิดตัวลงก่อนตอบ initialize",
+                                                 stderr: child.standardErrorText())
         } catch {
             await transport.disconnect()
             child.terminate()
@@ -237,49 +248,70 @@ public actor MCPConnection {
 // MARK: - deadlines
 
 struct DeadlineExceeded: Error {}
+/// The server is not slow; it is gone.
+struct ServerExited: Error {}
 
-/// Whether the timer won. Needed because `onTimeout` breaks the operation on
-/// purpose, so the operation's own failure and the deadline race each other to
-/// the caller — and under load the loser reports first. Without this, the same
-/// timeout is "handshake failed: client disconnected" on a busy machine and
-/// "no response in 20s" on an idle one.
-private final class DeadlineFlag: @unchecked Sendable {
+/// Why the operation was stopped, if it was.
+///
+/// Needed because stopping it means breaking it on purpose, so the operation's
+/// own failure and the watchdog race each other to the caller — and under load
+/// the loser reports first. Without this, the same timeout is "handshake
+/// failed: client disconnected" on a busy machine and "no response in 20s" on
+/// an idle one.
+private final class StopReason: @unchecked Sendable {
     private let lock = NSLock()
-    private var fired = false
-    func fire() { lock.withLock { fired = true } }
-    var hasFired: Bool { lock.withLock { fired } }
+    private var reason: (any Error)?
+    /// First writer wins: whichever watchdog noticed first is the true cause.
+    func set(_ error: any Error) { lock.withLock { if reason == nil { reason = error } } }
+    var value: (any Error)? { lock.withLock { reason } }
 }
 
-/// Races an operation against a timer.
+/// Races an operation against the two ways a handshake fails to arrive.
 ///
-/// `onTimeout` is not a convenience. A task group does not return until every
+/// **`stop` is not a convenience.** A task group does not return until every
 /// child has finished, and `cancelAll` only *asks* — an operation suspended on
-/// a continuation nobody will resume ignores it, and the timeout becomes the
-/// same hang it was meant to prevent. So the losing branch gets a chance to do
-/// the one thing that will actually free the operation, and only then throws.
-/// This cost an afternoon to find, in a test that was written to catch exactly
-/// this and hung instead of failing.
+/// a continuation nobody will resume ignores it, and the watchdog becomes the
+/// same hang it was meant to prevent. So a watchdog gets to do the one thing
+/// that will actually free the operation, and only then throws.
+///
+/// **`abortWhen` exists because a timer is the wrong instrument for half the
+/// problem.** A server that says nothing keeps its pipe open and there is
+/// nothing to notice but the passage of time. A server that has *exited* is a
+/// fact available immediately — and waiting out a 20-second timer to discover
+/// it is 20 seconds of an install button doing nothing visible. Found by
+/// installing a plugin in the real app, not by a test: the test suite only had
+/// the server that stays alive and stays quiet.
 func withDeadline<T: Sendable>(_ duration: Duration,
-                               onTimeout: @escaping @Sendable () async -> Void = {},
+                               abortWhen: (@Sendable () async -> Void)? = nil,
+                               stop: @escaping @Sendable () async -> Void = {},
                                _ operation: @escaping @Sendable () async throws -> T)
     async throws -> T {
-    let deadline = DeadlineFlag()
+    let stopped = StopReason()
     return try await withThrowingTaskGroup(of: T.self) { group in
         group.addTask { try await operation() }
         group.addTask {
             try await Task.sleep(for: duration)
-            deadline.fire()
-            await onTimeout()
+            stopped.set(DeadlineExceeded())
+            await stop()
             throw DeadlineExceeded()
+        }
+        if let abortWhen {
+            group.addTask {
+                await abortWhen()
+                try Task.checkCancellation()
+                stopped.set(ServerExited())
+                await stop()
+                throw ServerExited()
+            }
         }
         defer { group.cancelAll() }
         do {
             guard let first = try await group.next() else { throw DeadlineExceeded() }
             return first
         } catch {
-            // Success still wins — it is returned above. But once the timer
-            // has fired, every failure downstream of it is the timeout.
-            throw deadline.hasFired ? DeadlineExceeded() : error
+            // Success still wins — it is returned above. But once a watchdog
+            // has fired, every failure downstream of it is that watchdog's.
+            throw stopped.value ?? error
         }
     }
 }

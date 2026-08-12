@@ -45,6 +45,20 @@ public final class PipedChild: @unchecked Sendable {
 
     public var isRunning: Bool { lock.withLock { !exited } }
 
+    /// Returns once the child is gone.
+    ///
+    /// Polled rather than pushed: the `waitpid` that knows this runs on its
+    /// own thread, and handing a continuation across it would be a second
+    /// piece of concurrency in a file whose whole job is to keep the first one
+    /// simple. 50ms is far below any human-visible delay and this is only ever
+    /// awaited while something is being waited for anyway.
+    public func waitForExit() async {
+        while isRunning {
+            try? await Task.sleep(for: .milliseconds(50))
+            if Task.isCancelled { return }
+        }
+    }
+
     public init(executable: String,
                 arguments: [String] = [],
                 workingDirectory: URL? = nil,
