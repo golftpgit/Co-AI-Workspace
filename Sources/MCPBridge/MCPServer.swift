@@ -1,6 +1,7 @@
 import Foundation
 import AgentKit
 import Observability
+import Execution
 
 // ─────────────────────────────────────────────────────────────
 // M6/MCP — which servers to run (ARCHITECTURE §6.2, §10, P8.3).
@@ -159,30 +160,27 @@ extension String {
     }
 }
 
-/// Finds a bare command on `PATH`, the way a shell would.
+/// Finds the program a plugin or MCP server named.
+///
+/// Delegates to `ExecutableSearch` (P9.6) rather than walking `PATH` itself:
+/// a sandboxed app that resolves `python3` the way a shell would gets Apple's
+/// `xcrun` shim, which cannot start inside a sandbox — which is precisely how
+/// the first plugin installed in the real app failed, silently.
 public enum CommandLookup {
     public static func resolve(_ command: String,
                                environment: [String: String] = ProcessInfo.processInfo.environment)
         throws -> String {
-        if command.contains("/") {
-            guard FileManager.default.isExecutableFile(atPath: command) else {
-                throw MCPServerError.commandNotFound(command, searched: [])
+        do {
+            return try ExecutableSearch.resolve(command, environment: environment)
+        } catch let error as ExecutableSearchError {
+            // Re-thrown in this module's vocabulary so the status screen shows
+            // one kind of error, with the searched paths still in it.
+            switch error {
+            case .notFound(let name, let searched):
+                throw MCPServerError.commandNotFound(name, searched: searched)
+            case .onlyDeveloperShim:
+                throw MCPServerError.launchFailed(error.description)
             }
-            return command
         }
-        // The app's own PATH is short when it is launched from Finder rather
-        // than a shell, and `npx` lives in none of it. The usual places are
-        // appended so a server configured in Terminal still starts after a
-        // reboot — a difference that otherwise looks like the server breaking
-        // overnight.
-        let fallbacks = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
-        let path = (environment["PATH"] ?? "").split(separator: ":").map(String.init)
-        var searched: [String] = []
-        for directory in path + fallbacks where !searched.contains(directory) {
-            searched.append(directory)
-            let candidate = directory + "/" + command
-            if FileManager.default.isExecutableFile(atPath: candidate) { return candidate }
-        }
-        throw MCPServerError.commandNotFound(command, searched: searched)
     }
 }

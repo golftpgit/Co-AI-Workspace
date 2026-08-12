@@ -48,6 +48,22 @@ else
   echo "             app will fail to load its embedding model"
 fi
 
+# Every *other* SwiftPM resource bundle (P9.6). Not optional and not obvious:
+# `Bundle.module` resolves through the app's own resources at runtime, and its
+# last-resort fallback is the absolute path of *this machine's* build
+# directory. So a bundle left behind works perfectly here and traps on the
+# first machine that is not this one — `swift-transformers`' Hub calls
+# `Bundle.module`, and Hub is how a model gets loaded. The audit below fails
+# the build if any bundle the binary names is missing.
+BUILD_BUNDLES="$(dirname "$BIN_PATH")"
+for bundle in "$BUILD_BUNDLES"/*.bundle; do
+  [ -d "$bundle" ] || continue
+  name="$(basename "$bundle")"
+  [ -d "$APP/Contents/Resources/$name" ] && continue
+  cp -R "$bundle" "$APP/Contents/Resources/"
+  echo "    resource bundle: $name"
+done
+
 # §14.3 — App Intents. Siri, Shortcuts and Spotlight find intents by reading
 # Contents/Resources/Metadata.appintents, not by looking at the binary: an app
 # without this bundle has no intents as far as the system is concerned, however
@@ -109,5 +125,11 @@ codesign --verify --verbose=2 "$APP" 2>&1 | sed 's/^/    /'
 codesign -d --entitlements - "$APP" 2>/dev/null | grep -q "app-sandbox" \
   && echo "    sandbox entitlement present" \
   || { echo "    ERROR: sandbox entitlement missing"; exit 1; }
+
+echo "==> is it portable?"
+# P9.6 — the checks that only matter on a machine that is not this one. Run
+# here rather than left to a person to remember, because every one of them
+# passes locally whether or not it would pass anywhere else.
+"$ROOT/scripts/package-audit.sh" "$APP" || exit 1
 
 echo "==> built: $APP"
