@@ -110,6 +110,19 @@ public enum Schema {
         "DEFINE INDEX IF NOT EXISTS conflict_open ON conflict FIELDS decided",
         "DEFINE FIELD IF NOT EXISTS created_at ON conflict TYPE datetime",
 
+        // §12.4 — the pre-registration. The counts are denormalised so "which
+        // plans are still waiting for me" is a query rather than a decode of
+        // every row.
+        "DEFINE TABLE IF NOT EXISTS analysis_plan SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON analysis_plan TYPE string",
+        "DEFINE INDEX IF NOT EXISTS analysis_plan_uid ON analysis_plan FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS title ON analysis_plan TYPE string",
+        "DEFINE FIELD IF NOT EXISTS scope_kind ON analysis_plan TYPE string",
+        "DEFINE FIELD IF NOT EXISTS project_id ON analysis_plan TYPE option<string>",
+        "DEFINE FIELD IF NOT EXISTS approved ON analysis_plan TYPE bool",
+        "DEFINE INDEX IF NOT EXISTS analysis_plan_approved ON analysis_plan FIELDS approved",
+        "DEFINE FIELD IF NOT EXISTS updated_at ON analysis_plan TYPE datetime",
+
         "DEFINE TABLE IF NOT EXISTS schema_meta SCHEMALESS",
     ]
 }

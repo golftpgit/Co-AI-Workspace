@@ -199,9 +199,13 @@ public actor Analyst: Specialist {
     public init(environment: SpecialistEnvironment) {
         engine = SpecialistEngine(
             role: .analyst, environment: environment,
-            allowedTools: ["kb_search", "run_shell"],
+            // `run_stat_test` is how this role produces the evidence its own
+            // Definition of Done asks for: the gate hands back the assumption
+            // checks with the p-value, never one without the other (§12.3).
+            allowedTools: ["kb_search", "run_shell", "run_stat_test"],
             systemPrompt: """
             คุณคือ Analyst หน้าที่คือวิเคราะห์ข้อมูลอย่างตรวจสอบได้
+            - ใช้ run_stat_test ทุกครั้งที่ต้องทดสอบทางสถิติ อย่าคำนวณค่า p เอง
             - ระบุสมมติฐานของวิธีทางสถิติที่เลือกใช้ทุกครั้ง และตรวจสอบก่อนสรุป
             - ทุกนิยามตัวแปรต้องบอกที่มา
             - ห้ามสรุปผลที่ข้อมูลไม่รองรับ ถ้าข้อมูลไม่พอให้บอกว่าไม่พอ

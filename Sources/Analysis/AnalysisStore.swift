@@ -163,15 +163,24 @@ public actor AnalysisStore {
     }
 
     /// Reads a CSV or Parquet file into a table, letting DuckDB infer the
-    /// schema. The path is quoted, not concatenated.
+    /// schema.
     @discardableResult
     public func importFile(_ url: URL, into table: String) async throws -> QueryResult {
+        try await query(Self.importStatement(url, into: table))
+    }
+
+    /// The statement `importFile` would run.
+    ///
+    /// Exposed because an import overwrites a table of the same name, and the
+    /// screen has to put that in front of the SQL guard like any other
+    /// statement (P6.5) rather than keeping a second opinion about what is
+    /// destructive. The path is quoted, not concatenated.
+    public static func importStatement(_ url: URL, into table: String) -> String {
         let path = url.path(percentEncoded: false)
         let reader = url.pathExtension.lowercased() == "parquet"
-            ? "read_parquet(\(Self.quotedString(path)))"
-            : "read_csv_auto(\(Self.quotedString(path)))"
-        return try await query(
-            "CREATE OR REPLACE TABLE \(Self.quoted(table)) AS SELECT * FROM \(reader)")
+            ? "read_parquet(\(quotedString(path)))"
+            : "read_csv_auto(\(quotedString(path)))"
+        return "CREATE OR REPLACE TABLE \(quoted(table)) AS SELECT * FROM \(reader)"
     }
 
     /// The first column of a result, as text — the shape half the catalogue
@@ -185,7 +194,11 @@ public actor AnalysisStore {
     /// A double-quoted identifier, with any embedded quote doubled — the SQL
     /// standard's escape, and the reason a table name can never become a
     /// statement.
-    static func quoted(_ identifier: String) -> String {
+    ///
+    /// Public because the explorer builds `SELECT * FROM <table>` out of a name
+    /// the user clicked, and it must use this rather than a second attempt at
+    /// the same escape.
+    public static func quoted(_ identifier: String) -> String {
         "\"" + identifier.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }
 

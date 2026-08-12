@@ -35,9 +35,10 @@ private struct RootView: View {
     @State private var team = TeamViewModel()
     @State private var models = ModelsViewModel()
     @State private var endpoints = EndpointsViewModel()
+    @State private var analysis = AnalysisViewModel()
 
     enum Screen: String, CaseIterable, Identifiable {
-        case chat, knowledge, conflicts, team, models, endpoints
+        case chat, knowledge, conflicts, team, analysis, models, endpoints
         var id: String { rawValue }
 
         var label: String {
@@ -46,6 +47,7 @@ private struct RootView: View {
             case .knowledge: "คลังความรู้"
             case .conflicts: "ข้อขัดแย้ง"
             case .team: "ทีม"
+            case .analysis: "วิเคราะห์"
             case .models: "โมเดล"
             case .endpoints: "ระยะไกล"
             }
@@ -57,6 +59,7 @@ private struct RootView: View {
             case .knowledge: "books.vertical"
             case .conflicts: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90"
             case .team: "person.3"
+            case .analysis: "tablecells"
             case .models: "cpu"
             case .endpoints: "network"
             }
@@ -85,6 +88,15 @@ private struct RootView: View {
                         .task { await team.attach(team: engine.team,
                                                   ledger: engine.taskLedger,
                                                   gateway: engine.gateway) }
+                case .analysis:
+                    AnalysisView(model: analysis)
+                        .task {
+                            await analysis.attach(store: engine.analysis,
+                                                  kernel: engine.notebookKernel,
+                                                  library: engine.notebooks)
+                            await analysis.attach(plans: engine.plans,
+                                                  detector: engine.gapDetector)
+                        }
                 case .endpoints:
                     EndpointsView(model: endpoints)
                         .task {

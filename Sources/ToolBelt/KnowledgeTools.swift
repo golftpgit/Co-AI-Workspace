@@ -221,4 +221,37 @@ struct Arguments {
     func int(_ key: String) -> Int? {
         values[key] as? Int ?? (values[key] as? String).flatMap(Int.init)
     }
+
+    func strings(_ key: String) -> [String] {
+        values[key] as? [String] ?? []
+    }
+
+    /// A list of numbers. JSON gives back `NSNumber`, so integers and doubles
+    /// arrive indistinguishably and both have to be accepted.
+    func numbers(_ key: String) throws -> [Double] {
+        guard let raw = values[key] as? [Any] else {
+            throw ToolError.invalidArguments("ต้องมี \(key) เป็นรายการตัวเลข")
+        }
+        return try raw.map {
+            guard let number = $0 as? NSNumber else {
+                throw ToolError.invalidArguments("\(key) มีค่าที่ไม่ใช่ตัวเลข: \($0)")
+            }
+            return number.doubleValue
+        }
+    }
+
+    /// A list of lists of numbers — groups, or a contingency table.
+    func matrix(_ key: String) throws -> [[Double]] {
+        guard let raw = values[key] as? [[Any]] else {
+            throw ToolError.invalidArguments("ต้องมี \(key) เป็นรายการของรายการตัวเลข")
+        }
+        return try raw.map { row in
+            try row.map {
+                guard let number = $0 as? NSNumber else {
+                    throw ToolError.invalidArguments("\(key) มีค่าที่ไม่ใช่ตัวเลข: \($0)")
+                }
+                return number.doubleValue
+            }
+        }
+    }
 }

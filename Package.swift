@@ -72,8 +72,12 @@ let package = Package(
         // M8 — analysis: DuckDB, the connectors, and the SQL that runs against
         // them (ARCHITECTURE §12). Knows nothing about agents or models, so it
         // can be measured on its own.
+        // Execution is here for the notebook kernel (P6.4): a Python kernel is
+        // a process that outlives every cell, and §13 owns processes — spawning
+        // one from this target would be a second way to start a child that the
+        // kill switch does not know about.
         .target(name: "Analysis",
-                dependencies: ["AgentKit", "Observability",
+                dependencies: ["AgentKit", "Observability", "Execution",
                                .product(name: "DuckDB", package: "duckdb-swift")]),
 
         // M9 — every process the system runs: sandbox profile, process group
@@ -82,9 +86,12 @@ let package = Package(
 
         // M6 — the tools themselves. Depends on Execution, never the reverse,
         // and CoreEngine never depends on this: tools plug in via AgentTool.
+        // Analysis is here for `run_stat_test` (P6.6): the Statistical
+        // Verification Gate is only a feature once the Analyst can reach it —
+        // §12.3 is a hook on the Analyst's work, not a library on the shelf.
         .target(name: "ToolBelt",
                 dependencies: ["AgentKit", "Observability", "Execution",
-                               "Knowledge", "WebSearch"]),
+                               "Knowledge", "WebSearch", "Analysis"]),
 
         // M7 — the knowledge base's own logic: tokenisation, chunking and the
         // lexical half of hybrid search (ARCHITECTURE §11). Deliberately free

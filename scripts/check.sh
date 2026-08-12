@@ -103,13 +103,27 @@ fi
 # screen permanently empty. Each capability below must be reachable from the
 # wiring, not just from its own tests.
 UNWIRED=""
-for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer Researcher ContextManager LocalTier ModelInstaller BudgetGovernor EndpointProbe AnalysisStore; do
+for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer Researcher ContextManager LocalTier ModelInstaller BudgetGovernor EndpointProbe AnalysisStore NotebookKernel NotebookRunner NotebookStore \
+                  StatTestTool GapDetector AnalysisPlanStore; do
   grep -rq "$capability(" Sources/CoAIWorkspaceApp --include=*.swift || UNWIRED="$UNWIRED $capability"
 done
 if [ -n "$UNWIRED" ]; then
   fail "built but never wired into the app:$UNWIRED"
 else
   ok "capabilities are reachable from the app, not just from tests"
+fi
+
+# ARCHITECTURE §12.5 / P6.5: the "does this statement change anything" check
+# belongs to SQLGuard and nowhere else. v1 kept one copy in the notebook and one
+# in the DB explorer; they drifted, and the same DELETE warned on one screen and
+# ran silently on the other. A second copy would have to name the verbs.
+SQL_GUARD_COPIES=$(grep -rlE '"(DROP|TRUNCATE|DELETE|INSERT|ALTER)[ "]' \
+  Sources/Analysis Sources/CoAIWorkspaceApp --include='*.swift' \
+  | grep -v "SQLGuard.swift" || true)
+if [ -n "$SQL_GUARD_COPIES" ]; then
+  fail "a second mutating-statement check outside SQLGuard: $SQL_GUARD_COPIES"
+else
+  ok "the SQL guard exists once, for both the notebook and the DB explorer"
 fi
 
 if grep -rn ": \[String: Any\]" Sources --include=*.swift | grep -q "Sendable"; then
