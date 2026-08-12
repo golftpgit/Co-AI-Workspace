@@ -220,7 +220,12 @@ let package = Package(
         // CoreEngine is here for the reason P8.3 exists: the Done-when is that
         // an MCP tool reaches a real session's tool list, and the gateway is
         // where that is either true or not (v1 bug D6).
-        .testTarget(name: "MCPBridgeTests", dependencies: ["MCPBridge", "CoreEngine"]),
+        // Roster is here for P8.4: a plugin is a packaged MCP server, and
+        // "installed, therefore usable" is a claim only these two together can
+        // check — Roster may not import MCPBridge (it must not be able to
+        // reach an AgentTool), so the join lives in the test.
+        .testTarget(name: "MCPBridgeTests",
+                    dependencies: ["MCPBridge", "CoreEngine", "Roster"]),
         .testTarget(name: "DocGenTests", dependencies: ["DocGen", "Knowledge"]),
         // CoreEngine is here so the role→tool table in Roster is checked
         // against the specialists it mirrors, rather than trusted.

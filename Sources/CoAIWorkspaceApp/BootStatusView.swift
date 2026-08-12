@@ -7,6 +7,9 @@ import Sidecar
 /// shows — and what the user sees instead of an empty window when boot fails.
 struct BootStatusView: View {
     let environment: AppEnvironment
+    /// P8.4 — owned here rather than rebuilt on each body pass, for the reason
+    /// every other view model on this project is owned by its screen.
+    @State private var plugins = PluginsViewModel()
 
     var body: some View {
         ScrollView {
@@ -18,6 +21,15 @@ struct BootStatusView: View {
                 configSection
                 sidecarSection
                 engineSection
+                if let engine = environment.engine {
+                    Divider()
+                    PluginsSection(model: plugins)
+                        .task {
+                            await plugins.attach(registry: engine.plugins,
+                                                 mcp: engine.mcp,
+                                                 gateway: engine.gateway)
+                        }
+                }
                 if !environment.notes.isEmpty { notesSection }
             }
             .padding(28)
