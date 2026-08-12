@@ -97,8 +97,22 @@ public final class LocalTier: LLMExecutor {
         return executor.respond(to: request)
     }
 
+    /// Whether the selected model's weights are in memory right now.
+    ///
+    /// The models screen shows this because it is the difference between a
+    /// reply that starts in a second and one that starts in twenty — and
+    /// because 4.5 GB held by a model nobody is talking to is 4.5 GB the rest
+    /// of the machine wants back (§9.4).
+    public var isResident: Bool {
+        get async {
+            guard let executor = selection.withLock({ $0?.executor }) else { return false }
+            return await executor.isResident
+        }
+    }
+
     /// Frees the weights now — the model manager calls this before deleting
-    /// the files a running executor still has open.
+    /// the files a running executor still has open, and the eject button calls
+    /// it because the user wants their memory back.
     public func unloadSelected() async {
         guard let executor = selection.withLock({ $0?.executor }) else { return }
         await executor.unload()

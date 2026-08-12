@@ -4,6 +4,7 @@ import AgentKit
 import Persistence
 import LLMProviders
 import CoreEngine
+import MLXRuntime
 
 // ─────────────────────────────────────────────────────────────
 // Chat view model (ARCHITECTURE §14.2).
@@ -34,6 +35,17 @@ final class ChatViewModel {
     private(set) var isRunning = false
     private(set) var routedVia: String?
     private(set) var loadError: String?
+    /// The context meter. Kept in front of the user the whole time rather than
+    /// appearing once as a note when compaction happens: by then the messages
+    /// they were reading have already been summarised away (§5.6).
+    private(set) var contextTokens = 0
+    private(set) var contextBudget = 0
+    /// Which local model Tier 0.5 will use, and what else is installed —
+    /// switchable from the composer, because the model is a decision about
+    /// *this* turn, not a setting to go and find.
+    private(set) var localModels: [LocalModel] = []
+    private(set) var localModelName: String?
+    private(set) var localModelResident = false
 
     var input: String = ""
     var pendingApproval: ApprovalRequest?
@@ -128,6 +140,27 @@ final class ChatViewModel {
         }
     }
 
+    // MARK: - the model behind Tier 0.5
+
+    func refreshLocalModels() async {
+        localModels = await engine.modelCatalog.installed()
+        localModelName = engine.localTier.selected?.name
+        localModelResident = await engine.localTier.isResident
+    }
+
+    func useLocalModel(_ model: LocalModel) async {
+        engine.localTier.select(model)
+        await refreshLocalModels()
+    }
+
+    /// Hands the memory back without quitting anything. The next message
+    /// reloads the weights; on a 16 GB machine that trade is often worth it,
+    /// which is why LM Studio puts an eject button on every loaded model.
+    func unloadLocalModel() async {
+        await engine.localTier.unloadSelected()
+        await refreshLocalModels()
+    }
+
     // MARK: - turns
 
     func send() async {
@@ -171,6 +204,11 @@ final class ChatViewModel {
             break                                   // already on screen
         case .routed(let executor, let tier):
             routedVia = "\(executor) · tier \(tier.label)"
+        case .usage(let prompt, let completion, let budget):
+            // The prompt is what fills the window; the completion joins it on
+            // the next turn.
+            contextTokens = prompt + completion
+            contextBudget = budget
         case .assistantDelta(let chunk):
             appendToStreamingBubble(chunk)
         // One call, one card. It appears with the arguments the moment the
