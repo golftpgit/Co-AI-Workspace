@@ -150,6 +150,16 @@ else
   ok "the SQL guard exists once, for both the notebook and the DB explorer"
 fi
 
+# ARCHITECTURE §14.4 / P8.7: accessibility is a requirement from the start, not
+# a pass at the end. v1 had no `aria-*` at all and then had to go back through
+# 16 buttons in 8 files — a requirement nothing enforces is a preference, so
+# these rules fail the build like the structural ones above.
+if /usr/bin/python3 "$ROOT/scripts/accessibility-audit.py" Sources; then
+  ok "every action is reachable without a mouse, and says what it does"
+else
+  fail "accessibility rules (see above)"
+fi
+
 if grep -rn ": \[String: Any\]" Sources --include=*.swift | grep -q "Sendable"; then
   fail "[String: Any] on a Sendable type (see ARCHITECTURE App. C)"
 else

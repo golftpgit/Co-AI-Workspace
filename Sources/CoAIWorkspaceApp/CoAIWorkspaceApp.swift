@@ -144,6 +144,21 @@ private struct RootView: View {
                     Label("สถานะระบบ", systemImage: "heart.text.square")
                 }
                 .accessibilityLabel("สลับไปดูสถานะระบบ")
+                .keyboardShortcut("0", modifiers: .command)
+            }
+        }
+        // §14.4 / P8.7 — a segmented picker in a toolbar is reachable from the
+        // keyboard only if the person has turned Full Keyboard Access on, and
+        // "you can get there by changing a system setting" is not the same as
+        // "you can get there". ⌘1…⌘7 is: it works for everybody, including the
+        // people who use it because it is faster.
+        .background {
+            ForEach(Array(Screen.allCases.enumerated()), id: \.element) { index, target in
+                Button("") { screen = target; showingStatus = false }
+                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")),
+                                      modifiers: .command)
+                    .opacity(0)
+                    .accessibilityHidden(true)
             }
         }
     }

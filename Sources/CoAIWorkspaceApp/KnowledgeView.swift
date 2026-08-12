@@ -58,6 +58,9 @@ struct KnowledgeView: View {
                             pendingDeletion = document
                         }
                     }
+                    .accessibilityAction(named: "ลบเอกสารนี้") {
+                        pendingDeletion = document
+                    }
             }
             .listStyle(.sidebar)
             .overlay {

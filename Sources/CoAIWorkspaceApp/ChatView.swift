@@ -105,6 +105,9 @@ private struct ChatScreen: View {
                         Task { await model.delete(conversation) }
                     }
                 }
+                .accessibilityAction(named: "ลบบทสนทนานี้") {
+                    Task { await model.delete(conversation) }
+                }
             }
         }
         .navigationTitle("บทสนทนา")
