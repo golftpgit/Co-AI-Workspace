@@ -238,8 +238,13 @@ struct Engine: Sendable {
             file: paths.root.appending(path: "channels.json"))
         let channelRouter = ChannelRouter(runner: runner, conversations: conversations,
                                           modes: .default)
-        for account in channelAccounts.load(platform: .telegram) where account.isReady {
-            let channel = TelegramChannel(account: account, answering: broker)
+        for account in channelAccounts.load() where account.isReady {
+            let channel: any RunnableChannel
+            switch account.platform {
+            case .telegram: channel = TelegramChannel(account: account, answering: broker)
+            case .discord: channel = DiscordChannel(account: account, answering: broker)
+            case .line: channel = LINEChannel(account: account, answering: broker)
+            }
             await broker.subscribe(channel)
             await channelRouter.register(channel, for: account.id)
             await channel.start(handler: channelRouter)
