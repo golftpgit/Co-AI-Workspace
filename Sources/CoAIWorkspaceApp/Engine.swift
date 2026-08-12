@@ -13,6 +13,7 @@ import MLXRuntime
 import Analysis
 import Channels
 import Roster
+import MCPBridge
 
 // ─────────────────────────────────────────────────────────────
 // Everything the running system is made of, assembled once at boot.
@@ -96,6 +97,14 @@ struct Engine: Sendable {
     /// model that stopped following instructions.
     let roster: [RosterEntry]
     let rosterProblems: [String]
+    /// §6.2 — other people's tools. Held here for the reason this whole task
+    /// exists: v1's MCP client was complete, tested and reachable from
+    /// nothing (D6). A registry on the engine, whose tools are registered in
+    /// the gateway below, is what makes it a feature instead of a module.
+    let mcpServers: MCPServerStore
+    let mcp: MCPRegistry
+    let mcpConnected: [MCPRegistry.Connected]
+    let mcpProblems: [String]
 
     static func build(config: BootstrapConfig, paths: AppPaths) async throws -> Engine {
         let client = SurrealClient(url: URL(string: "ws://127.0.0.1:\(config.surrealPort)/rpc")!)
@@ -257,6 +266,19 @@ struct Engine: Sendable {
             await channel.start(handler: channelRouter)
         }
 
+        // §6.2 — MCP servers, connected and put on the tool list. This runs
+        // before the roster is read, and that order is the point: a manifest
+        // may name `mcp__…` in its `tools:`, and P8.1 validates those names
+        // against what is registered. Registered after the built-ins so a
+        // server cannot shadow `run_shell` by offering a tool of that name —
+        // the namespace prevents it, and the order means it could not win
+        // anyway.
+        let mcpServers = MCPServerStore(file: paths.root.appending(path: "mcp-servers.json"))
+        let mcp = MCPRegistry()
+        let mcpOutcome = await mcp.connectAll(mcpServers.load())
+        await gateway.register(mcp.tools())
+        let mcpProblems = mcpOutcome.failures.map { "MCP '\($0.name)': \($0.reason)" }
+
         // §7 — the roster. Validated against the tools that are actually
         // registered, so a name that does not exist is caught here rather than
         // mid-turn.
@@ -293,7 +315,9 @@ struct Engine: Sendable {
                       plans: AnalysisPlanStore(client: client),
                       gapDetector: GapDetector(router: router),
                       channelAccounts: channelAccounts, channelRouter: channelRouter,
-                      roster: roster, rosterProblems: rosterProblems)
+                      roster: roster, rosterProblems: rosterProblems,
+                      mcpServers: mcpServers, mcp: mcp,
+                      mcpConnected: mcpOutcome.connected, mcpProblems: mcpProblems)
     }
 
     /// Nothing the engine started may outlive the app (§13).
@@ -303,6 +327,9 @@ struct Engine: Sendable {
         // The kernel is a process too, and it is not in the registry — it
         // outlives every cell by design, so it has to be closed by name.
         await notebookKernel?.stop()
+        // Same rule, same reason: an MCP server is a child process, and it is
+        // not in the registry either.
+        await mcp.shutdown()
         await channelRouter.stopAll()
         await client.close()
     }

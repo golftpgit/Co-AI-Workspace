@@ -109,6 +109,7 @@ fi
 UNWIRED=""
 for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer Researcher ContextManager LocalTier ModelInstaller BudgetGovernor EndpointProbe AnalysisStore NotebookKernel NotebookRunner NotebookStore \
                   StatTestTool GapDetector AnalysisPlanStore ConnectorStore OfficeWriter \
+                  MCPRegistry MCPServerStore \
                   TelegramChannel DiscordChannel LINEChannel ChannelRouter LimitationsBuilder ManifestParser; do
   grep -rqE "$capability[(.]" Sources/CoAIWorkspaceApp --include=*.swift || UNWIRED="$UNWIRED $capability"
 done
