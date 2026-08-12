@@ -183,31 +183,105 @@ private struct ChatScreen: View {
 
     // MARK: - composer
 
+    /// The model and the context meter live here, next to the text, rather
+    /// than in a settings screen — both are facts about *this* turn, and both
+    /// are what a person reaches for mid-conversation ("run this on something
+    /// bigger", "how much room is left?"). Local model managers put them in
+    /// the same place for the same reason.
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            TextField("พิมพ์ข้อความ…", text: $model.input, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1...8)
-                .padding(10)
-                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
-                .onSubmit { Task { await model.send() } }
-                .accessibilityLabel("ข้อความถึงผู้ช่วย")
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .bottom, spacing: 10) {
+                TextField("พิมพ์ข้อความ…", text: $model.input, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...8)
+                    .padding(10)
+                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+                    .onSubmit { Task { await model.send() } }
+                    .accessibilityLabel("ข้อความถึงผู้ช่วย")
 
-            if model.isRunning {
-                Button(role: .destructive) { model.stop() } label: {
-                    Label("หยุด", systemImage: "stop.fill")
+                if model.isRunning {
+                    Button(role: .destructive) { model.stop() } label: {
+                        Label("หยุด", systemImage: "stop.fill")
+                    }
+                    .accessibilityLabel("หยุดการทำงานรอบนี้")
+                } else {
+                    Button { Task { await model.send() } } label: {
+                        Label("ส่ง", systemImage: "arrow.up.circle.fill")
+                    }
+                    .disabled(model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .accessibilityLabel("ส่งข้อความ")
                 }
-                .accessibilityLabel("หยุดการทำงานรอบนี้")
-            } else {
-                Button { Task { await model.send() } } label: {
-                    Label("ส่ง", systemImage: "arrow.up.circle.fill")
-                }
-                .disabled(model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .keyboardShortcut(.return, modifiers: .command)
-                .accessibilityLabel("ส่งข้อความ")
             }
+            composerFooter
         }
         .padding(16)
+        .task { await model.refreshLocalModels() }
+    }
+
+    private var composerFooter: some View {
+        HStack(spacing: 10) {
+            localModelPicker
+            if model.localModelResident {
+                // The eject button, in the sense LM Studio means it: the
+                // weights are holding gigabytes and the user may want them
+                // back without quitting anything.
+                Button("ปลดจากหน่วยความจำ") { Task { await model.unloadLocalModel() } }
+                    .buttonStyle(.link)
+                    .accessibilityLabel("ปลดโมเดลออกจากหน่วยความจำ")
+            }
+            Spacer()
+            if model.contextBudget > 0 {
+                Text("บริบท \(compact(model.contextTokens)) / \(compact(model.contextBudget))")
+                    .monospacedDigit()
+                    .foregroundStyle(model.contextTokens > model.contextBudget * 3 / 4
+                                     ? Color.orange : Color.secondary)
+                    // Orange from the point compaction starts (§5.6 compacts at
+                    // 75%), so the summarising is never a surprise.
+                    .help("ระบบจะย่อบทสนทนาเมื่อถึง 75% ของงบ")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
+    @ViewBuilder
+    private var localModelPicker: some View {
+        if model.localModels.isEmpty {
+            Label("ยังไม่มีโมเดลบนเครื่อง", systemImage: "cpu")
+                .foregroundStyle(.orange)
+        } else {
+            Menu {
+                ForEach(model.localModels, id: \.name) { local in
+                    Button {
+                        Task { await model.useLocalModel(local) }
+                    } label: {
+                        if local.name == model.localModelName {
+                            Label(local.name, systemImage: "checkmark")
+                        } else {
+                            Text(local.name)
+                        }
+                    }
+                }
+            } label: {
+                Label(model.localModelName.map(shortModelName) ?? "เลือกโมเดล",
+                      systemImage: model.localModelResident ? "cpu.fill" : "cpu")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("โมเดลบนเครื่องสำหรับ Tier 0.5" +
+                  (model.localModelResident ? " — โหลดอยู่ในหน่วยความจำ" : ""))
+        }
+    }
+
+    /// `mlx-community/Qwen3-VL-4B-Instruct-4bit` is the identity; the publisher
+    /// is not what anyone reads at a glance.
+    private func shortModelName(_ name: String) -> String {
+        name.split(separator: "/").last.map(String.init) ?? name
+    }
+
+    private func compact(_ tokens: Int) -> String {
+        tokens >= 1_000 ? String(format: "%.1fK", Double(tokens) / 1_000) : "\(tokens)"
     }
 }
 

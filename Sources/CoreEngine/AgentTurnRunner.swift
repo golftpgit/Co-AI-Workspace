@@ -25,6 +25,11 @@ public enum TurnEvent: Sendable {
     /// card it already drew instead of appending a second one.
     case toolCallStarted(id: String, name: String, argumentsJSON: String)
     case toolCallFinished(id: String, name: String, text: String, executed: Bool)
+    /// What this turn cost so far, against the transcript budget. Reported as
+    /// it happens rather than only on the span: a context window that fills
+    /// silently is how a conversation gets compacted out from under someone
+    /// who was reading it.
+    case usage(promptTokens: Int, completionTokens: Int, budget: Int)
     /// Something the user should know that is not part of the answer.
     case note(String)
     case assistantMessageStored(StoredMessage)
@@ -275,6 +280,9 @@ public actor AgentTurnRunner {
                     case .usage(let usage):
                         turnSpan.promptTokens = (turnSpan.promptTokens ?? 0) + usage.promptTokens
                         turnSpan.completionTokens = (turnSpan.completionTokens ?? 0) + usage.completionTokens
+                        emit(.usage(promptTokens: usage.promptTokens,
+                                    completionTokens: usage.completionTokens,
+                                    budget: contextManager.budget))
                     case .finished:
                         break
                     }
