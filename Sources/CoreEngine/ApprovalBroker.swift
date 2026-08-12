@@ -34,7 +34,7 @@ public enum ApprovalOutcome: Sendable, Equatable {
     }
 }
 
-public actor ApprovalBroker: ApprovalRequesting {
+public actor ApprovalBroker: ApprovalRequesting, ApprovalAnswering {
     private struct Pending {
         let request: ApprovalRequest
         var continuation: CheckedContinuation<ApprovalOutcome, Never>?

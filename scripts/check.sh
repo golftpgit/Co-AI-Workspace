@@ -33,6 +33,10 @@ if swift build 2>&1 | tail -3; then ok "build"; else fail "build"; fi
 step "tests"
 TEST_OUT="$(swift test 2>&1)"
 echo "$TEST_OUT" | grep -E "Test run with|error:" | tail -5
+# Which ones. A failing run that does not name the test is a signal nobody can
+# act on — and the timing-dependent pair in U12 only fails while the machine is
+# busy, which is exactly when this script is running.
+echo "$TEST_OUT" | grep '✘ Test "' | sed 's/^/   ✗ /' | head -10
 # What the suite could not check. Not failures — a machine with no
 # OpenAI-compatible endpoint is the state P5.4 is working towards — but they
 # stay in front of a person, because a silent skip reads exactly like a pass.
@@ -111,6 +115,23 @@ if [ -n "$UNWIRED" ]; then
   fail "built but never wired into the app:$UNWIRED"
 else
   ok "capabilities are reachable from the app, not just from tests"
+fi
+
+# ARCHITECTURE §8 / P7.4: no channel may reach a tool. v1's bug B2 was a
+# Telegram bridge that ran tools without passing the hook chain, and the fix is
+# structural: M4 does not depend on ToolBelt or CoreEngine, so the gateway and
+# the tools are not in scope there. Both halves are checked — the import in any
+# source file, and the dependency line in Package.swift that would allow it.
+CHANNEL_IMPORTS=$(grep -rlE "^import (ToolBelt|CoreEngine|Execution)" Sources/Channels \
+  --include='*.swift' 2>/dev/null || true)
+# The target's own declaration line only — "Channels" also appears in the app
+# target's dependency list, which is where it is *supposed* to be.
+CHANNEL_DEPS=$(grep 'name: "Channels", dependencies:' Package.swift \
+  | grep -E '"(ToolBelt|CoreEngine|Execution)"' || true)
+if [ -n "$CHANNEL_IMPORTS" ] || [ -n "$CHANNEL_DEPS" ]; then
+  fail "a channel can reach the tool layer: $CHANNEL_IMPORTS $CHANNEL_DEPS"
+else
+  ok "no channel can call a tool — the types are not in its module graph"
 fi
 
 # ARCHITECTURE §12.5 / P6.5: the "does this statement change anything" check
