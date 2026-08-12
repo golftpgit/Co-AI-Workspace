@@ -209,6 +209,15 @@ struct Engine: Sendable {
             // the notebook's operator can ask for the same check by hand.
             StatTestTool(),
         ])
+        // §7.3 / P8.5 — the agent writing down what it worked out. Registered
+        // like any other tool, because that is the whole point: it goes through
+        // the hook chain rather than around it. The tool list it validates a
+        // skill against is read at call time from this same gateway, so a
+        // skill may name a tool that arrived after boot — an MCP server's, or
+        // a plugin's.
+        await gateway.register(WriteSkillTool(
+            directory: paths.skillsDirectory,
+            knownTools: { [gateway] in Set(await gateway.registeredNames) }))
 
         // The budget is what this machine can actually serve, not what the
         // endpoint advertises. VLLMExecutor declares a 32k window; measured on

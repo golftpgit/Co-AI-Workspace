@@ -114,9 +114,14 @@ let package = Package(
         // Analysis is here for `run_stat_test` (P6.6): the Statistical
         // Verification Gate is only a feature once the Analyst can reach it —
         // §12.3 is a hook on the Analyst's work, not a library on the shelf.
+        // Roster is here for `write_skill` (P8.5): a skill an agent writes has
+        // to be validated by the same parser that will load it, and a second
+        // copy of §7.2's format in the tool layer would be the copy that
+        // drifts. The dependency only goes this way — Roster must never be
+        // able to see a tool.
         .target(name: "ToolBelt",
                 dependencies: ["AgentKit", "Observability", "Execution",
-                               "Knowledge", "WebSearch", "Analysis"]),
+                               "Knowledge", "WebSearch", "Analysis", "Roster"]),
 
         // M6/MCP — other people's tools (ARCHITECTURE §6.2, P8.3). Its own
         // target rather than part of ToolBelt so the SDK, its NIO and its
@@ -234,6 +239,6 @@ let package = Package(
         // database and a real sidecar alongside the tools and the gate.
         .testTarget(name: "ToolBeltTests",
                     dependencies: ["ToolBelt", "CoreEngine", "Persistence", "Sidecar", "Config",
-                                   "Knowledge", "WebSearch"]),
+                                   "Knowledge", "WebSearch", "Roster"]),
     ]
 )

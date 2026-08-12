@@ -254,6 +254,57 @@ public struct ManifestParser: Sendable {
         return (manifests, errors)
     }
 
+    // MARK: - writing one
+
+    /// §7.2's format, produced rather than parsed (P8.5).
+    ///
+    /// It is here, next to the parser, for the reason the parser is shared
+    /// between agents and skills: two places that know the format would drift,
+    /// and the first thing to drift would be `tools:`. A writer in the tool
+    /// layer would be that second place.
+    ///
+    /// Note what this cannot emit. There is no parameter for `risk` or
+    /// `bypass_gate` — they are not fields a manifest may have (P8.2), so a
+    /// skill an agent writes cannot contain one even by accident.
+    public static func text(name: String,
+                            description: String,
+                            tools: [String] = [],
+                            base: Role? = nil,
+                            definitionOfDone: String? = nil,
+                            modelTier: Int? = nil,
+                            body: String) -> String {
+        var lines = ["---", "name: \(name)", "description: \(description)"]
+        if !tools.isEmpty { lines.append("tools: \(tools.joined(separator: ", "))") }
+        if let base { lines.append("base: \(base.rawValue)") }
+        if let modelTier { lines.append("model_tier: \(modelTier)") }
+        if let definitionOfDone, !definitionOfDone.isEmpty {
+            lines.append("definition_of_done: \(definitionOfDone)")
+        }
+        lines.append("---")
+        lines.append("")
+        lines.append(body.trimmingCharacters(in: .whitespacesAndNewlines))
+        lines.append("")
+        return lines.joined(separator: "\n")
+    }
+
+    /// A filename that is the skill's name and nothing else.
+    ///
+    /// Refused rather than repaired. Sanitising `../evil` into `---evil` is
+    /// safe — it does not escape anywhere — but it saves a file under a name
+    /// nobody asked for, and a writer that quietly renames things is a writer
+    /// whose output cannot be predicted from its input. A name that cannot be
+    /// a filename is a name to reject while there is still somebody to tell.
+    public static func fileName(for name: String) -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        // Anything that would make this more than one path component, or that
+        // names a directory rather than a file.
+        guard !trimmed.contains("/"), !trimmed.contains("\\"), !trimmed.contains(":"),
+              !trimmed.contains(where: \.isNewline),
+              trimmed.contains(where: { $0 != "." }) else { return nil }
+        return trimmed + ".md"
+    }
+
     // MARK: - the format
 
     /// Splits `---\n…\n---\n` off the front. Returns nil when the first line is
