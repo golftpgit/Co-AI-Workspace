@@ -3,6 +3,7 @@ import AgentKit
 import LLMProviders
 import MLX
 import MLXLLM
+import MLXVLM
 import MLXLMCommon
 
 // ─────────────────────────────────────────────────────────────
@@ -142,16 +143,91 @@ public actor MLXExecutor: LLMExecutor {
         inFlight += 1
         defer { finishedRequest() }
 
+        guard let schema = request.responseSchema else {
+            _ = try await run(request, attempt: 0, container: container, into: continuation)
+            return
+        }
+
+        // A schema request gets a second go (P5.4). Measured on Qwen3-VL-4B:
+        // the same routing request came back as clean JSON one run and as
+        // `{"role: "researcher", needsClarification: false` the next — a key
+        // missing its closing quote and no closing brace. A 4B model is simply
+        // not reliable at punctuation, and this tier is the floor: a retry
+        // costs a second, while giving up costs conflict detection its answer
+        // and writes silence into the ledger (U13).
+        var lastAnswer = ""
+        for attempt in 0..<2 {
+            let result = try await run(request, attempt: attempt,
+                                       container: container, into: continuation)
+            // The answer first, then the thinking: a model that reasons its way
+            // to the object and then runs out of budget before repeating it has
+            // still produced it — the same accommodation
+            // `LLMCompletion.structuredText` makes for the hosted tiers.
+            if let json = StructuredOutput.object(in: result.answer)
+                ?? StructuredOutput.object(in: result.thoughts) {
+                continuation.yield(.textDelta(json))
+                continuation.yield(.finished(reason: result.finishReason))
+                return
+            }
+            lastAnswer = result.answer.isEmpty ? result.thoughts : result.answer
+            if result.finishReason == "length" {
+                lastAnswer = "ran out of tokens after \(request.maxTokens)"
+                break      // a second pass would run out in the same place
+            }
+        }
+        // Escalatable on purpose: a larger model on another tier can very well
+        // produce the JSON this one could not. Returning the prose instead
+        // would hand the caller an empty decode, which is how "no conflicts
+        // found" gets written for every document.
+        throw LLMError.unsupported(
+            "\(identifier) produced no JSON for schema \(schema.name) in two attempts: "
+            + String(lastAnswer.prefix(120)))
+    }
+
+    private struct Attempt {
+        var answer = ""
+        var thoughts = ""
+        var toolCalls = 0
+        var finishReason = "stop"
+    }
+
+    /// One pass through the model.
+    ///
+    /// `attempt` is the retry counter: the second pass says plainly that the
+    /// first reply was not JSON, which is far more effective on a small model
+    /// than repeating the schema louder.
+    private func run(_ request: LLMRequest, attempt: Int, container: ModelContainer,
+                     into continuation: AsyncThrowingStream<LLMEvent, Error>.Continuation) async throws -> Attempt {
         // A schema request cannot stream: the JSON has to be found in the
         // finished text, so the answer is collected and emitted at the end.
-        // Reasoning still streams — it is what shows the app is alive.
+        // A tool request is held back for the same reason — a tool call the
+        // library's parser missed has to be dug out of the finished text
+        // (`ToolCallSalvage`), and markup already streamed cannot be taken
+        // back. Reasoning still streams either way: it is what shows the app
+        // is alive.
         let wantsJSON = request.responseSchema != nil
+        let wantsTools = !request.tools.isEmpty
+        let buffersAnswer = wantsJSON || wantsTools
         let context = Self.templateContext(wantsJSON: wantsJSON)
+
         let session = ChatSession(
             container,
-            instructions: Self.instructions(for: request),
-            generateParameters: GenerateParameters(maxTokens: request.maxTokens,
-                                                   temperature: Float(request.temperature)),
+            instructions: Self.instructions(for: request, attempt: attempt),
+            generateParameters: GenerateParameters(
+                maxTokens: request.maxTokens,
+                // Small models fall into repetition loops on long, messy
+                // prompts — measured: asked a Thai question over a compacted
+                // 2.3k-token transcript, Qwen3-VL-4B answered "ไมรนบน" three
+                // hundred times. A hosted endpoint applies a penalty by
+                // default; mlx-swift-lm applies none unless asked.
+                // Sampling is what turns a well-formed object into one with a
+                // quote missing, so the first pass is greedy. The retry has to
+                // sample *differently*, though: at temperature 0 a second
+                // attempt reproduces the first mistake token for token, which
+                // is exactly what the first retry did.
+                temperature: wantsJSON ? (attempt == 0 ? 0 : 0.4)
+                                       : Float(request.temperature),
+                repetitionPenalty: 1.05, repetitionContextSize: 64),
             additionalContext: context,
             tools: try Self.toolSpecs(for: request))
 
@@ -163,10 +239,7 @@ public actor MLXExecutor: LLMExecutor {
             ChatTemplate.opensReasoningBlock(model.tokenizer, additionalContext: context)
         }
         var splitter = ReasoningSplitter(startsInsideReasoning: opensReasoningBlock)
-        var answer = ""
-        var thoughts = ""
-        var toolCalls = 0
-        var finishReason = "stop"
+        var result = Attempt()
 
         for try await generation in session.streamDetails(to: try Self.chat(from: request)) {
             try Task.checkCancellation()
@@ -175,55 +248,53 @@ public actor MLXExecutor: LLMExecutor {
                 for segment in splitter.consume(text) {
                     switch segment {
                     case .answer(let value):
-                        answer += value
-                        if !wantsJSON { continuation.yield(.textDelta(value)) }
+                        result.answer += value
+                        if !buffersAnswer { continuation.yield(.textDelta(value)) }
                     case .reasoning(let value):
-                        thoughts += value
+                        result.thoughts += value
                         continuation.yield(.reasoningDelta(value))
                     }
                 }
             case .toolCall(let call):
-                toolCalls += 1
-                continuation.yield(.toolCall(Self.toolCall(call, index: toolCalls)))
+                result.toolCalls += 1
+                continuation.yield(.toolCall(Self.toolCall(call, index: result.toolCalls)))
             case .info(let info):
                 continuation.yield(.usage(.init(promptTokens: info.promptTokenCount,
                                                 completionTokens: info.generationTokenCount)))
-                finishReason = "\(info.stopReason)"
+                result.finishReason = "\(info.stopReason)"
             }
         }
         for segment in splitter.flush() {
             switch segment {
             case .answer(let value):
-                answer += value
-                if !wantsJSON { continuation.yield(.textDelta(value)) }
+                result.answer += value
+                if !buffersAnswer { continuation.yield(.textDelta(value)) }
             case .reasoning(let value):
-                thoughts += value
+                result.thoughts += value
                 continuation.yield(.reasoningDelta(value))
             }
         }
 
-        if let schema = request.responseSchema {
-            // The answer first, then the thinking: a model that reasons its way
-            // to the object and then runs out of budget before repeating it has
-            // still produced it, and that is the same accommodation
-            // `LLMCompletion.structuredText` makes for the hosted tiers.
-            let json = StructuredOutput.firstJSONObject(in: answer)
-                ?? StructuredOutput.firstJSONObject(in: thoughts)
-            guard let json else {
-                // Escalatable on purpose: a larger model on another tier can
-                // very well produce the JSON this one failed to. Returning the
-                // prose instead would hand the caller an empty decode, which
-                // is how "no conflicts found" gets written for every document.
-                let reason = finishReason == "length"
-                    ? "ran out of tokens after \(request.maxTokens) — "
-                        + "\(thoughts.count) chars of it spent thinking"
-                    : String(answer.prefix(120))
-                throw LLMError.unsupported(
-                    "\(identifier) produced no JSON for schema \(schema.name): \(reason)")
+        // What the model meant, when the parser could not see it: the call is
+        // in the text, wrapped in one tag too many (see `ToolCallSalvage`).
+        if wantsTools, result.toolCalls == 0 {
+            for salvaged in ToolCallSalvage.calls(in: result.answer) {
+                result.toolCalls += 1
+                continuation.yield(.toolCall(LLMToolCall(id: "call_\(result.toolCalls)",
+                                                         name: salvaged.name,
+                                                         argumentsJSON: salvaged.argumentsJSON)))
             }
-            continuation.yield(.textDelta(json))
+            if result.toolCalls > 0 { result.answer = ToolCallSalvage.stripped(result.answer) }
         }
-        continuation.yield(.finished(reason: toolCalls > 0 ? "tool_calls" : finishReason))
+        if result.toolCalls > 0 { result.finishReason = "tool_calls" }
+
+        if !wantsJSON {
+            if wantsTools, !result.answer.isEmpty {
+                continuation.yield(.textDelta(result.answer))
+            }
+            continuation.yield(.finished(reason: result.finishReason))
+        }
+        return result
     }
 
     // MARK: - residency
@@ -231,7 +302,16 @@ public actor MLXExecutor: LLMExecutor {
     private func load() async throws -> ModelContainer {
         if let container { return container }
         do {
-            let loaded = try await LLMModelFactory.shared.loadContainer(
+            // Which factory depends on the architecture, not on what we intend
+            // to send it: a VL checkpoint answers text perfectly well, and
+            // handing it to the text factory fails with
+            // `unsupportedModelType("qwen3_vl")`.
+            guard let factory = await LocalModelCatalog.factory(
+                for: LocalModelCatalog.modelType(in: model.directory)) else {
+                throw LLMError.unavailable(
+                    "runtime นี้ยังรันสถาปัตยกรรมของ \(model.name) ไม่ได้")
+            }
+            let loaded = try await factory.loadContainer(
                 from: model.directory, using: ChatTokenizerLoader())
             container = loaded
             return loaded
@@ -282,11 +362,15 @@ public actor MLXExecutor: LLMExecutor {
     /// System turns become the session's instructions; the schema, when there
     /// is one, is another instruction, because nothing here can constrain
     /// decoding.
-    private static func instructions(for request: LLMRequest) -> String? {
+    private static func instructions(for request: LLMRequest, attempt: Int = 0) -> String? {
         var parts = request.messages.filter { $0.role == .system }.map(\.content)
         if let schema = request.responseSchema {
             parts.append(StructuredOutput.instruction(name: schema.name,
                                                       schemaJSON: schema.schemaJSON))
+            if attempt > 0 {
+                parts.append("Your previous reply was not valid JSON. "
+                             + "Check every quote, comma and brace. Output the object only.")
+            }
         }
         return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
     }

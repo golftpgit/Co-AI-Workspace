@@ -33,6 +33,10 @@ if swift build 2>&1 | tail -3; then ok "build"; else fail "build"; fi
 step "tests"
 TEST_OUT="$(swift test 2>&1)"
 echo "$TEST_OUT" | grep -E "Test run with|error:" | tail -5
+# What the suite could not check. Not failures — a machine with no
+# OpenAI-compatible endpoint is the state P5.4 is working towards — but they
+# stay in front of a person, because a silent skip reads exactly like a pass.
+echo "$TEST_OUT" | grep "^SKIPPED:" | sort -u | sed 's/^/   ⊘ /' 
 echo "$TEST_OUT" | grep -q "Test run with .* passed" && ok "tests" || fail "tests"
 
 # Structural rules from ARCHITECTURE §0.2 — the duplication that made v1 hard

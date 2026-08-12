@@ -50,6 +50,11 @@ let package = Package(
             dependencies: [
                 "LLMProviders", "AgentKit", "Observability",
                 .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                // Vision-language checkpoints are a different factory, not a
+                // different tier: Qwen3-VL answers text like any chat model,
+                // and on a 16 GB machine it may well be the only local model
+                // the user has (see MLXExecutor.load).
+                .product(name: "MLXVLM", package: "mlx-swift-lm"),
                 .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
                 .product(name: "Hub", package: "swift-transformers"),
                 .product(name: "Tokenizers", package: "swift-transformers"),
@@ -107,9 +112,12 @@ let package = Package(
         // An executable for the same reason as EmbeddingCheck: MLX finds its
         // Metal kernels through the main bundle, and under `swift test` that is
         // SwiftPM's helper. Run by scripts/check.sh.
+        // CoreEngine is here for P5.4: the offline floor is only proven by
+        // running the work that has nowhere else to go — conflict detection,
+        // which fails by saying nothing at all.
         .executableTarget(name: "MLXCheck",
                           dependencies: ["MLXRuntime", "ExecutorContract", "LLMProviders",
-                                         "Config"]),
+                                         "CoreEngine", "Config"]),
 
         // M1 — hook chain, approval broker, tool gateway, agent loop. Every
         // decision the system makes lives here (ARCHITECTURE §5).

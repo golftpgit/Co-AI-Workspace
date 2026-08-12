@@ -1,5 +1,7 @@
 import Foundation
 import MLXLLM
+import MLXVLM
+import MLXLMCommon
 
 // ─────────────────────────────────────────────────────────────
 // What is already on this machine (ARCHITECTURE §9.4, "ใช้โมเดลที่มีอยู่แล้ว").
@@ -153,6 +155,11 @@ public struct LocalModelCatalog: Sendable {
         guard files.contains("config.json"),
               files.contains(where: { $0.hasSuffix(".safetensors") }),
               chatTemplate(in: directory) != nil else { return false }
+        // A single `model.safetensors` is the whole model, index or no index:
+        // LM Studio's Qwen3-VL ships one merged file *and* the shard index it
+        // was built from, and reading the index as a requirement rejected a
+        // model that was perfectly complete.
+        if files.contains("model.safetensors") { return true }
         return Self.shards(in: directory).isSubset(of: files)
     }
 
@@ -174,10 +181,28 @@ public struct LocalModelCatalog: Sendable {
     }
 
     /// Asked of the library rather than guessed from a list we would have to
-    /// keep in step with it.
+    /// keep in step with it — of *both* registries, because a vision-language
+    /// checkpoint is built by a different factory and is still a chat model
+    /// (`qwen3_vl` lives in the VLM registry, and on a machine whose only local
+    /// model is a VL one, refusing it means no Tier 0.5 at all).
     static func runtimeCanBuild(_ modelType: String?) async -> Bool {
         guard let modelType else { return false }
-        return await LLMModelFactory.shared.typeRegistry.contains(modelType)
+        if await LLMModelFactory.shared.typeRegistry.contains(modelType) { return true }
+        return await VLMModelFactory.shared.typeRegistry.contains(modelType)
+    }
+
+    /// Which factory can build this architecture. Nil when neither can.
+    static func factory(
+        for modelType: String?
+    ) async -> (any GenericModelFactory<ModelContext, ModelContainer>)? {
+        guard let modelType else { return nil }
+        if await LLMModelFactory.shared.typeRegistry.contains(modelType) {
+            return LLMModelFactory.shared
+        }
+        if await VLMModelFactory.shared.typeRegistry.contains(modelType) {
+            return VLMModelFactory.shared
+        }
+        return nil
     }
 
     /// The template's text, wherever this export keeps it.

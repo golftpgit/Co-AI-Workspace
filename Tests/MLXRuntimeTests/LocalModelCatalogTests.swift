@@ -76,37 +76,48 @@ struct LocalModelCatalogTests {
         #expect(found.first?.name == "mlx-community/Qwen3-4B-4bit")
     }
 
-    /// LM Studio's `Qwen3-VL-4B-Instruct` has every file a chat model has —
-    /// weights, tokenizer, chat template — and dies at load with
-    /// `unsupportedModelType("qwen3_vl")`. Offering it hands the router a tier
-    /// that cannot answer, and on a machine where it is the largest model it
-    /// would have been *the* Tier 0.5 model.
+    /// A checkpoint can have every file a chat model has and still be
+    /// unbuildable — that is what `unsupportedModelType` is. Offering it hands
+    /// the router a tier that cannot answer, and on a machine where it is the
+    /// only model, that is Tier 0.5 gone.
     @Test("an architecture this runtime cannot build is not offered")
     func ignoresUnsupportedArchitectures() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
-        try fixture.makeModel("lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit",
-                              config: #"{"model_type": "qwen3_vl"}"#)
+        try fixture.makeModel("vendor/something-else",
+                              config: #"{"model_type": "not_a_real_architecture"}"#)
         try fixture.makeModel("lmstudio-community/Qwen3-8B-MLX-4bit")
 
         let found = await fixture.catalog().installed()
         #expect(found.map(\.name) == ["lmstudio-community/Qwen3-8B-MLX-4bit"])
     }
 
-    /// A cancelled download leaves the small files behind — config, template,
-    /// the first shard — and keeping them is the point: restarting continues
-    /// from there. What must not happen is the half-downloaded model being
-    /// offered as a working one and failing at load.
+    /// A vision-language checkpoint is built by the *other* factory and is
+    /// still a chat model. Asking only the text registry rejected
+    /// `Qwen3-VL-4B` — which on this machine was the model the user wanted
+    /// Tier 0.5 to be.
+    @Test("a vision-language model counts, because it answers text too")
+    func offersVisionLanguageModels() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        try fixture.makeModel("lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit",
+                              config: #"{"model_type": "qwen3_vl"}"#)
+
+        let found = await fixture.catalog().installed()
+        #expect(found.map(\.name) == ["lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit"])
+    }
+
     @Test("a half-downloaded model is not offered until its last shard arrives")
     func ignoresPartialDownloads() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
         let directory = try fixture.makeModel("mlx-community/Qwen3-30B-A3B-4bit")
-        try #"""
-        {"weight_map": {"a": "model-00001-of-00002.safetensors",
-                        "b": "model-00002-of-00002.safetensors"}}
-        """#.write(to: directory.appending(path: "model.safetensors.index.json"),
-                     atomically: true, encoding: .utf8)
+        // A sharded model has no single `model.safetensors`; it has the index
+        // and the shards, and an interrupted download has only some of them.
+        try FileManager.default.removeItem(at: directory.appending(path: "model.safetensors"))
+        try #"{"weight_map": {"a": "model-00001-of-00002.safetensors", "b": "model-00002-of-00002.safetensors"}}"#
+            .write(to: directory.appending(path: "model.safetensors.index.json"),
+                   atomically: true, encoding: .utf8)
         try Data(repeating: 1, count: 16)
             .write(to: directory.appending(path: "model-00001-of-00002.safetensors"))
 
@@ -115,6 +126,23 @@ struct LocalModelCatalogTests {
         // The last shard arrives; now it is a model.
         try Data(repeating: 1, count: 16)
             .write(to: directory.appending(path: "model-00002-of-00002.safetensors"))
+        #expect(await fixture.catalog().installed().count == 1)
+    }
+
+    /// The other shape of the same question: LM Studio's Qwen3-VL ships one
+    /// merged `model.safetensors` *and* the index of the two shards it was
+    /// built from. Reading that index as a requirement rejects a model that is
+    /// complete — which is how the machine's only usable local model
+    /// disappeared from the list.
+    @Test("a merged single-file model is complete, index or no index")
+    func acceptsMergedWeightsWithStaleIndex() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let directory = try fixture.makeModel("vendor/merged")
+        try #"{"weight_map": {"a": "model-00001-of-00002.safetensors"}}"#
+            .write(to: directory.appending(path: "model.safetensors.index.json"),
+                   atomically: true, encoding: .utf8)
+
         #expect(await fixture.catalog().installed().count == 1)
     }
 

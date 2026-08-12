@@ -65,6 +65,13 @@ public enum RecommendedModels {
             minimumRAMBytes: 8 * gigabyte,
             summary: "เทียบเท่า Tier 0 — ใช้เป็น fallback ตอนโมเดล on-device ปฏิเสธงาน"),
         ModelCatalogEntry(
+            repository: "mlx-community/Qwen3-VL-4B-Instruct-4bit",
+            displayName: "Qwen3-VL 4B Instruct",
+            parameters: "4B", quantization: "4-bit",
+            downloadBytes: 3_110_000_000,
+            minimumRAMBytes: 8 * gigabyte,
+            summary: "อ่านรูปได้ด้วย — เท่าที่ Tier 0.5 ส่งให้ตอนนี้คือข้อความ แต่โมเดลเดียวกันรองรับทั้งคู่"),
+        ModelCatalogEntry(
             repository: "mlx-community/Qwen3-8B-4bit",
             displayName: "Qwen3 8B",
             parameters: "8B", quantization: "4-bit",

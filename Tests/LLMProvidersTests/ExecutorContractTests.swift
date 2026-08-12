@@ -43,9 +43,20 @@ private func servedModel() async -> String? {
         .first { !$0.lowercased().contains("embed") }
 }
 
+/// Says out loud what could not be checked, without failing the run.
+///
+/// A skip has to stay visible — a silent one reads exactly like a pass — but
+/// it must not fail the build either, and that changed with P5.4: a machine
+/// with no OpenAI-compatible endpoint is no longer a misconfigured machine,
+/// it is the state this whole phase is working towards. `scripts/check.sh`
+/// surfaces every `SKIPPED:` line, so these stay in front of a person while
+/// the suite still goes green on a laptop running nothing but itself.
+private func skipped(_ message: String) {
+    print("SKIPPED: \(message)")
+}
+
 /// Runs the shared contract and reports each outcome as itself: a failure
-/// fails, and a case that could not be checked is recorded as an Issue so it
-/// stays visible — a silent skip reads exactly like a pass. A case that does
+/// fails, and a case that could not be checked is announced. A case that does
 /// not apply is neither: an executor that declares no tool calling and has no
 /// tool-call behaviour is the contract working, not a gap in the run.
 private func runContract(against executor: any LLMExecutor) async {
@@ -54,7 +65,7 @@ private func runContract(against executor: any LLMExecutor) async {
         case .passed, .notApplicable:
             continue
         case .skipped:
-            Issue.record("skipped [\(executor.identifier)] \(outcome.name): \(outcome.detail)")
+            skipped("[\(executor.identifier)] \(outcome.name) — \(outcome.detail)")
         case .failed:
             Issue.record("\(executor.identifier) — \(outcome.name): \(outcome.detail)")
         }
@@ -89,7 +100,7 @@ struct VLLMExecutorTests {
     @Test("keeps the executor contract", .timeLimit(.minutes(10)))
     func keepsTheContract() async {
         guard let model = await servedModel() else {
-            Issue.record("skipped: no OpenAI-compatible endpoint on :1234")
+            skipped("no OpenAI-compatible endpoint on :1234 — Tier 1 unchecked")
             return
         }
         await runContract(against: executor(model))
@@ -98,7 +109,7 @@ struct VLLMExecutorTests {
     @Test("availability also validates the configured model name", .timeLimit(.minutes(1)))
     func availabilityChecksModel() async {
         guard let model = await servedModel() else {
-            Issue.record("skipped: no OpenAI-compatible endpoint on :1234")
+            skipped("no OpenAI-compatible endpoint on :1234 — Tier 1 unchecked")
             return
         }
         #expect(await executor(model).isAvailable())
@@ -125,7 +136,7 @@ struct LiveRoutingTests {
     @Test("a live chain answers even when Tier 0 refuses", .timeLimit(.minutes(4)))
     func liveChain() async throws {
         guard let model = await servedModel() else {
-            Issue.record("skipped: no OpenAI-compatible endpoint on :1234")
+            skipped("no OpenAI-compatible endpoint on :1234 — Tier 1 unchecked")
             return
         }
         let router = ModelRouter(executors: [

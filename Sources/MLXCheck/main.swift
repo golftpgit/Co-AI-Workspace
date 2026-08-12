@@ -148,14 +148,43 @@ if residencyAdmission.isBlocking, await !executor.isResident {
     }
 }
 
+// ── P5.4: the floor, with the network gone ──
+print("")
+print("   — Tier 0.5 เป็นพื้นรับประกัน (P5.4) —")
+
+await check("endpoint ที่ตั้งไว้ต่อไม่ได้จริง") {
+    try await OfflineFloor.endpointIsDown()
+}
+
+// The floor cannot be demonstrated with a model that will not fit — and on a
+// 16 GB machine that happens for an honest reason: the *app* is holding the
+// same weights. Skipped loudly rather than failed, exactly as elsewhere.
+let floorAdmission = AdmissionControl.admit(model, memory: MachineMemory.current())
+if floorAdmission.isBlocking {
+    print("   ⊘ ข้ามเช็คพื้นรับประกัน — \(floorAdmission.reason)")
+} else {
+    await check("งาน high-impact ยังทำงานได้ ตกลงมาที่โมเดลบนเครื่อง") {
+        try await OfflineFloor.routesConsequentialWork(model)
+    }
+
+    await check("ตรวจข้อขัดแย้งได้โดยไม่มีเน็ต — ไม่ใช่เงียบว่าไม่มีข้อขัดแย้ง") {
+        try await OfflineFloor.detectsConflictsOffline(model)
+    }
+}
+
 // The download path, against the Hub, with the smallest model on the list
 // (~350 MB). Off by default: a check that pulls hundreds of megabytes every
 // run is a check people start skipping. `COAI_CHECK_DOWNLOAD=1` turns it on.
-if ProcessInfo.processInfo.environment["COAI_CHECK_DOWNLOAD"] == "1" {
+if let wanted = ProcessInfo.processInfo.environment["COAI_CHECK_DOWNLOAD"], !wanted.isEmpty {
     let scratch = FileManager.default.temporaryDirectory
         .appending(path: "coai-model-download-check")
-    let installer = ModelInstaller(destination: scratch, quotaGigabytes: 5)
-    let entry = RecommendedModels.all[0]
+    let installer = ModelInstaller(destination: scratch, quotaGigabytes: 30)
+    // `COAI_CHECK_DOWNLOAD=1` uses the smallest entry; anything else is read
+    // as a repository name, so a specific model can be checked by hand.
+    let entry = wanted == "1"
+        ? RecommendedModels.all[0]
+        : (RecommendedModels.all.first { $0.repository.contains(wanted) }
+           ?? RecommendedModels.all[0])
 
     /// The installer reports from its own actor, so the tally it writes into
     /// needs a lock rather than a captured `var`.
