@@ -25,6 +25,10 @@ func gigabytes(_ bytes: Int64) -> String {
     String(format: "%.1f GB", Double(bytes) / 1_073_741_824)
 }
 
+let machine = MachineMemory.current()
+let sizeClass = MachineSizeClass.forMachine(totalBytes: machine.totalBytes)
+print("   เครื่องนี้: RAM \(gigabytes(machine.totalBytes)) (ว่าง \(gigabytes(machine.availableBytes)))"
+      + " → แนะนำ \(sizeClass.recommendedSize) · \(sizeClass.trustedWith)")
 print("   โมเดลที่ติดตั้งอยู่: \(installed.count)")
 for model in installed {
     print("     · \(model.name) — \(gigabytes(model.sizeOnDisk)), "
@@ -32,6 +36,9 @@ for model in installed {
           + (model.declaredContextWindow > model.contextWindow
              ? " (ประกาศ \(model.declaredContextWindow), จำกัดไว้ตามที่เครื่องรับไหว)" : "")
           + (model.supportsTools ? ", tool calling" : ", ไม่มี tool calling"))
+    let admission = AdmissionControl.admit(model, memory: machine)
+    print("       \(admission.isBlocking ? "✗" : admission.verdict == .tight ? "!" : "·") "
+          + admission.reason)
 }
 
 /// `COAI_MLX_MODEL` picks one when a machine has several, the same shape as
@@ -97,34 +104,48 @@ struct CheckFailure: Error, CustomStringConvertible {
     init(_ description: String) { self.description = description }
 }
 
-await check("the weights stay resident between requests") {
-    guard await executor.isResident else {
-        throw CheckFailure("nothing is loaded after a full contract run")
+// Residency only means anything once something has been generated — and on a
+// machine with no room, admission (P5.3) is *supposed* to keep the model out,
+// so these are skipped loudly rather than failed.
+// Asked in the same order `isAvailable()` asks it: a model already in memory
+// has already spent it, and refusing to check it for want of the memory it is
+// holding would be circular.
+let residencyAdmission = AdmissionControl.admit(model, memory: MachineMemory.current())
+if residencyAdmission.isBlocking, await !executor.isResident {
+    print("   ⊘ ข้ามเช็ค residency — \(residencyAdmission.reason)")
+} else {
+    await check("the weights stay resident between requests") {
+        var request = LLMRequest(messages: [.init(.user, "Reply with: ok")])
+        request.maxTokens = 512
+        _ = try await executor.complete(request)
+        guard await executor.isResident else {
+            throw CheckFailure("answered but nothing is loaded")
+        }
+        return "resident"
     }
-    return "resident"
-}
 
-await check("and are given back when the model goes idle") {
-    // §9.4: the RAM a chat model holds is the RAM analysis and the embedding
-    // model need. On 16 GB this is not housekeeping, it is the difference
-    // between the next task running and the machine swapping.
-    let deadline = Date().addingTimeInterval(30)
-    while await executor.isResident, Date() < deadline {
-        try await Task.sleep(for: .milliseconds(500))
+    await check("and are given back when the model goes idle") {
+        // §9.4: the RAM a chat model holds is the RAM analysis and the
+        // embedding model need. On 16 GB this is not housekeeping, it is the
+        // difference between the next task running and the machine swapping.
+        let deadline = Date().addingTimeInterval(30)
+        while await executor.isResident, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(500))
+        }
+        guard await !executor.isResident else {
+            throw CheckFailure("still resident 30s after an idle timeout of 2s")
+        }
+        return "unloaded"
     }
-    guard await !executor.isResident else {
-        throw CheckFailure("still resident 30s after an idle timeout of 2s")
-    }
-    return "unloaded"
-}
 
-await check("and load again on the next request") {
-    var request = LLMRequest(messages: [.init(.user, "ตอบว่า พร้อม")])
-    request.maxTokens = 512
-    let completion = try await executor.complete(request)
-    guard await executor.isResident else { throw CheckFailure("answered without loading?") }
-    guard !completion.structuredText.isEmpty else { throw CheckFailure("empty answer") }
-    return "\(completion.usage?.total ?? 0) tokens"
+    await check("and load again on the next request") {
+        var request = LLMRequest(messages: [.init(.user, "ตอบว่า พร้อม")])
+        request.maxTokens = 512
+        let completion = try await executor.complete(request)
+        guard await executor.isResident else { throw CheckFailure("answered without loading?") }
+        guard !completion.structuredText.isEmpty else { throw CheckFailure("empty answer") }
+        return "\(completion.usage?.total ?? 0) tokens"
+    }
 }
 
 // The download path, against the Hub, with the smallest model on the list

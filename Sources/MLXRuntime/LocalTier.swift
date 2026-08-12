@@ -27,9 +27,12 @@ public final class LocalTier: LLMExecutor {
 
     private let selection = Mutex<Selection?>(nil)
     private let idleTimeout: Duration
+    private let memory: @Sendable () -> MachineMemory
 
-    public init(model: LocalModel? = nil, idleTimeout: Duration = .seconds(600)) {
+    public init(model: LocalModel? = nil, idleTimeout: Duration = .seconds(600),
+                memory: @escaping @Sendable () -> MachineMemory = { .current() }) {
         self.idleTimeout = idleTimeout
+        self.memory = memory
         if let model { select(model) }
     }
 
@@ -39,7 +42,9 @@ public final class LocalTier: LLMExecutor {
         let previous = selection.withLock { current -> MLXExecutor? in
             let leaving = current?.executor
             current = model.map {
-                Selection(model: $0, executor: MLXExecutor(model: $0, idleTimeout: idleTimeout))
+                Selection(model: $0,
+                          executor: MLXExecutor(model: $0, idleTimeout: idleTimeout,
+                                                memory: memory))
             }
             return leaving
         }

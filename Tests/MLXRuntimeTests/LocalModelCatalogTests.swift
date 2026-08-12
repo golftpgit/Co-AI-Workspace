@@ -173,14 +173,45 @@ struct LocalModelCatalogTests {
         #expect(await catalog.model(named: "withtools")?.supportsTools == true)
     }
 
-    @Test("the preferred model is the largest one installed")
-    func preferredIsLargest() async throws {
+    @Test("the preferred model is the largest one that fits")
+    func preferredIsLargestThatFits() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
         try fixture.makeModel("vendor/small", weightBytes: 1_024)
         try fixture.makeModel("vendor/large", weightBytes: 64_000)
 
-        #expect(await fixture.catalog().preferred()?.name == "vendor/large")
+        let roomy = MachineMemory(totalBytes: 64_000_000_000, availableBytes: 48_000_000_000)
+        #expect(await fixture.catalog().preferred(memory: roomy)?.name == "vendor/large")
+    }
+
+    /// Biggest-that-fits, not biggest: a model over the line does not answer
+    /// worse, it takes the machine down (P5.3). The two fixtures differ in
+    /// *shape* rather than file size, because what makes a model impossible on
+    /// a small machine is usually its KV cache, not its weights.
+    @Test("a model that would not fit loses to one that would, even if it is bigger")
+    func preferredSkipsWhatDoesNotFit() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        // 4 layers, 2 kv heads, 64-wide: ~2 KB per token.
+        try fixture.makeModel(
+            "vendor/light",
+            config: #"{"model_type":"qwen3","max_position_embeddings":8192,"num_hidden_layers":4,"num_attention_heads":4,"num_key_value_heads":2,"head_dim":64}"#,
+            weightBytes: 1_024)
+        // 80 layers, 64 kv heads, 256-wide: ~5 MB per token, so ~42 GB of KV
+        // cache at the assumed 8k context — impossible on any laptop.
+        try fixture.makeModel(
+            "vendor/heavy",
+            config: #"{"model_type":"qwen3","max_position_embeddings":8192,"num_hidden_layers":80,"num_attention_heads":64,"num_key_value_heads":64,"head_dim":256}"#,
+            weightBytes: 64_000)
+
+        let memory = MachineMemory(totalBytes: 16_000_000_000, availableBytes: 8_000_000_000)
+        let all = await fixture.catalog().installed()
+        #expect(all.count == 2)
+        // The bigger file is the one that cannot run here…
+        let heavy = try #require(all.first { $0.name == "vendor/heavy" })
+        #expect(AdmissionControl.admit(heavy, memory: memory).isBlocking)
+        // …so the smaller one is what gets chosen, despite the size sort.
+        #expect(await fixture.catalog().preferred(memory: memory)?.name == "vendor/light")
     }
 
     @Test("a search path that does not exist is not an error")

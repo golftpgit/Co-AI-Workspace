@@ -34,6 +34,12 @@ public final class ModelsViewModel {
     public private(set) var status: Status?
     /// Which model Tier 0.5 will load. Nil while nothing is installed.
     public private(set) var selectedName: String?
+    /// What this machine can hold, and what §9.4 says a model of that size can
+    /// be trusted with — shown so the size numbers below have a yardstick.
+    public private(set) var memory = MachineMemory.current()
+    public var sizeClass: MachineSizeClass {
+        MachineSizeClass.forMachine(totalBytes: memory.totalBytes)
+    }
 
     private var installer: ModelInstaller?
     private var catalog: LocalModelCatalog?
@@ -64,8 +70,19 @@ public final class ModelsViewModel {
         await refresh()
     }
 
+    /// Whether this model can be run here *now* — re-read on every refresh
+    /// because the answer changes with whatever else the Mac is doing.
+    public func admission(for model: LocalModel) -> Admission {
+        AdmissionControl.admit(model, memory: memory)
+    }
+
+    public func admission(for entry: ModelCatalogEntry) -> Admission {
+        AdmissionControl.admit(entry, memory: memory)
+    }
+
     public func refresh() async {
         guard let catalog, let installer else { return }
+        memory = MachineMemory.current()
         installed = await catalog.installed()
         storage = await installer.storage()
         if let selectedName, !installed.contains(where: { $0.name == selectedName }) {
@@ -138,7 +155,23 @@ public final class ModelsViewModel {
 
     // MARK: - choosing and removing
 
+    /// Refuses a model that would not fit in what is free (§9.4, P5.3).
+    ///
+    /// Not a warning with a button next to it: a model too big for the machine
+    /// does not answer slowly, it takes the Mac down with it, and by then the
+    /// user cannot get to this screen to undo the choice.
     public func select(_ model: LocalModel?) {
+        if let model {
+            let admission = self.admission(for: model)
+            guard !admission.isBlocking else {
+                status = Status(message: admission.reason, isError: true)
+                log.error("refused \(model.name) on memory: \(admission.reason)")
+                return
+            }
+            if admission.verdict == .tight {
+                status = Status(message: admission.reason, isError: false)
+            }
+        }
         tier?.select(model)
         selectedName = model?.name
         persist?(model?.name)

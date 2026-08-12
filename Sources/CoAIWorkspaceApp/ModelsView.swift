@@ -32,12 +32,17 @@ struct ModelsView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text("โมเดลบนเครื่อง (Tier 0.5)").font(.headline)
-            if let storage = model.storage {
-                Text("ใช้ไป \(bytes(storage.usedBytes)) จากโควตา \(bytes(storage.quotaBytes)) · "
-                     + "ดิสก์ว่าง \(bytes(storage.freeDiskBytes))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                if let storage = model.storage {
+                    Text("ใช้ไป \(bytes(storage.usedBytes)) จากโควตา \(bytes(storage.quotaBytes)) · "
+                         + "ดิสก์ว่าง \(bytes(storage.freeDiskBytes))")
+                }
+                // §9.4's RAM→size→work table, for this machine specifically.
+                Text("RAM \(bytes(model.memory.totalBytes)) (ว่าง \(bytes(model.memory.availableBytes))) "
+                     + "→ แนะนำ \(model.sizeClass.recommendedSize) · \(model.sizeClass.trustedWith)")
             }
+            .font(.caption)
+            .foregroundStyle(.secondary)
             Spacer()
             if let status = model.status {
                 Text(status.message)
@@ -113,6 +118,14 @@ private struct InstalledRow: View {
                 Text("\(ModelsView.format(installed.sizeOnDisk)) · context \(installed.contextWindow) "
                      + "· \(installed.supportsTools ? "เรียกทูลได้" : "เรียกทูลไม่ได้")")
                     .font(.caption).foregroundStyle(.secondary)
+                // The estimate the selection is allowed or refused on, shown
+                // with its numbers rather than as a verdict the user has to
+                // take on trust.
+                let admission = model.admission(for: installed)
+                Text(admission.reason)
+                    .font(.caption2)
+                    .foregroundStyle(admission.isBlocking ? Color.red
+                                     : admission.verdict == .tight ? Color.orange : Color.secondary)
                 if !removable {
                     // Explains why Delete is missing: the catalogue also finds
                     // models owned by LM Studio, and this app does not delete
@@ -124,6 +137,9 @@ private struct InstalledRow: View {
             Spacer()
             if !model.isSelected(installed) {
                 Button("ใช้ตัวนี้") { model.select(installed) }
+                    // Blocked rather than warned: §9.4 is explicit that a
+                    // model over the line must not become the default.
+                    .disabled(model.admission(for: installed).isBlocking)
             }
             if removable {
                 Button(role: .destructive) { confirmingDelete = true } label: {
@@ -157,11 +173,13 @@ private struct CatalogRow: View {
                 Text("ดาวน์โหลด \(ModelsView.format(entry.downloadBytes)) · "
                      + "แนะนำ RAM \(ModelsView.format(entry.minimumRAMBytes)) ขึ้นไป")
                     .font(.caption2).foregroundStyle(.tertiary)
-                if !RecommendedModels.fits(entry) {
-                    // Warned, not blocked: refusing to make an oversized model
-                    // the default is admission control (P5.3).
-                    Label("ใหญ่กว่าที่ RAM เครื่องนี้แนะนำ — โหลดได้แต่จะช้ามากหรือทำเครื่องค้าง",
-                          systemImage: "exclamationmark.triangle")
+                let admission = model.admission(for: entry)
+                if admission.isBlocking {
+                    // Downloading is still allowed — the machine may have
+                    // memory free later, and the user may be about to close
+                    // everything else — but it says plainly that it cannot be
+                    // made the default as things stand.
+                    Label("\(admission.reason)", systemImage: "exclamationmark.triangle")
                         .font(.caption2).foregroundStyle(.orange)
                 }
                 if let download = model.downloads[entry.repository] {

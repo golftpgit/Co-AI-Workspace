@@ -33,13 +33,18 @@ public actor MLXExecutor: LLMExecutor {
     private let model: LocalModel
     /// How long the weights may sit unused before they are given back.
     private let idleTimeout: Duration
+    private let memory: @Sendable () -> MachineMemory
 
     private var container: ModelContainer?
     private var inFlight = 0
     private var lastUsed = ContinuousClock.now
     private var idleWatcher: Task<Void, Never>?
 
-    public init(model: LocalModel, idleTimeout: Duration = .seconds(600)) {
+    /// Injectable so admission can be tested without a machine that happens to
+    /// be under memory pressure.
+    public init(model: LocalModel, idleTimeout: Duration = .seconds(600),
+                memory: @escaping @Sendable () -> MachineMemory = { .current() }) {
+        self.memory = memory
         self.model = model
         self.identifier = "mlx:\(model.name)"
         self.idleTimeout = idleTimeout
@@ -59,12 +64,23 @@ public actor MLXExecutor: LLMExecutor {
             supportsVision: false)
     }
 
-    /// The weights are on disk. Deliberately does not check that they load:
-    /// that costs minutes and gigabytes, and a load failure escalates through
-    /// the router like any other error.
+    /// The weights are on disk, and there is room to run them right now.
+    ///
+    /// Deliberately does not check that they *load*: that costs minutes and
+    /// gigabytes, and a load failure escalates through the router like any
+    /// other error. The memory question, though, has to be asked here and on
+    /// every call — a model that fitted when the app started does not fit
+    /// while an analysis run holds 10 GB, and the failure mode is not an error
+    /// but a machine that stops responding (§9.4, P5.3). Saying "not
+    /// available" sends the work up a tier instead.
     public func isAvailable() async -> Bool {
-        FileManager.default.fileExists(
+        guard FileManager.default.fileExists(
             atPath: model.directory.appending(path: "config.json").path(percentEncoded: false))
+        else { return false }
+        // Already resident: the memory is spent, and unloading to satisfy a
+        // check would be the expensive answer to a question about expense.
+        if container != nil { return true }
+        return !AdmissionControl.admit(model, memory: memory()).isBlocking
     }
 
     public func prewarm() async {

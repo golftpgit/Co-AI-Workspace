@@ -102,11 +102,20 @@ public struct LocalModelCatalog: Sendable {
         await installed().first { $0.name == name || $0.directory.lastPathComponent == name }
     }
 
-    /// What the runtime should load when nobody has chosen. Biggest wins:
-    /// within a size class the larger model is the better one, and admission
-    /// control against free RAM (P5.3) is what will stop this being naive.
-    public func preferred() async -> LocalModel? {
-        await installed().max { $0.sizeOnDisk < $1.sizeOnDisk }
+    /// What the runtime should load when nobody has chosen: the largest model
+    /// that fits in what is free right now (P5.3).
+    ///
+    /// Biggest-that-fits rather than simply biggest — within a size class the
+    /// larger model is the better one, but a model over the line does not
+    /// answer worse, it takes the machine down. When nothing fits, the
+    /// *smallest* is returned rather than nothing: the tier then has a
+    /// candidate to name, reports itself unavailable while memory is short,
+    /// and starts working the moment it is not.
+    public func preferred(memory: MachineMemory = .current()) async -> LocalModel? {
+        let all = await installed()
+        let fitting = all.filter { !AdmissionControl.admit($0, memory: memory).isBlocking }
+        return fitting.max { $0.sizeOnDisk < $1.sizeOnDisk }
+            ?? all.min { $0.sizeOnDisk < $1.sizeOnDisk }
     }
 
     // MARK: - what counts as a chat model
@@ -274,6 +283,37 @@ public struct LocalModelCatalog: Sendable {
         if let text = object["text_config"] as? [String: Any],
            let value = text["max_position_embeddings"] as? Int { return value }
         return nil
+    }
+
+    /// How much key/value cache one token of context costs, from the model's
+    /// own shape. Nil when config.json does not give enough to compute it.
+    ///
+    /// `2 × layers × kv-heads × head-dim × 2 bytes` — the 2s being key-and-value
+    /// and fp16. On qwen3.5-9B (32 layers, 4 kv heads, head dim 256) that is
+    /// ~128 KB per token, which is the difference between a model that fits in
+    /// what is free and one that puts the machine on the swap line.
+    static func kvCacheBytesPerToken(in directory: URL) -> Int64? {
+        guard let data = try? Data(contentsOf: directory.appending(path: "config.json")),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        // A multimodal checkpoint keeps the language model's shape one level in.
+        let config = (root["text_config"] as? [String: Any]) ?? root
+
+        guard let layers = config["num_hidden_layers"] as? Int, layers > 0 else { return nil }
+        let attentionHeads = config["num_attention_heads"] as? Int
+        guard let kvHeads = (config["num_key_value_heads"] as? Int) ?? attentionHeads,
+              kvHeads > 0 else { return nil }
+
+        let headDimension: Int
+        if let declared = config["head_dim"] as? Int, declared > 0 {
+            headDimension = declared
+        } else if let hidden = config["hidden_size"] as? Int,
+                  let heads = attentionHeads, heads > 0 {
+            headDimension = hidden / heads
+        } else {
+            return nil
+        }
+        return Int64(2 * layers * kvHeads * headDimension * 2)
     }
 
     /// Used when config.json does not say. Small on purpose: the router
