@@ -688,6 +688,24 @@ private struct PlanPane: View {
             TextField("ชื่อแผน", text: $model.planTitle)
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 360)
+
+            if !model.knowledgeDocuments.isEmpty {
+                HStack(spacing: 8) {
+                    // §12.4 wants this to key off `doc_type: proposal`; the
+                    // ingest pipeline records no document type yet, so the
+                    // list is everything and the choice is the user's.
+                    Menu("ใช้เอกสารจากคลังความรู้") {
+                        ForEach(model.knowledgeDocuments, id: \.id) { document in
+                            Button(document.title) {
+                                Task { await model.useDocument(document.id) }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: 260)
+                    Text("หรือวางข้อความเองข้างล่าง")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            }
             TextEditor(text: $model.proposalText)
                 .font(.system(.body, design: .default))
                 .frame(minHeight: 180)

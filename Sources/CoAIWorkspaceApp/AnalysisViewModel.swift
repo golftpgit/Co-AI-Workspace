@@ -98,6 +98,11 @@ public final class AnalysisViewModel {
     public var proposalText = ""
     public var planTitle = ""
     public private(set) var isReadingProposal = false
+    /// Documents already in the knowledge base, so a proposal that was
+    /// ingested does not have to be pasted a second time.
+    public private(set) var knowledgeDocuments: [(id: String, title: String)] = []
+    /// Which document the open plan was read from, when it came from the KB.
+    public private(set) var proposalDocumentID: String?
 
     // MARK: - shared
 
@@ -112,6 +117,7 @@ public final class AnalysisViewModel {
     private var store: AnalysisStore?
     private var library: NotebookStore?
     private var connectorStore: ConnectorStore?
+    private var knowledge: KnowledgeStore?
     private var planStore: AnalysisPlanStore?
     private var detector: GapDetector?
     private var scope: Scope = .central
@@ -120,11 +126,45 @@ public final class AnalysisViewModel {
     public init() {}
 
     public func attach(plans store: AnalysisPlanStore, detector: GapDetector,
-                       scope: Scope = .central) async {
+                       knowledge: KnowledgeStore? = nil, scope: Scope = .central) async {
         self.planStore = store
         self.detector = detector
+        self.knowledge = knowledge
         self.scope = scope
         await loadPlans()
+        await loadKnowledgeDocuments()
+    }
+
+    /// The documents that could be a proposal.
+    ///
+    /// §12.4 says the trigger is `doc_type: proposal`, and the ingest pipeline
+    /// does not record a document type yet — so this lists everything and lets
+    /// a person point at the right one, rather than filtering on a field that
+    /// does not exist and quietly showing nothing.
+    public func loadKnowledgeDocuments() async {
+        guard let knowledge else { return }
+        let chunks = (try? await knowledge.load(scope: scope)) ?? []
+        var seen: [String: String] = [:]
+        for chunk in chunks where seen[chunk.provenance.documentID] == nil {
+            seen[chunk.provenance.documentID] = chunk.provenance.title
+        }
+        knowledgeDocuments = seen.map { (id: $0.key, title: $0.value) }
+            .sorted { $0.title < $1.title }
+    }
+
+    /// Loads a document out of the knowledge base into the proposal box, in
+    /// the order its chunks were written.
+    public func useDocument(_ documentID: String) async {
+        guard let knowledge else { return }
+        let chunks = ((try? await knowledge.load(scope: scope)) ?? [])
+            .filter { $0.provenance.documentID == documentID }
+        guard !chunks.isEmpty else {
+            status = Status(message: "อ่านเอกสารนี้จากคลังความรู้ไม่ได้", isError: true)
+            return
+        }
+        proposalText = chunks.map(\.text).joined(separator: "\n")
+        proposalDocumentID = documentID
+        if planTitle.isEmpty { planTitle = chunks[0].provenance.title }
     }
 
     public func attach(connectors store: ConnectorStore) {
@@ -483,7 +523,7 @@ public final class AnalysisViewModel {
     /// proposal", because §12.4 does not have a blank plan in it.
     public func open(plan selected: AnalysisPlan?) {
         plan = selected
-        if selected == nil { proposalText = ""; planTitle = "" }
+        if selected == nil { proposalText = ""; planTitle = ""; proposalDocumentID = nil }
     }
 
     public func deletePlan(_ target: AnalysisPlan) async {
@@ -521,7 +561,8 @@ public final class AnalysisViewModel {
         })
         let built = GapDetector.plan(
             title: planTitle.isEmpty ? "แผนวิเคราะห์จากโครงร่าง" : planTitle,
-            scope: scope, reading: reading, proposalText: text, schema: snapshot)
+            scope: scope, reading: reading, proposalText: text,
+            proposalDocumentID: proposalDocumentID, schema: snapshot)
         plan = built
         await savePlan()
         status = Status(message: "อ่านโครงร่างแล้ว — พบช่องว่าง \(built.openGaps.count) จุด",
