@@ -18,6 +18,10 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "3.31.4"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.0.0"),
+        // M8 — the analysis store (ARCHITECTURE §12.1). Official Swift package
+        // rather than a C wrapper of our own; the C++ amalgamation inside it is
+        // why a clean build of this project is measured in minutes.
+        .package(url: "https://github.com/duckdb/duckdb-swift", from: "1.1.3"),
     ],
     targets: [
         // M2 — shared types/protocols only, no logic. Everything may import this.
@@ -64,6 +68,13 @@ let package = Package(
         // LLMProvidersTests for the tiers `swift test` can reach and by
         // MLXCheck for the one it cannot — see the target's own header.
         .target(name: "ExecutorContract", dependencies: ["LLMProviders", "AgentKit"]),
+
+        // M8 — analysis: DuckDB, the connectors, and the SQL that runs against
+        // them (ARCHITECTURE §12). Knows nothing about agents or models, so it
+        // can be measured on its own.
+        .target(name: "Analysis",
+                dependencies: ["AgentKit", "Observability",
+                               .product(name: "DuckDB", package: "duckdb-swift")]),
 
         // M9 — every process the system runs: sandbox profile, process group
         // signals, registry (ARCHITECTURE §13). Knows nothing about agents.
@@ -131,7 +142,7 @@ let package = Package(
             name: "CoAIWorkspaceApp",
             dependencies: ["AgentKit", "Config", "Observability", "Sidecar", "Persistence",
                            "LLMProviders", "CoreEngine", "Execution", "ToolBelt",
-                           "Knowledge", "EmbeddingRuntime", "MLXRuntime"]
+                           "Knowledge", "EmbeddingRuntime", "MLXRuntime", "Analysis"]
         ),
 
         .testTarget(name: "AgentKitTests", dependencies: ["AgentKit"]),
@@ -150,6 +161,7 @@ let package = Package(
         .testTarget(name: "WebSearchTests", dependencies: ["WebSearch", "Knowledge"]),
         .testTarget(name: "EmbeddingRuntimeTests", dependencies: ["EmbeddingRuntime"]),
         .testTarget(name: "ExecutionTests", dependencies: ["Execution", "Config"]),
+        .testTarget(name: "AnalysisTests", dependencies: ["Analysis"]),
         // Also hosts the end-to-end walking-skeleton test, which needs a real
         // database and a real sidecar alongside the tools and the gate.
         .testTarget(name: "ToolBeltTests",

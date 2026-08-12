@@ -14,12 +14,18 @@ public struct AppPaths: Sendable {
     public var skillsDirectory: URL { root.appending(path: "skills") }
     public var pluginsDirectory: URL { root.appending(path: "plugins") }
     public var documentsDirectory: URL { root.appending(path: "documents") }
+    /// The analysis store's own directory (§12.1). A directory rather than a
+    /// bare file because DuckDB writes a `.wal` beside the database, and a
+    /// stray write-ahead log in the middle of Application Support is the sort
+    /// of thing that gets deleted by hand and takes the data with it.
+    public var analysisDirectory: URL { root.appending(path: "analysis") }
     public var logsDirectory: URL { root.appending(path: "logs") }
 
     /// All directories that must exist before the app is usable.
     public var managedDirectories: [URL] {
         [root, databaseDirectory, modelsDirectory, agentsDirectory,
-         skillsDirectory, pluginsDirectory, documentsDirectory, logsDirectory]
+         skillsDirectory, pluginsDirectory, documentsDirectory, analysisDirectory,
+         logsDirectory]
     }
 
     public init(root: URL) { self.root = root }
