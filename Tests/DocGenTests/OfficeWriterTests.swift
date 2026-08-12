@@ -37,6 +37,50 @@ private func run(_ executable: String, _ arguments: [String]) -> (status: Int32,
     return (process.terminationStatus, String(decoding: data, as: UTF8.self))
 }
 
+/// Every file under an unpacked package, as package-relative part names.
+private func partNames(under root: URL) -> Set<String> {
+    let prefix = root.path(percentEncoded: false) + "/"
+    guard let walker = FileManager.default.enumerator(atPath: root.path(percentEncoded: false))
+    else { return [] }
+    var names: Set<String> = []
+    for case let entry as String in walker {
+        let full = root.appending(path: entry).path(percentEncoded: false)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: full, isDirectory: &isDirectory),
+              !isDirectory.boolValue else { continue }
+        names.insert(String(full.dropFirst(prefix.count)))
+    }
+    return names
+}
+
+/// Collapses `..` in a package-relative path. `standardizingPath` will not:
+/// it leaves `..` alone in a relative path, since it cannot know what the path
+/// is relative to.
+private func normalized(_ path: String) -> String {
+    var result: [String] = []
+    for component in path.split(separator: "/") {
+        if component == ".." { result.removeLast() } else if component != "." {
+            result.append(String(component))
+        }
+    }
+    return result.joined(separator: "/")
+}
+
+/// The `Target` of every relationship in a `.rels` part, parsed rather than
+/// matched: XMLDocument is Apple's reader, and it fails on malformed XML the
+/// way a regular expression would not.
+private func targets(ofRelationshipsIn file: URL) -> [String] {
+    guard let document = try? XMLDocument(contentsOf: file),
+          let nodes = try? document.nodes(forXPath: "//*[local-name()='Relationship']")
+    else { return [] }
+    return nodes.compactMap {
+        guard let element = $0 as? XMLElement,
+              element.attribute(forName: "TargetMode")?.stringValue != "External"
+        else { return nil }
+        return element.attribute(forName: "Target")?.stringValue
+    }
+}
+
 private func source(_ id: String, _ title: String, tier: SourceTier = .t1,
                     authors: [String] = ["สมชาย ก."], year: Int? = 2025) -> Provenance {
     Provenance(documentID: id, title: title, origin: .upload(filename: "\(id).pdf"),
@@ -138,6 +182,78 @@ struct OfficeWriterTests {
         #expect(slides[0].title == "ผลของเมตฟอร์มินต่อระดับ HbA1c")
         #expect(slides[1].title == "บทนำ")
         #expect(slides.last?.title == "เอกสารอ้างอิง")
+    }
+
+    /// The bug this guards against shipped once: a deck with no master chain
+    /// opens, but PowerPoint offers to repair it first and supplies the master
+    /// itself — so the text arriving intact says nothing about the package being
+    /// right. Every check below is on the package graph, where the fault was.
+    @Test("a generated .pptx has the master chain every slide resolves through")
+    func pptxHasACompleteMasterChain() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appending(path: "deck.pptx")
+        let root = directory.appending(path: "unpacked")
+
+        let rendered = try DocumentBuilder.render(draft())
+        try OfficeWriter.pptx(rendered).write(to: file)
+        #expect(run("/usr/bin/unzip",
+                    ["-o", "-q", file.path(percentEncoded: false),
+                     "-d", root.path(percentEncoded: false)]).status == 0)
+
+        let parts = partNames(under: root)
+        for required in ["ppt/slideMasters/slideMaster1.xml",
+                         "ppt/slideLayouts/slideLayout1.xml",
+                         "ppt/theme/theme1.xml",
+                         "ppt/slides/_rels/slide1.xml.rels"] {
+            #expect(parts.contains(required), "missing part: \(required)")
+        }
+
+        // Every relationship in the package points at a part that is in it. A
+        // dangling target is the failure mode here, and it is invisible until a
+        // reader follows the link.
+        for relationships in parts.filter({ $0.hasSuffix(".rels") }) {
+            let base = (relationships as NSString).deletingLastPathComponent  // …/_rels
+            let owner = (base as NSString).deletingLastPathComponent
+            for target in targets(ofRelationshipsIn: root.appending(path: relationships)) {
+                let resolved = target.hasPrefix("/")
+                    ? String(target.dropFirst())
+                    : normalized((owner as NSString).appendingPathComponent(target))
+                #expect(parts.contains(resolved),
+                        "\(relationships) points at \(target), which is not in the package")
+            }
+        }
+
+        // And every part is declared, which is the other half of the same
+        // question: a reader that cannot type a part will not read it.
+        let types = try String(contentsOf: root.appending(path: "[Content_Types].xml"),
+                               encoding: .utf8)
+        for part in parts where !part.hasSuffix(".rels") && part != "[Content_Types].xml" {
+            #expect(types.contains("PartName=\"/\(part)\"") || types.contains("Extension=\"xml\""),
+                    "no content type covers \(part)")
+        }
+        for declared in ["/ppt/slideMasters/slideMaster1.xml",
+                         "/ppt/slideLayouts/slideLayout1.xml",
+                         "/ppt/theme/theme1.xml"] {
+            #expect(types.contains("PartName=\"\(declared)\""))
+        }
+
+        // The master is reachable from the presentation, not merely present.
+        let presentation = try String(contentsOf: root.appending(path: "ppt/presentation.xml"),
+                                      encoding: .utf8)
+        #expect(presentation.contains("<p:sldMasterIdLst>"))
+        // Schema order: the masters are listed before the slides.
+        let masters = try #require(presentation.range(of: "<p:sldMasterIdLst>"))
+        let slides = try #require(presentation.range(of: "<p:sldIdLst>"))
+        #expect(masters.lowerBound < slides.lowerBound)
+
+        // Each slide names its layout exactly once.
+        for index in 1...OfficeWriter.slides(from: rendered).count {
+            let rels = root.appending(path: "ppt/slides/_rels/slide\(index).xml.rels")
+            let layouts = targets(ofRelationshipsIn: rels)
+                .filter { $0.contains("slideLayout") }
+            #expect(layouts.count == 1)
+        }
     }
 
     /// §14.1: a source with no author or year stops generation. Not a warning
