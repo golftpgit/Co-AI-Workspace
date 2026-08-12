@@ -106,6 +106,18 @@ struct BootStatusView: View {
                 ForEach(Array(engine.executorSummary.enumerated()), id: \.offset) { _, line in
                     labeled("โมเดล", line)
                 }
+                // §7: a manifest that did not load is worth saying out loud —
+                // a silent one looks like an agent that stopped behaving.
+                labeled("ทะเบียน (§7)",
+                        "\(engine.roster.count) รายการ"
+                            + (engine.rosterProblems.isEmpty ? ""
+                               : " · โหลดไม่ได้ \(engine.rosterProblems.count) ไฟล์"))
+                ForEach(Array(engine.rosterProblems.enumerated()), id: \.offset) { _, problem in
+                    Text("• \(problem)")
+                        .font(.caption).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
             } else {
                 HStack(spacing: 8) {
                     statusDot(.orange)

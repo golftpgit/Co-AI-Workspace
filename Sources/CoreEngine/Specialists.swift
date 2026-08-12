@@ -152,6 +152,23 @@ public enum SpecialistError: Error, CustomStringConvertible, Equatable {
 
 // MARK: - the four roles
 
+/// What each role may touch, in one table.
+///
+/// Written once because two places that both know a role's tool list are two
+/// places that can disagree — and the second one is `base:` in a manifest
+/// (§7.2), which inherits from here. `RosterTests` checks the mirror rather
+/// than trusting it.
+public enum SpecialistTools {
+    public static let byRole: [Role: Set<String>] = [
+        .researcher: ["kb_search", "web_search", "fetch_page"],
+        .analyst: ["kb_search", "run_shell", "run_stat_test"],
+        .engineer: ["run_shell", "kb_search"],
+        .writer: ["kb_search"],
+    ]
+
+    static func forRole(_ role: Role) -> Set<String> { byRole[role] ?? [] }
+}
+
 public actor Researcher: Specialist {
     public nonisolated let role = Role.researcher
     /// §2.5: two sources, read rather than skimmed, and disagreements filed.
@@ -167,7 +184,7 @@ public actor Researcher: Specialist {
     public init(environment: SpecialistEnvironment) {
         engine = SpecialistEngine(
             role: .researcher, environment: environment,
-            allowedTools: ["kb_search", "web_search", "fetch_page"],
+            allowedTools: SpecialistTools.forRole(.researcher),
             systemPrompt: """
             คุณคือ Researcher ของทีมวิจัย หน้าที่คือหาหลักฐานที่อ้างอิงได้
             - ค้นจากคลังความรู้ก่อนเสมอ (kb_search) แล้วจึงค้นเว็บถ้ายังไม่พอ
@@ -202,7 +219,7 @@ public actor Analyst: Specialist {
             // `run_stat_test` is how this role produces the evidence its own
             // Definition of Done asks for: the gate hands back the assumption
             // checks with the p-value, never one without the other (§12.3).
-            allowedTools: ["kb_search", "run_shell", "run_stat_test"],
+            allowedTools: SpecialistTools.forRole(.analyst),
             systemPrompt: """
             คุณคือ Analyst หน้าที่คือวิเคราะห์ข้อมูลอย่างตรวจสอบได้
             - ใช้ run_stat_test ทุกครั้งที่ต้องทดสอบทางสถิติ อย่าคำนวณค่า p เอง
@@ -233,7 +250,7 @@ public actor Engineer: Specialist {
         self.workingDirectory = workingDirectory
         engine = SpecialistEngine(
             role: .engineer, environment: environment,
-            allowedTools: ["run_shell", "kb_search"],
+            allowedTools: SpecialistTools.forRole(.engineer),
             systemPrompt: """
             คุณคือ Engineer หน้าที่คือแก้โค้ดให้ผ่านการทดสอบจริง
             - งานเสร็จเมื่อ build/test รันจริงแล้วผ่าน ไม่ใช่เมื่อคุณคิดว่าแก้ถูกแล้ว
@@ -259,7 +276,7 @@ public actor Writer: Specialist {
     public init(environment: SpecialistEnvironment) {
         engine = SpecialistEngine(
             role: .writer, environment: environment,
-            allowedTools: ["kb_search"],
+            allowedTools: SpecialistTools.forRole(.writer),
             systemPrompt: """
             คุณคือ Writer หน้าที่คือเรียบเรียงให้อ่านรู้เรื่องและตรวจสอบย้อนกลับได้
             - ทุกประโยคที่มาจากคลังความรู้ต้องมี citation ระบุเอกสารและ tier

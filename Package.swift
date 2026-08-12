@@ -80,6 +80,12 @@ let package = Package(
                 dependencies: ["AgentKit", "Observability", "Execution",
                                .product(name: "DuckDB", package: "duckdb-swift")]),
 
+        // M3 — the roster: agents, skills and plugins loaded from files
+        // (ARCHITECTURE §7). Knows the *names* of tools and their declared
+        // risk, and nothing else about them: it must not be able to reach a
+        // tool any more than a channel can.
+        .target(name: "Roster", dependencies: ["AgentKit", "Observability"]),
+
         // M4 — the channels (ARCHITECTURE §8). **This list is the invariant**
         // (P7.4): no ToolBelt, no CoreEngine, so a channel cannot reach a tool
         // or the gateway even by accident. v1's bug B2 was a Telegram bridge
@@ -163,7 +169,7 @@ let package = Package(
             dependencies: ["AgentKit", "Config", "Observability", "Sidecar", "Persistence",
                            "LLMProviders", "CoreEngine", "Execution", "ToolBelt",
                            "Knowledge", "EmbeddingRuntime", "MLXRuntime", "Analysis",
-                           "Channels", "DocGen"]
+                           "Channels", "DocGen", "Roster"]
         ),
 
         .testTarget(name: "AgentKitTests", dependencies: ["AgentKit"]),
@@ -185,6 +191,9 @@ let package = Package(
         .testTarget(name: "AnalysisTests", dependencies: ["Analysis"]),
         .testTarget(name: "ChannelsTests", dependencies: ["Channels"]),
         .testTarget(name: "DocGenTests", dependencies: ["DocGen", "Knowledge"]),
+        // CoreEngine is here so the role→tool table in Roster is checked
+        // against the specialists it mirrors, rather than trusted.
+        .testTarget(name: "RosterTests", dependencies: ["Roster", "CoreEngine", "ToolBelt"]),
         // Also hosts the end-to-end walking-skeleton test, which needs a real
         // database and a real sidecar alongside the tools and the gate.
         .testTarget(name: "ToolBeltTests",
