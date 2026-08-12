@@ -121,7 +121,7 @@ let package = Package(
         // able to see a tool.
         .target(name: "ToolBelt",
                 dependencies: ["AgentKit", "Observability", "Execution",
-                               "Knowledge", "WebSearch", "Analysis", "Roster"]),
+                               "Knowledge", "WebSearch", "Analysis", "Roster", "DocGen"]),
 
         // M6/MCP — other people's tools (ARCHITECTURE §6.2, P8.3). Its own
         // target rather than part of ToolBelt so the SDK, its NIO and its
@@ -239,6 +239,6 @@ let package = Package(
         // database and a real sidecar alongside the tools and the gate.
         .testTarget(name: "ToolBeltTests",
                     dependencies: ["ToolBelt", "CoreEngine", "Persistence", "Sidecar", "Config",
-                                   "Knowledge", "WebSearch", "Roster"]),
+                                   "Knowledge", "WebSearch", "Roster", "Analysis", "DocGen"]),
     ]
 )

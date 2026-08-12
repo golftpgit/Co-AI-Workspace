@@ -208,6 +208,26 @@ struct Engine: Sendable {
             // it goes through the one hook chain like everything else, and so
             // the notebook's operator can ask for the same check by hand.
             StatTestTool(),
+            // The four tools that closed a gap found by reading the plan
+            // (2026-08-12): every one of these wraps a capability that was
+            // finished, tested and reachable from nothing — `URLIngestor` was
+            // referenced by exactly one file, its own. Sixth instance of D6.
+            IngestURLTool(
+                index: { [knowledgeStore, embedder] in
+                    var index = KnowledgeIndex(profile: embedder.profile)
+                    for scope in [Scope.central, .policy] {
+                        let chunks = (try? await knowledgeStore.load(scope: scope)) ?? []
+                        try? index.insert(contentsOf: chunks.map {
+                            $0.embeddingProfileID == embedder.profile.id ? $0 : $0.withoutEmbedding()
+                        })
+                    }
+                    return index
+                },
+                // Written through before the tool answers: an ingest held only
+                // in memory is one the person loses without being told.
+                persist: { [knowledgeStore] chunks in try await knowledgeStore.save(chunks) },
+                embedder: embedder),
+            SaveDocumentTool(directory: paths.documentsDirectory),
         ])
         // §7.3 / P8.5 — the agent writing down what it worked out. Registered
         // like any other tool, because that is the whole point: it goes through
@@ -263,6 +283,15 @@ struct Engine: Sendable {
         // password is not in it.
         let connectors = ConnectorStore(
             file: paths.analysisDirectory.appending(path: "connectors.json"))
+        // §12 — registered here rather than above because this is where the
+        // store exists. The Analyst's tool list was `kb_search`, `run_shell`,
+        // `run_stat_test`: the specialist whose whole job is analysis could not
+        // reach the analysis store at all (found 2026-08-12).
+        await gateway.register([
+            AnalysisQueryTool(store: { analysis }),
+            AnalysisExecuteTool(store: { analysis }),
+            PullDBTableTool(store: { analysis }, connectors: { connectors.load() }),
+        ])
         // Nil on a machine with no Python: the notebook's SQL cells still work,
         // and the screen says which half is missing rather than failing at the
         // first Python cell.

@@ -100,10 +100,11 @@ public enum ManifestError: Error, CustomStringConvertible, Equatable {
 public enum RoleTools {
     public static func tools(for role: Role) -> [String] {
         switch role {
-        case .researcher: ["kb_search", "web_search", "fetch_page"]
-        case .analyst: ["kb_search", "run_shell", "run_stat_test"]
+        case .researcher: ["kb_search", "web_search", "fetch_page", "ingest_url"]
+        case .analyst: ["kb_search", "run_shell", "run_stat_test",
+                        "analysis_query", "analysis_execute", "pull_db_table"]
         case .engineer: ["run_shell", "kb_search"]
-        case .writer: ["kb_search"]
+        case .writer: ["kb_search", "save_document"]
         case .reviewer, .teamLead: []
         }
     }
