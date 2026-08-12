@@ -183,7 +183,20 @@ let package = Package(
             dependencies: ["AgentKit", "Config", "Observability", "Sidecar", "Persistence",
                            "LLMProviders", "CoreEngine", "Execution", "ToolBelt",
                            "Knowledge", "EmbeddingRuntime", "MLXRuntime", "Analysis",
-                           "Channels", "DocGen", "Roster", "MCPBridge"]
+                           "Channels", "DocGen", "Roster", "MCPBridge"],
+            // §14.3 — what makes an App Intent findable rather than merely
+            // written. Shortcuts and Siri read `Metadata.appintents` from the
+            // bundle, and that bundle is produced by `appintentsmetadataprocessor`
+            // from constant values the *compiler* has to be asked to emit.
+            // Xcode passes these flags for you; SwiftPM does not, so an intent
+            // built here without them compiles, links, runs from a test, and is
+            // invisible to Siri — the same shape of failure as D6.
+            // `scripts/build-app.sh` runs the processor over what these emit.
+            swiftSettings: [
+                .unsafeFlags(["-emit-const-values",
+                              "-Xfrontend", "-const-gather-protocols-file",
+                              "-Xfrontend", "Resources/AppIntentsProtocols.json"]),
+            ]
         ),
 
         .testTarget(name: "AgentKitTests", dependencies: ["AgentKit"]),
