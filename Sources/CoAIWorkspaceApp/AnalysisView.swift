@@ -75,12 +75,18 @@ struct AnalysisView: View {
             Spacer()
 
             if let status = model.status {
-                Text(status.message)
-                    .font(.caption)
-                    .foregroundStyle(status.isError ? .red : .secondary)
-                    .lineLimit(2)
-                    .frame(maxWidth: 420, alignment: .trailing)
-                    .onTapGesture { model.clearStatus() }
+                // A button rather than a tap gesture: dismissing this is the
+                // only way to clear it, and an action that only a mouse can
+                // reach is an action some people do not have (§14.4).
+                Button { model.clearStatus() } label: {
+                    Text(status.message)
+                        .font(.caption)
+                        .foregroundStyle(status.isError ? .red : .secondary)
+                        .lineLimit(2)
+                        .frame(maxWidth: 420, alignment: .trailing)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("ปิดข้อความนี้")
             }
         }
         .padding(12)
@@ -120,18 +126,25 @@ private struct NotebookPane: View {
             Divider()
             List {
                 ForEach(model.notebooks) { notebook in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(notebook.title).lineLimit(1)
-                        Text("\(notebook.cells.count) เซลล์ · \(scopeLabel(notebook.scope))")
-                            .font(.caption2).foregroundStyle(.secondary)
+                    Button { model.open(notebook) } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(notebook.title).lineLimit(1)
+                            Text("\(notebook.cells.count) เซลล์ · \(scopeLabel(notebook.scope))")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
-                    .onTapGesture { model.open(notebook) }
+                    .buttonStyle(.plain)
                     .listRowBackground(notebook.id == model.notebook?.id
                                        ? Color.accentColor.opacity(0.15) : Color.clear)
                     .contextMenu {
                         Button("ลบ", role: .destructive) { model.delete(notebook) }
                     }
+                    // The same action, offered where a context menu is not:
+                    // right-click is a mouse, and VoiceOver reaches this
+                    // through the actions rotor (§14.4).
+                    .accessibilityAction(named: "ลบสมุดงานนี้") { model.delete(notebook) }
                 }
             }
             .listStyle(.sidebar)
@@ -459,15 +472,24 @@ private struct ExplorerPane: View {
                             }
                         }
                     } label: {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(table.name).font(.callout)
-                            Text(table.rowCount.map { "\($0) แถว" } ?? "นับแถวไม่ได้")
-                                .font(.caption2).foregroundStyle(.secondary)
+                        // The disclosure triangle expands; the name writes a
+                        // SELECT into the editor. Two actions, so the second
+                        // one is a control rather than a gesture on a label —
+                        // otherwise it exists only for a mouse.
+                        Button {
+                            model.explorerSQL = "SELECT * FROM "
+                                + "\(AnalysisStore.quoted(table.name)) LIMIT 100"
+                        } label: {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(table.name).font(.callout)
+                                Text(table.rowCount.map { "\($0) แถว" } ?? "นับแถวไม่ได้")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            model.explorerSQL = "SELECT * FROM \(AnalysisStore.quoted(table.name)) LIMIT 100"
-                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("ใส่คำสั่ง SELECT ของตารางนี้ลงในช่องเขียน SQL")
                     }
                 }
                 Section {
@@ -507,9 +529,14 @@ private struct ConnectorRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 5) {
+                // Connected is green and filled, not-connected is grey and
+                // hollow — which is two ways of saying it to someone who can
+                // see it and none to anyone else. The state is in the label.
                 Image(systemName: model.isConnected(connector) ? "circle.fill" : "circle")
                     .font(.system(size: 7))
                     .foregroundStyle(model.isConnected(connector) ? .green : .secondary)
+                    .accessibilityLabel(model.isConnected(connector)
+                                        ? "ต่ออยู่" : "ยังไม่ได้ต่อ")
                 Text(connector.alias).font(.callout)
                 Spacer()
                 if model.isConnected(connector) {
@@ -532,16 +559,20 @@ private struct ConnectorRow: View {
             }
             ForEach(model.externalTables[connector.alias] ?? [], id: \.self) { table in
                 HStack {
-                    Text(table).font(.caption2)
-                    Spacer()
+                    Button {
+                        model.explorerSQL = "SELECT * FROM "
+                            + "\(AnalysisStore.quoted(connector.alias))."
+                            + "\(AnalysisStore.quoted(table)) LIMIT 100"
+                    } label: {
+                        Text(table).font(.caption2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("ใส่คำสั่ง SELECT ของตารางนี้ลงในช่องเขียน SQL")
                     Button("ดึงเข้ามา") { Task { await model.pull(table, from: connector.alias) } }
                         .buttonStyle(.borderless)
                         .font(.caption2)
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    model.explorerSQL = "SELECT * FROM \(AnalysisStore.quoted(connector.alias))."
-                        + "\(AnalysisStore.quoted(table)) LIMIT 100"
                 }
             }
         }
@@ -549,6 +580,9 @@ private struct ConnectorRow: View {
             Button("ลบแหล่งนี้", role: .destructive) {
                 Task { await model.remove(connector: connector) }
             }
+        }
+        .accessibilityAction(named: "ลบแหล่งข้อมูลนี้") {
+            Task { await model.remove(connector: connector) }
         }
     }
 }
@@ -666,25 +700,31 @@ private struct PlanPane: View {
             Divider()
             List {
                 ForEach(model.plans) { plan in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(plan.title).lineLimit(1)
-                        HStack(spacing: 4) {
-                            if plan.isApproved {
-                                Label("อนุมัติแล้ว", systemImage: "checkmark.seal.fill")
-                                    .foregroundStyle(.green)
-                            } else {
-                                Text("ค้าง \(plan.blockers.count) ข้อ")
-                                    .foregroundStyle(.orange)
+                    Button { model.open(plan: plan) } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(plan.title).lineLimit(1)
+                            HStack(spacing: 4) {
+                                if plan.isApproved {
+                                    Label("อนุมัติแล้ว", systemImage: "checkmark.seal.fill")
+                                        .foregroundStyle(.green)
+                                } else {
+                                    Text("ค้าง \(plan.blockers.count) ข้อ")
+                                        .foregroundStyle(.orange)
+                                }
                             }
+                            .font(.caption2)
                         }
-                        .font(.caption2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
-                    .onTapGesture { model.open(plan: plan) }
+                    .buttonStyle(.plain)
                     .listRowBackground(plan.id == model.plan?.id
                                        ? Color.accentColor.opacity(0.15) : Color.clear)
                     .contextMenu {
                         Button("ลบ", role: .destructive) { Task { await model.deletePlan(plan) } }
+                    }
+                    .accessibilityAction(named: "ลบแผนนี้") {
+                        Task { await model.deletePlan(plan) }
                     }
                 }
             }

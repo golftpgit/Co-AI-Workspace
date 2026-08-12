@@ -246,12 +246,14 @@ private struct CeilingField: View {
     let onChange: (Double?) -> Void
 
     @State private var text = ""
+    /// Scales with Dynamic Type — see the note in BootStatusView.
+    @ScaledMetric private var column: CGFloat = 90
 
     var body: some View {
         HStack {
-            Text(label).frame(width: 90, alignment: .leading)
+            Text(label).frame(width: column, alignment: .leading)
             TextField("ไม่จำกัด", text: $text)
-                .frame(width: 90)
+                .frame(width: column)
                 .onSubmit { onChange(Double(text)) }
             if let used, let value {
                 // Spent against the ceiling, on the same line: a limit without

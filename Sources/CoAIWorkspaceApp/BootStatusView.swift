@@ -10,6 +10,7 @@ struct BootStatusView: View {
     /// P8.4 — owned here rather than rebuilt on each body pass, for the reason
     /// every other view model on this project is owned by its screen.
     @State private var plugins = PluginsViewModel()
+    @ScaledMetric private var labelColumn: CGFloat = 150
 
     var body: some View {
         ScrollView {
@@ -185,7 +186,11 @@ struct BootStatusView: View {
 
     private func labeled(_ label: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(label).foregroundStyle(.secondary).frame(width: 150, alignment: .leading)
+            // `@ScaledMetric`, not a constant: a label column fixed at 150pt
+            // clips its own text at the larger Dynamic Type sizes, which is
+            // exactly the setting the people who need it are using.
+            Text(label).foregroundStyle(.secondary)
+                .frame(width: labelColumn, alignment: .leading)
             Text(value).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }
