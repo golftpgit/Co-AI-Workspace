@@ -51,6 +51,12 @@ public struct ChannelAccount: Sendable, Codable, Equatable, Identifiable {
     /// an empty list defaulting to open is one leaked token away from a stranger
     /// running commands on this machine.
     public var allowedChats: [String]
+    /// LINE only: the variable holding the *channel secret*, which is what its
+    /// webhook signature is computed under. A second name rather than a second
+    /// meaning for the first: the access token sends messages, the channel
+    /// secret proves an inbound one is real, and mixing them up fails in a way
+    /// that looks like LINE being broken.
+    public var signingSecretVariable: String?
     /// §8.2: a channel may pin its own model. Nil follows the router.
     public var modelOverride: String?
     public var scope: Scope
@@ -61,6 +67,7 @@ public struct ChannelAccount: Sendable, Codable, Equatable, Identifiable {
                 name: String,
                 tokenVariable: String,
                 allowedChats: [String] = [],
+                signingSecretVariable: String? = nil,
                 modelOverride: String? = nil,
                 scope: Scope = .central,
                 isEnabled: Bool = true) {
@@ -69,6 +76,7 @@ public struct ChannelAccount: Sendable, Codable, Equatable, Identifiable {
         self.name = name
         self.tokenVariable = tokenVariable
         self.allowedChats = allowedChats
+        self.signingSecretVariable = signingSecretVariable
         self.modelOverride = modelOverride
         self.scope = scope
         self.isEnabled = isEnabled
@@ -88,6 +96,9 @@ public struct ChannelAccount: Sendable, Codable, Equatable, Identifiable {
         if token == nil { reasons.append("ยังไม่ได้ตั้งตัวแปร \(tokenVariable) ที่เก็บโทเคน") }
         if allowedChats.isEmpty {
             reasons.append("ยังไม่มี chat id ที่อนุญาต — รายการว่างแปลว่าไม่รับจากใครเลย")
+        }
+        if platform == .line, signingSecretVariable.map({ !SecretStore.has($0) }) ?? true {
+            reasons.append("LINE ต้องมีตัวแปรที่เก็บ channel secret สำหรับตรวจลายเซ็น webhook")
         }
         return reasons
     }
