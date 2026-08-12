@@ -22,6 +22,12 @@ let package = Package(
         // rather than a C wrapper of our own; the C++ amalgamation inside it is
         // why a clean build of this project is measured in minutes.
         .package(url: "https://github.com/duckdb/duckdb-swift", from: "1.1.3"),
+        // M6 — MCP, both halves (ARCHITECTURE §6.2, P8.3). The official SDK
+        // rather than the JSON-RPC client v1 had to write and maintain itself.
+        // Pinned at the minor: this SDK is pre-1.0, where a minor bump is
+        // allowed to break, and `from:` would take one silently.
+        .package(url: "https://github.com/modelcontextprotocol/swift-sdk",
+                 "0.12.1"..<"0.13.0"),
     ],
     targets: [
         // M2 — shared types/protocols only, no logic. Everything may import this.
@@ -112,6 +118,14 @@ let package = Package(
                 dependencies: ["AgentKit", "Observability", "Execution",
                                "Knowledge", "WebSearch", "Analysis"]),
 
+        // M6/MCP — other people's tools (ARCHITECTURE §6.2, P8.3). Its own
+        // target rather than part of ToolBelt so the SDK, its NIO and its
+        // logging stay out of every other tool's build; it depends on
+        // Execution because spawning a server is §13's business, not its own.
+        .target(name: "MCPBridge",
+                dependencies: ["AgentKit", "Observability", "Execution",
+                               .product(name: "MCP", package: "swift-sdk")]),
+
         // M7 — the knowledge base's own logic: tokenisation, chunking and the
         // lexical half of hybrid search (ARCHITECTURE §11). Deliberately free
         // of storage and models so it can be measured on its own.
@@ -169,7 +183,7 @@ let package = Package(
             dependencies: ["AgentKit", "Config", "Observability", "Sidecar", "Persistence",
                            "LLMProviders", "CoreEngine", "Execution", "ToolBelt",
                            "Knowledge", "EmbeddingRuntime", "MLXRuntime", "Analysis",
-                           "Channels", "DocGen", "Roster"]
+                           "Channels", "DocGen", "Roster", "MCPBridge"]
         ),
 
         .testTarget(name: "AgentKitTests", dependencies: ["AgentKit"]),
@@ -190,6 +204,10 @@ let package = Package(
         .testTarget(name: "ExecutionTests", dependencies: ["Execution", "Config"]),
         .testTarget(name: "AnalysisTests", dependencies: ["Analysis"]),
         .testTarget(name: "ChannelsTests", dependencies: ["Channels"]),
+        // CoreEngine is here for the reason P8.3 exists: the Done-when is that
+        // an MCP tool reaches a real session's tool list, and the gateway is
+        // where that is either true or not (v1 bug D6).
+        .testTarget(name: "MCPBridgeTests", dependencies: ["MCPBridge", "CoreEngine"]),
         .testTarget(name: "DocGenTests", dependencies: ["DocGen", "Knowledge"]),
         // CoreEngine is here so the role→tool table in Roster is checked
         // against the specialists it mirrors, rather than trusted.

@@ -118,6 +118,16 @@ struct BootStatusView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                 }
+                // §6.2: and the same for MCP. A server that did not start is
+                // a tool list that is quietly shorter than the one the agent
+                // was written against — D6's failure, seen from the outside.
+                labeled("MCP (§6.2)", mcpSummary(engine))
+                ForEach(Array(engine.mcpProblems.enumerated()), id: \.offset) { _, problem in
+                    Text("• \(problem)")
+                        .font(.caption).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
             } else {
                 HStack(spacing: 8) {
                     statusDot(.orange)
@@ -141,6 +151,18 @@ struct BootStatusView: View {
     }
 
     // MARK: - building blocks
+
+    /// Counted in tools, not in servers: "2 servers" says nothing about
+    /// whether the thing an agent needs is on the list.
+    private func mcpSummary(_ engine: Engine) -> String {
+        guard !engine.mcpConnected.isEmpty || !engine.mcpProblems.isEmpty else {
+            return "ยังไม่ได้ตั้งค่าเซิร์ฟเวอร์"
+        }
+        let tools = engine.mcpConnected.reduce(0) { $0 + $1.toolNames.count }
+        let servers = "\(engine.mcpConnected.count) เซิร์ฟเวอร์ · \(tools) เครื่องมือ"
+        return engine.mcpProblems.isEmpty ? servers
+            : servers + " · ต่อไม่ได้ \(engine.mcpProblems.count)"
+    }
 
     private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 8) {
