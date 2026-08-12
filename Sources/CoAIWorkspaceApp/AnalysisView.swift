@@ -516,6 +516,16 @@ private struct ExplorerPane: View {
             .listStyle(.sidebar)
         }
         .frame(width: 230)
+        // Re-read from disk when the sheet closes. Driving this screen by hand
+        // (U19, 2026-08-12) found that adding a source left the whole external
+        // section rendering *nothing* — not the new row and not the "cannot
+        // connect yet" placeholders that were there before — until the pane was
+        // left and re-entered. The connector was saved correctly; the view had
+        // simply not re-rendered. Reloading here makes the list match the file
+        // whatever SwiftUI did with the in-flight update.
+        .onChange(of: addingConnector) { _, isPresented in
+            if !isPresented { model.reloadConnectors() }
+        }
         .sheet(isPresented: $addingConnector) {
             ConnectorSheet(model: model, isPresented: $addingConnector)
         }

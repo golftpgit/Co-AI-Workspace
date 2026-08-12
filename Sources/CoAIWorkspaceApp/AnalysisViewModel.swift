@@ -457,6 +457,15 @@ public final class AnalysisViewModel {
     /// which is exactly what the guard is for.
     public func importFile(_ url: URL, confirmed: Bool = false) async {
         guard let runner else { return }
+        // A sandboxed app reaches a file the user chose **only inside this
+        // scope**, and DuckDB opens the path itself — so without this the
+        // import fails with a raw `IO Error: Cannot open file`, which is what
+        // it did until somebody drove this screen by hand (U19, 2026-08-12).
+        // Held across the confirmation round-trip too: the second call is the
+        // one that actually reads.
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
         let table = url.deletingPathExtension().lastPathComponent
         let cell = NotebookCell(kind: .sql,
                                 source: AnalysisStore.importStatement(url, into: table))
@@ -470,17 +479,40 @@ public final class AnalysisViewModel {
                 confirmation = Confirmation(assessment: assessment,
                                             source: .importFile(url, table: table))
             } else {
-                status = Status(message: "นำเข้าไม่สำเร็จ: \(error)", isError: true)
+                status = Status(message: Self.importFailure(error, file: url), isError: true)
             }
         } catch {
-            status = Status(message: "นำเข้าไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: Self.importFailure(error, file: url), isError: true)
         }
+    }
+
+    /// What went wrong, in words rather than in a nested `Optional(...)`.
+    ///
+    /// The raw description of a DuckDB failure is `connectionQueryError(reason:
+    /// Optional("IO Error: Cannot open file \"…` — which the status line then
+    /// truncates, so the one useful sentence is the part that gets cut. The
+    /// most common cause has a fix a person can act on, so it is named.
+    static func importFailure(_ error: any Error, file: URL) -> String {
+        let raw = "\(error)"
+        if raw.contains("Cannot open file") || raw.contains("IO Error") {
+            return "อ่านไฟล์ \(file.lastPathComponent) ไม่ได้ — "
+                + "แอปเข้าถึงไฟล์นี้ไม่ได้ (สิทธิ์ของ sandbox) ลองเลือกไฟล์ใหม่อีกครั้ง "
+                + "หรือย้ายไฟล์ไปโฟลเดอร์เอกสารก่อน"
+        }
+        return "นำเข้า \(file.lastPathComponent) ไม่สำเร็จ: \(raw)"
     }
 
     // MARK: - external databases (§12.2)
 
     public func isConnected(_ connector: DBConnector) -> Bool {
         attached.contains(connector.alias)
+    }
+
+    /// Re-reads the saved sources. Called when the add sheet closes — see the
+    /// note at that call site.
+    public func reloadConnectors() {
+        guard let connectorStore else { return }
+        connectors = connectorStore.load(scope: scope)
     }
 
     public func save(connector: DBConnector) {
