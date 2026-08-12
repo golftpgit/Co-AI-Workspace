@@ -71,6 +71,17 @@ struct Engine: Sendable {
     /// on this struct: a capability that only its own tests can reach is the
     /// mistake this project has made four times.
     let analysis: AnalysisStore?
+    /// Where notebooks are kept, and the interpreter that runs their Python
+    /// cells (§12.5, P6.4). The kernel is *constructed* here and started by the
+    /// screen: resolving an interpreter costs nothing, and launching a Python
+    /// process at boot for a screen nobody may open costs a process.
+    let notebooks: NotebookStore
+    let notebookKernel: NotebookKernel?
+    /// §12.4 — the pre-registration and the model that reads a proposal into
+    /// one. The plan store is durable for the same reason the conflict ledger
+    /// is: a method agreed only in memory was never agreed.
+    let plans: AnalysisPlanStore
+    let gapDetector: GapDetector
 
     static func build(config: BootstrapConfig, paths: AppPaths) async throws -> Engine {
         let client = SurrealClient(url: URL(string: "ws://127.0.0.1:\(config.surrealPort)/rpc")!)
@@ -156,6 +167,10 @@ struct Engine: Sendable {
                 embedder: embedder),
             WebSearchTool(),
             FetchPageTool(),
+            // §12.3's gate. On the tool list rather than inside the Analyst so
+            // it goes through the one hook chain like everything else, and so
+            // the notebook's operator can ask for the same check by hand.
+            StatTestTool(),
         ])
 
         // The budget is what this machine can actually serve, not what the
@@ -194,6 +209,12 @@ struct Engine: Sendable {
         // and a corrupt `.duckdb` must not be the reason chat will not open.
         let analysis = try? AnalysisStore(
             fileURL: paths.analysisDirectory.appending(path: "analysis.duckdb"))
+        let notebooks = NotebookStore(
+            directory: paths.analysisDirectory.appending(path: "notebooks"))
+        // Nil on a machine with no Python: the notebook's SQL cells still work,
+        // and the screen says which half is missing rather than failing at the
+        // first Python cell.
+        let notebookKernel = try? NotebookKernel(workingDirectory: paths.analysisDirectory)
 
         var summary: [String] = []
         for executor in executors {
@@ -214,13 +235,19 @@ struct Engine: Sendable {
                       modelCatalog: modelCatalog, modelInstaller: modelInstaller,
                       endpoints: endpoints, endpointChecks: endpointChecks,
                       governor: governor, spendLedger: spendLedger,
-                      analysis: analysis)
+                      analysis: analysis, notebooks: notebooks,
+                      notebookKernel: notebookKernel,
+                      plans: AnalysisPlanStore(client: client),
+                      gapDetector: GapDetector(router: router))
     }
 
     /// Nothing the engine started may outlive the app (§13).
     func shutdown() async {
         await broker.cancelAll()
         await processes.stopAll()
+        // The kernel is a process too, and it is not in the registry — it
+        // outlives every cell by design, so it has to be closed by name.
+        await notebookKernel?.stop()
         await client.close()
     }
 }

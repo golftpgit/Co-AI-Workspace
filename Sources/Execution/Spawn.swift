@@ -62,9 +62,25 @@ enum Spawn {
         defer { posix_spawnattr_destroy(&attributes) }
         // SETPGROUP + group 0 is the whole point of this file; CLOEXEC_DEFAULT
         // keeps the child from inheriting our sockets and database handles.
+        //
+        // SETSIGDEF and SETSIGMASK are here because signal dispositions are
+        // inherited across exec, and a child that inherits SIG_IGN for SIGINT
+        // is a child the Stop button cannot reach. This is not hypothetical:
+        // a process started from a non-interactive shell has SIGINT and SIGQUIT
+        // ignored, and CPython does not install its own SIGINT handler when it
+        // finds one already ignored — so a notebook cell spawned that way ran
+        // `time.sleep(60)` straight through the interrupt (found by P6.4's
+        // test, which is why it exists).
+        var defaults = sigset_t()
+        sigfillset(&defaults)
+        posix_spawnattr_setsigdefault(&attributes, &defaults)
+        var unblocked = sigset_t()
+        sigemptyset(&unblocked)
+        posix_spawnattr_setsigmask(&attributes, &unblocked)
         posix_spawnattr_setflags(
             &attributes,
-            Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT))
+            Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT
+                  | POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK))
         posix_spawnattr_setpgroup(&attributes, 0)
 
         var pid: pid_t = 0
