@@ -83,6 +83,10 @@ public final class AnalysisViewModel {
     public private(set) var explorerError: String?
     public private(set) var tables: [TableSummary] = []
     public private(set) var attached: [String] = []
+    /// Saved connections to other people's databases (§12.2, P6.3).
+    public private(set) var connectors: [DBConnector] = []
+    /// Tables of each attached database, filled in as they are connected.
+    public private(set) var externalTables: [String: [String]] = [:]
 
     // MARK: - the analysis plan (§12.4)
 
@@ -107,6 +111,7 @@ public final class AnalysisViewModel {
     private var kernel: NotebookKernel?
     private var store: AnalysisStore?
     private var library: NotebookStore?
+    private var connectorStore: ConnectorStore?
     private var planStore: AnalysisPlanStore?
     private var detector: GapDetector?
     private var scope: Scope = .central
@@ -120,6 +125,11 @@ public final class AnalysisViewModel {
         self.detector = detector
         self.scope = scope
         await loadPlans()
+    }
+
+    public func attach(connectors store: ConnectorStore) {
+        connectorStore = store
+        connectors = store.load(scope: scope)
     }
 
     public func attach(store: AnalysisStore?, kernel: NotebookKernel?, library: NotebookStore) async {
@@ -375,6 +385,84 @@ public final class AnalysisViewModel {
             }
         } catch {
             status = Status(message: "นำเข้าไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    // MARK: - external databases (§12.2)
+
+    public func isConnected(_ connector: DBConnector) -> Bool {
+        attached.contains(connector.alias)
+    }
+
+    public func save(connector: DBConnector) {
+        guard let connectorStore else { return }
+        do {
+            connectors = try connectorStore.add(connector).filter {
+                $0.scope == scope || $0.scope == .central
+            }
+        } catch {
+            status = Status(message: "บันทึกแหล่งข้อมูลไม่ได้: \(error)", isError: true)
+        }
+    }
+
+    public func remove(connector: DBConnector) async {
+        guard let connectorStore else { return }
+        if isConnected(connector) { await disconnect(connector) }
+        connectors = ((try? connectorStore.remove(connector.id)) ?? []).filter {
+            $0.scope == scope || $0.scope == .central
+        }
+    }
+
+    /// Connects on request rather than at boot.
+    ///
+    /// Deliberately not automatic: attaching a remote database reaches across
+    /// the network and can want a password, and neither belongs in the path of
+    /// opening a screen. What the screen does instead is show plainly which
+    /// connections are live.
+    public func connect(_ connector: DBConnector) async {
+        guard let store else { return }
+        do {
+            try await store.attach(connector)
+            externalTables[connector.alias] = try await store.tables(in: connector.alias)
+            await refresh()
+            status = Status(message: "ต่อ \(connector.alias) แล้ว — "
+                            + "\(externalTables[connector.alias]?.count ?? 0) ตาราง", isError: false)
+        } catch {
+            // Whatever comes back here has already had any password scrubbed
+            // out of it (P6.3).
+            status = Status(message: "\(error)", isError: true)
+        }
+    }
+
+    public func disconnect(_ connector: DBConnector) async {
+        guard let store else { return }
+        try? await store.detach(connector.alias)
+        externalTables[connector.alias] = nil
+        await refresh()
+    }
+
+    /// Copies a remote table in. Goes through the runner like every other
+    /// statement, so `CREATE OR REPLACE` over an existing local table is
+    /// confirmed rather than assumed (P6.5).
+    public func pull(_ table: String, from alias: String) async {
+        guard let runner else { return }
+        let sql = """
+        CREATE OR REPLACE TABLE \(AnalysisStore.quoted("\(alias)_\(table)")) AS
+        SELECT * FROM \(AnalysisStore.quoted(alias)).\(AnalysisStore.quoted(table))
+        """
+        do {
+            _ = try await runner.run(NotebookCell(kind: .sql, source: sql))
+            await refresh()
+            status = Status(message: "ดึง \(alias).\(table) เข้ามาแล้ว", isError: false)
+        } catch let error as NotebookError {
+            if case .needsConfirmation(let assessment) = error {
+                confirmation = Confirmation(assessment: assessment, source: .explorer)
+                explorerSQL = sql
+            } else {
+                status = Status(message: "\(error)", isError: true)
+            }
+        } catch {
+            status = Status(message: "\(error)", isError: true)
         }
     }
 

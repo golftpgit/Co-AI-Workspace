@@ -94,6 +94,7 @@ private struct RootView: View {
                             await analysis.attach(store: engine.analysis,
                                                   kernel: engine.notebookKernel,
                                                   library: engine.notebooks)
+                            analysis.attach(connectors: engine.connectors)
                             await analysis.attach(plans: engine.plans,
                                                   detector: engine.gapDetector)
                         }

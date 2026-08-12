@@ -77,6 +77,7 @@ struct Engine: Sendable {
     /// process at boot for a screen nobody may open costs a process.
     let notebooks: NotebookStore
     let notebookKernel: NotebookKernel?
+    let connectors: ConnectorStore
     /// §12.4 — the pre-registration and the model that reads a proposal into
     /// one. The plan store is durable for the same reason the conflict ledger
     /// is: a method agreed only in memory was never agreed.
@@ -211,6 +212,12 @@ struct Engine: Sendable {
             fileURL: paths.analysisDirectory.appending(path: "analysis.duckdb"))
         let notebooks = NotebookStore(
             directory: paths.analysisDirectory.appending(path: "notebooks"))
+        // §12.2 — saved connections to other people's databases. A file rather
+        // than a row: it has to be readable before anything is connected to
+        // anything, and a person should be able to open it and see that their
+        // password is not in it.
+        let connectors = ConnectorStore(
+            file: paths.analysisDirectory.appending(path: "connectors.json"))
         // Nil on a machine with no Python: the notebook's SQL cells still work,
         // and the screen says which half is missing rather than failing at the
         // first Python cell.
@@ -236,7 +243,7 @@ struct Engine: Sendable {
                       endpoints: endpoints, endpointChecks: endpointChecks,
                       governor: governor, spendLedger: spendLedger,
                       analysis: analysis, notebooks: notebooks,
-                      notebookKernel: notebookKernel,
+                      notebookKernel: notebookKernel, connectors: connectors,
                       plans: AnalysisPlanStore(client: client),
                       gapDetector: GapDetector(router: router))
     }

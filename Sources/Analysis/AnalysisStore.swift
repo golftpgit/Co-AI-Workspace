@@ -73,6 +73,11 @@ public actor AnalysisStore {
     /// Nil for an in-memory store, which is what tests and scratch work use.
     public nonisolated let fileURL: URL?
     private let log = AppLog.logger("analysis")
+    /// The password currently being used to attach something, so `query` can
+    /// keep it out of the log and out of the error it throws. Set and cleared
+    /// by the connector attach (P6.3); nil the rest of the time, which is
+    /// almost always.
+    var secretInFlight: String?
 
     /// Opens (or creates) the store.
     ///
@@ -121,9 +126,16 @@ public actor AnalysisStore {
             // The SQL is carried with the message: by the time an error
             // reaches a screen or an agent, "syntax error at or near" with no
             // statement beside it is unactionable.
-            let message = String(describing: error)
+            //
+            // Except for the one thing that must never travel with it. DuckDB
+            // quotes the failing statement back, so a failed `ATTACH` on a
+            // connection string would put a live password into the log line
+            // below, into the span, and onto the screen. While a secret is in
+            // flight it is scrubbed from both halves (P6.3).
+            let message = Self.redact(String(describing: error), secret: secretInFlight)
             log.error("query failed: \(message, privacy: .public)")
-            throw AnalysisError.queryFailed(sql: sql, message: message)
+            throw AnalysisError.queryFailed(sql: Self.redact(sql, secret: secretInFlight),
+                                            message: message)
         }
     }
 
