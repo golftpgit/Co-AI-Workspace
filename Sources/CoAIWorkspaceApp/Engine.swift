@@ -12,6 +12,7 @@ import EmbeddingRuntime
 import MLXRuntime
 import Analysis
 import Channels
+import Roster
 
 // ─────────────────────────────────────────────────────────────
 // Everything the running system is made of, assembled once at boot.
@@ -89,6 +90,12 @@ struct Engine: Sendable {
     /// "every channel through the same core" true by construction.
     let channelAccounts: ChannelAccountStore
     let channelRouter: ChannelRouter
+    /// §7 — agents and skills loaded from files. Held with the errors beside
+    /// them: a manifest that failed to load is the one thing about the roster
+    /// worth putting on the boot screen, because otherwise a typo looks like a
+    /// model that stopped following instructions.
+    let roster: [RosterEntry]
+    let rosterProblems: [String]
 
     static func build(config: BootstrapConfig, paths: AppPaths) async throws -> Engine {
         let client = SurrealClient(url: URL(string: "ws://127.0.0.1:\(config.surrealPort)/rpc")!)
@@ -250,6 +257,18 @@ struct Engine: Sendable {
             await channel.start(handler: channelRouter)
         }
 
+        // §7 — the roster. Validated against the tools that are actually
+        // registered, so a name that does not exist is caught here rather than
+        // mid-turn.
+        let adverts = await gateway.adverts
+        let manifests = ManifestParser(
+            knownTools: Set(adverts.map(\.name)),
+            toolRisks: Dictionary(uniqueKeysWithValues: adverts.map { ($0.name, $0.declaredRisk) }))
+        let agents = manifests.load(directory: paths.agentsDirectory, kind: ManifestKind.agent)
+        let skills = manifests.load(directory: paths.skillsDirectory, kind: ManifestKind.skill)
+        let roster = (agents.manifests + skills.manifests).map(manifests.entry(for:))
+        let rosterProblems = (agents.errors + skills.errors).map { "\($0)" }
+
         var summary: [String] = []
         for executor in executors {
             let reachable = await executor.isAvailable()
@@ -273,7 +292,8 @@ struct Engine: Sendable {
                       notebookKernel: notebookKernel, connectors: connectors,
                       plans: AnalysisPlanStore(client: client),
                       gapDetector: GapDetector(router: router),
-                      channelAccounts: channelAccounts, channelRouter: channelRouter)
+                      channelAccounts: channelAccounts, channelRouter: channelRouter,
+                      roster: roster, rosterProblems: rosterProblems)
     }
 
     /// Nothing the engine started may outlive the app (§13).
