@@ -74,13 +74,16 @@ public enum LimitationsBuilder {
         // §12.4 → §14.1: the assumptions, in the words the plan recorded, with
         // the reason they had to be made at all.
         for decision in plan?.decisions ?? [] where decision.wasAgentSuggested {
-            let note = decision.note.map { " (\($0))" } ?? ""
-            items.append(Limitation(
-                kind: .assumption,
-                subject: decision.question,
-                text: "\(decision.question) กำหนดเป็น “\(decision.value)” "
-                    + "เนื่องจากโครงร่างไม่ได้ระบุไว้\(note)"
-                    + (decision.origin == .humanConfirmed ? " — ผู้วิจัยยืนยันแล้ว" : "")))
+            var sentence = "\(decision.question) กำหนดเป็น “\(decision.value)” "
+                + "เนื่องจากโครงร่างไม่ได้ระบุไว้"
+            // The note is only worth adding when it says something the sentence
+            // does not. `GapDetector` writes "โครงร่างไม่ได้ระบุไว้" for exactly
+            // this case, and printing it twice reads like a stutter.
+            if let note = decision.note, !sentence.contains(note) {
+                sentence += " (\(note))"
+            }
+            if decision.origin == .humanConfirmed { sentence += " — ผู้วิจัยยืนยันแล้ว" }
+            items.append(Limitation(kind: .assumption, subject: decision.question, text: sentence))
         }
 
         // §11.6 → §14.1: a passage that survived a disagreement is not the same
