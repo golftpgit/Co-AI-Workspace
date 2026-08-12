@@ -11,6 +11,7 @@ import Knowledge
 import EmbeddingRuntime
 import MLXRuntime
 import Analysis
+import Channels
 
 // ─────────────────────────────────────────────────────────────
 // Everything the running system is made of, assembled once at boot.
@@ -83,6 +84,11 @@ struct Engine: Sendable {
     /// is: a method agreed only in memory was never agreed.
     let plans: AnalysisPlanStore
     let gapDetector: GapDetector
+    /// §8 — the channels, and the one place an inbound message becomes a turn.
+    /// Accounts are configuration; the router is the wiring that makes §8.2's
+    /// "every channel through the same core" true by construction.
+    let channelAccounts: ChannelAccountStore
+    let channelRouter: ChannelRouter
 
     static func build(config: BootstrapConfig, paths: AppPaths) async throws -> Engine {
         let client = SurrealClient(url: URL(string: "ws://127.0.0.1:\(config.surrealPort)/rpc")!)
@@ -223,6 +229,22 @@ struct Engine: Sendable {
         // first Python cell.
         let notebookKernel = try? NotebookKernel(workingDirectory: paths.analysisDirectory)
 
+        // §8 — Telegram, if an account is configured and its token is in the
+        // environment. Started here so the phone works from boot rather than
+        // from whenever somebody opens a screen; an account that is not ready
+        // says why and is skipped, because a channel that cannot run must not
+        // stop the app from starting.
+        let channelAccounts = ChannelAccountStore(
+            file: paths.root.appending(path: "channels.json"))
+        let channelRouter = ChannelRouter(runner: runner, conversations: conversations,
+                                          modes: .default)
+        for account in channelAccounts.load(platform: .telegram) where account.isReady {
+            let channel = TelegramChannel(account: account, answering: broker)
+            await broker.subscribe(channel)
+            await channelRouter.register(channel, for: account.id)
+            await channel.start(handler: channelRouter)
+        }
+
         var summary: [String] = []
         for executor in executors {
             let reachable = await executor.isAvailable()
@@ -245,7 +267,8 @@ struct Engine: Sendable {
                       analysis: analysis, notebooks: notebooks,
                       notebookKernel: notebookKernel, connectors: connectors,
                       plans: AnalysisPlanStore(client: client),
-                      gapDetector: GapDetector(router: router))
+                      gapDetector: GapDetector(router: router),
+                      channelAccounts: channelAccounts, channelRouter: channelRouter)
     }
 
     /// Nothing the engine started may outlive the app (§13).
@@ -255,6 +278,7 @@ struct Engine: Sendable {
         // The kernel is a process too, and it is not in the registry — it
         // outlives every cell by design, so it has to be closed by name.
         await notebookKernel?.stop()
+        await channelRouter.stopAll()
         await client.close()
     }
 }

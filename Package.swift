@@ -80,6 +80,13 @@ let package = Package(
                 dependencies: ["AgentKit", "Observability", "Execution",
                                .product(name: "DuckDB", package: "duckdb-swift")]),
 
+        // M4 — the channels (ARCHITECTURE §8). **This list is the invariant**
+        // (P7.4): no ToolBelt, no CoreEngine, so a channel cannot reach a tool
+        // or the gateway even by accident. v1's bug B2 was a Telegram bridge
+        // that ran tools without passing the hook chain; here the types are not
+        // in scope. `scripts/check.sh` fails if this line grows.
+        .target(name: "Channels", dependencies: ["AgentKit", "Observability", "Config"]),
+
         // M9 — every process the system runs: sandbox profile, process group
         // signals, registry (ARCHITECTURE §13). Knows nothing about agents.
         .target(name: "Execution", dependencies: ["AgentKit", "Observability", "Config"]),
@@ -149,7 +156,8 @@ let package = Package(
             name: "CoAIWorkspaceApp",
             dependencies: ["AgentKit", "Config", "Observability", "Sidecar", "Persistence",
                            "LLMProviders", "CoreEngine", "Execution", "ToolBelt",
-                           "Knowledge", "EmbeddingRuntime", "MLXRuntime", "Analysis"]
+                           "Knowledge", "EmbeddingRuntime", "MLXRuntime", "Analysis",
+                           "Channels"]
         ),
 
         .testTarget(name: "AgentKitTests", dependencies: ["AgentKit"]),
@@ -169,6 +177,7 @@ let package = Package(
         .testTarget(name: "EmbeddingRuntimeTests", dependencies: ["EmbeddingRuntime"]),
         .testTarget(name: "ExecutionTests", dependencies: ["Execution", "Config"]),
         .testTarget(name: "AnalysisTests", dependencies: ["Analysis"]),
+        .testTarget(name: "ChannelsTests", dependencies: ["Channels"]),
         // Also hosts the end-to-end walking-skeleton test, which needs a real
         // database and a real sidecar alongside the tools and the gate.
         .testTarget(name: "ToolBeltTests",

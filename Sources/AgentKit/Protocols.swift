@@ -145,6 +145,20 @@ public enum ApprovalDecision: Sendable, Equatable {
     case approvedWithEdit(argumentsJSON: String)
 }
 
+/// The answering side of the approval broker (§5.4), as a channel sees it.
+///
+/// Declared here rather than in CoreEngine so a channel can hand back a
+/// decision without importing the engine — M4 must not be able to reach the
+/// tool gateway, and one import is all it would take (v1 bug B2).
+public protocol ApprovalAnswering: Sendable {
+    /// Returns false when someone else answered first, so the losing channel
+    /// can retract its own prompt instead of silently doing nothing.
+    @discardableResult
+    func submit(_ id: ApprovalRequest.ID,
+                decision: ApprovalDecision,
+                from channel: ChannelID?) async -> Bool
+}
+
 /// GUI, Telegram, Discord, LINE and App Intents are all just this.
 /// Approval is part of the contract, not something bolted on per channel —
 /// that omission is what left v1's remote approval permanently unfinished.
