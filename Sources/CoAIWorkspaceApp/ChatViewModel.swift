@@ -170,7 +170,7 @@ final class ChatViewModel {
         case .userMessageStored:
             break                                   // already on screen
         case .routed(let executor, let tier):
-            routedVia = "\(executor) · tier \(tier.rawValue)"
+            routedVia = "\(executor) · tier \(tier.label)"
         case .assistantDelta(let chunk):
             appendToStreamingBubble(chunk)
         // One call, one card. It appears with the arguments the moment the

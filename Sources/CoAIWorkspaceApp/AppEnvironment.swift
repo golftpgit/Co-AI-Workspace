@@ -147,9 +147,10 @@ public final class AppEnvironment {
         let deadline = ContinuousClock.now.advanced(by: .seconds(20))
         while ContinuousClock.now < deadline {
             do {
-                engine = try await Engine.build(config: config, paths: paths)
+                let engine = try await Engine.build(config: config, paths: paths)
+                self.engine = engine
                 engineError = nil
-                noteIfNoModelForHighImpactWork(config)
+                noteWhichModelsExist(config, engine: engine)
                 log.info("engine ready")
                 return
             } catch {
@@ -161,21 +162,49 @@ public final class AppEnvironment {
         log.error("engine unavailable: \(self.engineError ?? "unknown", privacy: .public)")
     }
 
-    /// Says so when the only model available is the on-device one.
+    /// Says which tiers this machine actually has.
     ///
-    /// The router keeps high-impact work off it because its answers are not
-    /// stable enough to decide on (ARCH E.7) — so with no self-hosted endpoint
-    /// there is no model for that work *at all*, and conflict detection and
-    /// relation extraction return nothing on every document. Both fail quietly
-    /// by design (an unreachable model must not be read as "these sources
-    /// agree"), which is exactly why the boot screen has to be the one to
-    /// mention it. It already does this for searxngPython.
-    private func noteIfNoModelForHighImpactWork(_ config: BootstrapConfig) {
-        guard config.selfHostedEndpoint?.isEmpty ?? true else { return }
-        notes.append("ยังไม่ได้ตั้ง selfHostedEndpoint — มีแต่โมเดลบนเครื่อง "
-                     + "งานที่ต้องความแม่นสูงจึงไม่มีโมเดลรองรับ: "
-                     + "จะไม่พบข้อขัดแย้งและไม่สกัดความสัมพันธ์ให้กราฟเลย "
-                     + "(ตั้ง selfHostedEndpoint/selfHostedModel ใน bootstrap.plist)")
+    /// The router keeps high-impact work off Apple's on-device model because
+    /// its answers are not stable enough to decide on (ARCH E.7). With neither
+    /// a local MLX model nor a self-hosted endpoint there is no model for that
+    /// work *at all*, and conflict detection and relation extraction return
+    /// nothing on every document. Both fail quietly by design (an unreachable
+    /// model must not be read as "these sources agree"), which is exactly why
+    /// the boot screen has to be the one to mention it.
+    private func noteWhichModelsExist(_ config: BootstrapConfig, engine: Engine) {
+        let hasEndpoint = !(config.selfHostedEndpoint?.isEmpty ?? true)
+        switch (engine.localTier.selected, hasEndpoint) {
+        case (nil, false):
+            notes.append("ไม่มีโมเดล MLX บนเครื่อง และยังไม่ได้ตั้ง selfHostedEndpoint — "
+                         + "เหลือแต่โมเดล on-device ซึ่งงานที่ต้องความแม่นสูงใช้ไม่ได้: "
+                         + "จะไม่พบข้อขัดแย้งและไม่สกัดความสัมพันธ์ให้กราฟเลย "
+                         + "(โหลดโมเดลได้ที่แท็บ \"โมเดล\")")
+        case (nil, true):
+            // §9.2 rule 4: the endpoint is not allowed to be the only path.
+            notes.append("ไม่มีโมเดล MLX บนเครื่อง — Tier 0.5 ซึ่งเป็นพื้นรับประกันจึงหายไป "
+                         + "ถ้า endpoint ล่มหรือออฟไลน์ งานที่ต้องความแม่นสูงจะไม่มีที่รัน "
+                         + "(โหลดโมเดลได้ที่แท็บ \"โมเดล\")")
+        case (let model?, false):
+            notes.append("ยังไม่ได้ตั้ง selfHostedEndpoint — งานที่ต้องความแม่นสูงจะรันบน "
+                         + "\(model.name) บนเครื่องนี้ ซึ่งช้ากว่าแต่ทำงานได้")
+        case (_?, true):
+            break
+        }
+    }
+
+    /// Records a change made on the models screen. Bootstrap, not the
+    /// database: the router is built during boot, before the database is up,
+    /// so which model Tier 0.5 loads has to be readable from a flat file.
+    public func rememberLocalModel(_ name: String?) {
+        guard let paths, config.localModel != name else { return }
+        var updated = config
+        updated.localModel = name
+        do {
+            try BootstrapStore(paths: paths).save(updated)
+            config = updated
+        } catch {
+            log.error("saving local model choice: \(String(describing: error), privacy: .public)")
+        }
     }
 
     private func startStatusPolling(_ manager: SidecarManager) {

@@ -32,8 +32,18 @@ public struct BootstrapConfig: Codable, Sendable, Equatable {
     /// meta-search sidecar is not started and T5 search is unavailable, which
     /// the boot screen says rather than failing silently.
     public var searxngPython: String?
+    /// Which Tier 0.5 model to load (P5.2). Here rather than in the database
+    /// for the same reason as the endpoint pair: the router is built during
+    /// boot, before a conversation exists. Nil means "the largest installed",
+    /// which is what a machine with exactly one model wants.
+    public var localModel: String?
+    /// Ceiling on what downloaded models may occupy, in gigabytes. Models are
+    /// the only thing in this app that can fill a disk — one 30B checkpoint is
+    /// 17 GB — so the limit is a setting, not a constant (ARCH §9.4).
+    public var modelQuotaGigabytes: Int?
 
     public static let currentSchemaVersion = 1
+    public static let defaultModelQuotaGigabytes = 60
 
     public static let `default` = BootstrapConfig(
         schemaVersion: currentSchemaVersion,
@@ -49,7 +59,9 @@ public struct BootstrapConfig: Codable, Sendable, Equatable {
                 dataDirectoryOverride: String? = nil,
                 selfHostedEndpoint: String? = nil,
                 selfHostedModel: String? = nil,
-                searxngPython: String? = nil) {
+                searxngPython: String? = nil,
+                localModel: String? = nil,
+                modelQuotaGigabytes: Int? = nil) {
         self.schemaVersion = schemaVersion
         self.surrealPort = surrealPort
         self.searxngPort = searxngPort
@@ -58,6 +70,8 @@ public struct BootstrapConfig: Codable, Sendable, Equatable {
         self.selfHostedEndpoint = selfHostedEndpoint
         self.selfHostedModel = selfHostedModel
         self.searxngPython = searxngPython
+        self.localModel = localModel
+        self.modelQuotaGigabytes = modelQuotaGigabytes
     }
 }
 
@@ -66,6 +80,7 @@ public enum BootstrapError: Error, CustomStringConvertible, Equatable {
     case duplicatePorts(Int)
     case unreadable(String)
     case invalidEndpoint(String)
+    case invalidQuota(Int)
 
     public var description: String {
         switch self {
@@ -73,6 +88,7 @@ public enum BootstrapError: Error, CustomStringConvertible, Equatable {
         case .duplicatePorts(let p): return "surreal and searxng cannot share port \(p)"
         case .unreadable(let m): return "cannot read bootstrap file: \(m)"
         case .invalidEndpoint(let e): return "invalid self-hosted endpoint: \(e)"
+        case .invalidQuota(let q): return "model quota must be at least 1 GB, got \(q)"
         }
     }
 }
@@ -93,6 +109,11 @@ extension BootstrapConfig {
             guard let url = URL(string: endpoint), url.scheme != nil, url.host() != nil else {
                 throw BootstrapError.invalidEndpoint(endpoint)
             }
+        }
+        if let quota = modelQuotaGigabytes {
+            // Zero would mean "no models allowed", which reads as a typo
+            // rather than an intention, and would disable Tier 0.5 silently.
+            guard quota >= 1 else { throw BootstrapError.invalidQuota(quota) }
         }
     }
 }

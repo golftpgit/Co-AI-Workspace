@@ -193,6 +193,38 @@ struct RoutingPolicyTests {
         #expect(await calls.order == ["gx10"])
     }
 
+    /// §9.2's heavy chain is Tier 1a → 0.5 → 1b, not cheapest-first. The
+    /// difference stopped being theoretical when Tier 0.5 became something a
+    /// user installs: with a 0.6B model on disk, planning would have gone to it
+    /// in preference to a 27B on the endpoint.
+    @Test("high-impact work prefers the self-hosted model over the local one")
+    func highImpactPrefersSelfHosted() async throws {
+        let calls = CallLog()
+        let router = ModelRouter(executors: [
+            StubExecutor("local-mlx", tier: .localMLX, behaviour: .succeed("small"), calls: calls),
+            StubExecutor("gx10", tier: .selfHosted, behaviour: .succeed("considered"), calls: calls),
+        ])
+
+        let completion = try await router.complete(ask(), policy: .consequential)
+        #expect(completion.producedBy == "gx10")
+        #expect(await calls.order == ["gx10"])
+    }
+
+    /// …and it is still the floor: when the endpoint is gone, the same work
+    /// lands on the local model rather than failing (§9.2 rule 4).
+    @Test("high-impact work falls to the local model when the endpoint is down")
+    func highImpactFallsToLocalTier() async throws {
+        let calls = CallLog()
+        let router = ModelRouter(executors: [
+            StubExecutor("local-mlx", tier: .localMLX, behaviour: .succeed("still answered"),
+                         calls: calls),
+            StubExecutor("gx10", tier: .selfHosted, behaviour: .offline, calls: calls),
+        ])
+
+        let completion = try await router.complete(ask(), policy: .consequential)
+        #expect(completion.producedBy == "local-mlx")
+    }
+
     @Test("cheap work prefers the cheapest capable tier")
     func disposableWorkStaysCheap() async throws {
         let calls = CallLog()

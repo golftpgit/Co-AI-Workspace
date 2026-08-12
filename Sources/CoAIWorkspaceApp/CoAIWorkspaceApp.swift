@@ -33,9 +33,10 @@ private struct RootView: View {
     @State private var knowledge = KnowledgeViewModel()
     @State private var conflicts = ConflictViewModel()
     @State private var team = TeamViewModel()
+    @State private var models = ModelsViewModel()
 
     enum Screen: String, CaseIterable, Identifiable {
-        case chat, knowledge, conflicts, team
+        case chat, knowledge, conflicts, team, models
         var id: String { rawValue }
 
         var label: String {
@@ -44,6 +45,7 @@ private struct RootView: View {
             case .knowledge: "คลังความรู้"
             case .conflicts: "ข้อขัดแย้ง"
             case .team: "ทีม"
+            case .models: "โมเดล"
             }
         }
 
@@ -53,6 +55,7 @@ private struct RootView: View {
             case .knowledge: "books.vertical"
             case .conflicts: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90"
             case .team: "person.3"
+            case .models: "cpu"
             }
         }
     }
@@ -79,6 +82,17 @@ private struct RootView: View {
                         .task { await team.attach(team: engine.team,
                                                   ledger: engine.taskLedger,
                                                   gateway: engine.gateway) }
+                case .models:
+                    ModelsView(model: models)
+                        .task {
+                            await models.attach(
+                                installer: engine.modelInstaller,
+                                catalog: engine.modelCatalog,
+                                tier: engine.localTier,
+                                persist: { [environment] name in
+                                    environment.rememberLocalModel(name)
+                                })
+                        }
                 }
             } else {
                 BootStatusView(environment: environment)

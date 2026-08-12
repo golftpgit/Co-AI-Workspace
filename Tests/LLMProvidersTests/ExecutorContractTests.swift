@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import AgentKit
+import ExecutorContract
 @testable import LLMProviders
 
 // ─────────────────────────────────────────────────────────────
@@ -9,6 +10,13 @@ import AgentKit
 // Stubs prove the router's logic; these prove the executors actually speak to
 // the models. Each suite skips loudly when its backend is absent, because a
 // silent skip reads exactly like a pass.
+//
+// The cases themselves live in the `ExecutorContract` target rather than here.
+// Tier 0.5 cannot run under `swift test` — MLX finds its Metal kernels through
+// the main bundle, which is SwiftPM's helper here (ARCHITECTURE E.13) — so it
+// runs the same cases from the `MLXCheck` executable. A second copy of the
+// assertions would drift, and the weaker copy would be the one guarding the
+// tier everything else falls back to (§9.2 rule 4).
 // ─────────────────────────────────────────────────────────────
 
 private let lmStudio = URL(string: "http://127.0.0.1:1234/v1")!
@@ -35,63 +43,51 @@ private func servedModel() async -> String? {
         .first { !$0.lowercased().contains("embed") }
 }
 
-private let routingSchema = #"""
-{"type":"object",
- "properties":{"role":{"type":"string","enum":["researcher","analyst","engineer","writer"]},
-               "needsClarification":{"type":"boolean"}},
- "required":["role","needsClarification"]}
-"""#
+/// Says out loud what could not be checked, without failing the run.
+///
+/// A skip has to stay visible — a silent one reads exactly like a pass — but
+/// it must not fail the build either, and that changed with P5.4: a machine
+/// with no OpenAI-compatible endpoint is no longer a misconfigured machine,
+/// it is the state this whole phase is working towards. `scripts/check.sh`
+/// surfaces every `SKIPPED:` line, so these stay in front of a person while
+/// the suite still goes green on a laptop running nothing but itself.
+private func skipped(_ message: String) {
+    print("SKIPPED: \(message)")
+}
+
+/// Runs the shared contract and reports each outcome as itself: a failure
+/// fails, and a case that could not be checked is announced. A case that does
+/// not apply is neither: an executor that declares no tool calling and has no
+/// tool-call behaviour is the contract working, not a gap in the run.
+private func runContract(against executor: any LLMExecutor) async {
+    for outcome in await ExecutorContract.run(against: executor) {
+        switch outcome.status {
+        case .passed, .notApplicable:
+            continue
+        case .skipped:
+            skipped("[\(executor.identifier)] \(outcome.name) — \(outcome.detail)")
+        case .failed:
+            Issue.record("\(executor.identifier) — \(outcome.name): \(outcome.detail)")
+        }
+    }
+}
 
 @Suite("On-device executor (Tier 0)", .serialized)
 struct OnDeviceExecutorTests {
-    @Test("reports availability without throwing", .timeLimit(.minutes(1)))
-    func availability() async {
+    @Test("keeps the executor contract", .timeLimit(.minutes(5)))
+    func keepsTheContract() async {
+        await runContract(against: OnDeviceExecutor())
+    }
+
+    @Test("declares what it cannot do rather than discovering it mid-turn")
+    func declaresItsLimits() {
         let executor = OnDeviceExecutor()
-        _ = await executor.isAvailable()   // must not trap on machines without Apple Intelligence
         #expect(executor.tier == .onDevice)
+        // Structured output is the dependable mode for a 3B model (E.6).
         #expect(executor.capabilities.supportsStructuredOutput)
-        // Declared honestly so the router escalates tool work rather than
-        // discovering the gap mid-turn.
+        // Apple's `Tool` protocol wants compile-time `@Generable` types;
+        // bridging our runtime registry onto it is P8.3 work.
         #expect(executor.capabilities.supportsTools == false)
-    }
-
-    @Test("structured output comes back as decodable JSON", .timeLimit(.minutes(3)))
-    func structuredOutput() async throws {
-        let executor = OnDeviceExecutor()
-        guard await executor.isAvailable() else {
-            Issue.record("skipped: Apple Intelligence unavailable on this machine")
-            return
-        }
-
-        var request = LLMRequest(messages: [
-            .init(.system, "Route the request to a specialist in a research AI team."),
-            .init(.user, "Fix a crash in main.swift on launch"),
-        ])
-        request.responseSchema = (name: "Routing", schemaJSON: routingSchema)
-        request.maxTokens = 128
-
-        do {
-            let completion = try await executor.complete(request)
-            let object = try #require(
-                try? JSONSerialization.jsonObject(with: Data(completion.text.utf8)) as? [String: Any])
-            let role = try #require(object["role"] as? String)
-            #expect(["researcher", "analyst", "engineer", "writer"].contains(role))
-            #expect(object["needsClarification"] is Bool)
-        } catch let error as LLMError {
-            // A refusal here is expected behaviour, not a test failure — it is
-            // precisely why the router escalates (ARCHITECTURE E.7).
-            guard case .refused = error else { throw error }
-        }
-    }
-
-    @Test("tool requests are rejected up front, not part-way through", .timeLimit(.minutes(1)))
-    func rejectsToolsEarly() async {
-        let executor = OnDeviceExecutor()
-        var request = LLMRequest(messages: [.init(.user, "hi")])
-        request.tools = [LLMToolSpec(name: "t", description: "d",
-                                     parametersJSON: #"{"type":"object","properties":{}}"#)]
-
-        await #expect(throws: LLMError.self) { _ = try await executor.complete(request) }
     }
 }
 
@@ -101,10 +97,19 @@ struct VLLMExecutorTests {
         VLLMExecutor(baseURL: lmStudio, model: model)
     }
 
+    @Test("keeps the executor contract", .timeLimit(.minutes(10)))
+    func keepsTheContract() async {
+        guard let model = await servedModel() else {
+            skipped("no OpenAI-compatible endpoint on :1234 — Tier 1 unchecked")
+            return
+        }
+        await runContract(against: executor(model))
+    }
+
     @Test("availability also validates the configured model name", .timeLimit(.minutes(1)))
     func availabilityChecksModel() async {
         guard let model = await servedModel() else {
-            Issue.record("skipped: no OpenAI-compatible endpoint on :1234")
+            skipped("no OpenAI-compatible endpoint on :1234 — Tier 1 unchecked")
             return
         }
         #expect(await executor(model).isAvailable())
@@ -113,89 +118,6 @@ struct VLLMExecutorTests {
         // has to be ours (ARCHITECTURE E.9, case 8a).
         let typo = VLLMExecutor(baseURL: lmStudio, model: "no-such-model-xyz")
         #expect(await typo.isAvailable() == false)
-    }
-
-    @Test("streams deltas and reports usage", .timeLimit(.minutes(3)))
-    func streamsAndAccounts() async throws {
-        guard let model = await servedModel() else {
-            Issue.record("skipped: no OpenAI-compatible endpoint on :1234")
-            return
-        }
-        var request = LLMRequest(messages: [.init(.user, "Count from 1 to 10, comma separated.")])
-        // Enough room for a reasoning model to think *and* answer. 80 produced
-        // nothing at all; 512 was still not always enough for qwen3.5 to finish
-        // thinking about counting to ten, which is a fact about reasoning
-        // models rather than about the executor.
-        request.maxTokens = 2_048
-
-        var deltas = 0
-        var thoughts = 0
-        var usage: LLMUsage?
-        for try await event in executor(model).respond(to: request) {
-            switch event {
-            case .textDelta: deltas += 1
-            case .reasoningDelta: thoughts += 1
-            case .usage(let u): usage = u
-            default: break
-            }
-        }
-        // Either kind proves the stream is arriving in pieces; a reasoning
-        // model legitimately sends thoughts first.
-        #expect(deltas + thoughts > 1, "expected streaming, got \(deltas) delta(s)")
-        #expect(deltas > 0, "the answer itself never arrived")
-        #expect(usage?.promptTokens ?? 0 > 0)
-    }
-
-    /// The chunks a reasoning model streams before it answers are not the
-    /// answer. Merging them would store thinking as the reply and break any
-    /// request with a response schema.
-    @Test("reasoning is reported apart from the answer", .timeLimit(.minutes(3)))
-    func reasoningIsSeparate() async throws {
-        guard let model = await servedModel() else {
-            Issue.record("skipped: no OpenAI-compatible endpoint on :1234")
-            return
-        }
-        var request = LLMRequest(messages: [
-            .init(.user, "What is 17 times 3? Reply with the number only."),
-        ])
-        request.maxTokens = 512
-
-        let completion = try await executor(model).complete(request)
-
-        // Holds either way, and it is the property that actually broke: with
-        // reasoning folded into `content` the answer came back empty.
-        #expect(completion.text.contains("51"),
-                "answer was: \(completion.text.prefix(200))")
-        // Only a model that reasons out loud can demonstrate the separation.
-        // Not every machine serves one, so this is a conditional check rather
-        // than a skip — the assertion above still runs everywhere.
-        if !completion.reasoning.isEmpty {
-            #expect(!completion.text.contains(completion.reasoning),
-                    "reasoning leaked into the answer: \(completion.text.prefix(200))")
-        }
-    }
-
-    @Test("assembles tool calls from fragmented chunks", .timeLimit(.minutes(3)))
-    func assemblesToolCalls() async throws {
-        guard let model = await servedModel() else {
-            Issue.record("skipped: no OpenAI-compatible endpoint on :1234")
-            return
-        }
-        var request = LLMRequest(messages: [
-            .init(.system, "Use tools when asked about cohort sizes."),
-            .init(.user, "How many patients are in the diabetes cohort?"),
-        ])
-        request.tools = [LLMToolSpec(
-            name: "lookup_patient_count",
-            description: "Look up how many patients are in a named cohort",
-            parametersJSON: #"{"type":"object","properties":{"cohort":{"type":"string"}},"required":["cohort"]}"#)]
-
-        let completion = try await executor(model).complete(request)
-        let call = try #require(completion.toolCalls.first)
-        #expect(call.name == "lookup_patient_count")
-        // Fragments must reassemble into valid JSON, not a truncated string.
-        #expect((try? JSONSerialization.jsonObject(with: Data(call.argumentsJSON.utf8))) != nil,
-                "arguments did not reassemble: \(call.argumentsJSON)")
     }
 
     @Test("a dead endpoint fails fast with a legible error", .timeLimit(.minutes(1)))
@@ -214,7 +136,7 @@ struct LiveRoutingTests {
     @Test("a live chain answers even when Tier 0 refuses", .timeLimit(.minutes(4)))
     func liveChain() async throws {
         guard let model = await servedModel() else {
-            Issue.record("skipped: no OpenAI-compatible endpoint on :1234")
+            skipped("no OpenAI-compatible endpoint on :1234 — Tier 1 unchecked")
             return
         }
         let router = ModelRouter(executors: [
@@ -226,13 +148,13 @@ struct LiveRoutingTests {
             .init(.system, "Route the request to a specialist in a research AI team."),
             .init(.user, "ช่วยหางานวิจัยเรื่องวัคซีน mRNA ในผู้สูงอายุ"),
         ])
-        request.responseSchema = (name: "Routing", schemaJSON: routingSchema)
+        request.responseSchema = (name: "Routing", schemaJSON: ExecutorContract.routingSchema)
         // Room for a reasoning model on Tier 1 to think before the JSON.
         request.maxTokens = 512
 
         let completion = try await router.complete(request)
         #expect(!completion.text.isEmpty)
-        #expect((try? JSONSerialization.jsonObject(with: Data(completion.text.utf8))) != nil,
+        #expect((try? JSONSerialization.jsonObject(with: Data(completion.text.utf8)) as? [String: Any]) != nil,
                 "expected JSON from whichever tier answered: \(completion.text.prefix(120))")
     }
 }

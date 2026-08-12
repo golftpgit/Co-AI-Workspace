@@ -186,17 +186,42 @@ public actor ModelRouter {
             })
         }
 
-        // Latency-sensitive work still prefers cheap-and-close; everything else
-        // uses the same order, so the chain is predictable either way.
-        if !policy.latencySensitive {
+        // Latency-sensitive work prefers cheap-and-close, which is the order
+        // the list is already in.
+        if policy.latencySensitive { return eligible }
+
+        if policy.impact == .high {
+            // §9.2's heavy chain: Tier 1a → 0.5 → 1b. Cheapest-first is the
+            // wrong order here, and stopped being harmless the moment Tier 0.5
+            // became something a user installs: with a 0.6B model on disk,
+            // planning and delegation would go to it in preference to a 27B on
+            // the endpoint. Tier 0.5 stays in the chain as the floor — it is
+            // where this work lands when the endpoint is gone — just not first.
             eligible.sort { lhs, rhs in
-                // Prefer a locally hosted model over on-device when quality
-                // matters more than speed, but never above self-hosted.
-                (lhs.tier == .onDevice ? 1 : 0, lhs.tier.rawValue)
-                    < (rhs.tier == .onDevice ? 1 : 0, rhs.tier.rawValue)
+                Self.heavyWorkRank(lhs.tier) < Self.heavyWorkRank(rhs.tier)
             }
+            return eligible
+        }
+
+        eligible.sort { lhs, rhs in
+            // Prefer a locally hosted model over on-device when quality
+            // matters more than speed, but never above self-hosted.
+            (lhs.tier == .onDevice ? 1 : 0, lhs.tier.rawValue)
+                < (rhs.tier == .onDevice ? 1 : 0, rhs.tier.rawValue)
         }
         return eligible
+    }
+
+    /// Order for work that must not be got wrong (§9.2): the self-hosted model
+    /// first, the local one behind it, a metered one last, and on-device never
+    /// (it is filtered out before this).
+    private static func heavyWorkRank(_ tier: ModelTier) -> Int {
+        switch tier {
+        case .selfHosted: 0
+        case .localMLX: 1
+        case .paid: 2
+        case .onDevice: 3
+        }
     }
 
     // MARK: - availability cache

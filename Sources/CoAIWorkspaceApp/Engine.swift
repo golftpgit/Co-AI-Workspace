@@ -9,6 +9,7 @@ import Execution
 import ToolBelt
 import Knowledge
 import EmbeddingRuntime
+import MLXRuntime
 
 // ─────────────────────────────────────────────────────────────
 // Everything the running system is made of, assembled once at boot.
@@ -50,6 +51,14 @@ struct Engine: Sendable {
     /// Which executors were actually reachable at boot — shown in the UI so
     /// "why is it slow / why can't it run commands" has a visible answer.
     let executorSummary: [String]
+    /// Tier 0.5 (P5.1/P5.2) — a slot rather than a fixed model, so a model
+    /// downloaded in the app is usable without a restart. Empty means the
+    /// floor §9.2 rule 4 promises is missing, which the boot screen has to say.
+    let localTier: LocalTier
+    /// Where models come from and go: the app's own directory, plus whatever
+    /// this machine already had (§9.4).
+    let modelCatalog: LocalModelCatalog
+    let modelInstaller: ModelInstaller
 
     static func build(config: BootstrapConfig, paths: AppPaths) async throws -> Engine {
         let client = SurrealClient(url: URL(string: "ws://127.0.0.1:\(config.surrealPort)/rpc")!)
@@ -60,6 +69,21 @@ struct Engine: Sendable {
         let conversations = ConversationStore(client: client)
 
         var executors: [any LLMExecutor] = [OnDeviceExecutor()]
+        // Tier 0.5 — the floor the rest of the chain falls back to (§9.2 rule
+        // 4). Resolved from disk, never downloaded here: boot must not depend
+        // on a network, and choosing a model is the user's call on the models
+        // screen. The tier joins the router either way, so the first download
+        // does not need a restart to become usable.
+        let modelCatalog = LocalModelCatalog(searchPaths: LocalModelCatalog
+            .standard(appModelsDirectory: paths.modelsDirectory).searchPaths)
+        var chosen: LocalModel?
+        if let name = config.localModel { chosen = await modelCatalog.model(named: name) }
+        if chosen == nil { chosen = await modelCatalog.preferred() }
+        let localTier = LocalTier(model: chosen)
+        executors.append(localTier)
+        let modelInstaller = ModelInstaller(
+            destination: paths.modelsDirectory,
+            quotaGigabytes: config.modelQuotaGigabytes ?? BootstrapConfig.defaultModelQuotaGigabytes)
         if let endpoint = config.selfHostedEndpoint, let model = config.selfHostedModel,
            let url = URL(string: endpoint) {
             executors.append(VLLMExecutor(baseURL: url, model: model))
@@ -144,7 +168,8 @@ struct Engine: Sendable {
                       router: router, processes: processes, gateway: gateway,
                       broker: broker, runner: runner,
                       team: team, taskLedger: taskLedger,
-                      executorSummary: summary)
+                      executorSummary: summary, localTier: localTier,
+                      modelCatalog: modelCatalog, modelInstaller: modelInstaller)
     }
 
     /// Nothing the engine started may outlive the app (§13).

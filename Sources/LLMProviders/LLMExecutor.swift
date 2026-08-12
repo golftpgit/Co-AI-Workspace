@@ -20,6 +20,19 @@ public enum ModelTier: Int, Sendable, Comparable, CaseIterable {
     public static func < (a: ModelTier, b: ModelTier) -> Bool { a.rawValue < b.rawValue }
 
     public var isMetered: Bool { self == .paid }
+
+    /// What §9.2 calls this tier. Not the raw value: `localMLX` is **0.5** in
+    /// every table, every diagram and every conversation about this system,
+    /// and the chat header calling it "tier 1" made the local model look like
+    /// the endpoint it had just fallen back from.
+    public var label: String {
+        switch self {
+        case .onDevice: "0"
+        case .localMLX: "0.5"
+        case .selfHosted: "1a"
+        case .paid: "1b"
+        }
+    }
 }
 
 public struct LLMCapabilities: Sendable {
@@ -249,7 +262,11 @@ extension LLMExecutor {
 
     /// Rejects work the executor has already declared it cannot do, so the
     /// router can move on instead of burning a round trip to find out.
-    func rejectIfUnsupported(_ request: LLMRequest) throws {
+    ///
+    /// Public because executors live in other modules now (Tier 0.5 is its own
+    /// target, since MLX must not be linked into everything that routes a
+    /// request): every implementation owes callers this same early rejection.
+    public func rejectIfUnsupported(_ request: LLMRequest) throws {
         if !request.tools.isEmpty && !capabilities.supportsTools {
             throw LLMError.unsupported("\(identifier) has no tool calling")
         }

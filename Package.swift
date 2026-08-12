@@ -41,6 +41,30 @@ let package = Package(
         // which tier serves a request (ARCHITECTURE §9).
         .target(name: "LLMProviders", dependencies: ["AgentKit", "Observability"]),
 
+        // M5/Tier 0.5 — the model we load and run ourselves (§9.4). Its own
+        // target for the same reason as EmbeddingRuntime: LLMProviders owns
+        // the interface and must stay free of MLX, so everything that merely
+        // routes a request does not link a machine-learning framework.
+        .target(
+            name: "MLXRuntime",
+            dependencies: [
+                "LLMProviders", "AgentKit", "Observability",
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                // Vision-language checkpoints are a different factory, not a
+                // different tier: Qwen3-VL answers text like any chat model,
+                // and on a 16 GB machine it may well be the only local model
+                // the user has (see MLXExecutor.load).
+                .product(name: "MLXVLM", package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
+            ]),
+
+        // What every executor owes its callers, written once. Used by
+        // LLMProvidersTests for the tiers `swift test` can reach and by
+        // MLXCheck for the one it cannot — see the target's own header.
+        .target(name: "ExecutorContract", dependencies: ["LLMProviders", "AgentKit"]),
+
         // M9 — every process the system runs: sandbox profile, process group
         // signals, registry (ARCHITECTURE §13). Knows nothing about agents.
         .target(name: "Execution", dependencies: ["AgentKit", "Observability", "Config"]),
@@ -84,6 +108,17 @@ let package = Package(
                           dependencies: ["EmbeddingRuntime", "Knowledge", "Persistence",
                                          "Sidecar", "Config", "CoreEngine"]),
 
+        // The executor contract, run against Tier 0.5 with the real weights.
+        // An executable for the same reason as EmbeddingCheck: MLX finds its
+        // Metal kernels through the main bundle, and under `swift test` that is
+        // SwiftPM's helper. Run by scripts/check.sh.
+        // CoreEngine is here for P5.4: the offline floor is only proven by
+        // running the work that has nowhere else to go — conflict detection,
+        // which fails by saying nothing at all.
+        .executableTarget(name: "MLXCheck",
+                          dependencies: ["MLXRuntime", "ExecutorContract", "LLMProviders",
+                                         "CoreEngine", "Config"]),
+
         // M1 — hook chain, approval broker, tool gateway, agent loop. Every
         // decision the system makes lives here (ARCHITECTURE §5).
         .target(name: "CoreEngine",
@@ -96,7 +131,7 @@ let package = Package(
             name: "CoAIWorkspaceApp",
             dependencies: ["AgentKit", "Config", "Observability", "Sidecar", "Persistence",
                            "LLMProviders", "CoreEngine", "Execution", "ToolBelt",
-                           "Knowledge", "EmbeddingRuntime"]
+                           "Knowledge", "EmbeddingRuntime", "MLXRuntime"]
         ),
 
         .testTarget(name: "AgentKitTests", dependencies: ["AgentKit"]),
@@ -105,7 +140,11 @@ let package = Package(
         .testTarget(name: "SidecarTests", dependencies: ["Sidecar"]),
         .testTarget(name: "PersistenceTests",
                     dependencies: ["Persistence", "Sidecar", "Config", "Knowledge"]),
-        .testTarget(name: "LLMProvidersTests", dependencies: ["LLMProviders"]),
+        .testTarget(name: "LLMProvidersTests",
+                    dependencies: ["LLMProviders", "ExecutorContract"]),
+        // Everything about Tier 0.5 that does not need the weights. The rest
+        // is MLXCheck.
+        .testTarget(name: "MLXRuntimeTests", dependencies: ["MLXRuntime", "LLMProviders"]),
         .testTarget(name: "CoreEngineTests", dependencies: ["CoreEngine", "Knowledge"]),
         .testTarget(name: "KnowledgeTests", dependencies: ["Knowledge"]),
         .testTarget(name: "WebSearchTests", dependencies: ["WebSearch", "Knowledge"]),
