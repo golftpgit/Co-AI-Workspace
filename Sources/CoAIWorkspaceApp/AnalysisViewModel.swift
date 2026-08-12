@@ -530,6 +530,47 @@ public final class AnalysisViewModel {
         LimitationsBuilder.build(plan: plan)
     }
 
+    /// The plan as a document (§14.1, P7.6).
+    ///
+    /// A pre-registration is a thing you send to somebody — an ethics
+    /// committee, a supervisor, a co-author — so it has to leave the app as a
+    /// file. Built from the plan itself: every decision with the tag that says
+    /// where it came from, and the Limitations section §14.1 writes out of the
+    /// assumptions.
+    public func exportPlan(to url: URL) {
+        guard let plan else { return }
+        let decisions = plan.decisions.map { decision in
+            "\(decision.question): \(decision.value) — \(decision.origin.label)"
+                + (decision.note.map { " (\($0))" } ?? "")
+        }
+        var sections = [Section(heading: "การตัดสินใจในแผน",
+                                paragraphs: [.bullets(decisions)])]
+        if !plan.openGaps.isEmpty {
+            sections.append(Section(heading: "ช่องว่างที่ยังเปิดอยู่", paragraphs: [
+                .bullets(plan.openGaps.map { "\($0.severity.label): \($0.subject) — \($0.detail)" }),
+            ]))
+        }
+        sections.append(Section(heading: "สถานะการอนุมัติ", paragraphs: [
+            .plain(plan.isApproved
+                   ? "อนุมัติแล้วโดย \(plan.approvedBy ?? "-") — การแก้แผนหลังจากนี้จะถอนการอนุมัติเอง"
+                   : "ยังไม่อนุมัติ: " + plan.blockers.joined(separator: " · ")),
+        ]))
+
+        let draft = DocumentDraft(title: plan.title,
+                                  sections: sections,
+                                  limitations: limitationsPreview)
+        do {
+            // Nothing is cited from the knowledge base in this document, so the
+            // audit has nothing to refuse; it still runs, because the rule
+            // belongs to the builder rather than to each caller.
+            let rendered = try DocumentBuilder.render(draft)
+            try OfficeWriter.docx(rendered).write(to: url)
+            status = Status(message: "บันทึกเอกสารที่ \(url.lastPathComponent) แล้ว", isError: false)
+        } catch {
+            status = Status(message: "สร้างเอกสารไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
     public func open(plan selected: AnalysisPlan?) {
         plan = selected
         if selected == nil { proposalText = ""; planTitle = ""; proposalDocumentID = nil }

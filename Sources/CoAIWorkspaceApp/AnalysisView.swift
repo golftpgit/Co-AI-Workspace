@@ -625,6 +625,7 @@ private struct ConnectorSheet: View {
 
 private struct PlanPane: View {
     @Bindable var model: AnalysisViewModel
+    @State private var exporting = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -637,6 +638,12 @@ private struct PlanPane: View {
             }
         }
         .task { await model.loadPlans() }
+        .fileExporter(isPresented: $exporting,
+                      document: PlanDocument(),
+                      contentType: .data,
+                      defaultFilename: model.plan?.title ?? "analysis-plan") { result in
+            if case .success(let url) = result { model.exportPlan(to: url) }
+        }
     }
 
     private var list: some View {
@@ -774,6 +781,10 @@ private struct PlanPane: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(plan.title).font(.headline)
                 Spacer()
+                // §14.1: a pre-registration is something you send to somebody.
+                Button { exporting = true } label: {
+                    Label("ส่งออก .docx", systemImage: "square.and.arrow.up")
+                }
                 if plan.isApproved {
                     Label("อนุมัติแล้วโดย \(plan.approvedBy ?? "")",
                           systemImage: "checkmark.seal.fill")
@@ -885,6 +896,21 @@ private struct DecisionRow: View {
         case .humanConfirmed: AnyShapeStyle(Color.green.opacity(0.18))
         case .proposalStated: AnyShapeStyle(.quaternary)
         }
+    }
+}
+
+/// A placeholder for the save panel. The bytes are written by
+/// `exportPlan(to:)` once a location is chosen: `FileDocument` wants the
+/// content up front, and building a document before knowing whether it will be
+/// saved is work for nothing.
+private struct PlanDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.data] }
+
+    init() {}
+    init(configuration: ReadConfiguration) throws {}
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data())
     }
 }
 
