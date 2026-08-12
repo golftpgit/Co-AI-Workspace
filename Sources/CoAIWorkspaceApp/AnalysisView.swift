@@ -368,6 +368,7 @@ private struct PythonOutputView: View {
 private struct ExplorerPane: View {
     @Bindable var model: AnalysisViewModel
     @State private var importing = false
+    @State private var addingConnector = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -469,17 +470,146 @@ private struct ExplorerPane: View {
                         }
                     }
                 }
-                if model.attached.count > 1 {
-                    Section("ฐานข้อมูลที่ต่ออยู่") {
-                        ForEach(model.attached, id: \.self) { alias in
-                            Text(alias).font(.caption)
-                        }
+                Section {
+                    ForEach(model.connectors) { connector in
+                        ConnectorRow(model: model, connector: connector)
+                    }
+                    // Named rather than omitted: a list with two silent
+                    // failures in it is worse than one that says why (§12.2).
+                    ForEach(UnsupportedConnector.allCases) { kind in
+                        Label("\(kind.label) — ยังต่อไม่ได้", systemImage: "minus.circle")
+                            .font(.caption2).foregroundStyle(.tertiary)
+                            .help(kind.reason)
+                    }
+                } header: {
+                    HStack {
+                        Text("แหล่งข้อมูลภายนอก")
+                        Spacer()
+                        Button { addingConnector = true } label: { Image(systemName: "plus") }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("เพิ่มแหล่งข้อมูลภายนอก")
                     }
                 }
             }
             .listStyle(.sidebar)
         }
         .frame(width: 230)
+        .sheet(isPresented: $addingConnector) {
+            ConnectorSheet(model: model, isPresented: $addingConnector)
+        }
+    }
+}
+
+private struct ConnectorRow: View {
+    @Bindable var model: AnalysisViewModel
+    let connector: DBConnector
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                Image(systemName: model.isConnected(connector) ? "circle.fill" : "circle")
+                    .font(.system(size: 7))
+                    .foregroundStyle(model.isConnected(connector) ? .green : .secondary)
+                Text(connector.alias).font(.callout)
+                Spacer()
+                if model.isConnected(connector) {
+                    Button("ปลด") { Task { await model.disconnect(connector) } }
+                } else {
+                    Button("ต่อ") { Task { await model.connect(connector) } }
+                        // Says why before it is pressed, rather than failing
+                        // with a driver error afterwards.
+                        .disabled(!connector.secretIsAvailable)
+                }
+            }
+            .buttonStyle(.borderless)
+            .font(.caption)
+
+            Text(connector.kind.rawValue + (connector.readOnly ? " · อ่านอย่างเดียว" : " · เขียนได้"))
+                .font(.caption2).foregroundStyle(.secondary)
+            if let variable = connector.secretVariable, !connector.secretIsAvailable {
+                Text("ยังไม่ได้ตั้ง \(variable)")
+                    .font(.caption2).foregroundStyle(.orange)
+            }
+            ForEach(model.externalTables[connector.alias] ?? [], id: \.self) { table in
+                HStack {
+                    Text(table).font(.caption2)
+                    Spacer()
+                    Button("ดึงเข้ามา") { Task { await model.pull(table, from: connector.alias) } }
+                        .buttonStyle(.borderless)
+                        .font(.caption2)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    model.explorerSQL = "SELECT * FROM \(AnalysisStore.quoted(connector.alias))."
+                        + "\(AnalysisStore.quoted(table)) LIMIT 100"
+                }
+            }
+        }
+        .contextMenu {
+            Button("ลบแหล่งนี้", role: .destructive) {
+                Task { await model.remove(connector: connector) }
+            }
+        }
+    }
+}
+
+/// Adding a connection. The password field is deliberately absent: what is
+/// stored is the *name of an environment variable*, the same shape §9.3's
+/// endpoint registry settled on, so the file on disk cannot log anybody in.
+private struct ConnectorSheet: View {
+    @Bindable var model: AnalysisViewModel
+    @Binding var isPresented: Bool
+    @State private var alias = ""
+    @State private var kind = ConnectorKind.sqlite
+    @State private var target = ""
+    @State private var secretVariable = ""
+    @State private var readOnly = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("เพิ่มแหล่งข้อมูลภายนอก").font(.headline)
+
+            Picker("ชนิด", selection: $kind) {
+                ForEach(ConnectorKind.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+
+            TextField("ชื่อที่ใช้ใน SQL (เช่น lab)", text: $alias)
+            TextField(kind == .sqlite ? "เส้นทางไฟล์ .sqlite"
+                                      : "host=… port=… dbname=… user=… (ไม่ต้องใส่รหัสผ่าน)",
+                      text: $target)
+            if kind != .sqlite {
+                TextField("ชื่อตัวแปรสภาพแวดล้อมที่เก็บรหัสผ่าน (เช่น PGPASSWORD)",
+                          text: $secretVariable)
+                Text("รหัสผ่านไม่ถูกเก็บลงไฟล์ — เก็บแค่ชื่อตัวแปร และอ่านค่าตอนต่อเท่านั้น")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            Toggle("อ่านอย่างเดียว", isOn: $readOnly)
+            Text("§12.2 ตั้งค่าเริ่มต้นเป็นอ่านอย่างเดียว เพราะข้อมูลปลายทางมักเป็นของคนอื่น")
+                .font(.caption2).foregroundStyle(.secondary)
+
+            HStack {
+                Spacer()
+                Button("ยกเลิก", role: .cancel) { isPresented = false }
+                Button("บันทึกและต่อ") {
+                    let connector = DBConnector(
+                        alias: alias.trimmingCharacters(in: .whitespaces),
+                        kind: kind,
+                        target: target.trimmingCharacters(in: .whitespaces),
+                        secretVariable: secretVariable.isEmpty ? nil : secretVariable,
+                        readOnly: readOnly)
+                    model.save(connector: connector)
+                    isPresented = false
+                    Task { await model.connect(connector) }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(alias.trimmingCharacters(in: .whitespaces).isEmpty
+                          || target.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .textFieldStyle(.roundedBorder)
+        .padding(18)
+        .frame(width: 460)
     }
 }
 
