@@ -299,6 +299,31 @@ struct StatGateTests {
         let logit = try #require(result.assumptions.first { $0.name.contains("logit") })
         #expect(!logit.wasChecked)
         #expect(!result.isClean)
+        // Perfectly separable: the coefficient runs away, and the flag is what
+        // stops anyone reading it as a strong effect.
+        #expect(result.assumptions.contains { $0.name.contains("separation") && !$0.passed })
+    }
+
+    /// A predictor that does nothing should not come back looking significant,
+    /// and one that does should — the Wald test per coefficient, from the same
+    /// inverse the fit already produced.
+    @Test("logistic regression reports an odds ratio, a CI and a p per predictor")
+    func logisticReportsPerCoefficient() throws {
+        // Odds double every unit of `dose`; `noise` is unrelated to the outcome.
+        let dose: [Double] = (0..<60).map { Double($0 % 10) }
+        let noise: [Double] = (0..<60).map { Double(($0 * 7) % 5) }
+        let y: [Double] = dose.enumerated().map { index, value in
+            // Deterministic but not separable: the high doses are mostly 1s,
+            // the low doses mostly 0s, with overlap in the middle.
+            (value >= 5 ? (index % 5 == 0 ? 0.0 : 1.0) : (index % 5 == 0 ? 1.0 : 0.0))
+        }
+        let result = try StatGate.logisticRegression(y: y, predictors: [dose, noise],
+                                                     names: ["ขนาดยา", "ตัวแปรที่ไม่เกี่ยว"])
+        #expect(result.summary.contains("ขนาดยา: OR ="))
+        #expect(result.summary.contains("95% CI"))
+        #expect(result.summary.contains("p = "))
+        #expect(result.pValue < 0.05)              // the dose effect is real
+        #expect(!result.assumptions.contains { $0.name.contains("separation") && !$0.passed })
     }
 
     @Test("too little data is an error, not a p-value")

@@ -96,7 +96,8 @@ private struct RootView: View {
                                                   library: engine.notebooks)
                             analysis.attach(connectors: engine.connectors)
                             await analysis.attach(plans: engine.plans,
-                                                  detector: engine.gapDetector)
+                                                  detector: engine.gapDetector,
+                                                  knowledge: engine.knowledge)
                         }
                 case .endpoints:
                     EndpointsView(model: endpoints)

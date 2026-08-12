@@ -486,15 +486,32 @@ public enum StatGate {
             wasChecked: false, passed: false, statistic: nil, pValue: nil,
             detail: "โมดูลนี้ยังตรวจไม่ได้ — ต้องดูด้วยวิธี Box–Tidwell หรือกราฟก่อนเชื่อผล"))
 
-        let terms = zip(labels, fit.coefficients.dropFirst()).map { name, value in
-            String(format: "%@: OR = %.4g", name, exp(value))
-        }.joined(separator: " · ")
+        // Wald test per coefficient: z = β/SE, from the same inverse the fit
+        // already produced. Reported per predictor rather than as one number —
+        // a model-level p-value would say nothing about which variable did the
+        // work. Meaningless under separation, and said so above.
+        let terms = zip(labels, zip(fit.coefficients.dropFirst(),
+                                    fit.standardErrors.dropFirst()))
+            .map { name, estimate in
+                let (coefficient, error) = estimate
+                guard error.isFinite, error > 0 else {
+                    return String(format: "%@: OR = %.4g (คำนวณ p ไม่ได้)", name, exp(coefficient))
+                }
+                let z = coefficient / error
+                let p = 2 * (1 - Statistics.normalCDF(abs(z)))
+                return String(format: "%@: OR = %.4g (95%% CI %.4g–%.4g) · p = %.4g",
+                              name, exp(coefficient),
+                              exp(coefficient - 1.96 * error), exp(coefficient + 1.96 * error), p)
+            }
+            .joined(separator: " · ")
+        let leading = Array(zip(fit.coefficients.dropFirst(), fit.standardErrors.dropFirst())).first
+        let leadingZ = leading.flatMap { $1.isFinite && $1 > 0 ? $0 / $1 : nil }
         return StatResult(
             test: .logisticRegression,
             statistic: fit.coefficients.dropFirst().first ?? .nan,
-            pValue: .nan,
+            pValue: leadingZ.map { 2 * (1 - Statistics.normalCDF(abs($0))) } ?? .nan,
             degreesOfFreedom: nil,
-            summary: "\(terms) (ค่า p รายสัมประสิทธิ์ยังไม่รายงานจากโมดูลนี้)",
+            summary: terms,
             assumptions: assumptions,
             alternatives: [])
     }
