@@ -435,3 +435,43 @@ private func runningPIDs(of scriptPath: String) async -> [String] {
     return String(decoding: data, as: UTF8.self)
         .split(separator: "\n").map(String.init)
 }
+
+/// Exits the moment it starts, the way a server with a missing dependency
+/// does. Found in the app, not here: the first plugin installed through the
+/// real UI hung the install instead of failing it.
+private let deadOnArrivalServer = #"""
+import sys
+sys.stderr.write("ModuleNotFoundError: no module named 'mcp'\n")
+sys.exit(1)
+"""#
+
+@Suite("MCP client — a server that dies", .serialized)
+struct MCPDeadServerTests {
+
+    /// The case the deadline test did not cover. A server that never *answers*
+    /// keeps its pipe open, so the client sits on a continuation and the timer
+    /// wins. A server that **exits** closes the pipe: the read loop finishes,
+    /// the pending `initialize` is never resumed, and the timeout's own
+    /// cleanup — `client.disconnect()`, which awaits that loop — is where it
+    /// hung. Silent, and indistinguishable from a slow install.
+    @Test("a server that exits immediately fails the connection instead of hanging")
+    func deadServerDoesNotHang() async throws {
+        try #require(python() != nil, "ต้องมี python3 บนเครื่อง")
+        let fixture = try writeServer(deadOnArrivalServer, named: "dead_server.py")
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        let registry = MCPRegistry()
+        let started = ContinuousClock.now
+        let outcome = await registry.connectAll([probeConfig(fixture, name: "dead")],
+                                                handshakeTimeout: .seconds(30))
+
+        // Well inside the 30s deadline: the point is that it notices the
+        // server is gone rather than waiting for a timer that then hangs.
+        #expect(started.duration(to: .now) < .seconds(10))
+        #expect(outcome.connected.isEmpty)
+        let failure = try #require(outcome.failures.first)
+        // And it says what the server said on its way out, which is the only
+        // useful thing about this failure.
+        #expect(failure.reason.contains("ModuleNotFoundError"))
+    }
+}
