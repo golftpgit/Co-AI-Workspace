@@ -1,4 +1,5 @@
 import Foundation
+import os
 import AgentKit
 import Observability
 
@@ -228,7 +229,7 @@ public struct TemplateStore: Sendable {
     public func load() -> [DocumentTemplate] {
         guard let data = try? Data(contentsOf: file) else { return [] }
         guard let templates = try? JSONDecoder().decode([DocumentTemplate].self, from: data) else {
-            log.error("template file unreadable — starting from an empty list")
+            reportUnreadable(file, kind: "template", log: log)
             return []
         }
         return templates
@@ -252,5 +253,18 @@ public struct TemplateStore: Sendable {
 
     public func remove(_ id: String) throws {
         try save(load().filter { $0.id != id })
+    }
+}
+
+/// A list file that will not decode. The copy is taken here, before anything
+/// can save over it — see `FileStoreSafety`.
+private func reportUnreadable(_ file: URL, kind: String, log: Logger) {
+    let backup = FileStoreSafety.preserveUnreadable(file)
+    if let backup {
+        log.error("""
+            \(kind, privacy: .public) file unreadable — kept a copy at \(backup.lastPathComponent, privacy: .public)             and starting from an empty list
+            """)
+    } else {
+        log.error("\(kind, privacy: .public) file unreadable — starting from an empty list")
     }
 }

@@ -225,7 +225,19 @@ struct BootStatusView: View {
         switch outcome {
         case .loaded: "อ่านจากไฟล์เดิม"
         case .createdDefault: "สร้างไฟล์ใหม่จากค่าเริ่มต้น"
-        case .repairedInvalid: "ไฟล์เดิมใช้ไม่ได้ จึงเขียนทับด้วยค่าเริ่มต้น"
+        // P9.2 — both of these replaced or refused somebody's file, so both say
+        // that a copy of the old one is still there. "Your settings moved" is
+        // only reassuring if you can check.
+        case .migrated(let from, let steps):
+            "ย้ายจากรุ่น \(from) เป็นรุ่น \(BootstrapConfig.currentSchemaVersion) "
+                + "(ขั้นที่ \(steps.map(String.init).joined(separator: ", "))) — "
+                + "ไฟล์เดิมเก็บไว้เป็น bootstrap.v\(from).backup.plist"
+        case .newerThanExpected(let version):
+            "ไฟล์ตั้งค่าเป็นรุ่น \(version) ซึ่งใหม่กว่าที่แอปรุ่นนี้รู้จัก "
+                + "(\(BootstrapConfig.currentSchemaVersion)) — รอบนี้ใช้ค่าเริ่มต้นและ**ไม่แก้ไฟล์เดิม**"
+        case .repairedInvalid:
+            "ไฟล์เดิมใช้ไม่ได้ จึงเขียนทับด้วยค่าเริ่มต้น — "
+                + "ไฟล์เดิมเก็บไว้เป็น bootstrap.unreadable.backup.plist"
         }
     }
 }

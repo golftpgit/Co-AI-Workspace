@@ -1,4 +1,5 @@
 import Foundation
+import os
 import AgentKit
 import Observability
 
@@ -176,7 +177,7 @@ public struct ConnectorStore: Sendable {
     public func load() -> [DBConnector] {
         guard let data = try? Data(contentsOf: file) else { return [] }
         guard let connectors = try? JSONDecoder().decode([DBConnector].self, from: data) else {
-            log.error("connector file unreadable — starting from an empty list")
+            reportUnreadable(file, kind: "connector", log: log)
             return []
         }
         return connectors
@@ -211,5 +212,18 @@ public struct ConnectorStore: Sendable {
         let all = load().filter { $0.id != id }
         try save(all)
         return all
+    }
+}
+
+/// A list file that will not decode. The copy is taken here, before anything
+/// can save over it — see `FileStoreSafety`.
+private func reportUnreadable(_ file: URL, kind: String, log: Logger) {
+    let backup = FileStoreSafety.preserveUnreadable(file)
+    if let backup {
+        log.error("""
+            \(kind, privacy: .public) file unreadable — kept a copy at \(backup.lastPathComponent, privacy: .public)             and starting from an empty list
+            """)
+    } else {
+        log.error("\(kind, privacy: .public) file unreadable — starting from an empty list")
     }
 }

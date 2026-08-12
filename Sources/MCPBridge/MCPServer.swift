@@ -1,4 +1,5 @@
 import Foundation
+import os
 import AgentKit
 import Observability
 import Execution
@@ -106,7 +107,7 @@ public struct MCPServerStore: Sendable {
     public func load() -> [MCPServerConfig] {
         guard let data = try? Data(contentsOf: file) else { return [] }
         guard let servers = try? JSONDecoder().decode([MCPServerConfig].self, from: data) else {
-            log.error("MCP server file unreadable — starting from an empty list")
+            reportUnreadable(file, kind: "MCP server", log: log)
             return []
         }
         return servers
@@ -182,5 +183,18 @@ public enum CommandLookup {
                 throw MCPServerError.launchFailed(error.description)
             }
         }
+    }
+}
+
+/// A list file that will not decode. The copy is taken here, before anything
+/// can save over it — see `FileStoreSafety`.
+private func reportUnreadable(_ file: URL, kind: String, log: Logger) {
+    let backup = FileStoreSafety.preserveUnreadable(file)
+    if let backup {
+        log.error("""
+            \(kind, privacy: .public) file unreadable — kept a copy at \(backup.lastPathComponent, privacy: .public)             and starting from an empty list
+            """)
+    } else {
+        log.error("\(kind, privacy: .public) file unreadable — starting from an empty list")
     }
 }
