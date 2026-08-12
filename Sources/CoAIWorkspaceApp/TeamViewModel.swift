@@ -38,6 +38,9 @@ public final class TeamViewModel {
         case failed
         /// Stopped and waiting for a person, with the reasons that got it here.
         case escalated
+        /// A person stopped it (P4.7). Distinct from `escalated`: that one is
+        /// a question, this one is the answer.
+        case cancelled
     }
 
     public struct Row: Sendable, Equatable, Identifiable {
@@ -100,6 +103,9 @@ public final class TeamViewModel {
     public var draft: [Draft] = []
 
     private var team: TeamOrchestrator?
+    /// The ledger as it came off disk, so a row on screen can be turned back
+    /// into an `Assignment` (P4.7's rework).
+    private var stored: [LedgerRow] = []
     private var ledger: TaskLedgerStore?
     /// Read at start time, not stored: the switch lives on the chat header and
     /// the gateway is where all three modes are already kept, so asking it is
@@ -124,8 +130,12 @@ public final class TeamViewModel {
     public func reload() async {
         guard let ledger else { return }
         do {
-            let stored = try await ledger.rows(scope: scope)
-            for row in stored { merge(row) }
+            let rows = try await ledger.rows(scope: scope)
+            // Kept, not just merged into the display rows: re-running a piece
+            // of work needs the acceptance criteria, and those live on the
+            // stored row rather than on anything the screen shows.
+            stored = rows
+            for row in rows { merge(row) }
         } catch {
             log.error("loading task ledger: \(error)")
             status = Status(message: "โหลดบันทึกงานของทีมไม่สำเร็จ: \(error)", isError: true)
@@ -135,6 +145,10 @@ public final class TeamViewModel {
     public var unfinishedCount: Int {
         rows.count { $0.progress == .running || $0.progress == .escalated }
     }
+
+    /// Whether this row can be sent back — false for rows written before the
+    /// ledger stored acceptance criteria, which cannot be rebuilt.
+    public func isReworkable(_ row: Row) -> Bool { assignment(for: row) != nil }
 
     // MARK: - planning (§2.6)
 
@@ -246,6 +260,45 @@ public final class TeamViewModel {
         }
     }
 
+    // MARK: - one assignment at a time (P4.7)
+
+    /// Sends one piece of work back with a reason.
+    ///
+    /// The reason is required by the UI rather than optional here: "do it
+    /// again" with no note is the instruction that produced v1's loops, and
+    /// the specialist reads this in the same place it reads QA's findings.
+    public func rework(_ row: Row, note: String) async {
+        guard let team, let assignment = assignment(for: row) else {
+            status = Status(message: "งานนี้เก่าเกินกว่าจะสั่งแก้ได้ — บันทึกไม่มีเกณฑ์ตรวจรับของมัน",
+                            isError: true)
+            return
+        }
+        isRunning = true
+        status = Status(message: "สั่งแก้ \(row.role.rawValue) แล้ว", isError: false)
+        await team.rework(assignment, note: note) { event in
+            Task { @MainActor in self.apply(event) }
+        }
+        isRunning = false
+        await reload()
+    }
+
+    /// Stops one piece of work and says so in the ledger.
+    public func cancel(_ row: Row, reason: String = "ผู้ใช้ยกเลิกงานนี้") async {
+        guard let team else { return }
+        await team.cancel(row.id, assignment: assignment(for: row), reason: reason) { event in
+            Task { @MainActor in self.apply(event) }
+        }
+        await reload()
+    }
+
+    /// The stored assignment behind a row, when the ledger kept enough to
+    /// rebuild it. Rows written before criteria were stored cannot be re-run —
+    /// `Assignment` refuses to exist without them — and the screen says so
+    /// rather than offering a button that would fail.
+    private func assignment(for row: Row) -> Assignment? {
+        stored.first { $0.assignmentID == row.id }?.assignment
+    }
+
     /// Stops the run without pretending the work is finished. The rows already
     /// on screen stay: what was done before the stop is still what happened.
     public func cancel() {
@@ -296,6 +349,12 @@ public final class TeamViewModel {
                 row.findings = reasons
             }
 
+        case .cancelled(let id, let reason):
+            upsert(id: id) { row in
+                row.progress = .cancelled
+                row.findings = [reason]
+            }
+
         case .continuing(let remaining):
             status = Status(message: "ทำต่อเองตาม Run-until-done — เหลืองานค้างในบันทึก \(remaining) งาน",
                             isError: false)
@@ -332,7 +391,8 @@ public final class TeamViewModel {
             row.findings = stored.findings
             row.summary = stored.summary
             if row.progress != .running || !isRunning {
-                row.progress = stored.passed ? .passed : .escalated
+                row.progress = stored.passed ? .passed
+                    : stored.cancelled ? .cancelled : .escalated
             }
         }
     }

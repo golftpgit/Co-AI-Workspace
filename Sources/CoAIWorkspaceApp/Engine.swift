@@ -59,6 +59,13 @@ struct Engine: Sendable {
     /// this machine already had (§9.4).
     let modelCatalog: LocalModelCatalog
     let modelInstaller: ModelInstaller
+    /// Every model above Tier 0.5 (§9.3) and what it is allowed to spend
+    /// (§9.5). Both live here so the settings screen changes the same objects
+    /// the router is using, rather than a copy of them.
+    let endpoints: EndpointRegistry
+    let endpointChecks: [String: EndpointCheck]
+    let governor: BudgetGovernor
+    let spendLedger: SurrealSpendLedger
 
     static func build(config: BootstrapConfig, paths: AppPaths) async throws -> Engine {
         let client = SurrealClient(url: URL(string: "ws://127.0.0.1:\(config.surrealPort)/rpc")!)
@@ -84,11 +91,36 @@ struct Engine: Sendable {
         let modelInstaller = ModelInstaller(
             destination: paths.modelsDirectory,
             quotaGigabytes: config.modelQuotaGigabytes ?? BootstrapConfig.defaultModelQuotaGigabytes)
-        if let endpoint = config.selfHostedEndpoint, let model = config.selfHostedModel,
-           let url = URL(string: endpoint) {
-            executors.append(VLLMExecutor(baseURL: url, model: model))
+        // §9.3: several endpoints rather than one, each declaring whether it
+        // costs money. The old single pair migrates itself (`effectiveEndpoints`).
+        let endpoints = config.effectiveEndpoints
+        var endpointChecks: [String: EndpointCheck] = [:]
+        let probe = EndpointProbe()
+        for endpoint in endpoints.endpoints {
+            guard let url = endpoint.url else { continue }
+            // Probed at boot so the status dots are true when the screen opens,
+            // and so a typo in a model name is visible before it is used
+            // (E.9 case 8a).
+            endpointChecks[endpoint.id] = await probe.check(endpoint)
+            executors.append(VLLMExecutor(
+                identifier: endpoint.name,
+                baseURL: url,
+                model: endpoint.model,
+                apiKey: endpoint.apiKey,
+                tier: endpoint.kind == .paid ? .paid : .selfHosted,
+                price: endpoint.inputPricePerMillion.flatMap { input in
+                    endpoint.outputPricePerMillion.map {
+                        TokenPrice(inputPerMillion: input, outputPerMillion: $0)
+                    }
+                }))
         }
-        let router = ModelRouter(executors: executors, spanSink: spans)
+
+        // §9.5 — only the metered tier passes through it, and only ever to be
+        // sent somewhere cheaper rather than to fail.
+        let spendLedger = SurrealSpendLedger(client: client)
+        let governor = BudgetGovernor(limits: config.budget ?? .conservative,
+                                      ledger: spendLedger, spanSink: spans)
+        let router = ModelRouter(executors: executors, spanSink: spans, governor: governor)
 
         let processes = ProcessRegistry(spanSink: spans)
         let broker = ApprovalBroker(spanSink: spans)
@@ -169,7 +201,9 @@ struct Engine: Sendable {
                       broker: broker, runner: runner,
                       team: team, taskLedger: taskLedger,
                       executorSummary: summary, localTier: localTier,
-                      modelCatalog: modelCatalog, modelInstaller: modelInstaller)
+                      modelCatalog: modelCatalog, modelInstaller: modelInstaller,
+                      endpoints: endpoints, endpointChecks: endpointChecks,
+                      governor: governor, spendLedger: spendLedger)
     }
 
     /// Nothing the engine started may outlive the app (§13).

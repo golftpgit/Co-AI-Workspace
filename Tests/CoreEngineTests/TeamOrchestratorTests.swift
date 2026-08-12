@@ -244,3 +244,122 @@ struct TeamOrchestratorTests {
         #expect(await team.entries.first?.passed == false)
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// P4.7's last piece: what a person can do to one assignment.
+// ─────────────────────────────────────────────────────────────
+
+@Suite("Rework and cancel, one assignment at a time")
+struct SingleAssignmentControlTests {
+
+    /// The note is not decoration: it goes to the specialist through the same
+    /// channel QA's findings use, so "do it again" always comes with what was
+    /// wrong with it.
+    @Test("a human rework re-runs the work with the reason attached")
+    func reworkCarriesTheReason() async throws {
+        let specialist = RecordingSpecialist(role: .writer)
+        let team = TeamOrchestrator(router: ModelRouter(executors: []),
+                                    specialists: [.writer: specialist])
+        let assignment = Assignment(id: "as_1", role: .writer, goal: "เขียนบทสรุป",
+                                    acceptanceCriteria: [Criterion(text: "มีข้อสรุป",
+                                                                   evidenceRequired: "สรุปหนึ่งย่อหน้า")],
+                                    deliverableType: "manuscript")
+
+        let seenEvents = EventBox()
+        _ = await team.rework(assignment, note: "ย่อหน้าแรกยังไม่ตอบคำถาม") { event in
+            if case .rework(_, _, let reasons) = event { seenEvents.add(reasons.joined()) }
+        }
+
+        #expect(seenEvents.all.contains("ย่อหน้าแรกยังไม่ตอบคำถาม"))
+        let seen = await specialist.lastGoal
+        #expect(seen?.contains("ย่อหน้าแรกยังไม่ตอบคำถาม") == true,
+                "the reason never reached the specialist: \(seen ?? "nil")")
+    }
+
+    @Test("a reworked assignment keeps counting attempts, not starting over")
+    func reworkContinuesTheAttemptCount() async throws {
+        let specialist = RecordingSpecialist(role: .writer)
+        let team = TeamOrchestrator(router: ModelRouter(executors: []),
+                                    specialists: [.writer: specialist])
+        let assignment = Assignment(id: "as_2", role: .writer, goal: "เขียน",
+                                    acceptanceCriteria: [Criterion(text: "ok", evidenceRequired: "ok")],
+                                    deliverableType: "manuscript")
+
+        _ = await team.rework(assignment, note: "รอบแรก")
+        _ = await team.rework(assignment, note: "รอบสอง")
+
+        let entry = await team.entries.first { $0.assignment.id == "as_2" }
+        // Two human rounds on top of nothing is two, not one twice: a rework
+        // that reset the counter would hand the work a fresh retry budget.
+        #expect(entry?.attempts == 2)
+    }
+
+    /// Cancelling is a decision, and §2.5's whole point is that a decision is
+    /// not overturned by a machine a moment later.
+    @Test("a cancelled assignment is recorded and never resumed")
+    func cancelIsRecordedAndFinal() async throws {
+        let specialist = RecordingSpecialist(role: .engineer)
+        let team = TeamOrchestrator(router: ModelRouter(executors: []),
+                                    specialists: [.engineer: specialist])
+        let assignment = Assignment(id: "as_3", role: .engineer, goal: "แก้บั๊ก",
+                                    acceptanceCriteria: [Criterion(text: "ok", evidenceRequired: "ok")],
+                                    deliverableType: "patch")
+
+        let seenEvents = EventBox()
+        await team.cancel("as_3", assignment: assignment, reason: "ทำเองแล้ว") { event in
+            if case .cancelled(_, let reason) = event { seenEvents.add(reason) }
+        }
+
+        #expect(seenEvents.all == ["ทำเองแล้ว"])
+        let entry = await team.entries.first { $0.assignment.id == "as_3" }
+        #expect(entry?.cancelled == true)
+        #expect(entry?.passed == false)
+        // And it is not an escalation: those two look the same on a
+        // `!passed` filter and mean opposite things to run-until-done.
+        #expect(entry?.needsHuman == false)
+    }
+
+    @Test("asking for a rework takes the work back off the human pile")
+    func reworkClearsEscalation() async throws {
+        let specialist = RecordingSpecialist(role: .analyst)
+        let team = TeamOrchestrator(router: ModelRouter(executors: []),
+                                    specialists: [.analyst: specialist])
+        let assignment = Assignment(id: "as_4", role: .analyst, goal: "วิเคราะห์",
+                                    acceptanceCriteria: [Criterion(text: "ok", evidenceRequired: "ok")],
+                                    deliverableType: "analysis")
+
+        await team.cancel("as_4", assignment: assignment)
+        _ = await team.rework(assignment, note: "ลองใหม่")
+
+        let entry = await team.entries.first { $0.assignment.id == "as_4" }
+        #expect(entry?.cancelled == false)
+        #expect(entry?.needsHuman == false)
+    }
+}
+
+/// Remembers the goal it was handed, which is where the rework note has to
+/// arrive if the specialist is to act on it.
+private actor RecordingSpecialist: Specialist {
+    nonisolated let role: Role
+    nonisolated var definitionOfDone: [Criterion] { [] }
+    private(set) var lastGoal: String?
+
+    init(role: Role) { self.role = role }
+
+    func execute(_ assignment: Assignment) async throws -> Deliverable {
+        lastGoal = assignment.goal
+        return Deliverable(assignmentID: assignment.id, summary: "เสร็จแล้ว",
+                           evidence: [Evidence(kind: .citation,
+                                               summary: "https://example.org/x", passed: true)])
+    }
+}
+
+
+/// The orchestrator emits from its own actor, so a test collecting events
+/// needs a lock rather than a captured `var`.
+private final class EventBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [String] = []
+    func add(_ item: String) { lock.lock(); items.append(item); lock.unlock() }
+    var all: [String] { lock.lock(); defer { lock.unlock() }; return items }
+}

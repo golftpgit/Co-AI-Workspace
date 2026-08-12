@@ -34,9 +34,10 @@ private struct RootView: View {
     @State private var conflicts = ConflictViewModel()
     @State private var team = TeamViewModel()
     @State private var models = ModelsViewModel()
+    @State private var endpoints = EndpointsViewModel()
 
     enum Screen: String, CaseIterable, Identifiable {
-        case chat, knowledge, conflicts, team, models
+        case chat, knowledge, conflicts, team, models, endpoints
         var id: String { rawValue }
 
         var label: String {
@@ -46,6 +47,7 @@ private struct RootView: View {
             case .conflicts: "ข้อขัดแย้ง"
             case .team: "ทีม"
             case .models: "โมเดล"
+            case .endpoints: "ระยะไกล"
             }
         }
 
@@ -56,6 +58,7 @@ private struct RootView: View {
             case .conflicts: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90"
             case .team: "person.3"
             case .models: "cpu"
+            case .endpoints: "network"
             }
         }
     }
@@ -82,6 +85,19 @@ private struct RootView: View {
                         .task { await team.attach(team: engine.team,
                                                   ledger: engine.taskLedger,
                                                   gateway: engine.gateway) }
+                case .endpoints:
+                    EndpointsView(model: endpoints)
+                        .task {
+                            await endpoints.attach(
+                                registry: engine.endpoints,
+                                checks: engine.endpointChecks,
+                                limits: environment.config.budget ?? .conservative,
+                                governor: engine.governor,
+                                ledger: engine.spendLedger,
+                                persist: { [environment] registry, limits in
+                                    environment.rememberEndpoints(registry, limits: limits)
+                                })
+                        }
                 case .models:
                     ModelsView(model: models)
                         .task {

@@ -24,6 +24,11 @@ public struct LedgerRow: Sendable, Equatable, Identifiable {
     /// difference decides whether run-until-done may pick it up again. Resuming
     /// an escalation automatically would undo the escalation.
     public let needsHuman: Bool
+    /// A person stopped this piece of work (P4.7). Recorded rather than
+    /// deleted: "we decided not to do this" is a different fact from "this
+    /// never existed", and the difference is what someone reads the ledger
+    /// for. Like an escalation, it is never picked up again automatically.
+    public let cancelled: Bool
     public let findings: [String]
     public let summary: String?
     /// Stored so an assignment can be rebuilt after the app closes. Without the
@@ -45,7 +50,8 @@ public struct LedgerRow: Sendable, Equatable, Identifiable {
     }
 
     public init(assignmentID: String, role: Role, goal: String, attempts: Int,
-                passed: Bool, needsHuman: Bool = false, findings: [String],
+                passed: Bool, needsHuman: Bool = false, cancelled: Bool = false,
+                findings: [String],
                 summary: String?, acceptanceCriteria: [Criterion] = [],
                 deliverableType: String = "") {
         self.assignmentID = assignmentID
@@ -54,6 +60,7 @@ public struct LedgerRow: Sendable, Equatable, Identifiable {
         self.attempts = attempts
         self.passed = passed
         self.needsHuman = needsHuman
+        self.cancelled = cancelled
         self.findings = findings
         self.summary = summary
         self.acceptanceCriteria = acceptanceCriteria
@@ -78,6 +85,7 @@ public actor TaskLedgerStore {
         content.set("attempts", row.attempts)
         content.set("passed", row.passed)
         content.set("needs_human", row.needsHuman)
+        content.set("cancelled", row.cancelled)
         content.set("findings", row.findings)
         content.setString("summary", row.summary)
         content.setString("deliverable_type", row.deliverableType)
@@ -116,6 +124,7 @@ public actor TaskLedgerStore {
                 attempts: row["attempts"]?.intValue ?? 0,
                 passed: row["passed"]?.boolValue ?? false,
                 needsHuman: row["needs_human"]?.boolValue ?? false,
+                cancelled: row["cancelled"]?.boolValue ?? false,
                 findings: row["findings"]?.arrayValue?.compactMap { $0.stringValue } ?? [],
                 summary: row["summary"]?.stringValue,
                 acceptanceCriteria: criteria ?? [],
@@ -132,10 +141,12 @@ public actor TaskLedgerStore {
     /// The subset a machine may pick up again: unfinished, not escalated, and
     /// carrying the criteria needed to review it.
     ///
-    /// Escalated work is excluded on purpose. §2.5 ends a run by asking a
-    /// person, and an automatic retry is precisely the thing that decision was
-    /// made instead of — run-until-done must not quietly overturn it.
+    /// Escalated and cancelled work is excluded on purpose. §2.5 ends a run by
+    /// asking a person, and an automatic retry is precisely the thing that
+    /// decision was made instead of — run-until-done must not quietly overturn
+    /// either of them.
     public func resumable(scope: Scope) async throws -> [LedgerRow] {
-        try await unfinished(scope: scope).filter { !$0.needsHuman && $0.assignment != nil }
+        try await unfinished(scope: scope)
+            .filter { !$0.needsHuman && !$0.cancelled && $0.assignment != nil }
     }
 }

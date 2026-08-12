@@ -43,7 +43,7 @@ struct TeamView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         if let plan = model.plan { PlanSummary(plan: plan) }
-                        ForEach(model.rows) { AssignmentRow(row: $0) }
+                        ForEach(model.rows) { AssignmentRow(model: model, row: $0) }
                     }
                     .padding(16)
                 }
@@ -230,7 +230,11 @@ private struct PlanSummary: View {
 }
 
 private struct AssignmentRow: View {
+    @Bindable var model: TeamViewModel
     let row: TeamViewModel.Row
+    @State private var askingRework = false
+    @State private var note = ""
+    @State private var confirmingCancel = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -266,10 +270,71 @@ private struct AssignmentRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.background, in: RoundedRectangle(cornerRadius: 6))
             }
+
+            actions
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
+        .sheet(isPresented: $askingRework) { reworkSheet }
+        .confirmationDialog("ยกเลิกงานนี้?", isPresented: $confirmingCancel,
+                            titleVisibility: .visible) {
+            Button("ยกเลิกงาน", role: .destructive) {
+                Task { await model.cancel(row) }
+            }
+            Button("ไม่", role: .cancel) {}
+        } message: {
+            Text("บันทึกไว้ว่าคนเป็นคนหยุด — Run-until-done จะไม่หยิบขึ้นมาทำเองอีก")
+        }
+    }
+
+    /// §2.6: the plan, and every piece of it, stays the user's to change. Until
+    /// now the only control was stopping the whole run, which is a blunt answer
+    /// to "this one is wrong".
+    @ViewBuilder
+    private var actions: some View {
+        if row.progress != .running {
+            HStack(spacing: 12) {
+                Button("สั่งแก้…") { note = ""; askingRework = true }
+                    .disabled(!model.isReworkable(row))
+                    .help(model.isReworkable(row)
+                          ? "ส่งกลับไปทำใหม่พร้อมเหตุผล"
+                          : "บันทึกของงานนี้ไม่มีเกณฑ์ตรวจรับ จึงสร้างงานกลับมาไม่ได้")
+                if row.progress != .cancelled {
+                    Button("ยกเลิก", role: .destructive) { confirmingCancel = true }
+                }
+                Spacer()
+            }
+            .buttonStyle(.link)
+            .font(.caption)
+        }
+    }
+
+    private var reworkSheet: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("สั่งแก้: \(row.goal)").font(.headline)
+            // Required, not optional. "ทำใหม่อีกรอบ" with no reason is the
+            // instruction that made v1's loops repeat themselves, and this
+            // note goes to the specialist in the same place QA's findings do.
+            Text("บอกด้วยว่าจะให้แก้อะไร — ข้อความนี้จะถูกส่งไปเป็นเหตุผลเดียวกับที่ QA ใช้")
+                .font(.caption).foregroundStyle(.secondary)
+            TextEditor(text: $note)
+                .font(.body)
+                .frame(minHeight: 90)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+            HStack {
+                Spacer()
+                Button("ปิด") { askingRework = false }
+                Button("ส่งกลับไปแก้") {
+                    askingRework = false
+                    Task { await model.rework(row, note: note) }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
     }
 }
 
@@ -326,6 +391,7 @@ private struct ProgressChip: View {
         case .passed: attempts > 1 ? "ผ่าน (รอบที่ \(attempts))" : "ผ่าน"
         case .failed: "ถูกตีกลับ (รอบ \(attempts))"
         case .escalated: "ต้องให้คนตัดสิน (\(attempts) รอบ)"
+        case .cancelled: "ยกเลิกโดยผู้ใช้"
         }
     }
 
@@ -335,6 +401,7 @@ private struct ProgressChip: View {
         case .passed: "checkmark.circle"
         case .failed: "arrow.uturn.backward"
         case .escalated: "hand.raised"
+        case .cancelled: "xmark.circle"
         }
     }
 
@@ -344,6 +411,7 @@ private struct ProgressChip: View {
         case .passed: .green
         case .failed: .orange
         case .escalated: .red
+        case .cancelled: .secondary
         }
     }
 }

@@ -17,12 +17,14 @@ public struct VLLMExecutor: LLMExecutor {
     public let identifier: String
     public let tier: ModelTier
     public let capabilities: LLMCapabilities
+    public let price: TokenPrice?
 
     public init(identifier: String? = nil,
                 baseURL: URL,
                 model: String,
                 apiKey: String? = nil,
                 tier: ModelTier = .selfHosted,
+                price: TokenPrice? = nil,
                 capabilities: LLMCapabilities = .init(contextWindow: 32_768,
                                                       supportsTools: true,
                                                       supportsStructuredOutput: true,
@@ -33,6 +35,7 @@ public struct VLLMExecutor: LLMExecutor {
         self.model = model
         self.apiKey = apiKey
         self.tier = tier
+        self.price = price
         self.capabilities = capabilities
     }
 

@@ -53,6 +53,9 @@ public enum TeamEvent: Sendable {
     /// work continuing without the user typing again is exactly the thing they
     /// should be able to see happening.
     case continuing(remaining: Int)
+    /// A person stopped one assignment (P4.7). Separate from `escalated`:
+    /// escalation asks for a decision, this *is* one.
+    case cancelled(assignmentID: String, reason: String)
     case finished(deliverables: [Deliverable])
     case failed(String)
 }
@@ -101,6 +104,9 @@ public actor TeamOrchestrator {
         /// from `!passed` so run-until-done can tell an escalation from a run
         /// that was merely cut short.
         public var needsHuman: Bool = false
+        /// A person stopped this one (P4.7). Kept apart from `needsHuman`:
+        /// escalation asks someone to decide, cancellation *is* the decision.
+        public var cancelled: Bool = false
         public var findings: [String]
         public var deliverable: Deliverable?
     }
@@ -133,6 +139,7 @@ public actor TeamOrchestrator {
                 attempts: entry.attempts,
                 passed: entry.passed,
                 needsHuman: entry.needsHuman,
+                cancelled: entry.cancelled,
                 findings: entry.findings,
                 summary: entry.deliverable?.summary,
                 acceptanceCriteria: entry.assignment.acceptanceCriteria,
@@ -149,6 +156,91 @@ public actor TeamOrchestrator {
 
     public var entries: [LedgerEntry] {
         ledger.values.sorted { $0.assignment.id < $1.assignment.id }
+    }
+
+    // MARK: - what a person can do to one piece of work (P4.7)
+
+    /// Runs one assignment again, with the reason a person gave for sending it
+    /// back.
+    ///
+    /// The note goes in where QA's findings go, because that is the channel
+    /// the specialist already reads (`reworked(_:attempt:findings:)`) — a
+    /// second mechanism for "here is what is wrong with it" would be a second
+    /// thing to keep in step. Attempts keep counting from where the ledger
+    /// left off, so a human rework does not hand the work a fresh retry budget
+    /// it has already spent.
+    public func rework(_ assignment: Assignment,
+                       note: String,
+                       emit: @Sendable (TeamEvent) -> Void = { _ in }) async -> Deliverable? {
+        guard let specialist = specialists[assignment.role] else {
+            emit(.failed(TeamError.noSpecialist(assignment.role).description))
+            return nil
+        }
+        let previous = ledger[assignment.id]
+        let attempt = (previous?.attempts ?? 0) + 1
+        let reasons = note.isEmpty ? ["ผู้ใช้สั่งให้แก้"] : [note]
+
+        ledger[assignment.id] = LedgerEntry(
+            assignment: assignment, attempts: attempt, passed: false,
+            // A person asking for a rework un-escalates and un-cancels it:
+            // they have taken it back off the "waiting for a human" pile by
+            // being the human.
+            needsHuman: false, cancelled: false,
+            findings: reasons, deliverable: previous?.deliverable)
+        await persist(assignment.id)
+        emit(.rework(assignmentID: assignment.id, attempt: attempt, reasons: reasons))
+        emit(.assigned(assignment, attempt: attempt))
+
+        do {
+            let deliverable = try await specialist.execute(
+                reworked(assignment, attempt: attempt, findings: reasons, fromAPerson: true))
+            emit(.delivered(deliverable))
+            // The same standard the automatic loop reviews against — a human
+            // rework must not be graded more leniently than a machine one.
+            let verdict = reviewer.review(deliverable, against: assignment,
+                                          standard: specialist.definitionOfDone)
+            ledger[assignment.id]?.deliverable = deliverable
+            ledger[assignment.id]?.passed = verdict.passed
+            ledger[assignment.id]?.findings = verdict.findings
+            await persist(assignment.id)
+            emit(.reviewed(assignmentID: assignment.id, passed: verdict.passed,
+                           findings: verdict.findings))
+            return verdict.passed ? deliverable : nil
+        } catch {
+            ledger[assignment.id]?.findings = ["\(error)"]
+            await persist(assignment.id)
+            emit(.rework(assignmentID: assignment.id, attempt: attempt,
+                         reasons: ["\(error)"]))
+            return nil
+        }
+    }
+
+    /// Marks one assignment as stopped by a person.
+    ///
+    /// Recorded, not deleted — the ledger's job is to say what happened, and
+    /// "we decided not to do this" is something that happened. Run-until-done
+    /// skips it afterwards for the same reason it skips escalations: picking
+    /// it back up would overturn the decision that was just made.
+    public func cancel(_ assignmentID: String,
+                       assignment: Assignment? = nil,
+                       reason: String = "ผู้ใช้ยกเลิกงานนี้",
+                       emit: @Sendable (TeamEvent) -> Void = { _ in }) async {
+        if var entry = ledger[assignmentID] {
+            entry.cancelled = true
+            entry.passed = false
+            entry.findings = [reason]
+            ledger[assignmentID] = entry
+        } else if let assignment {
+            // Cancelling something from a previous run, read back off the
+            // ledger rather than held in memory.
+            ledger[assignmentID] = LedgerEntry(assignment: assignment, attempts: 0,
+                                               passed: false, needsHuman: false,
+                                               cancelled: true, findings: [reason])
+        } else {
+            return
+        }
+        await persist(assignmentID)
+        emit(.cancelled(assignmentID: assignmentID, reason: reason))
     }
 
     // MARK: - running
@@ -278,9 +370,15 @@ public actor TeamOrchestrator {
 
     /// Rework carries the reviewer's reasons into the next attempt. Sending
     /// the same brief back unchanged is how a loop repeats itself.
+    /// - Parameter fromAPerson: a human rework carries its reason on the
+    ///   *first* attempt too. The attempt-count guard exists so the automatic
+    ///   loop does not prepend "the last round failed because…" to a round
+    ///   that has not happened yet; when someone types the reason themselves,
+    ///   there is nothing to guard against and dropping it would send the
+    ///   specialist the original goal with no idea what to change.
     private func reworked(_ assignment: Assignment, attempt: Int,
-                          findings: [String]) -> Assignment {
-        guard attempt > 1, !findings.isEmpty else { return assignment }
+                          findings: [String], fromAPerson: Bool = false) -> Assignment {
+        guard attempt > 1 || fromAPerson, !findings.isEmpty else { return assignment }
         return Assignment(
             id: assignment.id, role: assignment.role,
             goal: """
