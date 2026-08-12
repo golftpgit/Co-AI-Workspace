@@ -1,5 +1,7 @@
 import Foundation
 import AgentKit
+import Observability
+import os
 
 // ─────────────────────────────────────────────────────────────
 // Bootstrap config (ARCHITECTURE §15) — the only settings kept in a flat
@@ -51,6 +53,29 @@ public struct BootstrapConfig: Codable, Sendable, Equatable {
     /// the only thing in this app that can fill a disk — one 30B checkpoint is
     /// 17 GB — so the limit is a setting, not a constant (ARCH §9.4).
     public var modelQuotaGigabytes: Int?
+
+    /// The first shipped file had no `schemaVersion` key, so its absence means
+    /// version 0 rather than a file that cannot be read. Written out because
+    /// the synthesised decoder would make it required, and "required" here
+    /// means an old file is treated as corrupt — which is how the settings in
+    /// it used to be thrown away (P9.2).
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 0
+        surrealPort = try container.decode(Int.self, forKey: .surrealPort)
+        searxngPort = try container.decode(Int.self, forKey: .searxngPort)
+        logLevel = try container.decodeIfPresent(LogLevel.self, forKey: .logLevel) ?? .info
+        dataDirectoryOverride = try container.decodeIfPresent(String.self,
+                                                             forKey: .dataDirectoryOverride)
+        selfHostedEndpoint = try container.decodeIfPresent(String.self, forKey: .selfHostedEndpoint)
+        selfHostedModel = try container.decodeIfPresent(String.self, forKey: .selfHostedModel)
+        searxngPython = try container.decodeIfPresent(String.self, forKey: .searxngPython)
+        localModel = try container.decodeIfPresent(String.self, forKey: .localModel)
+        endpointRegistry = try container.decodeIfPresent(EndpointRegistry.self,
+                                                        forKey: .endpointRegistry)
+        budget = try container.decodeIfPresent(BudgetLimits.self, forKey: .budget)
+        modelQuotaGigabytes = try container.decodeIfPresent(Int.self, forKey: .modelQuotaGigabytes)
+    }
 
     public static let currentSchemaVersion = 1
     public static let defaultModelQuotaGigabytes = 60
@@ -164,13 +189,29 @@ public struct BootstrapStore: Sendable {
     public enum LoadOutcome: Sendable, Equatable {
         case loaded
         case createdDefault
+        /// Read at an older version and brought forward. Carries which steps
+        /// ran, because "your settings were moved" is worth saying once.
+        case migrated(from: Int, steps: [Int])
         case repairedInvalid(reason: String)
+        /// Written by a newer version of the app. **The file is left alone** —
+        /// see the note in `BootstrapMigration`.
+        case newerThanExpected(version: Int)
+
+        /// Whether the file on disk was replaced. The boot screen distinguishes
+        /// "we changed your file" from "we could not use it this time".
+        public var rewroteFile: Bool {
+            switch self {
+            case .createdDefault, .migrated, .repairedInvalid: true
+            case .loaded, .newerThanExpected: false
+            }
+        }
     }
 
     public let paths: AppPaths
     /// `FileManager` is not Sendable; each call site takes the shared instance
     /// rather than the store holding one across concurrency domains.
     private var fileManager: FileManager { .default }
+    private var log: Logger { AppLog.logger("config") }
 
     public init(paths: AppPaths) {
         self.paths = paths
@@ -184,13 +225,57 @@ public struct BootstrapStore: Sendable {
         do {
             let data = try Data(contentsOf: paths.bootstrapFile)
             let config = try PropertyListDecoder().decode(BootstrapConfig.self, from: data)
+
+            // A file from a version we do not know is not ours to rewrite.
+            // Running on defaults costs this session's settings; overwriting
+            // costs them in the version they go back to as well.
+            if config.schemaVersion > BootstrapConfig.currentSchemaVersion {
+                log.error("""
+                    bootstrap.plist is version \(config.schemaVersion, privacy: .public) but this                     build understands \(BootstrapConfig.currentSchemaVersion, privacy: .public) — leaving it alone
+                    """)
+                return (.default, .newerThanExpected(version: config.schemaVersion))
+            }
+
+            if config.schemaVersion < BootstrapConfig.currentSchemaVersion {
+                let (migrated, steps) = BootstrapMigration.migrate(config)
+                try migrated.validate()
+                // The copy is taken before the rewrite, not after: this is the
+                // only moment the old shape still exists.
+                try backUpFile(suffix: "v\(config.schemaVersion)")
+                try save(migrated)
+                log.info("""
+                    bootstrap.plist migrated \(config.schemaVersion, privacy: .public) →                     \(BootstrapConfig.currentSchemaVersion, privacy: .public)
+                    """)
+                return (migrated, .migrated(from: config.schemaVersion, steps: steps))
+            }
+
             try config.validate()
             return (config, .loaded)
         } catch {
-            // Corrupt or invalid: keep going with defaults rather than refusing to launch.
+            // Corrupt or invalid: keep going with defaults rather than refusing
+            // to launch — but keep what was there. Somebody who has to retype
+            // their endpoint at least has something to read it off.
+            try? backUpFile(suffix: "unreadable")
             try save(.default)
             return (.default, .repairedInvalid(reason: "\(error)"))
         }
+    }
+
+    /// Copies the current file aside. Suffixed rather than numbered: one backup
+    /// per reason is useful, and a directory filling up with `.backup-17` is
+    /// not.
+    private func backUpFile(suffix: String) throws {
+        let backup = paths.bootstrapFile
+            .deletingPathExtension()
+            .appendingPathExtension("\(suffix).backup.plist")
+        try? fileManager.removeItem(at: backup)
+        try fileManager.copyItem(at: paths.bootstrapFile, to: backup)
+    }
+
+    /// Where a backup for a given reason would be, so the UI can point at it.
+    public func backupFile(suffix: String) -> URL {
+        paths.bootstrapFile.deletingPathExtension()
+            .appendingPathExtension("\(suffix).backup.plist")
     }
 
     public func save(_ config: BootstrapConfig) throws {
