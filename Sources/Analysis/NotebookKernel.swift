@@ -54,6 +54,10 @@ public struct CellOutput: Sendable, Equatable, Codable {
 
 public enum KernelError: Error, CustomStringConvertible, Equatable {
     case interpreterMissing([String])
+    /// Found something, but not something this process can start — see
+    /// `ExecutableSearch`. Separate from "missing" because the fix is
+    /// different and the screen has to say which one happened.
+    case interpreterUnusable(String)
     case notRunning
     case startFailed(String)
     case protocolBroken(String)
@@ -63,6 +67,7 @@ public enum KernelError: Error, CustomStringConvertible, Equatable {
         switch self {
         case .interpreterMissing(let tried):
             "ไม่พบ Python บนเครื่องนี้ (ลองหาที่: \(tried.joined(separator: ", ")))"
+        case .interpreterUnusable(let reason): reason
         case .notRunning: "เคอร์เนลยังไม่ได้เริ่ม — กด 'เริ่มเคอร์เนล' ก่อน"
         case .startFailed(let message): "เริ่มเคอร์เนลไม่สำเร็จ: \(message)"
         case .protocolBroken(let message): "เคอร์เนลตอบมาในรูปแบบที่อ่านไม่ออก: \(message)"
@@ -74,13 +79,16 @@ public enum KernelError: Error, CustomStringConvertible, Equatable {
 public actor NotebookKernel {
     /// Homebrew first: a machine that has one is a machine where pandas and
     /// numpy live in it, and a kernel without the libraries is a kernel nobody
-    /// will use. `/usr/bin/python3` is last and may be Xcode's stub, which is
-    /// why a failed start reports the interpreter's own stderr.
-    public static let searchPaths = [
-        "/opt/homebrew/bin/python3",
-        "/usr/local/bin/python3",
-        "/usr/bin/python3",
-    ]
+    /// will use.
+    ///
+    /// The order — and the fact that `/usr/bin/python3` is *not* the fallback
+    /// it looks like — belongs to `ExecutableSearch`, which knows the thing
+    /// this list used to only suspect: that path is a shim that cannot run
+    /// inside the App Sandbox at all (P9.6). Kept as a computed property so
+    /// there is one search on this machine rather than two that disagree.
+    public static var searchPaths: [String] {
+        ExecutableSearch.toolchainDirectories.map { $0 + "/python3" } + ["/usr/bin/python3"]
+    }
 
     private let interpreter: String
     private let workingDirectory: URL?
@@ -103,11 +111,16 @@ public actor NotebookKernel {
             }
             self.interpreter = interpreter
         } else {
-            guard let found = Self.searchPaths
-                .first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
-                throw KernelError.interpreterMissing(Self.searchPaths)
+            do {
+                self.interpreter = try ExecutableSearch.resolve("python3")
+            } catch {
+                // The reason matters here: "no Python" and "the only Python is
+                // one this sandbox cannot start" are different problems with
+                // different fixes, and the screen shows whichever it is.
+                throw KernelError.interpreterUnusable(
+                    (error as? ExecutableSearchError)?.description
+                        ?? "\(error)")
             }
-            self.interpreter = found
         }
         self.interpreterPath = self.interpreter
         self.workingDirectory = workingDirectory
