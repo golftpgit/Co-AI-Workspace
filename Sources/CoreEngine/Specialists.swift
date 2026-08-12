@@ -160,10 +160,19 @@ public enum SpecialistError: Error, CustomStringConvertible, Equatable {
 /// than trusting it.
 public enum SpecialistTools {
     public static let byRole: [Role: Set<String>] = [
-        .researcher: ["kb_search", "web_search", "fetch_page"],
-        .analyst: ["kb_search", "run_shell", "run_stat_test"],
+        // `ingest_url` belongs to the role that finds sources: a page worth
+        // citing later has to be *in* the knowledge base, and `fetch_page`
+        // only reads it once.
+        .researcher: ["kb_search", "web_search", "fetch_page", "ingest_url"],
+        // The three analysis tools were missing here until 2026-08-12, which
+        // meant the specialist whose entire job is analysis had to reach the
+        // store through `run_shell` or not at all.
+        .analyst: ["kb_search", "run_shell", "run_stat_test",
+                   "analysis_query", "analysis_execute", "pull_db_table"],
         .engineer: ["run_shell", "kb_search"],
-        .writer: ["kb_search"],
+        // A Writer that cannot write a file is a Writer that hands back prose
+        // for somebody else to paste (§14.1).
+        .writer: ["kb_search", "save_document"],
     ]
 
     static func forRole(_ role: Role) -> Set<String> { byRole[role] ?? [] }

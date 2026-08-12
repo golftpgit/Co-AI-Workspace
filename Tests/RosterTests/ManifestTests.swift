@@ -13,12 +13,21 @@ import ToolBelt
 // by describing itself as safe.
 // ─────────────────────────────────────────────────────────────
 
+/// The tools a real gateway advertises. `base:` resolves against this, so it
+/// has to contain everything `RoleTools` inherits — a fixture that lags the
+/// role table makes every `base:` test fail for a reason that has nothing to do
+/// with what it is testing. (It did, the day the four missing tools landed,
+/// which is the invariant working.)
 private let known: Set<String> = ["kb_search", "web_search", "fetch_page",
-                                  "run_shell", "run_stat_test"]
+                                  "run_shell", "run_stat_test", "ingest_url",
+                                  "analysis_query", "analysis_execute",
+                                  "pull_db_table", "save_document"]
 
 private let risks: [String: RiskLevel] = [
     "kb_search": .low, "web_search": .low, "fetch_page": .low,
-    "run_stat_test": .low, "run_shell": .high,
+    "run_stat_test": .low, "analysis_query": .low, "run_shell": .high,
+    "ingest_url": .medium, "analysis_execute": .medium,
+    "pull_db_table": .medium, "save_document": .medium,
 ]
 
 private func parser() -> ManifestParser {
@@ -58,7 +67,10 @@ struct ManifestTests {
     @Test("base inherits a tool set and the manifest's own list is added on top")
     func baseInheritance() throws {
         let manifest = try parser().parse(legalReview, kind: .agent)
-        #expect(manifest.tools.sorted() == ["fetch_page", "kb_search", "web_search"])
+        // `ingest_url` comes from the role, not from the file: a researcher may
+        // put a page into the knowledge base so it can be cited later.
+        #expect(manifest.tools.sorted()
+                == ["fetch_page", "ingest_url", "kb_search", "web_search"])
         #expect(manifest.tools.count == Set(manifest.tools).count)
         // And what the persona is *not* allowed to touch stays out.
         #expect(!manifest.tools.contains("run_shell"))
@@ -118,10 +130,28 @@ struct ManifestTests {
     /// file would have preferred.
     @Test("risk is computed from the tools, so a shell agent is always gated")
     func riskFollowsTheTools() throws {
-        let reader = try parser().parse(legalReview, kind: .agent)
+        // Tools listed rather than inherited, because the point here is the
+        // arithmetic — read-only tools give a low ceiling and a capability that
+        // never reaches the gate.
+        let reader = try parser().parse("""
+        ---
+        name: reader
+        description: อ่านอย่างเดียว
+        tools: kb_search, web_search, fetch_page
+        ---
+        อ่านแล้วสรุป
+        """, kind: .agent)
         let readerEntry = parser().entry(for: reader)
         #expect(readerEntry.riskCeiling == .low)
         #expect(!readerEntry.isRiskSensitive)
+
+        // And `base: researcher` is *not* read-only any more, which is the
+        // truthful consequence of giving that role `ingest_url`: writing into
+        // the shared knowledge base is a write, and what goes in there is what
+        // gets cited later (§5.3 grades it medium).
+        let researcher = parser().entry(for: try parser().parse(legalReview, kind: .agent))
+        #expect(researcher.riskCeiling == .medium)
+        #expect(researcher.isRiskSensitive)
 
         let shell = try parser().parse("""
         ---

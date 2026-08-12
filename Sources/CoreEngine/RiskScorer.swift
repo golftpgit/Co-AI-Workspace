@@ -51,6 +51,24 @@ public struct DefaultRiskScorer: RiskScoring {
         "install_package": .high,
     ]
 
+    /// Names classified above for tools that **do not exist yet**, each with
+    /// the task that owes it.
+    ///
+    /// Declared rather than deleted, and declared rather than left to be
+    /// noticed later: `scripts/check.sh` fails if a name in `baseline` has no
+    /// `AgentTool` behind it *and* is not listed here, so the set of intended
+    /// tools is finite, visible, and cannot grow by accident. That rule exists
+    /// because nine names sat in the table above with nothing implementing
+    /// them, four of them wrapping capabilities that were finished, tested and
+    /// reachable from nothing — found by reading the plan by hand (2026-08-12),
+    /// which is not a method anybody should have to rely on.
+    static let notBuiltYet: [String: String] = [
+        "read_file": "M6 FileTool — ยังไม่มี task ผูก",
+        "write_file": "M6 FileTool — ยังไม่มี task ผูก",
+        "install_package": "P8.4 (Completeness Checklist ผูกไว้) — ต้องมีนโยบายเน็ตก่อน",
+        "fetch_docs": "M6 — ต้องมีแหล่งเอกสารก่อน",
+    ]
+
     /// Substrings that turn an ordinary command into a destructive one. Crude
     /// on purpose: this decides whether to *ask*, and a false alarm costs one
     /// click while a miss costs a home directory.

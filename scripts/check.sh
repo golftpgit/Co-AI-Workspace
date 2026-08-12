@@ -150,6 +150,55 @@ else
   ok "the SQL guard exists once, for both the notebook and the DB explorer"
 fi
 
+# ARCHITECTURE §5.3 / §M6: a tool the risk table classifies must exist.
+#
+# This is the sixth instance of one failure — a capability built, tested, and
+# reachable from nothing (v1's D6, then ConflictDetector, the P4 team, the MCP
+# client, plugins, and then nine tools at once). It was found by reading the
+# plan, which is not a method. `RiskScorer.baseline` is the honest place to
+# check it: a name is written there because somebody intended a tool, so a name
+# with no `AgentTool` behind it is an intention that never landed.
+step "tools exist"
+UNBUILT=$(/usr/bin/python3 - <<'PY'
+import re, os
+src = open('Sources/CoreEngine/RiskScorer.swift').read()
+baseline = src[src.index('static let baseline'):src.index('/// Names classified above')]
+planned = src[src.index('static let notBuiltYet'):src.index('/// Substrings')]
+classified = re.findall(r'"([a-z_]+)":', baseline)
+declared = set(re.findall(r'"([a-z_]+)":', planned))
+implemented = set()
+for root, _, files in os.walk('Sources'):
+    for name in files:
+        if name.endswith('.swift'):
+            implemented |= set(re.findall(r'let name\s*=\s*"([a-z_]+)"',
+                                          open(os.path.join(root, name)).read()))
+print(' '.join(n for n in classified
+                if n not in implemented and n not in declared))
+PY
+)
+if [ -n "$UNBUILT" ]; then
+  fail "classified in RiskScorer but neither implemented nor declared in notBuiltYet:$UNBUILT"
+else
+  ok "every classified tool is implemented, or declared as not built yet"
+fi
+
+# The declared ones stay in front of a person on every run. A list nobody reads
+# is how nine of these went unnoticed until somebody read the plan by hand.
+grep -A 6 "static let notBuiltYet" Sources/CoreEngine/RiskScorer.swift \
+  | grep -oE '"[a-z_]+": "[^"]+"' | sed 's/^/   ⊘ ยังไม่ได้ทำ: /'
+
+# And every implemented tool is on the tool list the app builds. A tool nobody
+# registers is the same gap one step later.
+UNREGISTERED=""
+for tool in IngestURLTool AnalysisQueryTool AnalysisExecuteTool SaveDocumentTool PullDBTableTool; do
+  grep -rq "$tool(" Sources/CoAIWorkspaceApp --include=*.swift || UNREGISTERED="$UNREGISTERED $tool"
+done
+if [ -n "$UNREGISTERED" ]; then
+  fail "built but never registered in the gateway:$UNREGISTERED"
+else
+  ok "the new tools are registered where a session can reach them"
+fi
+
 # ARCHITECTURE §14.4 / P8.7: accessibility is a requirement from the start, not
 # a pass at the end. v1 had no `aria-*` at all and then had to go back through
 # 16 buttons in 8 files — a requirement nothing enforces is a preference, so
