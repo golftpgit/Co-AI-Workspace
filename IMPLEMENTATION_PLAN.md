@@ -177,10 +177,17 @@
 
 ## P6 — Analysis
 
-| Task | รายละเอียด | Done-when |
-|---|---|---|
-| **P6.1** DuckDB store | `duckdb-swift` + query API | query จริงได้จากในแอป |
-| **P6.2** Extension + federated query | ยืนยัน `INSTALL/LOAD` จาก Swift (postgres/sqlite/mssql scanner) | ต่อ external DB จริงแล้วดึงตารางได้ |
+| Task | รายละเอียด | Done-when | สถานะ |
+|---|---|---|---|
+| **P6.1** DuckDB store | `duckdb-swift` + query API | query จริงได้จากในแอป | 🔶 **`AnalysisStore` ทำงานกับ DuckDB จริง 9 เทส ไม่มี stub** — เปิดไฟล์/in-memory, query, `SHOW TABLES`, schema, import CSV/Parquet · "
+ "**ผลลัพธ์เป็นค่า ไม่ใช่ cursor** — materialise ให้จบก่อนคืน ไม่มี handle ค้างข้าม await (ซ้ำรอย D6) · **NULL ไม่เท่ากับสตริงว่าง** · error แนบ SQL มาด้วยเสมอ · "
+ "**สองกับดักที่เจอกับของจริง**: (1) `cast(to: String.self)` ของ duckdb-swift **ไม่ fail แต่คืน nil ทั้งคอลัมน์**ถ้าชนิดไม่ตรง — ตารางจะว่างเปล่าแทนที่จะ error จึงต้องอ่านตามชนิดที่ DuckDB บอก แล้วให้ DuckDB เอง `CAST(... AS VARCHAR)` เฉพาะชนิดที่เราไม่ได้รองรับ (list/struct/interval) "
+ "(2) **`DESCRIBE` รับ quoted identifier ที่มี `\"` ไม่ได้** ("Unterminated quote in qualified name") ตารางที่ชื่อแปลกจึงสร้างได้แต่ describe ไม่ได้ → อ่านจาก `information_schema` ด้วย **bound parameter** แทน ซึ่งไม่มีปัญหาการ quote ตั้งแต่แรก · "
+ "**ค้าง**: ยังไม่มี UI (P6.8) — ต่อเข้า `Engine` แล้วแต่ยังไม่มีหน้าจอให้กด |
+| **P6.2** Extension + federated query | ยืนยัน `INSTALL/LOAD` จาก Swift (postgres/sqlite/mssql scanner) | ต่อ external DB จริงแล้วดึงตารางได้ | "
+ "✅ **ผ่าน Done-when กับฐานข้อมูลภายนอกจริง** — สร้างไฟล์ SQLite ด้วย `/usr/bin/sqlite3` (ของที่เครื่องมีอยู่ ไม่ใช่ของที่เราเขียนเอง) → `INSTALL/LOAD sqlite_scanner` จาก Swift → `ATTACH` → เห็น schema → **join ตาราง local กับ remote ในคำสั่งเดียว** → `pull` เข้ามาเป็นสำเนา → `DETACH` แล้วสำเนายังอยู่ · 5 เทส · "
+ "**attach เป็น read-only โดยปริยาย** และมีเทสยืนยันว่า INSERT ลงฐานที่ attach มาถูกปฏิเสธ — ข้อมูลของคนอื่นบ่อยกว่าของเรา · "
+ "**ค้าง**: postgres/mysql ใช้เส้นทางเดียวกันเป๊ะ (สอง statement เหมือนกัน) แต่**ยังไม่ได้ยืนยันกับ server จริง** เพราะยังไม่มี · mssql ไม่มี extension ทางการ ([§12.2](ARCHITECTURE.md#122-db-connectors) เขียนไว้แล้วว่าไปทาง ATTACH) · การโหลด extension ครั้งแรกต้องมีเน็ต — เทสจึง skip ดังๆ ถ้าโหลดไม่ได้ |
 | **P6.3** DB connectors | PG/MySQL/SQLite/MSSQL + MongoDB (native) + scope | เพิ่ม connector ผ่าน UI แล้ว explore schema ได้ |
 | **P6.4** Notebook kernel | Python persistent kernel (stdin/stdout protocol) + SQL cell | state คงข้าม cell; kill kernel แล้ว restart ได้ |
 | **P6.5** Shared SQL guard | mutating-statement confirm **sub-module เดียว** ใช้ทั้ง Notebook + DB Explorer (v1 ก็อปกัน) | มีที่เดียวจริง — grep แล้วไม่เจอโค้ดซ้ำ |

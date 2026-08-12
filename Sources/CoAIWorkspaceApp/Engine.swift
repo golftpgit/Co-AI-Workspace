@@ -10,6 +10,7 @@ import ToolBelt
 import Knowledge
 import EmbeddingRuntime
 import MLXRuntime
+import Analysis
 
 // ─────────────────────────────────────────────────────────────
 // Everything the running system is made of, assembled once at boot.
@@ -66,6 +67,10 @@ struct Engine: Sendable {
     let endpointChecks: [String: EndpointCheck]
     let governor: BudgetGovernor
     let spendLedger: SurrealSpendLedger
+    /// The analysis store (§12.1, P6.1). Opened at boot like everything else
+    /// on this struct: a capability that only its own tests can reach is the
+    /// mistake this project has made four times.
+    let analysis: AnalysisStore?
 
     static func build(config: BootstrapConfig, paths: AppPaths) async throws -> Engine {
         let client = SurrealClient(url: URL(string: "ws://127.0.0.1:\(config.surrealPort)/rpc")!)
@@ -185,6 +190,11 @@ struct Engine: Sendable {
             reviewer: QAReviewer(),
             ledgerStore: taskLedger)
 
+        // Nil rather than a failed boot: analysis is one screen among several,
+        // and a corrupt `.duckdb` must not be the reason chat will not open.
+        let analysis = try? AnalysisStore(
+            fileURL: paths.analysisDirectory.appending(path: "analysis.duckdb"))
+
         var summary: [String] = []
         for executor in executors {
             let reachable = await executor.isAvailable()
@@ -203,7 +213,8 @@ struct Engine: Sendable {
                       executorSummary: summary, localTier: localTier,
                       modelCatalog: modelCatalog, modelInstaller: modelInstaller,
                       endpoints: endpoints, endpointChecks: endpointChecks,
-                      governor: governor, spendLedger: spendLedger)
+                      governor: governor, spendLedger: spendLedger,
+                      analysis: analysis)
     }
 
     /// Nothing the engine started may outlive the app (§13).
