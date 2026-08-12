@@ -14,6 +14,7 @@ import MLXRuntime
 import Analysis
 import Channels
 import Roster
+import DocGen
 import MCPBridge
 
 // ─────────────────────────────────────────────────────────────
@@ -87,6 +88,10 @@ struct Engine: Sendable {
     /// is: a method agreed only in memory was never agreed.
     let plans: AnalysisPlanStore
     let gapDetector: GapDetector
+    /// §14.1 / P7.9 — templates learned from documents the user uploaded. A
+    /// file rather than a row: a template is a thing people copy between
+    /// machines, and it has to be readable without the database being up.
+    let templates: TemplateStore
     /// §8 — the channels, and the one place an inbound message becomes a turn.
     /// Accounts are configuration; the router is the wiring that makes §8.2's
     /// "every channel through the same core" true by construction.
@@ -339,6 +344,8 @@ struct Engine: Sendable {
                       notebookKernel: notebookKernel, connectors: connectors,
                       plans: AnalysisPlanStore(client: client),
                       gapDetector: GapDetector(router: router),
+                      templates: TemplateStore(
+                        file: paths.root.appending(path: "templates.json")),
                       channelAccounts: channelAccounts, channelRouter: channelRouter,
                       appIntents: appIntents,
                       roster: roster, rosterProblems: rosterProblems,

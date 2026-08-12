@@ -626,6 +626,7 @@ private struct ConnectorSheet: View {
 private struct PlanPane: View {
     @Bindable var model: AnalysisViewModel
     @State private var exporting = false
+    @State private var importingTemplate = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -643,6 +644,12 @@ private struct PlanPane: View {
                       contentType: .data,
                       defaultFilename: model.plan?.title ?? "analysis-plan") { result in
             if case .success(let url) = result { model.exportPlan(to: url) }
+        }
+        // P7.9 — a template is learned from a document, so this is an import
+        // of somebody's own file rather than a form to fill in.
+        .fileImporter(isPresented: $importingTemplate,
+                      allowedContentTypes: [.init(filenameExtension: "docx") ?? .data]) { result in
+            if case .success(let url) = result { model.importTemplate(from: url) }
         }
     }
 
@@ -781,6 +788,24 @@ private struct PlanPane: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(plan.title).font(.headline)
                 Spacer()
+                // P7.9: the shape it comes out in. "แบบของเราเอง" is P7.6's
+                // layout; the rest are documents this person uploaded.
+                Picker("แม่แบบ", selection: Binding(
+                    get: { model.selectedTemplateID },
+                    set: { model.selectTemplate($0) })) {
+                        Text("แบบของเราเอง").tag(String?.none)
+                        ForEach(model.templates) { template in
+                            Text(template.name).tag(String?.some(template.id))
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 180)
+                Button {
+                    importingTemplate = true
+                } label: {
+                    Label("เพิ่มแม่แบบจากไฟล์", systemImage: "doc.badge.plus")
+                }
+                .help("เลือกไฟล์ .docx ที่มีหัวข้อครบ แล้วระบบจะจำโครงของมันไว้")
                 // §14.1: a pre-registration is something you send to somebody.
                 Button { exporting = true } label: {
                     Label("ส่งออก .docx", systemImage: "square.and.arrow.up")

@@ -93,6 +93,11 @@ public final class AnalysisViewModel {
 
     public private(set) var plans: [AnalysisPlan] = []
     public private(set) var plan: AnalysisPlan?
+    /// §14.1 / P7.9 — templates parsed from documents the user uploaded, and
+    /// which one the next export should be poured into. Nil means "our own
+    /// layout", which is what P7.6 already produced.
+    public private(set) var templates: [DocumentTemplate] = []
+    public private(set) var selectedTemplateID: String?
     /// The proposal being read. Pasted for now — reading it straight out of
     /// the knowledge base needs a `doc_type` the ingest pipeline does not
     /// record yet.
@@ -120,6 +125,7 @@ public final class AnalysisViewModel {
     private var connectorStore: ConnectorStore?
     private var knowledge: KnowledgeStore?
     private var planStore: AnalysisPlanStore?
+    private var templateStore: TemplateStore?
     private var detector: GapDetector?
     private var scope: Scope = .central
     private let log = AppLog.logger("analysis-ui")
@@ -135,6 +141,48 @@ public final class AnalysisViewModel {
         await loadPlans()
         await loadKnowledgeDocuments()
     }
+
+    /// §14.1 / P7.9 — the templates learned from documents the user already
+    /// had. Attached here rather than read at export time so the picker beside
+    /// the export button has something in it before anybody clicks.
+    public func attach(templates store: TemplateStore) {
+        self.templateStore = store
+        templates = store.load()
+    }
+
+    /// Learns a template from a document somebody uploads, and keeps it.
+    ///
+    /// The failure is worth reporting rather than swallowing: a file with no
+    /// headings cannot be a template, and "nothing happened" is the least
+    /// useful thing to show someone who just chose a file.
+    public func importTemplate(from url: URL) {
+        guard let templateStore else { return }
+        // A file chosen from a panel is outside the sandbox until it is
+        // opened this way; without the scope the read fails with a permission
+        // error that reads like a corrupt file.
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let template = try TemplateParser.parse(docx: url)
+            templates = try templateStore.add(template)
+            selectedTemplateID = template.id
+            status = Status(message: "อ่านแม่แบบ '\(template.name)' แล้ว — "
+                            + "\(template.sections.count) หัวข้อ", isError: false)
+        } catch {
+            status = Status(message: "ใช้ไฟล์นี้เป็นแม่แบบไม่ได้: "
+                            + ((error as? TemplateError)?.description ?? "\(error)"),
+                            isError: true)
+        }
+    }
+
+    public func removeTemplate(_ id: String) {
+        guard let templateStore else { return }
+        try? templateStore.remove(id)
+        templates = templateStore.load()
+        if selectedTemplateID == id { selectedTemplateID = nil }
+    }
+
+    public func selectTemplate(_ id: String?) { selectedTemplateID = id }
 
     /// The documents that could be a proposal.
     ///
@@ -556,16 +604,33 @@ public final class AnalysisViewModel {
                    : "ยังไม่อนุมัติ: " + plan.blockers.joined(separator: " · ")),
         ]))
 
-        let draft = DocumentDraft(title: plan.title,
+        var draft = DocumentDraft(title: plan.title,
                                   sections: sections,
                                   limitations: limitationsPreview)
+
+        // P7.9 — poured into the shape somebody's own document had, if they
+        // chose one. What is missing from it is said out loud: the reason to
+        // use a template is usually that a committee expects those headings,
+        // and finding out which ones are empty after sending it is too late.
+        var note = ""
+        if let selectedTemplateID,
+           let template = templates.first(where: { $0.id == selectedTemplateID }) {
+            let applied = TemplateFiller.apply(template, to: draft)
+            draft = applied.draft
+            note = " · แม่แบบ '\(template.name)'"
+            if !applied.missing.isEmpty {
+                note += " — ยังไม่มีเนื้อหาใน: " + applied.missing.joined(separator: ", ")
+            }
+        }
+
         do {
             // Nothing is cited from the knowledge base in this document, so the
             // audit has nothing to refuse; it still runs, because the rule
             // belongs to the builder rather than to each caller.
             let rendered = try DocumentBuilder.render(draft)
             try OfficeWriter.docx(rendered).write(to: url)
-            status = Status(message: "บันทึกเอกสารที่ \(url.lastPathComponent) แล้ว", isError: false)
+            status = Status(message: "บันทึกเอกสารที่ \(url.lastPathComponent) แล้ว" + note,
+                            isError: false)
         } catch {
             status = Status(message: "สร้างเอกสารไม่สำเร็จ: \(error)", isError: true)
         }
