@@ -178,7 +178,10 @@ let package = Package(
                           // running one rather than by reading the wiring.
                           dependencies: ["EmbeddingRuntime", "Knowledge", "Persistence",
                                          "Sidecar", "Config", "CoreEngine", "ProjectKit",
-                                         "Analysis"]),
+                                         // ToolBelt/WebSearch for P13.2: the T5
+                                         // rule is only proven by running the
+                                         // real tool output into the real QA.
+                                         "Analysis", "ToolBelt", "WebSearch"]),
 
         // The executor contract, run against Tier 0.5 with the real weights.
         // An executable for the same reason as EmbeddingCheck: MLX finds its

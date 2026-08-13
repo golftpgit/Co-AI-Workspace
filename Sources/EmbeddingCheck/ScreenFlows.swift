@@ -6,6 +6,8 @@ import EmbeddingRuntime
 import CoreEngine
 import LLMProviders
 import Analysis
+import ToolBelt
+import WebSearch
 
 // ─────────────────────────────────────────────────────────────
 // Driving the screens' logic the way a person would, against the real
@@ -43,6 +45,56 @@ struct ScreenFlows {
         try? text.write(to: file, atomically: true, encoding: .utf8)
 
         var firstChunkID = ""
+
+        // §1.4 / §14.1 / P13.2 — the rule that must not get weaker because T5 is
+        // now reachable: two general-web sources do not pass QA. Driven through
+        // the real chain rather than asserted in a unit test, because the
+        // interesting part is that three modules agree — the tool writes a tier
+        // into its output, the evidence builder reads it back, and QA refuses.
+        await check("[ค้นเว็บ T5] อ่านสองหน้าจากเว็บทั่วไปแล้ว QA ยังไม่ผ่าน") {
+            let tool = FetchPageTool(fetcher: StubPageReader())
+            var evidence: [Evidence] = []
+            for address in ["https://blog.example/burnout", "https://forum.example/thread"] {
+                let output = try await tool.call(
+                    argumentsJSON: #"{"url":"\(address)"}"#.replacingOccurrences(
+                        of: "\\(address)", with: address),
+                    context: ToolContext(scope: .central))
+                // Exactly what the Researcher's evidence builder does with a
+                // `fetch_page` entry, including the 200-character truncation.
+                evidence.append(Evidence(kind: .citation,
+                                         summary: String(output.text.prefix(200)),
+                                         passed: true,
+                                         tier: CitationTier.tier(in: output.text)))
+            }
+            guard evidence.allSatisfy({ $0.tier == .t5 }) else {
+                throw CheckFailure("tier ไม่ได้เดินทางจาก tool ไปถึงหลักฐาน: \(evidence.map(\.tier))")
+            }
+
+            let assignment = Assignment(
+                id: "r1", role: .researcher, goal: "ความชุกภาวะหมดไฟ",
+                acceptanceCriteria: [Criterion(text: "2 แหล่ง", evidenceRequired: "citation")],
+                deliverableType: "สรุป")
+            let reviewer = QAReviewer()
+            let weak = reviewer.review(
+                Deliverable(assignmentID: "r1", summary: "พบแล้ว", evidence: evidence),
+                against: assignment, standard: [])
+            guard !weak.passed,
+                  weak.findings.contains(where: { $0.contains("T1–T3") }) else {
+                throw CheckFailure("T5 สองแหล่งผ่าน QA ไปได้: \(weak.findings)")
+            }
+
+            // One peer-reviewed source behind them, and the same work passes.
+            let supported = evidence + [Evidence(kind: .citation,
+                                                 summary: "https://he01.tci-thaijo.org/x",
+                                                 passed: true, tier: .t2)]
+            let ok = reviewer.review(
+                Deliverable(assignmentID: "r1", summary: "พบแล้ว", evidence: supported),
+                against: assignment, standard: [])
+            guard ok.passed else {
+                throw CheckFailure("มี T2 ยืนยันแล้วยังไม่ผ่าน: \(ok.findings)")
+            }
+            return "T5×2 ไม่ผ่าน · เติม T2 แล้วผ่าน"
+        }
 
         // §19.2 / P10.12 — the Workbench's second Done-when: General can query a
         // database without anybody creating a project first. General is not the
@@ -450,5 +502,22 @@ private actor AlwaysFailingEngineer: Specialist {
 
     func execute(_ assignment: Assignment) async throws -> Deliverable {
         throw SpecialistError.modelUnavailable("โมเดลใช้ไม่ได้ในเทสนี้")
+    }
+}
+
+/// A page reader with no network: P13.2 is about the tier travelling from a
+/// tool's output into QA's verdict, and a real fetch would only add flakiness to
+/// a check about arithmetic. The tier comes from the registry exactly as it does
+/// in production — an unknown domain is T5.
+private struct StubPageReader: PageReading {
+    func fetch(_ url: URL) async throws -> FetchedPage {
+        FetchedPage(url: url, finalURL: url, title: "หน้าทดสอบ",
+                    paragraphs: ["ย่อหน้าหนึ่ง", "ย่อหน้าสอง"],
+                    provenance: Provenance(
+                        documentID: "web_" + IngestionPipeline.contentHash(url.absoluteString).prefix(8),
+                        title: "หน้าทดสอบ",
+                        origin: .web(url: url),
+                        tier: SourceRegistry().tier(for: url)),
+                    contentType: "text/html")
     }
 }

@@ -539,6 +539,11 @@ public struct QAReviewer: Sendable {
             if !citations.contains(where: { $0.summary.contains("http") }) {
                 findings.append("ยังไม่มีหลักฐานว่าอ่านเนื้อหาจริงผ่าน fetch_page")
             }
+            // §14.1's corroboration rule, now enforced rather than described
+            // (P13.2). Two sources is a count; two *blog posts* is not evidence,
+            // and until this the rule only ever appeared in a Limitations
+            // paragraph after the work had already been accepted.
+            if let reason = corroborationFinding(citations) { findings.append(reason) }
 
         case .analyst:
             if !deliverable.evidence.contains(where: { $0.kind == .statisticalCheck }) {
@@ -546,8 +551,14 @@ public struct QAReviewer: Sendable {
             }
 
         case .writer:
-            if !deliverable.evidence.contains(where: { $0.kind == .citation && $0.passed }) {
+            let cited = deliverable.evidence.filter { $0.kind == .citation && $0.passed }
+            if cited.isEmpty {
                 findings.append("ไม่มี citation ผูกกับแหล่งจริง")
+            } else if let reason = corroborationFinding(cited) {
+                // A draft rests on its sources exactly as a research summary
+                // does; the tier rule does not get weaker because the output is
+                // prose (§14.1).
+                findings.append(reason)
             }
 
         case .teamLead, .reviewer:
@@ -562,5 +573,20 @@ public struct QAReviewer: Sendable {
         _ = standard
 
         return Verdict(passed: findings.isEmpty, findings: findings)
+    }
+
+    /// Why these citations are not enough, or `nil` when they are.
+    ///
+    /// The arithmetic is `Corroboration.assess` — the same rule the Limitations
+    /// section explains to a reader, so a document cannot describe a standard the
+    /// gate did not apply. Deduplicating by summary is the QA-side answer to
+    /// "what counts as one source": reading the same page twice is one source,
+    /// and the transcript is where that duplication comes from.
+    private func corroborationFinding(_ citations: [Evidence]) -> String? {
+        var byWork: [String: CredibilityTier?] = [:]
+        for citation in citations { byWork[citation.summary] = citation.tier }
+        let verdict = Corroboration.assess(tiers: byWork.values.map { $0 })
+        guard !verdict.isEnoughForQA else { return nil }
+        return verdict.note.map { "ยังไม่ผ่านกติกาแหล่งอ้างอิง (§14.1): \($0)" }
     }
 }

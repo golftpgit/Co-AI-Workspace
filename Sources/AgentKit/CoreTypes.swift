@@ -83,6 +83,62 @@ public enum CredibilityTier: Int, Sendable, Codable, Comparable, CaseIterable {
     }
 
     public var label: String { "T\(rawValue)" }
+
+    /// Good enough to stand behind a claim on its own (§14.1). T4–T5 are not:
+    /// a curated wiki and a blog post can *point* at the truth, but the rule is
+    /// that something at T1–T3 has to be there too.
+    public var canCarryAClaim: Bool { self <= .t3 }
+}
+
+/// §14.1's rule for how confidently something may be written, as arithmetic.
+///
+/// It lives here, in the module both callers already depend on, because it is one
+/// rule with two jobs: the Limitations section of a document explains it to a
+/// reader, and QA *refuses work* over it. Two copies would have drifted the first
+/// time one of them was tuned — and the copy that mattered would have been the
+/// one that let work through (§0.2 rule 3).
+public enum Corroboration: Sendable, Equatable {
+    /// Two or more sources at T1–T2.
+    case strong
+    /// Enough to state, with the qualification that goes with it.
+    case adequate
+    /// Only weak sources, or only one of anything.
+    case weak(reason: String)
+
+    public var mayStatePlainly: Bool { self == .strong }
+    public var isEnoughForQA: Bool {
+        if case .weak = self { return false }
+        return true
+    }
+
+    public var note: String? {
+        switch self {
+        case .strong: nil
+        case .adequate: "มีแหล่งรองรับพอสมควร แต่ยังไม่ถึงเกณฑ์ 'แหล่งชั้นต้นสองแหล่งขึ้นไป'"
+        case .weak(let reason): reason
+        }
+    }
+
+    /// One tier per *work*, in any order. `nil` is a source with no tier at all,
+    /// which counts as a source and never as a strong one.
+    ///
+    /// Counting works rather than sentences is the point: quoting one paper three
+    /// times is one source, and a rule that counted otherwise would let a single
+    /// blog post look like a consensus.
+    public static func assess(tiers: [CredibilityTier?]) -> Corroboration {
+        guard !tiers.isEmpty else { return .weak(reason: "ไม่มีแหล่งอ้างอิงเลย") }
+        let strong = tiers.filter { $0 == .t1 || $0 == .t2 }.count
+        let mid = tiers.filter { $0 == .t3 }.count
+        if strong >= 2 { return .strong }
+        if tiers.count == 1 {
+            return .weak(reason: "มีแหล่งเดียว — ยังยืนยันข้ามแหล่งไม่ได้")
+        }
+        if strong + mid >= 1 { return .adequate }
+        // Ten weak sources are not two strong ones; §14.1 is explicit that T5s
+        // need at least one T1–T3 standing behind them.
+        return .weak(reason: "มีแต่แหล่งชั้นรอง (T4–T5) \(tiers.count) แหล่ง — "
+                     + "ต้องมีแหล่ง T1–T3 ยืนยันอย่างน้อยหนึ่งแหล่ง")
+    }
 }
 
 /// Which specialist on the AI team owns a piece of work (§2).
