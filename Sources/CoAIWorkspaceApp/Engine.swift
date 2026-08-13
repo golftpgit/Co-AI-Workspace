@@ -195,7 +195,8 @@ struct Engine: Sendable {
         // `HookChain()` with no reader refuses every project-scoped call, which
         // is the safe default for a library; the app is the place that knows
         // where stages come from.
-        let projects = ProjectService(store: ProjectStore(client: client))
+        let projects = ProjectService(store: ProjectStore(client: client),
+                                      plans: WorkPackageStore(client: client))
         let gateway = ToolGateway(chain: HookChain(stageGate: StageGate(reader: projects)),
                                   approver: broker,
                                   spanSink: spans,

@@ -37,6 +37,12 @@ public final class ProjectsViewModel {
     /// The gate for whatever is selected, recomputed after every change, so the
     /// screen never shows a stale "ready to advance".
     public private(set) var gate: GateEvaluation?
+    /// The selected project's plan (§19.6). Read after every change rather
+    /// than mutated in place: the gate reads the same value the screen draws,
+    /// and two copies of a plan is how a gate starts disagreeing with the
+    /// thing it is gating.
+    public private(set) var wbs = WorkBreakdown()
+    public private(set) var problems: [WBSProblem] = []
 
     private var service: ProjectService?
     private let log = AppLog.logger("projects-ui")
@@ -175,11 +181,72 @@ public final class ProjectsViewModel {
         }
     }
 
+    // MARK: - the plan
+
+    public func addPackage(title: String, parent: String?) async {
+        guard let service, let project = selected else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let siblings = wbs.children(of: parent)
+        do {
+            try await service.save(WorkPackage(
+                projectID: project.id,
+                parent: parent,
+                title: trimmed,
+                // Pre-filled when the project has exactly one thing in scope,
+                // because that is the common case and an empty required field
+                // teaches people to ignore required fields.
+                scopeRef: project.statement.inScope.count == 1
+                    ? project.statement.inScope.first : nil,
+                acceptanceCriteria: [],
+                order: (siblings.map(\.order).max() ?? -1) + 1))
+            await refreshGate()
+        } catch {
+            status = Status(message: "เพิ่มใบงานไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    public func update(_ package: WorkPackage) async {
+        guard let service else { return }
+        do {
+            try await service.save(package)
+            await refreshGate()
+        } catch {
+            status = Status(message: "บันทึกใบงานไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    public func removePackage(_ packageID: String) async {
+        guard let service, let project = selected else { return }
+        do {
+            try await service.removePackage(packageID, from: project.id)
+            await refreshGate()
+        } catch {
+            status = Status(message: "ลบใบงานไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    /// Closing a leaf by hand. The evidence rule lives in `WorkBreakdown`, so
+    /// the refusal here is the same refusal an agent gets.
+    public func complete(_ packageID: String, evidence: [Evidence]) async {
+        guard let service, let project = selected else { return }
+        do {
+            try await service.complete(packageID, in: project.id, with: evidence)
+            await refreshGate()
+        } catch {
+            status = Status(message: "\(error)", isError: true)
+        }
+    }
+
     private func refreshGate() async {
         guard let service, case .project(let id) = selection else {
             gate = nil
+            wbs = WorkBreakdown()
+            problems = []
             return
         }
+        wbs = await service.breakdown(of: id)
+        problems = wbs.problems(inScope: selected?.statement.inScope ?? [])
         gate = await service.gate(for: id)
     }
 }

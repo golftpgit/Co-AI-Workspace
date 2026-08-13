@@ -18,6 +18,8 @@ struct ProjectsView: View {
     @State private var newName = ""
     @State private var newKind = ProjectKind.blank
     @State private var draft: Project?
+    @State private var newPackageTitle = ""
+    @State private var selectedParent: String?
 
     var body: some View {
         HSplitView {
@@ -175,12 +177,139 @@ struct ProjectsView: View {
             }
         }
 
+        wbsBox(project)
+
         if let gate = model.gate {
             gateBox(gate)
         } else {
             Text("โครงการปิดแล้ว — อ่านได้ แต่เครื่องมือที่เปลี่ยนข้อมูลใช้ไม่ได้แล้ว")
                 .font(.callout).foregroundStyle(.secondary)
         }
+    }
+
+    // MARK: - work breakdown
+
+    @ViewBuilder
+    private func wbsBox(_ project: Project) -> some View {
+        GroupBox("แผนงาน (WBS) — ใบสุดท้ายคือสิ่งที่ส่งมอบได้") {
+            VStack(alignment: .leading, spacing: 8) {
+                if model.wbs.isEmpty {
+                    Text("ยังไม่มีใบงาน — G2 ต้องการอย่างน้อย 1 ใบ")
+                        .font(.callout).foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.wbs.ordered) { package in
+                        packageRow(package, project: project)
+                    }
+                }
+
+                HStack {
+                    TextField("เพิ่มงานที่ส่งมอบได้", text: $newPackageTitle)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit { addPackage(under: selectedParent) }
+                    Picker("อยู่ใต้", selection: $selectedParent) {
+                        Text("บนสุด").tag(String?.none)
+                        ForEach(model.wbs.ordered) { package in
+                            Text(package.title).tag(String?.some(package.id))
+                        }
+                    }
+                    .labelsHidden()
+                    .accessibilityLabel("เลือกงานแม่ของใบงานใหม่")
+                    Button("เพิ่ม") { addPackage(under: selectedParent) }
+                        .disabled(newPackageTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+
+                if !model.problems.isEmpty {
+                    VStack(alignment: .leading, spacing: 3) {
+                        ForEach(model.problems) { problem in
+                            Text("• " + problem.text)
+                                .font(.caption).foregroundStyle(.orange)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func packageRow(_ package: WorkPackage, project: Project) -> some View {
+        let leaf = model.wbs.isLeaf(package)
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(String(repeating: "   ", count: model.wbs.depth(of: package)) + package.title)
+                    .font(leaf ? .callout : .callout.bold())
+                Spacer()
+                if leaf {
+                    Text(package.status.label)
+                        .font(.caption2)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(.quaternary, in: Capsule())
+                }
+                Button {
+                    Task { await model.removePackage(package.id) }
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("ลบใบงาน \(package.title) และทุกใบที่อยู่ข้างใน")
+            }
+
+            if leaf {
+                HStack(spacing: 8) {
+                    Picker("ผูกกับขอบเขต", selection: Binding(
+                        get: { package.scopeRef },
+                        set: { ref in
+                            var next = package; next.scopeRef = ref
+                            Task { await model.update(next) }
+                        })) {
+                        Text("— ยังไม่ผูก —").tag(String?.none)
+                        ForEach(project.statement.inScope, id: \.self) { line in
+                            Text(line).tag(String?.some(line))
+                        }
+                    }
+                    .labelsHidden()
+                    .accessibilityLabel("ผูกใบงาน \(package.title) กับข้อในขอบเขต")
+
+                    Picker("บทบาท", selection: Binding(
+                        get: { package.role },
+                        set: { role in
+                            var next = package; next.role = role
+                            Task { await model.update(next) }
+                        })) {
+                        Text("— ยังไม่มอบหมาย —").tag(Role?.none)
+                        ForEach(Role.allCases, id: \.self) { role in
+                            Text(role.rawValue).tag(Role?.some(role))
+                        }
+                    }
+                    .labelsHidden()
+                    .accessibilityLabel("มอบหมายใบงาน \(package.title)")
+                }
+
+                TextField("เสร็จแปลว่าอะไร — บรรทัดละข้อ",
+                          text: Binding(
+                            get: { package.acceptanceCriteria.map(\.text).joined(separator: " · ") },
+                            set: { text in
+                                var next = package
+                                next.acceptanceCriteria = text
+                                    .split(separator: "·", omittingEmptySubsequences: true)
+                                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                                    .filter { !$0.isEmpty }
+                                    .map { Criterion(text: $0, evidenceRequired: "หลักฐานที่ตรวจได้") }
+                                Task { await model.update(next) }
+                            }),
+                          axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.caption)
+                    .accessibilityLabel("เกณฑ์เสร็จของใบงาน \(package.title)")
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func addPackage(under parent: String?) {
+        let title = newPackageTitle
+        newPackageTitle = ""
+        Task { await model.addPackage(title: title, parent: parent) }
     }
 
     private func stageStrip(_ current: ProjectStage) -> some View {

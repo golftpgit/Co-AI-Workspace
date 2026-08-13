@@ -17,11 +17,43 @@ import AgentKit
 
 public actor ProjectService {
     private let store: any ProjectPersisting
+    private let plans: (any WorkPackagePersisting)?
     private var byID: [ProjectID: Project] = [:]
     private var loaded = false
 
-    public init(store: any ProjectPersisting) {
+    public init(store: any ProjectPersisting, plans: (any WorkPackagePersisting)? = nil) {
         self.store = store
+        self.plans = plans
+    }
+
+    // MARK: - the plan
+
+    /// The project's WBS, read fresh. Not cached: the tree is small, it is
+    /// edited constantly, and a stale plan feeding a gate is the one kind of
+    /// staleness that matters here.
+    public func breakdown(of id: ProjectID) async -> WorkBreakdown {
+        guard let plans, let packages = try? await plans.all(project: id) else {
+            return WorkBreakdown()
+        }
+        return WorkBreakdown(packages)
+    }
+
+    public func save(_ package: WorkPackage) async throws {
+        guard let plans else { return }
+        try await plans.save(package)
+    }
+
+    public func removePackage(_ packageID: String, from id: ProjectID) async throws {
+        guard let plans else { return }
+        try await plans.delete(packageID, project: id)
+    }
+
+    /// Closing a leaf. Goes through `WorkBreakdown` so the evidence rule is
+    /// enforced in one place rather than at each caller (§19.15 invariant 4).
+    public func complete(_ packageID: String, in id: ProjectID,
+                         with evidence: [Evidence]) async throws {
+        let wbs = await breakdown(of: id)
+        try await save(wbs.complete(packageID, with: evidence))
     }
 
     // MARK: - reading
@@ -71,23 +103,19 @@ public actor ProjectService {
     }
 
     /// The gate for the *next* stage boundary, or nil for a closed project.
-    public func gate(for id: ProjectID, openWorkPackages: Int = 0,
-                     hasLessons: Bool = true) async -> GateEvaluation? {
+    public func gate(for id: ProjectID, hasLessons: Bool = true) async -> GateEvaluation? {
         guard let project = await project(id) else { return nil }
-        return ProjectLifecycle.evaluate(project,
-                                         openWorkPackages: openWorkPackages,
+        return ProjectLifecycle.evaluate(project, wbs: await breakdown(of: id),
                                          hasLessons: hasLessons)
     }
 
     /// The only way a stage changes. Refuses rather than reports: a gate that
     /// returns "you probably should not" is a gate that gets ignored.
     @discardableResult
-    public func advance(_ id: ProjectID,
-                        openWorkPackages: Int = 0,
-                        hasLessons: Bool = true) async throws -> Project {
+    public func advance(_ id: ProjectID, hasLessons: Bool = true) async throws -> Project {
         guard var project = await project(id) else { throw LifecycleError.alreadyClosed }
         guard let evaluation = ProjectLifecycle.evaluate(project,
-                                                         openWorkPackages: openWorkPackages,
+                                                         wbs: await breakdown(of: id),
                                                          hasLessons: hasLessons) else {
             throw LifecycleError.alreadyClosed
         }

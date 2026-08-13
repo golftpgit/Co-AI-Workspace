@@ -74,11 +74,13 @@ public enum ProjectLifecycle {
     /// checked honestly today — and they are written as conditions rather than
     /// left out, so the gate reads as incomplete instead of as passed.
     public static func evaluate(_ project: Project,
-                                openWorkPackages: Int = 0,
+                                wbs: WorkBreakdown = WorkBreakdown(),
                                 hasLessons: Bool = true) -> GateEvaluation? {
         guard let to = next(after: project.stage), let gate = project.stage.exitGate else {
             return nil
         }
+        let problems = wbs.problems(inScope: project.statement.inScope)
+        let openWorkPackages = wbs.openLeaves.count
 
         let conditions: [GateCondition]
         switch project.stage {
@@ -97,9 +99,30 @@ public enum ProjectLifecycle {
                               satisfied: !project.statement.outOfScope.isEmpty),
             ]
         case .planning:
+            // G2 is where the plan stops being a list of intentions. Each
+            // condition names a plan that looks finished and is not (§19.6).
+            let uncovered = wbs.uncoveredScope(inScope: project.statement.inScope)
             conditions = [
                 GateCondition(text: "เกณฑ์รับงานอย่างน้อย 1 ข้อ",
                               satisfied: !project.statement.acceptanceCriteria.isEmpty),
+                GateCondition(text: "มีใบงานอย่างน้อย 1 ใบ",
+                              satisfied: !wbs.leaves.isEmpty),
+                GateCondition(text: "ทุกใบงานบอกว่าเสร็จแปลว่าอะไร",
+                              satisfied: !problems.contains { $0.kind == .noAcceptanceCriteria }),
+                GateCondition(text: "ทุกใบงานผูกกับข้อในขอบเขต 'ทำ'",
+                              satisfied: !problems.contains {
+                                  $0.kind == .noScopeRef || $0.kind == .danglingScopeRef
+                              }),
+                GateCondition(text: "ไม่มีงานแม่ที่ไม่มีใบงานอยู่ข้างใน",
+                              satisfied: !problems.contains { $0.kind == .emptyGroup }),
+                GateCondition(text: "โครงสร้างไม่ขาด (ไม่มีใบงานลอย)",
+                              satisfied: !problems.contains {
+                                  $0.kind == .missingParent || $0.kind == .cycle
+                              }),
+                // The other half of the 100% rule: work that covers nothing is
+                // caught above, scope that nothing covers is caught here.
+                GateCondition(text: "ทุกข้อในขอบเขต 'ทำ' มีใบงานรองรับ",
+                              satisfied: uncovered.isEmpty),
             ]
         case .execution:
             conditions = [

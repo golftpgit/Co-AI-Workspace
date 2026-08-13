@@ -37,6 +37,10 @@ public struct LedgerRow: Sendable, Equatable, Identifiable {
     /// resumed.
     public let acceptanceCriteria: [Criterion]
     public let deliverableType: String
+    /// Which leaf of the WBS this round of work was against (§19.6, P10.4).
+    /// `nil` for work that predates the plan or that happened in General,
+    /// which is a real state and not a defect: not every turn is a promise.
+    public let workPackageID: String?
 
     public var id: String { assignmentID }
 
@@ -53,7 +57,8 @@ public struct LedgerRow: Sendable, Equatable, Identifiable {
                 passed: Bool, needsHuman: Bool = false, cancelled: Bool = false,
                 findings: [String],
                 summary: String?, acceptanceCriteria: [Criterion] = [],
-                deliverableType: String = "") {
+                deliverableType: String = "",
+                workPackageID: String? = nil) {
         self.assignmentID = assignmentID
         self.role = role
         self.goal = goal
@@ -65,6 +70,7 @@ public struct LedgerRow: Sendable, Equatable, Identifiable {
         self.summary = summary
         self.acceptanceCriteria = acceptanceCriteria
         self.deliverableType = deliverableType
+        self.workPackageID = workPackageID
     }
 }
 
@@ -89,6 +95,7 @@ public actor TaskLedgerStore {
         content.set("findings", row.findings)
         content.setString("summary", row.summary)
         content.setString("deliverable_type", row.deliverableType)
+        content.setString("work_package", row.workPackageID)
         // As JSON rather than two parallel arrays: a criterion and the evidence
         // it demands are one thing, and splitting them is how they drift apart.
         if let criteria = try? JSONEncoder().encode(row.acceptanceCriteria) {
@@ -128,8 +135,17 @@ public actor TaskLedgerStore {
                 findings: row["findings"]?.arrayValue?.compactMap { $0.stringValue } ?? [],
                 summary: row["summary"]?.stringValue,
                 acceptanceCriteria: criteria ?? [],
-                deliverableType: row["deliverable_type"]?.stringValue ?? "")
+                deliverableType: row["deliverable_type"]?.stringValue ?? "",
+                workPackageID: row["work_package"]?.stringValue)
         } ?? []
+    }
+
+    /// Every round of work recorded against one leaf of the plan, newest
+    /// first. This is the link that makes the WBS answerable in both
+    /// directions: from the plan, what happened; from the ledger, which
+    /// promise it was against (§19.6).
+    public func rows(workPackage: String, scope: Scope) async throws -> [LedgerRow] {
+        try await rows(scope: scope).filter { $0.workPackageID == workPackage }
     }
 
     /// Everything that did not pass — the list a user opens the app to see

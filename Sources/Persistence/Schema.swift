@@ -16,11 +16,13 @@ public enum Schema {
     /// an interrupted run — run-until-done resumes the second and never the
     /// first. The criteria and deliverable type it needs to rebuild an
     /// assignment ride along on the schemaless part of the row.
+    /// 4: `work_package` exists and `task` points at one (§19.6, P10.4) — the
+    /// plan and the record of doing it are finally two ends of one link.
     /// 3: `project` exists (§19.1, P10.1). Every other table already carried
     /// `project_id`; there was simply nothing on the other end of it, so two
     /// projects were indistinguishable and the app wrote the literal id
     /// "default" into all of them.
-    public static let version = 3
+    public static let version = 4
 
     /// Split into statements that are executed one at a time: a single
     /// failing statement should name itself, not abort a 40-line blob.
@@ -92,6 +94,11 @@ public enum Schema {
         "DEFINE FIELD IF NOT EXISTS project_id ON task TYPE option<string>",
         "DEFINE INDEX IF NOT EXISTS task_open ON task FIELDS passed",
         "DEFINE FIELD IF NOT EXISTS needs_human ON task TYPE bool",
+        // §19.6 — which leaf of the plan this round of work was against. The
+        // ledger already answered "what happened"; this makes it answer
+        // "against which promise".
+        "DEFINE FIELD IF NOT EXISTS work_package ON task TYPE option<string>",
+        "DEFINE INDEX IF NOT EXISTS task_work_package ON task FIELDS work_package",
         "DEFINE FIELD IF NOT EXISTS updated_at ON task TYPE datetime",
 
         "DEFINE TABLE IF NOT EXISTS relation SCHEMALESS",
@@ -140,6 +147,19 @@ public enum Schema {
         "DEFINE FIELD IF NOT EXISTS open ON project TYPE bool",
         "DEFINE INDEX IF NOT EXISTS project_open ON project FIELDS open",
         "DEFINE FIELD IF NOT EXISTS updated_at ON project TYPE datetime",
+
+        // ── work breakdown (§19.6, P10.4) ──
+        // Flat with parent pointers: the tree is derived, because a plan being
+        // edited is a list and only a list can be indexed.
+        "DEFINE TABLE IF NOT EXISTS work_package SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON work_package TYPE string",
+        "DEFINE INDEX IF NOT EXISTS work_package_uid ON work_package FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS project_id ON work_package TYPE string",
+        "DEFINE INDEX IF NOT EXISTS work_package_project ON work_package FIELDS project_id",
+        "DEFINE FIELD IF NOT EXISTS parent ON work_package TYPE option<string>",
+        "DEFINE FIELD IF NOT EXISTS title ON work_package TYPE string",
+        "DEFINE FIELD IF NOT EXISTS status ON work_package TYPE string",
+        "DEFINE FIELD IF NOT EXISTS updated_at ON work_package TYPE datetime",
 
         "DEFINE TABLE IF NOT EXISTS schema_meta SCHEMALESS",
     ]
