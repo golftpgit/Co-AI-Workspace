@@ -106,6 +106,30 @@ public actor SurrealSpendLedger: SpendLedger {
             .sorted { $0.costUSD > $1.costUSD }
     }
 
+    /// The same money, split the two ways §19.2.3's budget popover asks for.
+    ///
+    /// Two lists rather than one keyed string, because the popover answers two
+    /// different questions — "which role is spending" and "which model is
+    /// expensive" — and a combined key answers neither without the reader doing
+    /// the grouping in their head. Work with no role attached is counted as
+    /// exactly that rather than dropped: unattributed spend is a real category,
+    /// and hiding it makes the columns not add up.
+    public func breakdown(since: Date) async throws -> (byRole: [(key: String, costUSD: Double)],
+                                                        byModel: [(key: String, costUSD: Double)],
+                                                        total: Double) {
+        let entries = try await self.entries(since: since)
+        var byRole: [String: Double] = [:]
+        var byModel: [String: Double] = [:]
+        for entry in entries {
+            byRole[entry.role ?? "ไม่ผูกกับบทบาท", default: 0] += entry.costUSD
+            byModel[entry.model, default: 0] += entry.costUSD
+        }
+        let sorted = { (dictionary: [String: Double]) in
+            dictionary.map { (key: $0.key, costUSD: $0.value) }.sorted { $0.costUSD > $1.costUSD }
+        }
+        return (sorted(byRole), sorted(byModel), entries.reduce(0) { $0 + $1.costUSD })
+    }
+
     static func date(_ text: String) -> Date? {
         let withFraction = ISO8601DateFormatter()
         withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

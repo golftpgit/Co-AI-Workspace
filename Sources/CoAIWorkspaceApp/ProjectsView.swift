@@ -25,8 +25,20 @@ struct ProjectsView: View {
     @State private var registerKind = RegisterKind.risk
     @State private var draft = Draft()
     @State private var saving = false
+    /// The closing tab's forms (§19.12). Plain state rather than a sheet: every
+    /// one of these is a gate condition, and putting a gate condition behind a
+    /// modal is what made the Executive seat unreachable for five phases.
+    @State private var benefitDraft = BenefitDraft()
+    @State private var measurements: [String: String] = [:]
+    @State private var tailoringReason = ""
+    @State private var dispositionAction = DataDisposition.Action.keep
+    @State private var dispositionPolicy = ""
     /// Per-leaf editing buffers, keyed by package id. Same reason as `draft`.
     @State private var criteriaDrafts: [String: String] = [:]
+    /// Titles and tolerance limits, buffered the same way and for the same
+    /// reason: both are text fields on values the gate reads.
+    @State private var titleDrafts: [String: String] = [:]
+    @State private var limitDrafts: [String: String] = [:]
     @State private var tab = PlanTab.overview
 
     /// The Plan area's sections (§19.2). Driving the screen by hand is what
@@ -34,7 +46,7 @@ struct ProjectsView: View {
     /// registers meant scrolling past four boxes, and the gate — the one thing
     /// that says what to do next — was below all of them.
     enum PlanTab: String, CaseIterable, Identifiable {
-        case overview, plan, board, team
+        case overview, plan, board, team, closing
         var id: String { rawValue }
         var label: String {
             switch self {
@@ -42,7 +54,25 @@ struct ProjectsView: View {
             case .plan: "แผนงาน + ลำดับ"
             case .board: "กระดานงาน"
             case .team: "ทีม & RACI"
+            case .closing: "ประโยชน์ & ปิดงาน"
             }
+        }
+    }
+
+    /// One benefit being typed. Numbers as text on purpose: a `TextField` bound
+    /// to a `Double` shows `0` for an empty field, and a baseline of zero that
+    /// nobody typed is exactly the fake measurement §19.12 is about.
+    struct BenefitDraft: Equatable {
+        var title = ""
+        var measure = ""
+        var baseline = ""
+        var target = ""
+        var owner = ""
+        var reviewAt = Date()
+
+        var isReady: Bool {
+            !title.trimmingCharacters(in: .whitespaces).isEmpty
+                && Double(baseline) != nil && Double(target) != nil
         }
     }
     /// Sends an exception report out through every running channel. Passed in
@@ -71,6 +101,12 @@ struct ProjectsView: View {
             try? await Task.sleep(for: .milliseconds(700))
             guard !Task.isCancelled else { return }
             for package in model.wbs.packages { commitCriteria(for: package) }
+        }
+        .task(id: titleDrafts) {
+            guard !titleDrafts.isEmpty else { return }
+            try? await Task.sleep(for: .milliseconds(700))
+            guard !Task.isCancelled else { return }
+            for package in model.wbs.packages { commitTitle(for: package) }
         }
     }
 
@@ -207,6 +243,8 @@ struct ProjectsView: View {
                 .font(.callout).foregroundStyle(.secondary)
         }
 
+        if let pending = model.pendingEdit { changeRequestBar(pending) }
+
         Picker("ส่วนของแผน", selection: $tab) {
             ForEach(PlanTab.allCases) { Text($0.label).tag($0) }
         }
@@ -280,6 +318,305 @@ struct ProjectsView: View {
         if tab == .team {
             raciBox(project)
         }
+
+        if tab == .closing {
+            reportsBox()
+            benefitsBox()
+            conformanceBox()
+            dispositionBox(project)
+        }
+    }
+
+    // MARK: - reporting (§19.13)
+
+    /// The three reports, and the last thing each one said. Issuing is a button
+    /// rather than a schedule because a report on a timer that nobody reads is
+    /// the thing status reporting usually degrades into — the cycle can come
+    /// later; being able to produce one from real rows is the point.
+    @ViewBuilder
+    private func reportsBox() -> some View {
+        GroupBox("รายงาน") {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    ForEach(ReportKind.allCases, id: \.self) { kind in
+                        Button(kind.label) { issue(kind) }
+                    }
+                    Spacer()
+                }
+                .controlSize(.small)
+
+                if model.reports.isEmpty {
+                    Text("ยังไม่มีรายงาน — ทุกบรรทัดในรายงานประกอบจากแผนงาน · ทะเบียน · span · baseline · ทะเบียนประโยชน์ ไม่ใช่ข้อความที่โมเดลแต่ง")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                ForEach(model.reports) { report in
+                    DisclosureGroup {
+                        Text(report.rendered)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } label: {
+                        Text("\(report.kind.label) · ขั้น\(report.stageAtIssue.label) · "
+                             + report.generatedAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.callout)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func issue(_ kind: ReportKind) {
+        Task {
+            // A report is also something to tell people about, on whatever
+            // channel they are on (§19.13, §8.2) — the same text that is in the
+            // file, not a summary of it.
+            if let text = await model.issueReport(kind) { await announce(text) }
+        }
+    }
+
+    // MARK: - benefits, conformance and closing (§19.12, §19.16)
+
+    /// The benefit ledger. Deliberately editable after the project closes: the
+    /// review date is usually months out, and a system that requires reopening a
+    /// project to record what it achieved gets the review skipped.
+    @ViewBuilder
+    private func benefitsBox() -> some View {
+        GroupBox("ประโยชน์ที่จะได้ (benefit)") {
+            VStack(alignment: .leading, spacing: 8) {
+                if model.benefits.isEmpty {
+                    Text("ยังไม่มีรายการ — โครงการที่ส่งมอบครบทุกใบงานแล้วยังไร้ประโยชน์ได้ ถ้าไม่มีใครเขียนไว้ว่าอยากได้อะไร")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                ForEach(model.benefits.benefits) { benefit in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text(benefit.title).font(.callout)
+                            Spacer()
+                            if let achieved = benefit.achievement {
+                                Text("\(Int(achieved * 100))% ของเป้า")
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(achieved >= 1 ? Color.green : Color.orange)
+                            } else {
+                                Text(benefit.isDue() ? "ถึงกำหนดวัดแล้ว" : "ยังไม่ถึงกำหนดวัด")
+                                    .font(.caption)
+                                    .foregroundStyle(benefit.isDue() ? Color.orange : Color.secondary)
+                            }
+                            Button("ลบ") { Task { await model.removeBenefit(benefit) } }
+                                .controlSize(.small)
+                        }
+                        Text("\(benefit.measure) · จาก \(format(benefit.baselineValue)) → \(format(benefit.target))"
+                             + " · วัดโดย \(benefit.owner.label)"
+                             + " · กำหนด \(benefit.reviewAt.formatted(date: .abbreviated, time: .omitted))")
+                            .font(.caption2).foregroundStyle(.secondary)
+                        if let result = benefit.result {
+                            Text("วัดได้ \(format(result.value)) โดย \(result.measuredBy)"
+                                 + (result.note.isEmpty ? "" : " — \(result.note)"))
+                                .font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            HStack {
+                                TextField("ค่าที่วัดได้", text: Binding(
+                                    get: { measurements[benefit.id] ?? "" },
+                                    set: { measurements[benefit.id] = $0 }))
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(maxWidth: 120)
+                                TextField("ชื่อคนที่วัด", text: $decider)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(maxWidth: 160)
+                                Button("บันทึกผล") { recordMeasurement(benefit) }
+                                    .disabled(Double(measurements[benefit.id] ?? "") == nil
+                                              || decider.trimmingCharacters(in: .whitespaces).isEmpty)
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+                }
+
+                Divider()
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        TextField("ประโยชน์ที่อยากได้", text: $benefitDraft.title)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("ตัววัด + หน่วย", text: $benefitDraft.measure)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    HStack {
+                        TextField("ค่าฐานวันนี้", text: $benefitDraft.baseline)
+                            .textFieldStyle(.roundedBorder).frame(maxWidth: 110)
+                        TextField("ค่าเป้าหมาย", text: $benefitDraft.target)
+                            .textFieldStyle(.roundedBorder).frame(maxWidth: 110)
+                        DatePicker("วัดเมื่อ", selection: $benefitDraft.reviewAt,
+                                   displayedComponents: .date)
+                            .labelsHidden()
+                        TextField("ใครวัด", text: $benefitDraft.owner)
+                            .textFieldStyle(.roundedBorder).frame(maxWidth: 130)
+                        Button("เพิ่ม") { addBenefit() }
+                            .disabled(!benefitDraft.isReady)
+                    }
+                    Text("ค่าฐานบังคับ เพราะ “ดีขึ้น” ที่ไม่มีจุดเริ่มต้น ตรวจย้อนหลังไม่ได้ · เป้าที่ต่ำกว่าค่าฐานก็ได้ (เช่นลดเวลา) ระบบคิดทิศทางให้เอง")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                .controlSize(.small)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// The conformance matrix, and the one thing that makes it worth reading:
+    /// every green row names what it counted, and a row satisfied by a decision
+    /// not to do the practice looks different from one satisfied by doing it.
+    @ViewBuilder
+    private func conformanceBox() -> some View {
+        let gaps = model.conformance.filter { !$0.satisfied }
+        GroupBox("ความครบตามมาตรฐาน (ISO 21502 · 17 practice)") {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(model.conformance) { status in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: status.satisfied
+                              ? (status.isTailored ? "minus.circle" : "checkmark.circle.fill")
+                              : "exclamationmark.circle")
+                            .foregroundStyle(status.satisfied
+                                             ? (status.isTailored ? Color.secondary : Color.green)
+                                             : Color.orange)
+                        Text(status.practice.label)
+                            .font(.callout).frame(width: 180, alignment: .leading)
+                        if let evidence = status.evidence {
+                            Text(evidence).font(.caption).foregroundStyle(.secondary)
+                        } else if let record = status.tailoring {
+                            Text("ไม่ทำ: \(record.reason) — ตัดสินโดย \(record.decidedBy)")
+                                .font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            Text("ยังไม่มีทั้งของจริงและบันทึกว่าไม่ทำ")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+
+                if !gaps.isEmpty {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("บันทึกว่าไม่ทำ practice ไหน พร้อมเหตุผล — ปิดโครงการไม่ได้ถ้ายังมีข้อที่ไม่ได้ตอบ")
+                            .font(.caption).foregroundStyle(.secondary)
+                        ForEach(gaps) { status in
+                            HStack {
+                                Text(status.practice.label)
+                                    .font(.callout).frame(width: 180, alignment: .leading)
+                                TextField("เหตุผลที่ไม่ทำ", text: $tailoringReason)
+                                    .textFieldStyle(.roundedBorder)
+                                TextField("ชื่อคนที่ตัดสิน", text: $decider)
+                                    .textFieldStyle(.roundedBorder).frame(maxWidth: 150)
+                                Button("บันทึก") { tailor(status.practice) }
+                                    .disabled(tailoringReason.trimmingCharacters(in: .whitespaces).isEmpty
+                                              || decider.trimmingCharacters(in: .whitespaces).isEmpty)
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func dispositionBox(_ project: Project) -> some View {
+        GroupBox("ข้อมูลและไฟล์ที่เหลือ") {
+            VStack(alignment: .leading, spacing: 6) {
+                if let decided = project.dataDisposition, decided.isDecided {
+                    Text("\(decided.action.label) · ตามนโยบาย “\(decided.policy)” · ตัดสินโดย \(decided.decidedBy)")
+                        .font(.callout)
+                } else {
+                    Text("ยังไม่ได้ตัดสิน — ข้อนี้เป็นเงื่อนไขข้อที่ 8 ของการปิดโครงการ")
+                        .font(.callout).foregroundStyle(.orange)
+                }
+                HStack {
+                    Picker("ทำอะไรกับของที่เหลือ", selection: $dispositionAction) {
+                        ForEach(DataDisposition.Action.allCases, id: \.self) { action in
+                            Text(action.label).tag(action)
+                        }
+                    }
+                    .labelsHidden()
+                    TextField("นโยบายที่ใช้", text: $dispositionPolicy)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("ชื่อคนที่ตัดสิน", text: $decider)
+                        .textFieldStyle(.roundedBorder).frame(maxWidth: 150)
+                    Button("บันทึก") { decideDisposition() }
+                        .disabled(dispositionPolicy.trimmingCharacters(in: .whitespaces).isEmpty
+                                  || decider.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                .controlSize(.small)
+                Text("ระบบบันทึกการตัดสิน ไม่ลบไฟล์ให้เอง — การลบของคนอื่นย้อนกลับไม่ได้")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func addBenefit() {
+        let draft = benefitDraft
+        benefitDraft = BenefitDraft()
+        Task {
+            await model.addBenefit(title: draft.title, measure: draft.measure,
+                                   baselineValue: Double(draft.baseline) ?? 0,
+                                   target: Double(draft.target) ?? 0,
+                                   reviewAt: draft.reviewAt, owner: draft.owner)
+        }
+    }
+
+    private func recordMeasurement(_ benefit: Benefit) {
+        guard let value = Double(measurements[benefit.id] ?? "") else { return }
+        let person = decider
+        measurements[benefit.id] = nil
+        Task { await model.measure(benefit, value: value, by: person) }
+    }
+
+    private func tailor(_ practice: Practice) {
+        let reason = tailoringReason
+        let person = decider
+        tailoringReason = ""
+        Task { await model.tailor(practice, reason: reason, by: person) }
+    }
+
+    private func decideDisposition() {
+        let policy = dispositionPolicy
+        let person = decider
+        let action = dispositionAction
+        Task { await model.decideDisposition(action: action, policy: policy, by: person) }
+    }
+
+    // MARK: - editing an agreed plan (§19.2.4, P10.16)
+
+    /// The bar §19.2.4 asks for: not a block and not a warning afterwards, but
+    /// the consequence stated where the hand already is, with two buttons.
+    @ViewBuilder
+    private func changeRequestBar(_ proposal: PlanChangeProposal) -> some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(proposal.title).font(.callout).bold()
+                Text(proposal.headline)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("ส่วนต่างจาก baseline หลังแก้: \(proposal.driftAfter)")
+                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button("ยืนยันและเปิดคำขอ") { Task { await model.confirmPendingEdit() } }
+                        .keyboardShortcut(.defaultAction)
+                    Button("ยกเลิก") { model.cancelPendingEdit() }
+                    Spacer()
+                    Text("ประตูขั้นถัดไปจะยังไม่เปิดจนกว่าจะมีคนตัดสินคำขอนี้")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                .controlSize(.small)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } label: {
+            Label("แผนนี้ตกลงกันไว้แล้ว — การแก้จะกลายเป็นคำขอเปลี่ยนแปลง",
+                  systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.orange)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("คำขอเปลี่ยนแปลงที่รอการยืนยัน: \(proposal.headline)")
     }
 
     // MARK: - order, board and RACI (§19.7–§19.9)
@@ -297,6 +634,11 @@ struct ProjectsView: View {
 
         GroupBox("ลำดับงานและเส้นทางวิกฤต") {
             VStack(alignment: .leading, spacing: 6) {
+                // §19.2.4, said out loud rather than only enforced by the absence
+                // of a gesture: the end date is a result, so there is nothing here
+                // to drag. Wanting it sooner means changing what it depends on.
+                Text("แถบพวกนี้ลากไม่ได้โดยตั้งใจ — วันจบเป็นผลของลำดับงานกับความเร็วจริง ไม่ใช่ค่าที่ตั้ง · อยากให้จบเร็วขึ้นให้แก้สิ่งที่มันขึ้นกับ: ตัดขอบเขต ลดเส้นพึ่งพา หรือเปลี่ยน tier ของโมเดล")
+                    .font(.caption2).foregroundStyle(.secondary)
                 if ordered.isEmpty {
                     Text("ยังไม่มีใบงาน").font(.callout).foregroundStyle(.secondary)
                 } else {
@@ -474,7 +816,32 @@ struct ProjectsView: View {
                         Spacer()
                     }
                 }
-                Text("A มีได้คนเดียวต่อใบงาน — ตัวเลือกนี้จึงเป็นค่าเดียว ไม่ใช่รายการติ๊กถูก")
+                Divider()
+                // R/C/I, which P10.5 left for later. Toggles rather than text:
+                // the set of people and agents a project has is known, and a
+                // free-text field here is how "อนาลิสต์" and "analyst" end up
+                // being two different people in the same table.
+                ForEach(model.wbs.leaves) { package in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(package.title).font(.caption).foregroundStyle(.secondary)
+                        ForEach(RACILetter.allCases, id: \.self) { letter in
+                            HStack(spacing: 4) {
+                                Text(letter.label)
+                                    .font(.caption2).frame(width: 96, alignment: .leading)
+                                ForEach(raciCandidates(project), id: \.self) { actor in
+                                    Toggle(actor.label, isOn: raciBinding(package, letter: letter,
+                                                                         actor: actor))
+                                        .toggleStyle(.button)
+                                        .controlSize(.mini)
+                                }
+                                Spacer()
+                            }
+                        }
+                    }
+                    .padding(.vertical, 1)
+                }
+
+                Text("A มีได้คนเดียวต่อใบงาน — ตัวเลือกนี้จึงเป็นค่าเดียว ไม่ใช่รายการติ๊กถูก · R/C/I เป็นรายการได้")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -498,6 +865,63 @@ struct ProjectsView: View {
                     }
                     Task { await model.update(next) }
                 })
+    }
+
+    /// The three letters that are lists. `A` is not here on purpose — it is a
+    /// single value in the type system (§19.9), and offering it as a toggle row
+    /// would be offering a state that cannot be saved.
+    enum RACILetter: String, CaseIterable {
+        case responsible, consulted, informed
+        var label: String {
+            switch self {
+            case .responsible: "R ทำ"
+            case .consulted: "C ปรึกษา"
+            case .informed: "I แจ้งให้ทราบ"
+            }
+        }
+    }
+
+    /// Who can appear in an R/C/I cell: every role the team has, plus the people
+    /// who already hold a seat. Not a text field — see the comment at the call site.
+    private func raciCandidates(_ project: Project) -> [RACIActor] {
+        Role.allCases.map { RACIActor.agent($0) }
+            + project.board.map(\.person)
+                .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                .map { RACIActor.human($0) }
+    }
+
+    private func raciBinding(_ package: WorkPackage, letter: RACILetter,
+                             actor: RACIActor) -> Binding<Bool> {
+        func list(_ raci: RACI?) -> [RACIActor] {
+            switch letter {
+            case .responsible: raci?.responsible ?? []
+            case .consulted: raci?.consulted ?? []
+            case .informed: raci?.informed ?? []
+            }
+        }
+        return Binding(
+            get: { list(package.raci).contains(actor) },
+            set: { on in
+                // A leaf with no A yet cannot carry an R either, because `RACI`
+                // has no state without an accountable — so the row says what is
+                // missing instead of dropping the tap.
+                guard var raci = package.raci else { return }
+                var current = list(raci)
+                if on {
+                    guard !current.contains(actor) else { return }
+                    current.append(actor)
+                } else {
+                    current.removeAll { $0 == actor }
+                }
+                switch letter {
+                case .responsible: raci.responsible = current
+                case .consulted: raci.consulted = current
+                case .informed: raci.informed = current
+                }
+                var next = package
+                next.raci = raci
+                Task { await model.update(next) }
+            })
     }
 
     // MARK: - registers and baselines (§19.11)
@@ -616,6 +1040,19 @@ struct ProjectsView: View {
                         // check against what is happening. But a number the
                         // app is not actually reading is worse than no number,
                         // so an unwired dimension says that instead.
+                        // The limit is typed; the current value is not (§19.2.4).
+                        // One text field and one read-only number, side by side,
+                        // is the clearest statement of that line this screen can
+                        // make.
+                        TextField("กรอบ", text: Binding(
+                            get: { limitDrafts[status.dimension.rawValue] ?? format(status.limit) },
+                            set: { limitDrafts[status.dimension.rawValue] = $0 }))
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.caption, design: .monospaced))
+                            .frame(width: 70)
+                            .accessibilityLabel("กรอบของ\(status.dimension.label) ตั้งได้")
+                            .onSubmit { commitLimit(status.dimension) }
+
                         if noTarget {
                             Text("ยังไม่ได้ตั้งเป้า")
                                 .font(.callout).foregroundStyle(.secondary)
@@ -645,7 +1082,7 @@ struct ProjectsView: View {
                     }())
                 }
 
-                Text("แกนที่ยังไม่ได้วัดมีกรอบและบังคับอยู่จริง แต่แอปยังไม่ได้ต่อค่าเข้ามา (P10.15)")
+                Text("แกนที่ขึ้นว่า “ยังไม่ได้วัด” มีกรอบและบังคับอยู่จริง แต่ยังไม่มีข้อมูลต้นทาง — ประโยชน์จะวัดได้เมื่อมีคนบันทึกผลในแท็บ “ประโยชน์ & ปิดงาน”")
                     .font(.caption2).foregroundStyle(.secondary)
 
                 HStack {
@@ -685,6 +1122,18 @@ struct ProjectsView: View {
 
     private func format(_ value: Double) -> String {
         value == value.rounded() ? String(Int(value)) : String(format: "%.2f", value)
+    }
+
+    private func commitLimit(_ dimension: ToleranceDimension) {
+        guard let text = limitDrafts[dimension.rawValue] else { return }
+        limitDrafts[dimension.rawValue] = nil
+        // A field that will not parse leaves the frame alone. Silently reading it
+        // as zero would set the strictest possible limit on the axis somebody was
+        // trying to loosen.
+        guard let limit = Double(text.trimmingCharacters(in: .whitespaces)) else {
+            return
+        }
+        Task { await model.setTolerance(dimension, to: limit) }
     }
 
     private func checkTolerances() {
@@ -745,8 +1194,17 @@ struct ProjectsView: View {
         let leaf = model.wbs.isLeaf(package)
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
-                Text(String(repeating: "   ", count: model.wbs.depth(of: package)) + package.title)
+                Text(String(repeating: "   ", count: model.wbs.depth(of: package)))
+                // The title is edited where it is read (§19.2.4). Buffered like
+                // every other field on this screen, because a write per keystroke
+                // is what ate Thai characters here before.
+                TextField("ชื่อสิ่งที่ส่งมอบ", text: Binding(
+                    get: { titleDrafts[package.id] ?? package.title },
+                    set: { titleDrafts[package.id] = $0 }))
+                    .textFieldStyle(.plain)
                     .font(leaf ? .callout : .callout.bold())
+                    .accessibilityLabel("ชื่อใบงาน \(package.title)")
+                    .onSubmit { commitTitle(for: package) }
                 Spacer()
                 if leaf {
                     Text(package.status.label)
@@ -765,6 +1223,35 @@ struct ProjectsView: View {
 
             if leaf {
                 HStack(spacing: 8) {
+                    // What is handed over, and how much is at stake — both are
+                    // things a person sets, and `riskClass` decides whether a
+                    // human has to be accountable (§19.9), so it cannot stay a
+                    // field only the tests can reach.
+                    TextField("ส่งมอบเป็นอะไร", text: Binding(
+                        get: { package.deliverableType },
+                        set: { value in
+                            var next = package; next.deliverableType = value
+                            Task { await model.update(next) }
+                        }))
+                        .textFieldStyle(.roundedBorder)
+                        .font(.caption)
+                        .frame(maxWidth: 160)
+                        .accessibilityLabel("ชนิดของสิ่งที่ส่งมอบสำหรับ \(package.title)")
+
+                    Picker("ความเสี่ยง", selection: Binding(
+                        get: { package.riskClass },
+                        set: { level in
+                            var next = package; next.riskClass = level
+                            Task { await model.update(next) }
+                        })) {
+                        ForEach(RiskLevel.allCases, id: \.self) { level in
+                            Text(riskLabel(level)).tag(level)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 110)
+                    .accessibilityLabel("ระดับความเสี่ยงของ \(package.title)")
+
                     Picker("ผูกกับขอบเขต", selection: Binding(
                         get: { package.scopeRef },
                         set: { ref in
@@ -808,6 +1295,37 @@ struct ProjectsView: View {
                     .font(.caption)
                     .accessibilityLabel("เกณฑ์เสร็จของใบงาน \(package.title)")
                     .onSubmit { commitCriteria(for: package) }
+
+                // Dependencies, edited as "which of these must finish first"
+                // rather than by dragging a line: §19.7 keeps only
+                // finish-to-start, so there is nothing a line could express that
+                // a toggle cannot — and the critical path below is computed from
+                // exactly this list.
+                let candidates = model.wbs.leaves.filter { $0.id != package.id }
+                if !candidates.isEmpty {
+                    HStack(spacing: 4) {
+                        Text("ต้องเสร็จก่อน")
+                            .font(.caption2).foregroundStyle(.secondary)
+                        ForEach(candidates) { other in
+                            Toggle(other.title, isOn: Binding(
+                                get: { package.dependsOn.contains(other.id) },
+                                set: { on in
+                                    var next = package
+                                    if on {
+                                        guard !next.dependsOn.contains(other.id) else { return }
+                                        next.dependsOn.append(other.id)
+                                    } else {
+                                        next.dependsOn.removeAll { $0 == other.id }
+                                    }
+                                    Task { await model.update(next) }
+                                }))
+                                .toggleStyle(.button)
+                                .controlSize(.mini)
+                                .accessibilityLabel("\(other.title) ต้องเสร็จก่อน \(package.title)")
+                        }
+                        Spacer()
+                    }
+                }
             }
         }
         .padding(.vertical, 2)
@@ -817,6 +1335,28 @@ struct ProjectsView: View {
         let title = newPackageTitle
         newPackageTitle = ""
         Task { await model.addPackage(title: title, parent: parent) }
+    }
+
+    /// Thai for the three levels. `RiskLevel.description` is the English the
+    /// hook chain logs; this screen is read by a person.
+    private func riskLabel(_ level: RiskLevel) -> String {
+        switch level {
+        case .low: "เสี่ยงต่ำ"
+        case .medium: "เสี่ยงกลาง"
+        case .high: "เสี่ยงสูง"
+        }
+    }
+
+    private func commitTitle(for package: WorkPackage) {
+        guard let draft = titleDrafts[package.id] else { return }
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        titleDrafts[package.id] = nil
+        // An empty title is not a rename, it is a deleted name — and a leaf with
+        // no title cannot be reviewed against anything.
+        guard !trimmed.isEmpty, trimmed != package.title else { return }
+        var next = package
+        next.title = trimmed
+        Task { await model.update(next) }
     }
 
     private func stageStrip(_ current: ProjectStage) -> some View {
@@ -993,7 +1533,17 @@ struct ProjectsView: View {
         let edited = draft.applied(to: project)
         guard edited != project else { return }
         saving = true
-        await model.update(edited)
+        // Two writes, because the baseline holds one of these and not the other
+        // (§19.11): the scope statement is part of the agreement and goes through
+        // change control, while the brief and the board seats are not — asking
+        // for a change request to fix a typo in the brief would teach people to
+        // click through the bar that asks (§19.2.4).
+        if edited.statement != project.statement {
+            await model.updateScope(edited.statement)
+        }
+        var withoutScope = edited
+        withoutScope.statement = project.statement
+        if withoutScope != project { await model.update(withoutScope) }
         saving = false
     }
 }

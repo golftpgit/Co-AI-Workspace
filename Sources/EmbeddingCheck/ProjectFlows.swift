@@ -50,7 +50,12 @@ struct ProjectFlows {
             exceptions: ExceptionStore(client: client),
             registers: RegisterStore(client: client),
             baselines: BaselineStore(client: client),
-            lessons: LessonPublisher(knowledge: knowledge))
+            lessons: LessonPublisher(knowledge: knowledge),
+            benefits: BenefitStore(client: client),
+            tailoring: TailoringStore(client: client),
+            closingLedger: ClosingLedger(conflicts: ConflictStore(client: client),
+                                         plans: AnalysisPlanStore(client: client)),
+            reports: ReportStore(client: client))
 
         let shell = RanFlag()
         let search = RanFlag()
@@ -166,14 +171,34 @@ struct ProjectFlows {
             return "baseline v1 · \(baseline.packages.count) ใบ"
         }
 
-        await check("[baseline] เพิ่มใบงานหลังตกลงแล้ว = drift ที่มองเห็น") {
+        await check("[baseline] เพิ่มใบงานหลังตกลงแล้ว = คำขอเปลี่ยนแปลงที่บอกผลกระทบ 3 ด้าน") {
             let extra = WorkPackage(projectID: project.id, title: "ภาคผนวก ก",
                                     scopeRef: "ความชุกในพยาบาลวิชาชีพ",
                                     acceptanceCriteria: [Criterion(text: "มีตาราง",
                                                                    evidenceRequired: "ไฟล์")],
                                     raci: RACI(accountable: .teamLead))
             extraLeafID = extra.id
-            try await projects.save(extra)
+
+            // §19.2.4 — the person is told what this becomes *before* confirming,
+            // and the same call that lands the edit opens the request. Two calls
+            // would be one call somebody forgets (P10.16).
+            let preview = await projects.proposal(for: .savePackage(extra), in: project.id)
+            guard let preview, preview.scopeImpact.contains("+1 ใบ") else {
+                throw CheckFailure("ตัวอย่างผลกระทบไม่บอกว่าเพิ่มกี่ใบ: \(String(describing: preview?.scopeImpact))")
+            }
+            guard preview.timeImpact.contains("ยังประเมินไม่ได้"),
+                  preview.costImpact.contains("ยังประเมินไม่ได้") else {
+                throw CheckFailure("ประเมินเวลา/เงินทั้งที่ยังไม่มีใบงานที่วัดได้ — \(preview.headline)")
+            }
+
+            let opened = try await projects.apply(.savePackage(extra), in: project.id)
+            guard let opened, opened.requestNumber == 1 else {
+                throw CheckFailure("ไม่ได้เปิดคำขอเปลี่ยนแปลงตอนแก้แผนหลัง baseline")
+            }
+            let changes = await projects.entries(of: project.id, kind: .change)
+            guard changes.count == 1, changes[0].status == .proposed else {
+                throw CheckFailure("คำขอที่เปิดผิดสถานะ: \(changes.map(\.status))")
+            }
 
             guard let drift = await projects.drift(of: project.id) else {
                 throw CheckFailure("ไม่มี drift ให้ดูทั้งที่มี baseline แล้ว")
@@ -181,7 +206,9 @@ struct ProjectFlows {
             guard drift.addedCount == 1, !drift.isEmpty else {
                 throw CheckFailure("นับส่วนต่างผิด: \(drift.summary)")
             }
-            return drift.summary
+            // Editing before G2 asked nothing; editing now opened a request. The
+            // difference is the whole of §19.2.4.
+            return "\(drift.summary) · เปิดคำขอ #\(opened.requestNumber)"
         }
 
         await check("[ข้อยกเว้น] ทะลุกรอบแล้วโครงการหยุดรับงานใหม่จริง") {
@@ -202,36 +229,81 @@ struct ProjectFlows {
             guard try await callTool("kb_search").didExecute else {
                 throw CheckFailure("อ่านข้อมูลไม่ได้ ทั้งที่คนต้องใช้มันเพื่อตัดสิน")
             }
-            try await projects.resolve(raised[0], decision: "ขยายเพดานเป็น ฿1,000")
+            // §19.2.3 — decided from the status bar's popover, which is the path
+            // a person actually takes: the same `StatusAction` the button builds,
+            // through the same service call. Deciding it here rather than calling
+            // `resolve` directly is the point: this is what proves the popover's
+            // button does the whole job, record included.
+            do {
+                try await projects.perform(.decideException(raised[0], decision: "  "),
+                                           in: project.id)
+                throw CheckFailure("ปิดข้อยกเว้นได้ทั้งที่ไม่ได้เขียนคำตัดสิน")
+            } catch StatusActionError.emptyDecision {}
+
+            try await projects.perform(
+                .widenTolerance(.cost, to: 1_000, reason: "อนุมัติงบเพิ่มรอบนี้"),
+                in: project.id)
+            guard await projects.project(project.id)?.tolerances.limit(.cost) == 1_000 else {
+                throw CheckFailure("ขยายกรอบแล้วค่าไม่เปลี่ยน")
+            }
+            // Widening the frame that stopped the work releases the stop with it
+            // — otherwise the project stays halted for a limit that no longer
+            // exists, which reads as the system ignoring the decision.
+            guard try await projects.openExceptions(project.id).isEmpty else {
+                throw CheckFailure("ขยายกรอบแล้วยังหยุดอยู่")
+            }
+            let decisions = await projects.entries(of: project.id, kind: .decision)
+            guard decisions.contains(where: { $0.note == "อนุมัติงบเพิ่มรอบนี้" }) else {
+                throw CheckFailure("การกระทำจาก popover ไม่ได้เขียน decision record")
+            }
+
             shell.reset()
             guard try await callTool("run_shell").didExecute, shell.ran else {
                 throw CheckFailure("ปิดข้อยกเว้นแล้วยังทำงานต่อไม่ได้")
             }
-            return "หยุดแล้วเดินต่อได้"
+            return "ตัดสินจาก popover · หยุดแล้วเดินต่อได้ · มี decision record"
         }
 
         await check("[คำขอเปลี่ยนแปลง] คนตัดสิน แล้ว baseline v2 เกิดขึ้นโดยไม่ทับ v1") {
-            let change = RegisterEntry(
-                projectID: project.id, title: "เพิ่มภาคผนวก ก",
-                detail: .change(scopeImpact: "+1 ใบงาน", timeImpact: "+0.5 วัน",
-                                costImpact: "+฿40"),
-                origin: .agent(.teamLead))
-            try await projects.record(change)
+            // The request the edit above opened — not a fabricated one. That is
+            // the flow a person actually walks: edit, get asked, confirm, and
+            // somebody with the business case decides.
+            // Two requests are waiting, from the two different kinds of edit made
+            // above: the extra work package, and the wider cost frame from the
+            // status bar. A baseline holds both the plan and the frame, so both
+            // are changes to the agreement (§19.11).
+            let pending = await projects.entries(of: project.id, kind: .change)
+                .filter { $0.status == .proposed }
+            guard pending.count == 2 else {
+                throw CheckFailure("คำขอที่รอตัดสินควรมี 2 ใบ (แผน + กรอบ): \(pending.map(\.title))")
+            }
+            guard pending.allSatisfy({ $0.note.contains("กระทบ:") }) else {
+                throw CheckFailure("คำขอไม่ได้เก็บข้อความผลกระทบที่คนเห็นตอนยืนยัน")
+            }
+            guard let change = pending.first else { throw CheckFailure("ไม่มีคำขอให้ตัดสิน") }
+            do {
+                try await projects.decideChange(change, approve: true, by: "   ")
+                throw CheckFailure("ตัดสินคำขอได้ทั้งที่ไม่มีชื่อคน")
+            } catch RegisterError.emptyDecider {}
 
             let blockedGate = try await requireGate(projects, project.id)
             guard !blockedGate.passed else {
                 throw CheckFailure("G3 เปิดทั้งที่มีคำขอค้างและแผนต่างจาก baseline")
             }
 
-            try await projects.decideChange(change, approve: true, by: "ผู้ใช้")
+            for request in pending {
+                try await projects.decideChange(request, approve: true, by: "ผู้ใช้")
+            }
+            // One version per approved change, never overwritten: the count is
+            // itself the answer to "how many times did the agreement move".
             let history = await projects.baselineHistory(of: project.id)
-            guard history.map(\.version) == [2, 1] else {
+            guard history.map(\.version) == [3, 2, 1] else {
                 throw CheckFailure("ประวัติ baseline ผิด: \(history.map(\.version))")
             }
             guard await projects.drift(of: project.id)?.isEmpty == true else {
                 throw CheckFailure("อนุมัติแล้วแต่ยังเห็นส่วนต่างจาก baseline ใหม่")
             }
-            return "v1 ยังอ่านได้ · v2 ตรงกับแผนวันนี้"
+            return "v1 ยังอ่านได้ · v3 ตรงกับแผนและกรอบวันนี้"
         }
 
         await check("[G3] ปิดใบงานต้องมีหลักฐาน แล้วถึงเข้าขั้นปิดโครงการได้") {
@@ -254,12 +326,58 @@ struct ProjectFlows {
             return "เข้าขั้นปิดโครงการ"
         }
 
-        await check("[G4] ปิดโครงการแล้วบทเรียนไปโผล่ในคลังส่วนกลาง") {
-            let gateBefore = try await requireGate(projects, project.id)
-            guard !gateBefore.passed else {
-                throw CheckFailure("ปิดได้ทั้งที่ยังไม่มีบทเรียน")
+        await check("[รายงาน] สร้างจากแถวจริง — เปลี่ยนข้อมูลต้นทางแล้วรายงานเปลี่ยนตาม") {
+            guard let first = try await projects.issueReport(.highlight, for: project.id) else {
+                throw CheckFailure("ออกรายงานไม่สำเร็จ")
+            }
+            // The evidence that closed a leaf a few checks ago, arriving in a
+            // report without anybody retyping it.
+            guard first.rendered.contains("α = 0.74") else {
+                throw CheckFailure("รายงานไม่มีหลักฐานที่ปิดใบงานจริง")
             }
 
+            try await projects.record(RegisterEntry(
+                projectID: project.id, title: "โรงพยาบาลที่สองส่งข้อมูลช้า",
+                detail: .issue(severity: 3, kind: .concern), origin: .agent(.analyst)))
+            guard let second = try await projects.issueReport(
+                .highlight, for: project.id, now: Date().addingTimeInterval(60)) else {
+                throw CheckFailure("ออกรายงานฉบับที่สองไม่สำเร็จ")
+            }
+            // The new one carries what is new; the old one is unchanged, because
+            // a report is a claim made on a date rather than a live view.
+            guard second.rendered.contains("โรงพยาบาลที่สองส่งข้อมูลช้า"),
+                  !first.rendered.contains("โรงพยาบาลที่สองส่งข้อมูลช้า") else {
+                throw CheckFailure("รายงานใหม่ไม่ได้เปลี่ยนตามข้อมูล หรือฉบับเก่าถูกเขียนทับ")
+            }
+            let history = await projects.reportHistory(of: project.id)
+            guard history.count == 2, history.first?.id == second.id else {
+                throw CheckFailure("ประวัติรายงานผิด: \(history.count) ฉบับ")
+            }
+            // Which also settles the `reporting` practice with real evidence
+            // instead of a tailoring record (§19.16).
+            let facts = await projects.conformanceFacts(of: project.id)
+            guard Conformance.evidence(for: .reporting, in: facts) != nil else {
+                throw CheckFailure("ออกรายงานแล้วแต่ practice การรายงานยังว่าง")
+            }
+            // Closing the issue again, so it does not sit in front of G4 — the
+            // point above was that the report saw it, not that it stays open.
+            for entry in await projects.entries(of: project.id, kind: .issue) {
+                var closed = entry
+                closed.status = .closed
+                try await projects.record(closed)
+            }
+            return "2 ฉบับ · ฉบับใหม่เห็นของใหม่ ฉบับเก่าไม่ถูกแก้"
+        }
+
+        await check("[G4] แปดเงื่อนไขปิดงาน อ่านจากของจริงทีละข้อ") {
+            // Every step here removes exactly one blocker and asserts the gate
+            // is still shut. A gate tested only against "everything missing"
+            // passes while checking one condition — and the eight are wired to
+            // eight different stores, so this is where the wiring shows.
+            var unmet = try await requireGate(projects, project.id).unmet
+            guard unmet.contains(where: { $0.contains("บันทึกบทเรียน") }) else {
+                throw CheckFailure("ไม่เห็นเงื่อนไขบทเรียน: \(unmet)")
+            }
             try await projects.record(RegisterEntry(
                 projectID: project.id,
                 title: "ฉบับแปลไทยมักไม่รายงาน α รายด้าน",
@@ -268,6 +386,76 @@ struct ProjectFlows {
                                 appliesTo: "งานที่ใช้มาตรวัดแปล"),
                 origin: .agent(.researcher)))
 
+            unmet = try await requireGate(projects, project.id).unmet
+            guard unmet.contains("ตัดสินแล้วว่าข้อมูลและไฟล์ที่เหลือจะไปทางไหน") else {
+                throw CheckFailure("ไม่เห็นเงื่อนไขข้อมูลที่เหลือ: \(unmet)")
+            }
+            // Half a disposition is not a disposition: the policy has to be
+            // named and a person has to have decided.
+            do {
+                _ = try await projects.decideDisposition(
+                    DataDisposition(action: .archive, policy: "", decidedBy: "ผู้ใช้"),
+                    for: project.id)
+                throw CheckFailure("บันทึกการจัดการข้อมูลได้ทั้งที่ไม่ได้บอกนโยบาย")
+            } catch LifecycleError.dispositionIncomplete {}
+            project = try await projects.decideDisposition(
+                DataDisposition(action: .archive,
+                                policy: "เก็บข้อมูลดิบ 5 ปี แล้วลบตามระเบียบคณะ",
+                                decidedBy: "ผู้ใช้"),
+                for: project.id)
+
+            // The business case, measured rather than asserted — and the same
+            // record that answers the `benefits` practice below.
+            let benefit = Benefit(projectID: project.id,
+                                  title: "เวลาที่ใช้สรุปแบบสอบถามหนึ่งชุด",
+                                  measure: "ชั่วโมงต่อชุด", baselineValue: 6, target: 2,
+                                  reviewAt: Date(), owner: .human("ผู้ใช้"))
+            try await projects.save(benefit)
+            try await projects.measure(benefit, value: 3, by: "ผู้ใช้")
+            let measured = await projects.benefitLedger(of: project.id).lowestAchievement
+            guard let measured, abs(measured - 0.75) < 0.001 else {
+                throw CheckFailure("ผลการวัดประโยชน์ผิด: \(String(describing: measured))")
+            }
+
+            // §19.12 condition 6, against the seventeen practices as this
+            // project actually stands. Whatever is left over gets a tailoring
+            // record — which is the ISO answer, not a loophole.
+            let gaps = await projects.conformance(of: project.id).filter { !$0.satisfied }
+            guard !gaps.isEmpty else {
+                throw CheckFailure("ไม่มี practice ค้างเลย — น่าสงสัยว่านับจากของจริงหรือเปล่า")
+            }
+            do {
+                try await projects.tailor(gaps[0].practice, in: project.id,
+                                          reason: "  ", by: "ผู้ใช้")
+                throw CheckFailure("บันทึก tailoring ได้ทั้งที่ไม่มีเหตุผล")
+            } catch TailoringError.emptyReason {}
+            for gap in gaps {
+                try await projects.tailor(gap.practice, in: project.id,
+                                          reason: "ไม่อยู่ในขอบเขตของโครงการนี้", by: "ผู้ใช้")
+            }
+
+            // An issue raised at the last minute still shuts the gate, and
+            // closing it opens it again — the condition reads the register on
+            // every evaluation rather than at the moment the stage changed.
+            let issue = RegisterEntry(projectID: project.id, title: "ยังไม่ได้ตอบผู้ตรวจภายนอก",
+                                      detail: .issue(severity: 3, kind: .problem),
+                                      origin: .human("ผู้ใช้"))
+            try await projects.record(issue)
+            guard try await !requireGate(projects, project.id).passed else {
+                throw CheckFailure("ปิดได้ทั้งที่มีปัญหาค้างอยู่ในทะเบียน")
+            }
+            var resolved = issue
+            resolved.status = .closed
+            try await projects.record(resolved)
+
+            let ready = try await requireGate(projects, project.id)
+            guard ready.passed else {
+                throw CheckFailure("ครบแปดข้อแล้วแต่ยังปิดไม่ได้ — ค้าง: \(ready.unmet)")
+            }
+            return "8 ข้อผ่านทีละข้อ · ประโยชน์วัดได้ 75% ของเป้า"
+        }
+
+        await check("[G4] ปิดโครงการแล้วบทเรียนไปโผล่ในคลังส่วนกลาง") {
             project = try await projects.advance(project.id)
             guard project.stage == .closed, project.closure == .completed else {
                 throw CheckFailure("ปิดไม่สำเร็จ: \(project.stage) / \(String(describing: project.closure))")
@@ -280,6 +468,27 @@ struct ProjectFlows {
                 throw CheckFailure("บทเรียนไม่ได้ไหลเข้าคลังส่วนกลาง (\(central.count) chunk)")
             }
             return "ปิดแล้ว · บทเรียนอยู่ใน central"
+        }
+
+        await check("[รายงานปิดโครงการ] ส่งมอบ · ประโยชน์ · บทเรียน · สิ่งที่ยกให้คนอื่น") {
+            guard let report = try await projects.issueReport(.endProject, for: project.id) else {
+                throw CheckFailure("ออกรายงานปิดโครงการไม่สำเร็จ")
+            }
+            for expected in ["α = 0.74",                       // ส่งมอบอะไรบ้าง
+                             "ได้ 75% ของเป้า",                 // ประโยชน์ที่วัดได้
+                             "ขอฉบับเต็มจากผู้แปลตั้งแต่ต้น",     // บทเรียน
+                             "ย้ายเข้าคลังเก็บถาวร"] {          // สิ่งที่ยกให้คนอื่นรับต่อ
+                guard report.rendered.contains(expected) else {
+                    throw CheckFailure("รายงานปิดโครงการไม่มี '\(expected)'")
+                }
+            }
+            // The report is written *after* closing and still reads correctly,
+            // which is the case that matters: everything it quotes is a row, so
+            // nothing needed to be captured while the project was still open.
+            guard report.stageAtIssue == .closed else {
+                throw CheckFailure("รายงานไม่ได้บันทึกว่าเขียนตอนขั้นไหน")
+            }
+            return "ครบ 4 หัวข้อจากแถวจริง"
         }
 
         await check("[เวลา] งานที่ทำผ่านประตูถูกนับเข้าใบงานที่ทำอยู่") {
@@ -342,7 +551,12 @@ struct ProjectFlows {
             exceptions: ExceptionStore(client: client),
             registers: RegisterStore(client: client),
             baselines: BaselineStore(client: client),
-            lessons: LessonPublisher(knowledge: knowledge))
+            lessons: LessonPublisher(knowledge: knowledge),
+            benefits: BenefitStore(client: client),
+            tailoring: TailoringStore(client: client),
+            closingLedger: ClosingLedger(conflicts: ConflictStore(client: client),
+                                         plans: AnalysisPlanStore(client: client)),
+            reports: ReportStore(client: client))
 
         await check("[เปิดใหม่] โปรเจกต์กลับมาพร้อมขอบเขต หมวก และกรอบที่ตั้งไว้") {
             guard let reloaded = await fresh.project(project.id) else {
@@ -357,8 +571,11 @@ struct ProjectFlows {
             guard reloaded.executive?.person == "ผู้ใช้" else {
                 throw CheckFailure("ชื่อ Executive หาย")
             }
-            guard reloaded.tolerances.limit(.cost) == Tolerances.balanced.limit(.cost) else {
-                throw CheckFailure("กรอบค่าใช้จ่ายเพี้ยนหลังโหลดใหม่")
+            // The frame as it was *decided*, not the preset it started from: the
+            // status bar widened cost to ฿1,000 mid-project, and a decision that
+            // does not survive a relaunch is a decision the system forgot.
+            guard reloaded.tolerances.limit(.cost) == 1_000 else {
+                throw CheckFailure("กรอบค่าใช้จ่ายที่ขยายไว้ไม่รอดข้ามการเปิดใหม่: \(reloaded.tolerances.limit(.cost))")
             }
             return reloaded.stage.label
         }
@@ -380,7 +597,7 @@ struct ProjectFlows {
 
         await check("[เปิดใหม่] baseline ทั้งสองเวอร์ชันยังอยู่ และคำตัดสินยังมีชื่อคน") {
             let history = await fresh.baselineHistory(of: project.id)
-            guard history.map(\.version) == [2, 1] else {
+            guard history.map(\.version) == [3, 2, 1] else {
                 throw CheckFailure("ประวัติ baseline หลังเปิดใหม่: \(history.map(\.version))")
             }
             let changes = await fresh.entries(of: project.id, kind: .change)
@@ -391,6 +608,27 @@ struct ProjectFlows {
             let lessons = await fresh.entries(of: project.id, kind: .lesson)
             guard lessons.count == 1 else { throw CheckFailure("บทเรียนหาย") }
             return "v2/v1 · ตัดสินโดย \(decided.decidedBy ?? "—")"
+        }
+
+        await check("[เปิดใหม่] ประโยชน์ที่วัดแล้ว การจัดการข้อมูล และบันทึก tailoring ยังอยู่") {
+            let achieved = await fresh.benefitLedger(of: project.id).lowestAchievement
+            guard let achieved, abs(achieved - 0.75) < 0.001 else {
+                throw CheckFailure("ผลการวัดประโยชน์ไม่รอด: \(String(describing: achieved))")
+            }
+            guard let disposition = await fresh.project(project.id)?.dataDisposition,
+                  disposition.isDecided, disposition.action == .archive else {
+                throw CheckFailure("การตัดสินเรื่องข้อมูลที่เหลือหายไปหลังเปิดใหม่")
+            }
+            // The whole conformance answer, rebuilt from rows: seventeen
+            // practices, each still pointing at either something real or the
+            // record of somebody deciding not to.
+            let rows = await fresh.conformance(of: project.id)
+            let unanswered = rows.filter { !$0.satisfied }
+            guard unanswered.isEmpty else {
+                throw CheckFailure("practice ที่ตอบไว้แล้วกลับว่าง: \(unanswered.map(\.practice.label))")
+            }
+            let tailored = rows.count(where: \.isTailored)
+            return "ประโยชน์ 75% · \(disposition.action.label) · ของจริง \(rows.count - tailored) · บันทึกว่าไม่ทำ \(tailored)"
         }
 
         await check("[เปิดใหม่] ข้อยกเว้นที่ยังเปิดอยู่ หยุดงานได้ตั้งแต่ก่อนใครเปิดหน้าจอ") {

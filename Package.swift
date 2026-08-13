@@ -109,7 +109,13 @@ let package = Package(
         // section are logic over what the rest of the system already recorded,
         // so this target knows about provenance and plans and nothing else —
         // no models, no storage, no file formats.
-        .target(name: "DocGen", dependencies: ["AgentKit", "Knowledge", "Observability"]),
+        .target(name: "DocGen", dependencies: ["AgentKit", "Knowledge", "Observability",
+                                            // §19.13 — the three project reports are
+                                            // documents, and the mapping from a report to a
+                                            // draft belongs next to the other renderers. The
+                                            // edge only goes this way: ProjectKit does not
+                                            // know what a .docx is.
+                                            "ProjectKit"]),
 
         // M9 — every process the system runs: sandbox profile, process group
         // signals, registry (ARCHITECTURE §13). Knows nothing about agents.
@@ -167,8 +173,12 @@ let package = Package(
         // ledger store: its own tests assert on the in-memory entries, which is
         // how a run whose writes stopped after the first attempt still passed.
         .executableTarget(name: "EmbeddingCheck",
+                          // Analysis is here for §19.2's Workbench Done-when: that
+                          // General can query a database with no project, proven by
+                          // running one rather than by reading the wiring.
                           dependencies: ["EmbeddingRuntime", "Knowledge", "Persistence",
-                                         "Sidecar", "Config", "CoreEngine", "ProjectKit"]),
+                                         "Sidecar", "Config", "CoreEngine", "ProjectKit",
+                                         "Analysis"]),
 
         // The executor contract, run against Tier 0.5 with the real weights.
         // An executable for the same reason as EmbeddingCheck: MLX finds its

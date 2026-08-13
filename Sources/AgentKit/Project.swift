@@ -122,6 +122,57 @@ public enum ProjectClosure: String, Sendable, Codable {
     }
 }
 
+/// What happens to the project's data and files once it is over (§19.12
+/// condition 8).
+///
+/// Recorded, not performed: the system does not delete somebody's folder because
+/// a gate wanted a tick — the same rule that keeps `delete` on a project from
+/// touching the files on disk. What the gate actually asks for is that a person
+/// decided, and that the decision is readable a year later.
+public struct DataDisposition: Sendable, Codable, Equatable {
+    public enum Action: String, Sendable, Codable, CaseIterable {
+        case keep
+        case archive
+        case handOver
+        case delete
+
+        public var label: String {
+            switch self {
+            case .keep: "เก็บไว้ที่เดิม"
+            case .archive: "ย้ายเข้าคลังเก็บถาวร"
+            case .handOver: "ยกให้ผู้รับต่อ"
+            case .delete: "ลบตามนโยบายเก็บรักษา"
+            }
+        }
+    }
+
+    public var action: Action
+    /// Which retention rule this follows, in the words of the rule (`policy`
+    /// scope, §11.2). Free text because the policy library is documents, not an
+    /// enum — but it has to say something.
+    public var policy: String
+    /// A person. An agent cannot decide what happens to somebody's data.
+    public var decidedBy: String
+    public var note: String
+    public var decidedAt: Date
+
+    public init(action: Action, policy: String, decidedBy: String,
+                note: String = "", decidedAt: Date = Date()) {
+        self.action = action
+        self.policy = policy
+        self.decidedBy = decidedBy
+        self.note = note
+        self.decidedAt = decidedAt
+    }
+
+    /// Whether this counts. A disposition with no policy named and nobody
+    /// attached is the box-ticking the condition exists to prevent.
+    public var isDecided: Bool {
+        !policy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !decidedBy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
 public struct Project: Sendable, Codable, Equatable, Identifiable {
     public let id: ProjectID
     public var name: String
@@ -137,6 +188,9 @@ public struct Project: Sendable, Codable, Equatable, Identifiable {
     /// than derived from the autonomy slider, because the slider is a shortcut
     /// for setting these and the project is what the gate reads.
     public var toleranceLimits: [String: Double]
+    /// What happens to the leftovers (§19.12 condition 8). `nil` until somebody
+    /// decides, which is the state the closing gate refuses to pass.
+    public var dataDisposition: DataDisposition?
     public let createdAt: Date
     public var updatedAt: Date
     public var closedAt: Date?
@@ -150,6 +204,7 @@ public struct Project: Sendable, Codable, Equatable, Identifiable {
                 statement: ScopeStatement = ScopeStatement(),
                 board: [BoardRole] = [],
                 toleranceLimits: [String: Double] = [:],
+                dataDisposition: DataDisposition? = nil,
                 createdAt: Date = Date(),
                 updatedAt: Date = Date(),
                 closedAt: Date? = nil,
@@ -162,6 +217,7 @@ public struct Project: Sendable, Codable, Equatable, Identifiable {
         self.statement = statement
         self.board = board
         self.toleranceLimits = toleranceLimits
+        self.dataDisposition = dataDisposition
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.closedAt = closedAt

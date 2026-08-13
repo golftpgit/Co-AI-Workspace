@@ -20,6 +20,16 @@ import CoreEngine
 struct AnalysisView: View {
     @Bindable var model: AnalysisViewModel
     @State private var pane = Pane.notebook
+    /// Which pane the Workbench area asked for (§19.2, P10.12). When set, this
+    /// screen stops choosing for itself and hides its own picker — the area's
+    /// sub-tabs are the picker, and two of them would be two answers to "where
+    /// am I".
+    var chosen: Pane?
+    /// Which half of the database pane to show. The Workbench splits internal
+    /// and external storage into separate sub-tabs because they are different
+    /// steps of one data path (§19.2), while the SQL editor and the result table
+    /// underneath them are the same tool.
+    var explorerFocus: ExplorerFocus = .both
 
     enum Pane: String, CaseIterable, Identifiable {
         case notebook, explorer, plan
@@ -33,18 +43,27 @@ struct AnalysisView: View {
         }
     }
 
+    enum ExplorerFocus {
+        case internalStore, external, both
+
+        var showsInternal: Bool { self != .external }
+        var showsExternal: Bool { self != .internalStore }
+    }
+
+    private var visible: Pane { chosen ?? pane }
+
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
-            if pane == .plan {
+            if visible == .plan {
                 // The plan does not need the store to be open — it is about
                 // the method, and it is written before anything runs.
                 PlanPane(model: model)
             } else if model.storeIsOpen {
-                switch pane {
+                switch visible {
                 case .notebook: NotebookPane(model: model)
-                case .explorer: ExplorerPane(model: model)
+                case .explorer: ExplorerPane(model: model, focus: explorerFocus)
                 case .plan: EmptyView()
                 }
             } else {
@@ -65,12 +84,14 @@ struct AnalysisView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            Picker("มุมมอง", selection: $pane) {
-                ForEach(Pane.allCases) { Text($0.label).tag($0) }
+            if chosen == nil {
+                Picker("มุมมอง", selection: $pane) {
+                    ForEach(Pane.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 320)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 320)
 
             Spacer()
 
@@ -109,8 +130,15 @@ private struct NotebookPane: View {
             } else {
                 ContentUnavailableView("ยังไม่มีสมุดงาน", systemImage: "square.grid.3x1.below.line.grid.1x2",
                                        description: Text("กด + เพื่อสร้างสมุดงานแรก"))
+                    // Without this the empty state takes its ideal width and the
+                    // whole pane centres itself, leaving 390pt of blank white to
+                    // the left of the notebook list — which reads as a screen
+                    // that failed to draw. Only visible once the pane stopped
+                    // being the whole window (P10.12).
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var library: some View {
@@ -380,6 +408,7 @@ private struct PythonOutputView: View {
 
 private struct ExplorerPane: View {
     @Bindable var model: AnalysisViewModel
+    let focus: AnalysisView.ExplorerFocus
     @State private var importing = false
     @State private var addingConnector = false
 
@@ -462,6 +491,21 @@ private struct ExplorerPane: View {
             .padding(.horizontal, 10).padding(.vertical, 8)
             Divider()
             List {
+                if focus.showsInternal {
+                if model.tables.isEmpty {
+                    // Splitting internal from external (P10.12) made this state
+                    // reachable for the first time: before, the external
+                    // placeholders always filled the column, so an empty store
+                    // never looked like a broken screen. §12.2's rule again — a
+                    // list that says nothing is worse than one that says why.
+                    Text("ยังไม่มีตารางในสโตร์ของโปรเจกต์นี้ — นำเข้า CSV/Parquet "
+                         + "หรือดึงตารางจากฐานข้อมูลภายนอกเข้ามา")
+                        .font(.caption).foregroundStyle(.secondary)
+                        // Wraps rather than truncating: the sidebar is 200pt and
+                        // the one-line version ended at "นำเข้า…", which is half
+                        // an instruction.
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 ForEach(model.tables) { table in
                     DisclosureGroup {
                         ForEach(table.columns, id: \.name) { column in
@@ -492,7 +536,13 @@ private struct ExplorerPane: View {
                         .accessibilityHint("ใส่คำสั่ง SELECT ของตารางนี้ลงในช่องเขียน SQL")
                     }
                 }
+                }
+                if focus.showsExternal {
                 Section {
+                    if model.connectors.isEmpty {
+                        Text("ยังไม่มีแหล่งข้อมูลภายนอก — กด + เพื่อเพิ่ม")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     ForEach(model.connectors) { connector in
                         ConnectorRow(model: model, connector: connector)
                     }
@@ -511,6 +561,7 @@ private struct ExplorerPane: View {
                             .buttonStyle(.borderless)
                             .accessibilityLabel("เพิ่มแหล่งข้อมูลภายนอก")
                     }
+                }
                 }
             }
             .listStyle(.sidebar)

@@ -3,6 +3,8 @@ import Observation
 import AgentKit
 import ProjectKit
 import CoreEngine
+import Config
+import DocGen
 import Persistence
 import Observability
 
@@ -67,8 +69,65 @@ public final class ProjectsViewModel {
     public private(set) var registers: [RegisterEntry] = []
     public private(set) var baselines: [Baseline] = []
     public private(set) var drift: BaselineDiff?
+    /// What the project was for, and how far the seventeen practices are
+    /// answered (§19.12, §19.16). Both read after every change, like the gate:
+    /// the closing checklist is only useful if it is the same set of facts the
+    /// gate refuses on.
+    public private(set) var benefits = BenefitLedger()
+    public private(set) var conformance: [PracticeStatus] = []
+    /// Reports already issued, newest first (§19.13). History rather than a
+    /// button that re-renders: "what did we say in June" is the question a
+    /// status report exists to answer.
+    public private(set) var reports: [ProjectReport] = []
+
+    /// What the status bar's popovers show (§19.2.3). Read alongside the gate,
+    /// because a dashboard cell whose number is older than the screen it sits
+    /// under is worse than no cell.
+    public private(set) var spendByRole: [Slice] = []
+    public private(set) var spendByModel: [Slice] = []
+    public private(set) var spendTotal: Double = 0
+    public private(set) var toolActivity: [ToolSlice] = []
+    public private(set) var rework: [ReworkRow] = []
+    /// p50–p90 of comparable finished work, for the time popover's band. `nil`
+    /// when this machine has no history to forecast from — which the popover
+    /// says, rather than drawing a band around a guess.
+    public private(set) var forecast: ScheduleEstimate?
+
+    public struct Slice: Sendable, Equatable, Identifiable {
+        public let key: String
+        public let amount: Double
+        public var id: String { key }
+    }
+
+    public struct ToolSlice: Sendable, Equatable, Identifiable {
+        public let tool: String
+        public let calls: Int
+        public let seconds: TimeInterval
+        public var id: String { tool }
+    }
+
+    /// A round of work that had to be done again, with what QA said each time.
+    /// §19.2.3: "งานที่ rework แล้วกี่รอบ พร้อมเหตุผลจาก QA ทุกรอบ" — the count
+    /// on its own is a number nobody can act on.
+    public struct ReworkRow: Sendable, Equatable, Identifiable {
+        public let goal: String
+        public let role: String
+        public let attempts: Int
+        public let findings: [String]
+        public let needsHuman: Bool
+        public var id: String { goal + role }
+    }
+
+    /// The edit waiting for a person to confirm, once the plan is an agreement
+    /// (§19.2.4). `nil` most of the time — before G2, and for edits that change
+    /// nothing the baseline holds.
+    public private(set) var pendingEdit: PlanChangeProposal?
 
     private var service: ProjectService?
+    /// Where a project's documents live (§19.1). Optional because the screen
+    /// works without it — a report still becomes a row, it just does not become
+    /// a file, and that is the honest degradation.
+    private var paths: AppPaths?
     private var spans: SurrealSpanSink?
     private var spend: SurrealSpendLedger?
     private var ledger: TaskLedgerStore?
@@ -102,7 +161,8 @@ public final class ProjectsViewModel {
     /// — a tolerance whose source nobody can point at is the thing this whole
     /// section exists to avoid.
     public func attach(spans: SurrealSpanSink, spend: SurrealSpendLedger,
-                       ledger: TaskLedgerStore) async {
+                       ledger: TaskLedgerStore, paths: AppPaths? = nil) async {
+        self.paths = paths
         self.spans = spans
         self.spend = spend
         self.ledger = ledger
@@ -220,49 +280,102 @@ public final class ProjectsViewModel {
         }
     }
 
-    // MARK: - the plan
+    // MARK: - editing the plan (§19.2.4, P10.16)
+
+    /// Makes an edit, or asks first.
+    ///
+    /// Every inline edit in the Plan area comes through here, which is the point:
+    /// after G2 the same edit is a change to an agreement, and the decision about
+    /// whether to say so cannot be made at each call site or it will be made
+    /// differently at each call site. Before a baseline exists nothing is asked —
+    /// editing the plan then *is* writing the plan.
+    public func edit(_ edit: PlanEdit) async {
+        guard let service, let project = selected else { return }
+        if let proposal = await service.proposal(for: edit, in: project.id, basis: basis()) {
+            // §19.2.4: not blocked, not warned about afterwards — put the
+            // consequence where the hand already is and let the person confirm.
+            pendingEdit = proposal
+            return
+        }
+        await commit(edit)
+    }
+
+    /// Confirms the edit the bar is asking about, which also records the change
+    /// request. One call, because they are one event (§19.11).
+    public func confirmPendingEdit() async {
+        guard let proposal = pendingEdit else { return }
+        pendingEdit = nil
+        await commit(proposal.edit, expecting: proposal)
+    }
+
+    public func cancelPendingEdit() {
+        pendingEdit = nil
+        // The screen is still showing the edited value in its local buffers, so
+        // a reload is what puts the agreed plan back in front of the person.
+        Task { await reload() }
+    }
+
+    private func commit(_ edit: PlanEdit, expecting proposal: PlanChangeProposal? = nil) async {
+        guard let service, let project = selected else { return }
+        do {
+            let recorded = try await service.apply(edit, in: project.id, basis: basis())
+            await refreshGate()
+            if let recorded {
+                status = Status(message: "บันทึกแล้ว · เปิดคำขอเปลี่ยนแปลง #\(recorded.requestNumber) "
+                                + "รอคนตัดสิน — ประตูขั้นถัดไปยังไม่เปิดจนกว่าจะตัดสิน",
+                                isError: false)
+            } else if proposal != nil {
+                // The proposal was computed from a plan that has since moved. Say
+                // it rather than silently applying under a stale impact estimate.
+                status = Status(message: "แก้แล้ว แต่ผลกระทบที่แสดงไว้คำนวณจากแผนก่อนหน้า — ตรวจส่วนต่างอีกครั้ง",
+                                isError: true)
+            }
+        } catch {
+            status = Status(message: "แก้แผนไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    /// What the two estimated impacts rest on (§19.2.4). Read from the same
+    /// measurements the status strip shows, so the change request cannot quote a
+    /// number the screen does not.
+    private func basis() -> ChangeEstimateBasis {
+        ChangeEstimateBasis(elapsedByPackage: elapsed,
+                            spent: readings.spent,
+                            costMeasured: measured.contains(.cost))
+    }
 
     public func addPackage(title: String, parent: String?) async {
-        guard let service, let project = selected else { return }
+        guard let project = selected else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let siblings = wbs.children(of: parent)
-        do {
-            try await service.save(WorkPackage(
-                projectID: project.id,
-                parent: parent,
-                title: trimmed,
-                // Pre-filled when the project has exactly one thing in scope,
-                // because that is the common case and an empty required field
-                // teaches people to ignore required fields.
-                scopeRef: project.statement.inScope.count == 1
-                    ? project.statement.inScope.first : nil,
-                acceptanceCriteria: [],
-                order: (siblings.map(\.order).max() ?? -1) + 1))
-            await refreshGate()
-        } catch {
-            status = Status(message: "เพิ่มใบงานไม่สำเร็จ: \(error)", isError: true)
-        }
+        await edit(.savePackage(WorkPackage(
+            projectID: project.id,
+            parent: parent,
+            title: trimmed,
+            // Pre-filled when the project has exactly one thing in scope,
+            // because that is the common case and an empty required field
+            // teaches people to ignore required fields.
+            scopeRef: project.statement.inScope.count == 1
+                ? project.statement.inScope.first : nil,
+            acceptanceCriteria: [],
+            order: (siblings.map(\.order).max() ?? -1) + 1)))
     }
 
     public func update(_ package: WorkPackage) async {
-        guard let service else { return }
-        do {
-            try await service.save(package)
-            await refreshGate()
-        } catch {
-            status = Status(message: "บันทึกใบงานไม่สำเร็จ: \(error)", isError: true)
-        }
+        await edit(.savePackage(package))
     }
 
     public func removePackage(_ packageID: String) async {
-        guard let service, let project = selected else { return }
-        do {
-            try await service.removePackage(packageID, from: project.id)
-            await refreshGate()
-        } catch {
-            status = Status(message: "ลบใบงานไม่สำเร็จ: \(error)", isError: true)
-        }
+        let title = wbs.packages.first { $0.id == packageID }?.title ?? packageID
+        await edit(.removePackage(id: packageID, title: title))
+    }
+
+    /// The scope statement, which a baseline holds as well (§19.11). Split from
+    /// the rest of the project row on purpose: the brief and the board seats are
+    /// not part of the agreement, so editing them is not a change request.
+    public func updateScope(_ statement: ScopeStatement) async {
+        await edit(.scopeStatement(statement))
     }
 
     /// Closing a leaf by hand. The evidence rule lives in `WorkBreakdown`, so
@@ -279,10 +392,20 @@ public final class ProjectsViewModel {
 
     // MARK: - tolerance (§19.10)
 
+    /// The frame is part of the agreement, so changing it after G2 goes through
+    /// change control like the plan does.
     public func setTolerances(_ preset: Tolerances) async {
-        guard var project = selected else { return }
-        project.tolerances = preset
-        await update(project)
+        await edit(.tolerances(preset))
+    }
+
+    /// One axis, typed in. §19.2.4's line between what you *set* and what you
+    /// *measure*: the limit is set, the current value is measured, and only one
+    /// of the two has a text field.
+    public func setTolerance(_ dimension: ToleranceDimension, to limit: Double) async {
+        guard let project = selected else { return }
+        var limits = project.tolerances
+        limits.limits[dimension] = limit
+        await edit(.tolerances(limits))
     }
 
     /// Checks the frame and raises what is newly outside it. Returns the text
@@ -309,6 +432,127 @@ public final class ProjectsViewModel {
             status = Status(message: "ปิดข้อยกเว้นแล้ว — ทีมทำงานต่อได้", isError: false)
         } catch {
             status = Status(message: "ปิดข้อยกเว้นไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    // MARK: - benefits (§19.12)
+
+    public func addBenefit(title: String, measure: String, baselineValue: Double,
+                           target: Double, reviewAt: Date, owner: String) async {
+        guard let service, let project = selected else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            status = Status(message: "ตั้งชื่อประโยชน์ที่จะได้ก่อน", isError: true)
+            return
+        }
+        let who = owner.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            try await service.save(Benefit(
+                projectID: project.id, title: trimmed,
+                measure: measure.trimmingCharacters(in: .whitespacesAndNewlines),
+                baselineValue: baselineValue, target: target, reviewAt: reviewAt,
+                owner: who.isEmpty ? .agent(.teamLead) : .human(who)))
+            await refreshGate()
+        } catch {
+            status = Status(message: "บันทึกประโยชน์ไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    /// Recording the measurement. Works on a closed project on purpose — the
+    /// review date is usually after closing, and §19.12 asks for the review, not
+    /// for somebody to reopen the project to hold it.
+    public func measure(_ benefit: Benefit, value: Double, by person: String,
+                        note: String = "") async {
+        guard let service else { return }
+        do {
+            try await service.measure(benefit, value: value, by: person, note: note)
+            await refreshGate()
+            status = Status(message: "บันทึกผลการวัดแล้ว", isError: false)
+        } catch {
+            status = Status(message: "\(error)", isError: true)
+        }
+    }
+
+    public func removeBenefit(_ benefit: Benefit) async {
+        guard let service, let project = selected else { return }
+        do {
+            try await service.removeBenefit(benefit.id, from: project.id)
+            await refreshGate()
+        } catch {
+            status = Status(message: "ลบไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    // MARK: - reporting (§19.13)
+
+    /// Issues one of the three reports, keeps it, and writes the file beside the
+    /// project's other documents.
+    ///
+    /// Returns the text so the caller can send it — the same string that is in
+    /// the `.docx`, because a report that reads differently on a phone than in
+    /// the file is two reports.
+    @discardableResult
+    public func issueReport(_ kind: ReportKind) async -> String? {
+        guard let service, let project = selected else { return nil }
+        do {
+            guard let report = try await service.issueReport(kind, for: project.id) else {
+                return nil
+            }
+            var note = "\(kind.label)ออกแล้ว"
+            if let paths {
+                // A row is not a deliverable. §19.13 says these go through
+                // DocGen, and a report nobody can attach to an email is a report
+                // that gets rewritten by hand.
+                let folder = paths.project(project.id).documentsDirectory
+                let file = folder.appending(path: ReportDocument.filename(report) + ".docx")
+                do {
+                    try FileManager.default.createDirectory(at: folder,
+                                                            withIntermediateDirectories: true)
+                    try ReportDocument.docx(report).write(to: file, options: .atomic)
+                    note += " · \(file.lastPathComponent)"
+                } catch {
+                    log.error("writing report: \(error)")
+                    note += " · เก็บเป็นข้อมูลแล้ว แต่เขียนไฟล์ไม่ได้: \(error.localizedDescription)"
+                }
+            }
+            await refreshGate()
+            status = Status(message: note, isError: false)
+            return report.rendered
+        } catch {
+            status = Status(message: "ออกรายงานไม่สำเร็จ: \(error)", isError: true)
+            return nil
+        }
+    }
+
+    // MARK: - conformance and closing (§19.12, §19.15)
+
+    /// Writing down that a practice is not being done. The name and the reason
+    /// are both required by `TailoringRecord.decided`, so a blank form comes
+    /// back as an error rather than as a green tick.
+    public func tailor(_ practice: Practice, reason: String, by person: String) async {
+        guard let service, let project = selected else { return }
+        do {
+            try await service.tailor(practice, in: project.id, reason: reason, by: person)
+            await refreshGate()
+            status = Status(message: "บันทึกไว้แล้วว่าไม่ทำ \(practice.label) — พร้อมเหตุผลและชื่อคนตัดสิน",
+                            isError: false)
+        } catch {
+            status = Status(message: "\(error)", isError: true)
+        }
+    }
+
+    public func decideDisposition(action: DataDisposition.Action, policy: String,
+                                  by person: String, note: String = "") async {
+        guard let service, let project = selected else { return }
+        do {
+            _ = try await service.decideDisposition(
+                DataDisposition(action: action, policy: policy, decidedBy: person, note: note),
+                for: project.id)
+            await reload()
+            status = Status(message: "บันทึกแล้วว่าข้อมูลที่เหลือจะ\(action.label) — ระบบไม่ลบไฟล์ให้เอง",
+                            isError: false)
+        } catch {
+            status = Status(message: "\(error)", isError: true)
         }
     }
 
@@ -348,8 +592,9 @@ public final class ProjectsViewModel {
     ///
     /// Each source is the one §19.10 named: spans for time, the spend ledger
     /// for cost, the task ledger's retry count for quality, and the plan's own
-    /// risk classes for risk. Benefit stays unread because nothing measures a
-    /// benefit yet — and it says so rather than showing a zero.
+    /// risk classes for risk, and the benefit ledger for benefit — which reads
+    /// only once somebody has measured one, and says "ยังไม่ได้วัด" until then
+    /// rather than showing a zero.
     private func measure(_ id: ProjectID) async {
         var reading = readings
         var known: Set<ToleranceDimension> = [.scope]
@@ -380,10 +625,68 @@ public final class ProjectsViewModel {
         let openRisk = wbs.openLeaves.map(\.riskClass.rawValue).max() ?? 0
         reading.highestRisk = Double(openRisk)
         known.insert(.risk)
+        // The sixth axis (§19.12, P10.10). Only counts once somebody has
+        // actually measured something — benefits with no result leave the
+        // reading alone and the strip keeps saying "ยังไม่ได้วัด", because a
+        // business case that looks fine because nobody looked is the failure
+        // this dimension exists to catch.
+        if let achieved = benefits.lowestAchievement {
+            reading.benefitRatio = achieved
+            known.insert(.benefit)
+        }
 
         readings = reading
         measured = known
         tolerances = ToleranceCheck.evaluate(selected?.tolerances ?? .balanced, readings: reading)
+    }
+
+    /// The four popovers that read stores rather than the project row
+    /// (§19.2.3). Each source is named where it is read, for the same reason the
+    /// tolerance readings are: a dashboard number nobody can trace is a number
+    /// nobody can argue with when it decides something.
+    private func refreshStatusDetail(_ id: ProjectID) async {
+        if let spend, let split = try? await spend.breakdown(since: startOfMonth()) {
+            spendByRole = split.byRole.map { Slice(key: $0.key, amount: $0.costUSD) }
+            spendByModel = split.byModel.map { Slice(key: $0.key, amount: $0.costUSD) }
+            spendTotal = split.total
+        }
+        if let spans {
+            toolActivity = ((try? await spans.toolActivity(project: id)) ?? [])
+                .map { ToolSlice(tool: $0.tool, calls: $0.calls, seconds: $0.seconds) }
+            // The band the time popover draws. Across projects on purpose: the
+            // whole point of a p90 is that it comes from more than the project
+            // asking for it.
+            forecast = Schedule.estimate(from: (try? await spans.durations(forRole: .analyst)) ?? [])
+        }
+        if let ledger, let rows = try? await ledger.rows(scope: .project(id)) {
+            // Only the rounds that were actually redone. A row with one attempt
+            // is work, not rework, and listing it would bury the ones that hurt.
+            rework = rows.filter { $0.attempts > 1 || $0.needsHuman }
+                .sorted { $0.attempts > $1.attempts }
+                .map { ReworkRow(goal: $0.goal, role: $0.role.rawValue, attempts: $0.attempts,
+                                 findings: $0.findings, needsHuman: $0.needsHuman) }
+        }
+    }
+
+    private func startOfMonth() -> Date {
+        let calendar = Calendar.current
+        return calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
+    }
+
+    // MARK: - the status bar's actions (§19.2.3)
+
+    /// Runs a status-bar action. Every one of them writes to the register on the
+    /// way through (`ProjectService.perform`), which is the half of this feature
+    /// that keeps a one-click dashboard from being a place decisions vanish.
+    public func perform(_ action: StatusAction) async {
+        guard let service, let project = selected else { return }
+        do {
+            try await service.perform(action, in: project.id)
+            await refreshGate()
+            status = Status(message: "\(action.title) — บันทึกลงทะเบียนแล้ว", isError: false)
+        } catch {
+            status = Status(message: "\(error)", isError: true)
+        }
     }
 
     private func refreshGate() async {
@@ -395,13 +698,6 @@ public final class ProjectsViewModel {
         }
         wbs = await service.breakdown(of: id)
         problems = wbs.problems(inScope: selected?.statement.inScope ?? [])
-        gate = await service.gate(for: id)
-        // The readings the plan itself can answer. Cost and time come from the
-        // budget governor and the span store, which the screen does not hold —
-        // they stay at zero until P10.15 wires the status strip, and a zero
-        // that is honestly zero is better than a number nobody can trace.
-        tolerances = ToleranceCheck.evaluate(selected?.tolerances ?? .balanced,
-                                             readings: readings)
         openExceptions = (try? await service.openExceptions(id)) ?? []
         registers = await service.entries(of: id)
         baselines = await service.baselineHistory(of: id)
@@ -410,6 +706,17 @@ public final class ProjectsViewModel {
         // size of the plan: a project is not off-scope for having a plan, only
         // for having grown one past what was agreed (§19.10).
         readings.addedPackages = drift?.addedCount ?? 0
+        benefits = await service.benefitLedger(of: id)
         await measure(id)
+        // Order matters here: what the app measured has to reach the service
+        // *before* the gate is asked, because G4's conformance condition counts
+        // money and time this screen is the only one that can read (§19.16).
+        await service.observe(ObservedFacts(readings: readings,
+                                           measured: measured,
+                                           measuredSeconds: elapsed.values.reduce(0, +)))
+        conformance = await service.conformance(of: id)
+        gate = await service.gate(for: id)
+        reports = await service.reportHistory(of: id)
+        await refreshStatusDetail(id)
     }
 }

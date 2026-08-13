@@ -155,18 +155,27 @@ private struct ChatScreen: View {
             conversationRows
         }
         .navigationTitle("บทสนทนา")
-        .toolbar {
-            Button { Task { await model.newConversation() } } label: {
-                Label("บทสนทนาใหม่", systemImage: "square.and.pencil")
-            }
-            .accessibilityLabel("สร้างบทสนทนาใหม่")
-        }
     }
 
     // MARK: - history (§19.2.1)
 
     private var searchBar: some View {
         VStack(alignment: .leading, spacing: 6) {
+            // §19.2.6 — "+" at the head of the list, not in the window toolbar.
+            // Two reasons, and the second is why it moved: creating a
+            // conversation happens in the context of this list, and in the
+            // toolbar it was pushed into the `»` overflow the moment the area
+            // switch arrived (P10.12) — a primary action behind a chevron.
+            HStack(spacing: 6) {
+                Text("บทสนทนา").font(.subheadline).bold()
+                Spacer()
+                Button { Task { await model.newConversation() } } label: {
+                    Label("บทสนทนาใหม่", systemImage: "square.and.pencil")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("สร้างบทสนทนาใหม่")
+            }
             HStack(spacing: 6) {
                 TextField("ค้นในบทสนทนา", text: $model.query)
                     .textFieldStyle(.roundedBorder)
@@ -311,6 +320,15 @@ private struct ChatScreen: View {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     if let error = model.loadError {
                         Text(error).foregroundStyle(.red).font(.callout)
+                    }
+                    // An empty transcript used to be indistinguishable from a
+                    // screen that failed to load — found by opening a project
+                    // that has no conversations yet (U23-7). One line, and it
+                    // points at the button that starts one.
+                    if model.bubbles.isEmpty, model.loadError == nil {
+                        Text("ยังไม่มีข้อความในบทสนทนานี้ — พิมพ์ด้านล่างเพื่อเริ่ม "
+                             + "หรือกด ✎ ที่หัวรายการทางซ้ายเพื่อเปิดบทสนทนาใหม่")
+                            .font(.callout).foregroundStyle(.secondary)
                     }
                     ForEach(model.bubbles) { bubble in
                         // "กำลังทำงาน…" on a card that is really waiting for a
