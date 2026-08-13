@@ -282,6 +282,36 @@ struct ProjectFlows {
             return "ปิดแล้ว · บทเรียนอยู่ใน central"
         }
 
+        await check("[เวลา] งานที่ทำผ่านประตูถูกนับเข้าใบงานที่ทำอยู่") {
+            // The pipe P10.15 built, end to end: a tool call carrying a work
+            // package on its context must show up as time against that leaf,
+            // and a call carrying none must not invent one.
+            let sink = SurrealSpanSink(client: client)
+            let gateway = ToolGateway(
+                chain: HookChain(stageGate: StageGate(reader: projects)),
+                spanSink: sink,
+                modes: OperatingModes(autonomy: .fullAutonomous))
+            let flag = RanFlag()
+            await gateway.register(SpyTool(name: "kb_search", riskLevel: .low, flag: flag))
+
+            _ = try await gateway.call("kb_search", argumentsJSON: "{}",
+                                       context: ToolContext(scope: project.scope,
+                                                            role: .analyst,
+                                                            workPackage: leafID))
+            _ = try await gateway.call("kb_search", argumentsJSON: "{}",
+                                       context: ToolContext(scope: project.scope,
+                                                            role: .analyst))
+
+            let elapsed = try await sink.elapsedByWorkPackage(project: project.id)
+            guard elapsed[leafID] != nil else {
+                throw CheckFailure("งานที่ผูกใบไว้ไม่ได้ถูกนับเข้าใบนั้น")
+            }
+            guard elapsed.count == 1 else {
+                throw CheckFailure("งานที่ไม่ได้ผูกใบ ถูกยัดเข้าใบใดใบหนึ่ง: \(elapsed.keys)")
+            }
+            return "นับเข้า 1 ใบ · งานที่ไม่ผูกไม่ถูกยัดเข้าใคร"
+        }
+
         await check("[หลังปิด] โครงการที่ปิดแล้วอ่านได้ แต่แก้ข้อมูลไม่ได้") {
             shell.reset(); search.reset()
             let blocked = try await callTool("run_shell")

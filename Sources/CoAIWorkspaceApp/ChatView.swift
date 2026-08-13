@@ -49,6 +49,7 @@ struct ChatView: View {
             await created.adoptDefaultWorkingDirectory()
             await created.attach()
             await created.load()
+            await created.loadWorkPackages()
         }
     }
 }
@@ -103,6 +104,26 @@ private struct ChatScreen: View {
             } cancel: {
                 draft = nil
             }
+        }
+    }
+
+    /// Only inside a project, and only when the plan has open work. Choosing
+    /// nothing is a legitimate state: a question is not work against a promise
+    /// (§19.6).
+    @ViewBuilder
+    private var workPackagePicker: some View {
+        if !model.workPackages.isEmpty {
+            Picker("ใบงาน", selection: $model.workPackage) {
+                Text("ไม่ผูกกับใบงาน").tag(String?.none)
+                ForEach(model.workPackages) { package in
+                    Text(package.title).tag(String?.some(package.id))
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(maxWidth: 220)
+            .labelsHidden()
+            .accessibilityLabel("เลือกใบงานที่การสนทนานี้ทำอยู่")
+            .help("เวลาและค่าใช้จ่ายของเทิร์นนี้จะถูกนับเข้าใบงานที่เลือก")
         }
     }
 
@@ -178,6 +199,8 @@ private struct ChatScreen: View {
                 .help("ทำงานต่อกันหลายขั้นโดยไม่รอให้พิมพ์ใหม่")
 
             Spacer()
+
+            workPackagePicker
 
             promotionButton
 

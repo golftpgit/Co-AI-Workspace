@@ -4,6 +4,7 @@ import AgentKit
 import Persistence
 import LLMProviders
 import CoreEngine
+import ProjectKit
 import MLXRuntime
 
 // ─────────────────────────────────────────────────────────────
@@ -72,6 +73,31 @@ final class ChatViewModel {
     init(engine: Engine, scope: Scope = .central) {
         self.engine = engine
         self.scope = scope
+    }
+
+    /// Which leaf of the plan this conversation is working against (§19.6).
+    ///
+    /// Chosen rather than guessed. A turn that is not against any promise is a
+    /// real and common thing — asking a question, checking a number — and
+    /// inventing an attribution for it would put time on a package nobody
+    /// worked on.
+    var workPackage: String?
+    /// Open leaves of the current project, for the picker. Empty in General,
+    /// which is why the picker does not appear there.
+    private(set) var workPackages: [WorkPackage] = []
+
+    func loadWorkPackages() async {
+        guard case .project(let id) = scope else {
+            workPackages = []
+            workPackage = nil
+            return
+        }
+        workPackages = await engine.projects.breakdown(of: id).openLeaves
+        // A package that was finished or deleted elsewhere must not stay
+        // selected: the next turn would be filed against something closed.
+        if let current = workPackage, !workPackages.contains(where: { $0.id == current }) {
+            workPackage = nil
+        }
     }
 
     /// The conversation as the brief drafter reads it (§19.1, P10.3). Tool
@@ -210,7 +236,8 @@ final class ChatViewModel {
         let stream = await engine.runner.run(userText: text,
                                              conversationID: conversation.id,
                                              scope: scope,
-                                             workingDirectory: workingDirectory)
+                                             workingDirectory: workingDirectory,
+                                             workPackage: workPackage)
         // Inherits MainActor isolation, so every bubble update lands on the
         // main actor without hopping.
         turn = Task { [weak self] in
