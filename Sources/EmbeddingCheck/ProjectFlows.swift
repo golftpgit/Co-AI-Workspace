@@ -50,7 +50,11 @@ struct ProjectFlows {
             exceptions: ExceptionStore(client: client),
             registers: RegisterStore(client: client),
             baselines: BaselineStore(client: client),
-            lessons: LessonPublisher(knowledge: knowledge))
+            lessons: LessonPublisher(knowledge: knowledge),
+            benefits: BenefitStore(client: client),
+            tailoring: TailoringStore(client: client),
+            closingLedger: ClosingLedger(conflicts: ConflictStore(client: client),
+                                         plans: AnalysisPlanStore(client: client)))
 
         let shell = RanFlag()
         let search = RanFlag()
@@ -254,12 +258,15 @@ struct ProjectFlows {
             return "เข้าขั้นปิดโครงการ"
         }
 
-        await check("[G4] ปิดโครงการแล้วบทเรียนไปโผล่ในคลังส่วนกลาง") {
-            let gateBefore = try await requireGate(projects, project.id)
-            guard !gateBefore.passed else {
-                throw CheckFailure("ปิดได้ทั้งที่ยังไม่มีบทเรียน")
+        await check("[G4] แปดเงื่อนไขปิดงาน อ่านจากของจริงทีละข้อ") {
+            // Every step here removes exactly one blocker and asserts the gate
+            // is still shut. A gate tested only against "everything missing"
+            // passes while checking one condition — and the eight are wired to
+            // eight different stores, so this is where the wiring shows.
+            var unmet = try await requireGate(projects, project.id).unmet
+            guard unmet.contains(where: { $0.contains("บันทึกบทเรียน") }) else {
+                throw CheckFailure("ไม่เห็นเงื่อนไขบทเรียน: \(unmet)")
             }
-
             try await projects.record(RegisterEntry(
                 projectID: project.id,
                 title: "ฉบับแปลไทยมักไม่รายงาน α รายด้าน",
@@ -268,6 +275,76 @@ struct ProjectFlows {
                                 appliesTo: "งานที่ใช้มาตรวัดแปล"),
                 origin: .agent(.researcher)))
 
+            unmet = try await requireGate(projects, project.id).unmet
+            guard unmet.contains("ตัดสินแล้วว่าข้อมูลและไฟล์ที่เหลือจะไปทางไหน") else {
+                throw CheckFailure("ไม่เห็นเงื่อนไขข้อมูลที่เหลือ: \(unmet)")
+            }
+            // Half a disposition is not a disposition: the policy has to be
+            // named and a person has to have decided.
+            do {
+                _ = try await projects.decideDisposition(
+                    DataDisposition(action: .archive, policy: "", decidedBy: "ผู้ใช้"),
+                    for: project.id)
+                throw CheckFailure("บันทึกการจัดการข้อมูลได้ทั้งที่ไม่ได้บอกนโยบาย")
+            } catch LifecycleError.dispositionIncomplete {}
+            project = try await projects.decideDisposition(
+                DataDisposition(action: .archive,
+                                policy: "เก็บข้อมูลดิบ 5 ปี แล้วลบตามระเบียบคณะ",
+                                decidedBy: "ผู้ใช้"),
+                for: project.id)
+
+            // The business case, measured rather than asserted — and the same
+            // record that answers the `benefits` practice below.
+            let benefit = Benefit(projectID: project.id,
+                                  title: "เวลาที่ใช้สรุปแบบสอบถามหนึ่งชุด",
+                                  measure: "ชั่วโมงต่อชุด", baselineValue: 6, target: 2,
+                                  reviewAt: Date(), owner: .human("ผู้ใช้"))
+            try await projects.save(benefit)
+            try await projects.measure(benefit, value: 3, by: "ผู้ใช้")
+            let measured = await projects.benefitLedger(of: project.id).lowestAchievement
+            guard let measured, abs(measured - 0.75) < 0.001 else {
+                throw CheckFailure("ผลการวัดประโยชน์ผิด: \(String(describing: measured))")
+            }
+
+            // §19.12 condition 6, against the seventeen practices as this
+            // project actually stands. Whatever is left over gets a tailoring
+            // record — which is the ISO answer, not a loophole.
+            let gaps = await projects.conformance(of: project.id).filter { !$0.satisfied }
+            guard !gaps.isEmpty else {
+                throw CheckFailure("ไม่มี practice ค้างเลย — น่าสงสัยว่านับจากของจริงหรือเปล่า")
+            }
+            do {
+                try await projects.tailor(gaps[0].practice, in: project.id,
+                                          reason: "  ", by: "ผู้ใช้")
+                throw CheckFailure("บันทึก tailoring ได้ทั้งที่ไม่มีเหตุผล")
+            } catch TailoringError.emptyReason {}
+            for gap in gaps {
+                try await projects.tailor(gap.practice, in: project.id,
+                                          reason: "ไม่อยู่ในขอบเขตของโครงการนี้", by: "ผู้ใช้")
+            }
+
+            // An issue raised at the last minute still shuts the gate, and
+            // closing it opens it again — the condition reads the register on
+            // every evaluation rather than at the moment the stage changed.
+            let issue = RegisterEntry(projectID: project.id, title: "ยังไม่ได้ตอบผู้ตรวจภายนอก",
+                                      detail: .issue(severity: 3, kind: .problem),
+                                      origin: .human("ผู้ใช้"))
+            try await projects.record(issue)
+            guard try await !requireGate(projects, project.id).passed else {
+                throw CheckFailure("ปิดได้ทั้งที่มีปัญหาค้างอยู่ในทะเบียน")
+            }
+            var resolved = issue
+            resolved.status = .closed
+            try await projects.record(resolved)
+
+            let ready = try await requireGate(projects, project.id)
+            guard ready.passed else {
+                throw CheckFailure("ครบแปดข้อแล้วแต่ยังปิดไม่ได้ — ค้าง: \(ready.unmet)")
+            }
+            return "8 ข้อผ่านทีละข้อ · ประโยชน์วัดได้ 75% ของเป้า"
+        }
+
+        await check("[G4] ปิดโครงการแล้วบทเรียนไปโผล่ในคลังส่วนกลาง") {
             project = try await projects.advance(project.id)
             guard project.stage == .closed, project.closure == .completed else {
                 throw CheckFailure("ปิดไม่สำเร็จ: \(project.stage) / \(String(describing: project.closure))")
@@ -342,7 +419,11 @@ struct ProjectFlows {
             exceptions: ExceptionStore(client: client),
             registers: RegisterStore(client: client),
             baselines: BaselineStore(client: client),
-            lessons: LessonPublisher(knowledge: knowledge))
+            lessons: LessonPublisher(knowledge: knowledge),
+            benefits: BenefitStore(client: client),
+            tailoring: TailoringStore(client: client),
+            closingLedger: ClosingLedger(conflicts: ConflictStore(client: client),
+                                         plans: AnalysisPlanStore(client: client)))
 
         await check("[เปิดใหม่] โปรเจกต์กลับมาพร้อมขอบเขต หมวก และกรอบที่ตั้งไว้") {
             guard let reloaded = await fresh.project(project.id) else {
@@ -391,6 +472,27 @@ struct ProjectFlows {
             let lessons = await fresh.entries(of: project.id, kind: .lesson)
             guard lessons.count == 1 else { throw CheckFailure("บทเรียนหาย") }
             return "v2/v1 · ตัดสินโดย \(decided.decidedBy ?? "—")"
+        }
+
+        await check("[เปิดใหม่] ประโยชน์ที่วัดแล้ว การจัดการข้อมูล และบันทึก tailoring ยังอยู่") {
+            let achieved = await fresh.benefitLedger(of: project.id).lowestAchievement
+            guard let achieved, abs(achieved - 0.75) < 0.001 else {
+                throw CheckFailure("ผลการวัดประโยชน์ไม่รอด: \(String(describing: achieved))")
+            }
+            guard let disposition = await fresh.project(project.id)?.dataDisposition,
+                  disposition.isDecided, disposition.action == .archive else {
+                throw CheckFailure("การตัดสินเรื่องข้อมูลที่เหลือหายไปหลังเปิดใหม่")
+            }
+            // The whole conformance answer, rebuilt from rows: seventeen
+            // practices, each still pointing at either something real or the
+            // record of somebody deciding not to.
+            let rows = await fresh.conformance(of: project.id)
+            let unanswered = rows.filter { !$0.satisfied }
+            guard unanswered.isEmpty else {
+                throw CheckFailure("practice ที่ตอบไว้แล้วกลับว่าง: \(unanswered.map(\.practice.label))")
+            }
+            let tailored = rows.count(where: \.isTailored)
+            return "ประโยชน์ 75% · \(disposition.action.label) · ของจริง \(rows.count - tailored) · บันทึกว่าไม่ทำ \(tailored)"
         }
 
         await check("[เปิดใหม่] ข้อยกเว้นที่ยังเปิดอยู่ หยุดงานได้ตั้งแต่ก่อนใครเปิดหน้าจอ") {

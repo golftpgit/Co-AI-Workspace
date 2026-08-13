@@ -49,6 +49,7 @@ public enum LifecycleError: Error, CustomStringConvertible, Equatable {
     case notForward(from: ProjectStage, to: ProjectStage)
     case gateNotPassed(gate: String, unmet: [String])
     case alreadyClosed
+    case dispositionIncomplete
 
     public var description: String {
         switch self {
@@ -58,6 +59,8 @@ public enum LifecycleError: Error, CustomStringConvertible, Equatable {
             return "ยังผ่าน \(gate) ไม่ได้ — ค้าง: " + unmet.joined(separator: " · ")
         case .alreadyClosed:
             return "โครงการปิดแล้ว"
+        case .dispositionIncomplete:
+            return "ต้องบอกทั้งนโยบายที่ใช้และชื่อคนที่ตัดสิน"
         }
     }
 }
@@ -67,6 +70,57 @@ extension GateCondition {
     init(vacuousWhenEmpty empty: Bool, text: String, satisfied: Bool) {
         self.init(text: text, satisfied: satisfied, vacuous: empty)
     }
+}
+
+/// Everything G4 asks about that is not in the plan (ARCHITECTURE §19.12).
+///
+/// The three optional fields are optional for one reason: they live in stores
+/// this module does not own, and "nobody asked" must not arrive at the gate
+/// looking like "asked and fine". `nil` fails the condition and says so in the
+/// text — the same rule the stage gate uses for a project it cannot read
+/// ("ไม่มีทางถาม ไม่เท่ากับอนุญาต"), and the reason the eight conditions do not
+/// quietly shrink to five when a store is missing.
+public struct ClosingFacts: Sendable, Equatable {
+    /// Risks, issues and change requests still open (§19.11). Transferring one
+    /// out with a named owner is what closing it means here.
+    public var openRegisterEntries: Int
+    /// Unresolved contradictions in the knowledge base (§11.6). `nil` when the
+    /// ledger was not consulted.
+    public var openConflicts: Int?
+    /// Analysis-plan decisions still marked `agent_suggested` (§12.4). An
+    /// approved plan has none by construction, so a project closing with some
+    /// has assumptions nobody confirmed. `nil` when the plans were not read.
+    public var pendingAssumptions: Int?
+    /// Practices with neither a real thing nor a tailoring record (§19.15).
+    /// `nil` when conformance was not evaluated.
+    public var conformanceGaps: [Practice]?
+    /// What happens to the data and files (§19.12 condition 8).
+    public var dataDisposition: DataDisposition?
+
+    public init(openRegisterEntries: Int = 0,
+                openConflicts: Int? = nil,
+                pendingAssumptions: Int? = nil,
+                conformanceGaps: [Practice]? = nil,
+                dataDisposition: DataDisposition? = nil) {
+        self.openRegisterEntries = openRegisterEntries
+        self.openConflicts = openConflicts
+        self.pendingAssumptions = pendingAssumptions
+        self.conformanceGaps = conformanceGaps
+        self.dataDisposition = dataDisposition
+    }
+}
+
+/// The two facts G4 needs from stores ProjectKit does not own (§19.12
+/// conditions 4 and 5).
+///
+/// One protocol rather than two because a project that can answer one can answer
+/// the other — both are "what is still unresolved about what this project
+/// concluded", and splitting them would only make it possible to wire half.
+public protocol ClosingLedgerReading: Sendable {
+    /// Contradictions still waiting for a person (§11.6).
+    func openConflictCount(scope: Scope) async -> Int
+    /// Analysis-plan decisions still marked `agent_suggested` (§12.4).
+    func unconfirmedAssumptionCount(scope: Scope) async -> Int
 }
 
 public enum ProjectLifecycle {
@@ -84,16 +138,12 @@ public enum ProjectLifecycle {
     }
 
     /// The gate between `project.stage` and the stage after it.
-    ///
-    /// G3 and G4 depend on work packages and registers, which arrive in
-    /// P10.4/P10.8/P10.10. Until then their conditions are the ones that can be
-    /// checked honestly today — and they are written as conditions rather than
-    /// left out, so the gate reads as incomplete instead of as passed.
     public static func evaluate(_ project: Project,
                                 wbs: WorkBreakdown = WorkBreakdown(),
                                 hasLessons: Bool = true,
                                 drift: BaselineDiff? = nil,
-                                undecidedChanges: Int = 0) -> GateEvaluation? {
+                                undecidedChanges: Int = 0,
+                                closing: ClosingFacts = ClosingFacts()) -> GateEvaluation? {
         guard let to = next(after: project.stage), let gate = project.stage.exitGate else {
             return nil
         }
@@ -170,13 +220,49 @@ public enum ProjectLifecycle {
                               satisfied: drift?.isEmpty ?? true),
             ]
         case .closing:
-            // §19.12 condition 7. The rest of the eight arrive with the
-            // registers they read (P10.8, P10.10).
+            // §19.12's eight, in the standard's order. This is the project's own
+            // rule turned on itself — README §5's "ห้าม mark งานเป็นเสร็จถ้ายัง
+            // มีรายการค้าง" as eight things a gate reads rather than a sentence
+            // somebody remembers.
+            let delivered = wbs.leaves.filter { $0.status == .done }
+            let unreviewed = delivered.filter { !$0.evidence.contains(where: \.passed) }
             conditions = [
                 GateCondition(text: "ไม่มีใบงานที่ยังไม่เสร็จ",
                               satisfied: openWorkPackages == 0),
-                GateCondition(text: "บันทึกบทเรียนอย่างน้อย 1 ข้อ",
+                GateCondition(vacuousWhenEmpty: delivered.isEmpty,
+                              text: "ทุกใบงานที่เสร็จมีหลักฐานที่ QA รับแล้ว",
+                              satisfied: unreviewed.isEmpty),
+                GateCondition(text: "ไม่มีความเสี่ยง/ปัญหา/คำขอเปลี่ยนแปลงที่ยังเปิดอยู่",
+                              satisfied: closing.openRegisterEntries == 0),
+                GateCondition(text: closing.openConflicts == nil
+                              ? "ไม่มีข้อขัดแย้งค้างในคลังความรู้ (ยังตรวจไม่ได้ — ไม่ได้ต่อกับคลัง)"
+                              : "ไม่มีข้อขัดแย้งค้างในคลังความรู้",
+                              satisfied: closing.openConflicts == 0),
+                GateCondition(text: closing.pendingAssumptions == nil
+                              ? "ไม่มีสมมติฐานที่ agent เดาไว้แล้วยังไม่มีใครยืนยัน (ยังตรวจไม่ได้ — ไม่ได้ต่อกับแผนวิเคราะห์)"
+                              : "ไม่มีสมมติฐานที่ agent เดาไว้แล้วยังไม่มีใครยืนยัน",
+                              satisfied: closing.pendingAssumptions == 0),
+                GateCondition(text: {
+                                  guard let gaps = closing.conformanceGaps else {
+                                      return "ทุก practice ของ ISO 21502 มีของจริงหรือมีบันทึกว่าไม่ทำ (ยังไม่ได้ตรวจ)"
+                                  }
+                                  guard !gaps.isEmpty else {
+                                      return "ทุก practice ของ ISO 21502 มีของจริงหรือมีบันทึกว่าไม่ทำ"
+                                  }
+                                  // Naming them matters: "conformance ไม่ผ่าน"
+                                  // sends somebody hunting through seventeen
+                                  // rows for the two that are empty.
+                                  return "ยังไม่ได้ตอบ practice: "
+                                      + gaps.map(\.label).joined(separator: " · ")
+                              }(),
+                              satisfied: closing.conformanceGaps?.isEmpty == true),
+                // Recorded here, published on the way out (`advance`): a lesson
+                // cannot be in `central` before the project is closed, so the
+                // gate checks the half that can be true now and says so.
+                GateCondition(text: "บันทึกบทเรียนอย่างน้อย 1 ข้อ (ไหลเข้าคลังส่วนกลางตอนปิด)",
                               satisfied: hasLessons),
+                GateCondition(text: "ตัดสินแล้วว่าข้อมูลและไฟล์ที่เหลือจะไปทางไหน",
+                              satisfied: closing.dataDisposition?.isDecided == true),
             ]
         case .closed:
             conditions = []

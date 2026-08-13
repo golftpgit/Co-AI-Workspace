@@ -22,6 +22,13 @@ public actor ProjectService {
     private let registers: (any RegisterPersisting)?
     private let baselines: (any BaselinePersisting)?
     private let lessons: (any LessonPublishing)?
+    private let benefits: (any BenefitPersisting)?
+    private let tailoring: (any TailoringPersisting)?
+    private let closingLedger: (any ClosingLedgerReading)?
+    /// What the app measured last time it looked (§19.16). Held rather than
+    /// asked for, because `advance` evaluates the gate itself and cannot call
+    /// back into a screen.
+    private var observed = ObservedFacts()
     /// Which projects are outside their frame. Cached because the hook chain
     /// asks on every tool call, and refreshed on every write that could change
     /// the answer — the cost of being wrong here is work that should have
@@ -35,13 +42,27 @@ public actor ProjectService {
                 exceptions: (any ExceptionPersisting)? = nil,
                 registers: (any RegisterPersisting)? = nil,
                 baselines: (any BaselinePersisting)? = nil,
-                lessons: (any LessonPublishing)? = nil) {
+                lessons: (any LessonPublishing)? = nil,
+                benefits: (any BenefitPersisting)? = nil,
+                tailoring: (any TailoringPersisting)? = nil,
+                closingLedger: (any ClosingLedgerReading)? = nil) {
         self.store = store
         self.plans = plans
         self.exceptions = exceptions
         self.registers = registers
         self.baselines = baselines
         self.lessons = lessons
+        self.benefits = benefits
+        self.tailoring = tailoring
+        self.closingLedger = closingLedger
+    }
+
+    /// Hands over the numbers only the app can read (§19.16). Called by the
+    /// screen after it refreshes the status strip; the gate reads whatever
+    /// arrived last, and a stale reading is visible as one because every
+    /// conformance row says what it counted.
+    public func observe(_ facts: ObservedFacts) {
+        observed = facts
     }
 
     // MARK: - registers (§19.11)
@@ -66,6 +87,120 @@ public actor ProjectService {
         try await record(decided)
         guard approve, let project = await project(entry.projectID) else { return }
         try await freezeBaseline(project, reason: "คำขอเปลี่ยนแปลง: \(entry.title)")
+    }
+
+    // MARK: - benefits (§19.12)
+
+    public func benefitLedger(of id: ProjectID) async -> BenefitLedger {
+        BenefitLedger((try? await benefits?.all(project: id)) ?? [])
+    }
+
+    public func save(_ benefit: Benefit) async throws {
+        guard let benefits else { return }
+        var updated = benefit
+        updated.updatedAt = Date()
+        try await benefits.save(updated)
+    }
+
+    /// Recording what a benefit turned out to be.
+    ///
+    /// Deliberately allowed on a closed project — that is what a review date
+    /// three months out means, and §19.12 asks for the review rather than for a
+    /// reopened project. It is the one write closing does not stop, and it is
+    /// safe because a measurement adds a fact instead of changing an agreement.
+    public func measure(_ benefit: Benefit, value: Double,
+                        by person: String, note: String = "") async throws {
+        let name = person.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { throw BenefitError.emptyMeasurer }
+        var updated = benefit
+        updated.result = BenefitMeasurement(value: value, measuredBy: name, note: note)
+        try await save(updated)
+    }
+
+    public func removeBenefit(_ benefitID: String, from id: ProjectID) async throws {
+        try await benefits?.delete(benefitID, project: id)
+    }
+
+    // MARK: - conformance and tailoring (§19.15–§19.16)
+
+    public func tailoringRecords(of id: ProjectID) async -> [TailoringRecord] {
+        ((try? await tailoring?.all(project: id)) ?? []).sorted { $0.decidedAt > $1.decidedAt }
+    }
+
+    /// Writing down that a practice is not being done, and why. Throws when
+    /// either half is missing (`TailoringRecord.decided`).
+    @discardableResult
+    public func tailor(_ practice: Practice, in id: ProjectID,
+                       reason: String, by person: String) async throws -> TailoringRecord {
+        let record = try TailoringRecord.decided(projectID: id, practice: practice,
+                                                 reason: reason, by: person)
+        try await tailoring?.save(record)
+        return record
+    }
+
+    /// All seventeen practices, each answered by something that exists.
+    public func conformance(of id: ProjectID) async -> [PracticeStatus] {
+        Conformance.evaluate(await conformanceFacts(of: id),
+                             tailoring: await tailoringRecords(of: id))
+    }
+
+    /// Counted from the stores, never declared. A conformance matrix whose rows
+    /// somebody ticked is the thing §19.16 says this one is not.
+    public func conformanceFacts(of id: ProjectID) async -> ConformanceFacts {
+        let project = await project(id)
+        let leaves = await breakdown(of: id).leaves
+        let entries = await entries(of: id)
+        // Every exception report went out on every channel (§19.10), so each one
+        // is a communication that demonstrably reached a person.
+        let raised = ((try? await exceptions?.all(project: id)) ?? []).count
+        return ConformanceFacts(
+            leafCount: leaves.count,
+            benefitCount: await benefitLedger(of: id).benefits.count,
+            inScopeCount: project?.statement.inScope.count ?? 0,
+            outOfScopeCount: project?.statement.outOfScope.count ?? 0,
+            staffedLeaves: leaves.count { $0.role != nil || $0.raci?.responsible.isEmpty == false },
+            dependencyCount: leaves.reduce(0) { $0 + $1.dependsOn.count },
+            measuredSeconds: observed.measuredSeconds,
+            spent: observed.spent,
+            riskCount: entries.count { $0.kind == .risk },
+            issueCount: entries.count { $0.kind == .issue },
+            changeCount: entries.count { $0.kind == .change },
+            decisionCount: entries.count { $0.kind == .decision },
+            lessonCount: entries.count { $0.kind == .lesson },
+            baselineVersions: await baselineHistory(of: id).count,
+            evidenceCount: leaves.reduce(0) { $0 + $1.evidence.count(where: \.passed) },
+            boardSeats: project?.board.count { $0.isFilled } ?? 0,
+            messagesSent: observed.messagesSent + raised,
+            reportsIssued: observed.reportsIssued,
+            dataDispositionDecided: project?.dataDisposition?.isDecided == true)
+    }
+
+    /// What happens to the leftovers (§19.12 condition 8).
+    @discardableResult
+    public func decideDisposition(_ disposition: DataDisposition,
+                                  for id: ProjectID) async throws -> Project {
+        guard var project = await project(id) else { throw LifecycleError.alreadyClosed }
+        guard disposition.isDecided else { throw LifecycleError.dispositionIncomplete }
+        project.dataDisposition = disposition
+        try await update(project)
+        return byID[project.id] ?? project
+    }
+
+    /// Everything G4 asks that is not in the plan. Assembled here because this
+    /// is the only object that holds all of the stores it reads.
+    public func closingFacts(of id: ProjectID) async -> ClosingFacts {
+        guard let project = await project(id) else { return ClosingFacts() }
+        let entries = await entries(of: id)
+        let stillOpen = entries.count {
+            [RegisterKind.risk, .issue, .change].contains($0.kind) && $0.status.isOpen
+        }
+        return ClosingFacts(
+            openRegisterEntries: stillOpen,
+            openConflicts: await closingLedger?.openConflictCount(scope: project.scope),
+            pendingAssumptions: await closingLedger?.unconfirmedAssumptionCount(scope: project.scope),
+            conformanceGaps: Conformance.gaps(await conformanceFacts(of: id),
+                                              tailoring: await tailoringRecords(of: id)),
+            dataDisposition: project.dataDisposition)
     }
 
     // MARK: - baselines (§19.11)
@@ -117,6 +252,15 @@ public actor ProjectService {
                               readings: ToleranceReadings) async throws -> [ExceptionReport] {
         guard let project = await project(id) else { return [] }
         let open = Set((try? await openExceptions(id))?.map(\.dimension) ?? [])
+        // The sixth axis, filled in here rather than by the caller: this object
+        // owns the benefit ledger, and a business-case tolerance the screen
+        // computes is one the gate cannot check when nobody is looking at it.
+        // Nothing measured leaves the reading alone — an unmeasured benefit is
+        // not a benefit of zero (§19.12).
+        var readings = readings
+        if let achieved = await benefitLedger(of: id).lowestAchievement {
+            readings.benefitRatio = achieved
+        }
         var raised: [ExceptionReport] = []
         for status in ToleranceCheck.breaches(project.tolerances, readings: readings)
         where !open.contains(status.dimension) {
@@ -251,7 +395,8 @@ public actor ProjectService {
             hasLessons: !(await entries(of: id, kind: .lesson)).isEmpty,
             drift: await drift(of: id),
             undecidedChanges: await entries(of: id, kind: .change)
-                .count { $0.status == .proposed })
+                .count { $0.status == .proposed },
+            closing: project.stage == .closing ? await closingFacts(of: id) : ClosingFacts())
     }
 
     /// The only way a stage changes. Refuses rather than reports: a gate that

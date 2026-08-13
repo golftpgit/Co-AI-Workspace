@@ -25,6 +25,14 @@ struct ProjectsView: View {
     @State private var registerKind = RegisterKind.risk
     @State private var draft = Draft()
     @State private var saving = false
+    /// The closing tab's forms (§19.12). Plain state rather than a sheet: every
+    /// one of these is a gate condition, and putting a gate condition behind a
+    /// modal is what made the Executive seat unreachable for five phases.
+    @State private var benefitDraft = BenefitDraft()
+    @State private var measurements: [String: String] = [:]
+    @State private var tailoringReason = ""
+    @State private var dispositionAction = DataDisposition.Action.keep
+    @State private var dispositionPolicy = ""
     /// Per-leaf editing buffers, keyed by package id. Same reason as `draft`.
     @State private var criteriaDrafts: [String: String] = [:]
     @State private var tab = PlanTab.overview
@@ -34,7 +42,7 @@ struct ProjectsView: View {
     /// registers meant scrolling past four boxes, and the gate — the one thing
     /// that says what to do next — was below all of them.
     enum PlanTab: String, CaseIterable, Identifiable {
-        case overview, plan, board, team
+        case overview, plan, board, team, closing
         var id: String { rawValue }
         var label: String {
             switch self {
@@ -42,7 +50,25 @@ struct ProjectsView: View {
             case .plan: "แผนงาน + ลำดับ"
             case .board: "กระดานงาน"
             case .team: "ทีม & RACI"
+            case .closing: "ประโยชน์ & ปิดงาน"
             }
+        }
+    }
+
+    /// One benefit being typed. Numbers as text on purpose: a `TextField` bound
+    /// to a `Double` shows `0` for an empty field, and a baseline of zero that
+    /// nobody typed is exactly the fake measurement §19.12 is about.
+    struct BenefitDraft: Equatable {
+        var title = ""
+        var measure = ""
+        var baseline = ""
+        var target = ""
+        var owner = ""
+        var reviewAt = Date()
+
+        var isReady: Bool {
+            !title.trimmingCharacters(in: .whitespaces).isEmpty
+                && Double(baseline) != nil && Double(target) != nil
         }
     }
     /// Sends an exception report out through every running channel. Passed in
@@ -280,6 +306,222 @@ struct ProjectsView: View {
         if tab == .team {
             raciBox(project)
         }
+
+        if tab == .closing {
+            benefitsBox()
+            conformanceBox()
+            dispositionBox(project)
+        }
+    }
+
+    // MARK: - benefits, conformance and closing (§19.12, §19.16)
+
+    /// The benefit ledger. Deliberately editable after the project closes: the
+    /// review date is usually months out, and a system that requires reopening a
+    /// project to record what it achieved gets the review skipped.
+    @ViewBuilder
+    private func benefitsBox() -> some View {
+        GroupBox("ประโยชน์ที่จะได้ (benefit)") {
+            VStack(alignment: .leading, spacing: 8) {
+                if model.benefits.isEmpty {
+                    Text("ยังไม่มีรายการ — โครงการที่ส่งมอบครบทุกใบงานแล้วยังไร้ประโยชน์ได้ ถ้าไม่มีใครเขียนไว้ว่าอยากได้อะไร")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                ForEach(model.benefits.benefits) { benefit in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text(benefit.title).font(.callout)
+                            Spacer()
+                            if let achieved = benefit.achievement {
+                                Text("\(Int(achieved * 100))% ของเป้า")
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(achieved >= 1 ? Color.green : Color.orange)
+                            } else {
+                                Text(benefit.isDue() ? "ถึงกำหนดวัดแล้ว" : "ยังไม่ถึงกำหนดวัด")
+                                    .font(.caption)
+                                    .foregroundStyle(benefit.isDue() ? Color.orange : Color.secondary)
+                            }
+                            Button("ลบ") { Task { await model.removeBenefit(benefit) } }
+                                .controlSize(.small)
+                        }
+                        Text("\(benefit.measure) · จาก \(format(benefit.baselineValue)) → \(format(benefit.target))"
+                             + " · วัดโดย \(benefit.owner.label)"
+                             + " · กำหนด \(benefit.reviewAt.formatted(date: .abbreviated, time: .omitted))")
+                            .font(.caption2).foregroundStyle(.secondary)
+                        if let result = benefit.result {
+                            Text("วัดได้ \(format(result.value)) โดย \(result.measuredBy)"
+                                 + (result.note.isEmpty ? "" : " — \(result.note)"))
+                                .font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            HStack {
+                                TextField("ค่าที่วัดได้", text: Binding(
+                                    get: { measurements[benefit.id] ?? "" },
+                                    set: { measurements[benefit.id] = $0 }))
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(maxWidth: 120)
+                                TextField("ชื่อคนที่วัด", text: $decider)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(maxWidth: 160)
+                                Button("บันทึกผล") { recordMeasurement(benefit) }
+                                    .disabled(Double(measurements[benefit.id] ?? "") == nil
+                                              || decider.trimmingCharacters(in: .whitespaces).isEmpty)
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+                }
+
+                Divider()
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        TextField("ประโยชน์ที่อยากได้", text: $benefitDraft.title)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("ตัววัด + หน่วย", text: $benefitDraft.measure)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    HStack {
+                        TextField("ค่าฐานวันนี้", text: $benefitDraft.baseline)
+                            .textFieldStyle(.roundedBorder).frame(maxWidth: 110)
+                        TextField("ค่าเป้าหมาย", text: $benefitDraft.target)
+                            .textFieldStyle(.roundedBorder).frame(maxWidth: 110)
+                        DatePicker("วัดเมื่อ", selection: $benefitDraft.reviewAt,
+                                   displayedComponents: .date)
+                            .labelsHidden()
+                        TextField("ใครวัด", text: $benefitDraft.owner)
+                            .textFieldStyle(.roundedBorder).frame(maxWidth: 130)
+                        Button("เพิ่ม") { addBenefit() }
+                            .disabled(!benefitDraft.isReady)
+                    }
+                    Text("ค่าฐานบังคับ เพราะ “ดีขึ้น” ที่ไม่มีจุดเริ่มต้น ตรวจย้อนหลังไม่ได้ · เป้าที่ต่ำกว่าค่าฐานก็ได้ (เช่นลดเวลา) ระบบคิดทิศทางให้เอง")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                .controlSize(.small)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// The conformance matrix, and the one thing that makes it worth reading:
+    /// every green row names what it counted, and a row satisfied by a decision
+    /// not to do the practice looks different from one satisfied by doing it.
+    @ViewBuilder
+    private func conformanceBox() -> some View {
+        let gaps = model.conformance.filter { !$0.satisfied }
+        GroupBox("ความครบตามมาตรฐาน (ISO 21502 · 17 practice)") {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(model.conformance) { status in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: status.satisfied
+                              ? (status.isTailored ? "minus.circle" : "checkmark.circle.fill")
+                              : "exclamationmark.circle")
+                            .foregroundStyle(status.satisfied
+                                             ? (status.isTailored ? Color.secondary : Color.green)
+                                             : Color.orange)
+                        Text(status.practice.label)
+                            .font(.callout).frame(width: 180, alignment: .leading)
+                        if let evidence = status.evidence {
+                            Text(evidence).font(.caption).foregroundStyle(.secondary)
+                        } else if let record = status.tailoring {
+                            Text("ไม่ทำ: \(record.reason) — ตัดสินโดย \(record.decidedBy)")
+                                .font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            Text("ยังไม่มีทั้งของจริงและบันทึกว่าไม่ทำ")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+
+                if !gaps.isEmpty {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("บันทึกว่าไม่ทำ practice ไหน พร้อมเหตุผล — ปิดโครงการไม่ได้ถ้ายังมีข้อที่ไม่ได้ตอบ")
+                            .font(.caption).foregroundStyle(.secondary)
+                        ForEach(gaps) { status in
+                            HStack {
+                                Text(status.practice.label)
+                                    .font(.callout).frame(width: 180, alignment: .leading)
+                                TextField("เหตุผลที่ไม่ทำ", text: $tailoringReason)
+                                    .textFieldStyle(.roundedBorder)
+                                TextField("ชื่อคนที่ตัดสิน", text: $decider)
+                                    .textFieldStyle(.roundedBorder).frame(maxWidth: 150)
+                                Button("บันทึก") { tailor(status.practice) }
+                                    .disabled(tailoringReason.trimmingCharacters(in: .whitespaces).isEmpty
+                                              || decider.trimmingCharacters(in: .whitespaces).isEmpty)
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func dispositionBox(_ project: Project) -> some View {
+        GroupBox("ข้อมูลและไฟล์ที่เหลือ") {
+            VStack(alignment: .leading, spacing: 6) {
+                if let decided = project.dataDisposition, decided.isDecided {
+                    Text("\(decided.action.label) · ตามนโยบาย “\(decided.policy)” · ตัดสินโดย \(decided.decidedBy)")
+                        .font(.callout)
+                } else {
+                    Text("ยังไม่ได้ตัดสิน — ข้อนี้เป็นเงื่อนไขข้อที่ 8 ของการปิดโครงการ")
+                        .font(.callout).foregroundStyle(.orange)
+                }
+                HStack {
+                    Picker("ทำอะไรกับของที่เหลือ", selection: $dispositionAction) {
+                        ForEach(DataDisposition.Action.allCases, id: \.self) { action in
+                            Text(action.label).tag(action)
+                        }
+                    }
+                    .labelsHidden()
+                    TextField("นโยบายที่ใช้", text: $dispositionPolicy)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("ชื่อคนที่ตัดสิน", text: $decider)
+                        .textFieldStyle(.roundedBorder).frame(maxWidth: 150)
+                    Button("บันทึก") { decideDisposition() }
+                        .disabled(dispositionPolicy.trimmingCharacters(in: .whitespaces).isEmpty
+                                  || decider.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                .controlSize(.small)
+                Text("ระบบบันทึกการตัดสิน ไม่ลบไฟล์ให้เอง — การลบของคนอื่นย้อนกลับไม่ได้")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func addBenefit() {
+        let draft = benefitDraft
+        benefitDraft = BenefitDraft()
+        Task {
+            await model.addBenefit(title: draft.title, measure: draft.measure,
+                                   baselineValue: Double(draft.baseline) ?? 0,
+                                   target: Double(draft.target) ?? 0,
+                                   reviewAt: draft.reviewAt, owner: draft.owner)
+        }
+    }
+
+    private func recordMeasurement(_ benefit: Benefit) {
+        guard let value = Double(measurements[benefit.id] ?? "") else { return }
+        let person = decider
+        measurements[benefit.id] = nil
+        Task { await model.measure(benefit, value: value, by: person) }
+    }
+
+    private func tailor(_ practice: Practice) {
+        let reason = tailoringReason
+        let person = decider
+        tailoringReason = ""
+        Task { await model.tailor(practice, reason: reason, by: person) }
+    }
+
+    private func decideDisposition() {
+        let policy = dispositionPolicy
+        let person = decider
+        let action = dispositionAction
+        Task { await model.decideDisposition(action: action, policy: policy, by: person) }
     }
 
     // MARK: - order, board and RACI (§19.7–§19.9)
@@ -645,7 +887,7 @@ struct ProjectsView: View {
                     }())
                 }
 
-                Text("แกนที่ยังไม่ได้วัดมีกรอบและบังคับอยู่จริง แต่แอปยังไม่ได้ต่อค่าเข้ามา (P10.15)")
+                Text("แกนที่ขึ้นว่า “ยังไม่ได้วัด” มีกรอบและบังคับอยู่จริง แต่ยังไม่มีข้อมูลต้นทาง — ประโยชน์จะวัดได้เมื่อมีคนบันทึกผลในแท็บ “ประโยชน์ & ปิดงาน”")
                     .font(.caption2).foregroundStyle(.secondary)
 
                 HStack {

@@ -16,6 +16,9 @@ public enum Schema {
     /// an interrupted run — run-until-done resumes the second and never the
     /// first. The criteria and deliverable type it needs to rebuild an
     /// assignment ride along on the schemaless part of the row.
+    /// 9: `benefit` and `tailoring_record` exist (§19.12, §19.15, P10.10/P10.13)
+    /// — the two things the closing gate reads that no other table could answer:
+    /// what the project was *for*, and which practices it decided not to do.
     /// 8: `conversation` can be pinned (§19.2.1, P10.14).
     /// 7: `span` carries `work_package` (§19.6, P10.15) — the link that turns
     /// "how long did this take" into "how long did *this promise* take", and
@@ -31,7 +34,7 @@ public enum Schema {
     /// `project_id`; there was simply nothing on the other end of it, so two
     /// projects were indistinguishable and the app wrote the literal id
     /// "default" into all of them.
-    public static let version = 8
+    public static let version = 9
 
     /// Split into statements that are executed one at a time: a single
     /// failing statement should name itself, not abort a 40-line blob.
@@ -202,6 +205,25 @@ public enum Schema {
         // written twice, so superseding is the only way to change one.
         "DEFINE INDEX IF NOT EXISTS baseline_version ON baseline FIELDS project_id, version UNIQUE",
         "DEFINE FIELD IF NOT EXISTS frozen_at ON baseline TYPE datetime",
+
+        // ── benefits and tailoring (§19.12, §19.15, P10.10/P10.13) ──
+        "DEFINE TABLE IF NOT EXISTS benefit SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON benefit TYPE string",
+        "DEFINE INDEX IF NOT EXISTS benefit_uid ON benefit FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS project_id ON benefit TYPE string",
+        // "which benefits does somebody still owe a number for" is asked at
+        // closing and again months later, so it is a column and not a blob field.
+        "DEFINE FIELD IF NOT EXISTS measured ON benefit TYPE bool",
+        "DEFINE INDEX IF NOT EXISTS benefit_project ON benefit FIELDS project_id, measured",
+        "DEFINE FIELD IF NOT EXISTS updated_at ON benefit TYPE datetime",
+
+        "DEFINE TABLE IF NOT EXISTS tailoring_record SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON tailoring_record TYPE string",
+        "DEFINE INDEX IF NOT EXISTS tailoring_uid ON tailoring_record FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS project_id ON tailoring_record TYPE string",
+        "DEFINE FIELD IF NOT EXISTS practice ON tailoring_record TYPE string",
+        "DEFINE INDEX IF NOT EXISTS tailoring_project ON tailoring_record FIELDS project_id, practice",
+        "DEFINE FIELD IF NOT EXISTS decided_at ON tailoring_record TYPE datetime",
 
         "DEFINE TABLE IF NOT EXISTS schema_meta SCHEMALESS",
     ]

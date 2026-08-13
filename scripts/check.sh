@@ -281,6 +281,50 @@ else
   ok "every tool is classified for both risk and stage effect"
 fi
 
+# Every test that needs a database starts its own SurrealDB on its own port, and
+# the "on its own" half is not enforced by anything: two servers on one port do
+# not collide loudly — the second client connects to the first server's data. The
+# two suites that shared 18_631 failed in ways that pointed nowhere near the
+# cause (a write conflict in one, an extra search hit in the other) and both
+# passed when run alone. A number somebody has to remember not to reuse is a
+# number that gets reused.
+DUPLICATE_PORTS=$(grep -rhn "port: 18_[0-9]*" Tests \
+  | sed 's/.*port: \(18_[0-9]*\).*/\1/' | sort | uniq -d | tr '\n' ' ')
+if [ -n "$DUPLICATE_PORTS" ]; then
+  fail "two tests share a database port: $DUPLICATE_PORTS"
+else
+  ok "every database test has a port to itself"
+fi
+
+# ARCHITECTURE §19.15 / P10.13: the conformance answer is a `switch` over all
+# seventeen ISO 21502 practices, and the compiler only enforces that while there
+# is no `default:` in it. A single default arm would turn "every practice has an
+# answer" into "every practice has *an* answer, possibly the same nil forever" —
+# which is exactly the box-ticking conformance claim §19.16 says this one is not.
+PRACTICE_GAPS=$(/usr/bin/python3 - <<'PRACTICES'
+import re
+src = open('Sources/ProjectKit/Conformance.swift').read()
+declaration = src[src.index('public enum Practice'):src.index('public var label')]
+cases = re.findall(r'^\s*case (\w+)$', declaration, re.M)
+problems = []
+if len(cases) != 17:
+    problems.append(f'practice-count:{len(cases)}')
+# A real arm starts its own line; the words "default:" inside a comment are how
+# this file explains why there isn't one.
+if re.search(r'^\s*default\s*:', src, re.M):
+    problems.append('has-default-arm')
+# Each case must be answered in the evidence switch as well as labelled.
+evidence = src[src.index('public static func evidence'):src.index('public static func evaluate')]
+problems += [f'unanswered:{c}' for c in cases if f'case .{c}:' not in evidence]
+print(' '.join(problems))
+PRACTICES
+)
+if [ -n "$PRACTICE_GAPS" ]; then
+  fail "the ISO 21502 practice switch is not exhaustive by construction:$PRACTICE_GAPS"
+else
+  ok "all 17 practices are answered by name, with no default arm"
+fi
+
 # ARCHITECTURE §14.4 / P8.7: accessibility is a requirement from the start, not
 # a pass at the end. v1 had no `aria-*` at all and then had to go back through
 # 16 buttons in 8 files — a requirement nothing enforces is a preference, so

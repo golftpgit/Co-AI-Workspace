@@ -205,7 +205,15 @@ struct Engine: Sendable {
             exceptions: ExceptionStore(client: client),
             registers: RegisterStore(client: client),
             baselines: BaselineStore(client: client),
-            lessons: LessonPublisher(knowledge: knowledgeStore))
+            lessons: LessonPublisher(knowledge: knowledgeStore),
+            benefits: BenefitStore(client: client),
+            tailoring: TailoringStore(client: client),
+            // §19.12 conditions 4–5. Wired here for the reason the whole gate
+            // exists: without this the two conditions read "ยังตรวจไม่ได้" and
+            // refuse to close, which is correct but useless — the app is the
+            // only place that has both the conflict ledger and the plans.
+            closingLedger: ClosingLedger(conflicts: ConflictStore(client: client),
+                                         plans: AnalysisPlanStore(client: client)))
         // §19.10 — an exception raised before the app closed must still stop
         // work after it reopens, so the blocked set is read at boot rather
         // than starting empty and filling in when somebody opens the screen.

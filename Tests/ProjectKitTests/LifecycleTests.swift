@@ -111,13 +111,17 @@ struct LifecycleTests {
         #expect(ProjectLifecycle.evaluate(project, wbs: WorkBreakdown([finished]))?.passed == true)
     }
 
-    @Test("Closing needs a lesson written down")
+    @Test("Closing reads all eight conditions, and a lesson is one of them")
     func closingNeedsLessons() async throws {
         var project = briefed()
         project.stage = .closing
 
-        #expect(ProjectLifecycle.evaluate(project, hasLessons: false)?.passed == false)
-        #expect(ProjectLifecycle.evaluate(project, hasLessons: true)?.passed == true)
+        let gate = try #require(ProjectLifecycle.evaluate(project, hasLessons: false))
+        #expect(gate.conditions.count == 8)
+        #expect(gate.unmet.contains { $0.contains("บันทึกบทเรียน") })
+        // Writing the lesson is necessary and not sufficient — the other seven
+        // are in ClosingTests, one case each (§19.12).
+        #expect(ProjectLifecycle.evaluate(project, hasLessons: true)?.passed == false)
     }
 
     @Test("stopping early is recorded as terminated, not as completed")

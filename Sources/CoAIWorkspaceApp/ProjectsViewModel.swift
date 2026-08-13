@@ -67,6 +67,12 @@ public final class ProjectsViewModel {
     public private(set) var registers: [RegisterEntry] = []
     public private(set) var baselines: [Baseline] = []
     public private(set) var drift: BaselineDiff?
+    /// What the project was for, and how far the seventeen practices are
+    /// answered (§19.12, §19.16). Both read after every change, like the gate:
+    /// the closing checklist is only useful if it is the same set of facts the
+    /// gate refuses on.
+    public private(set) var benefits = BenefitLedger()
+    public private(set) var conformance: [PracticeStatus] = []
 
     private var service: ProjectService?
     private var spans: SurrealSpanSink?
@@ -312,6 +318,86 @@ public final class ProjectsViewModel {
         }
     }
 
+    // MARK: - benefits (§19.12)
+
+    public func addBenefit(title: String, measure: String, baselineValue: Double,
+                           target: Double, reviewAt: Date, owner: String) async {
+        guard let service, let project = selected else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            status = Status(message: "ตั้งชื่อประโยชน์ที่จะได้ก่อน", isError: true)
+            return
+        }
+        let who = owner.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            try await service.save(Benefit(
+                projectID: project.id, title: trimmed,
+                measure: measure.trimmingCharacters(in: .whitespacesAndNewlines),
+                baselineValue: baselineValue, target: target, reviewAt: reviewAt,
+                owner: who.isEmpty ? .agent(.teamLead) : .human(who)))
+            await refreshGate()
+        } catch {
+            status = Status(message: "บันทึกประโยชน์ไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    /// Recording the measurement. Works on a closed project on purpose — the
+    /// review date is usually after closing, and §19.12 asks for the review, not
+    /// for somebody to reopen the project to hold it.
+    public func measure(_ benefit: Benefit, value: Double, by person: String,
+                        note: String = "") async {
+        guard let service else { return }
+        do {
+            try await service.measure(benefit, value: value, by: person, note: note)
+            await refreshGate()
+            status = Status(message: "บันทึกผลการวัดแล้ว", isError: false)
+        } catch {
+            status = Status(message: "\(error)", isError: true)
+        }
+    }
+
+    public func removeBenefit(_ benefit: Benefit) async {
+        guard let service, let project = selected else { return }
+        do {
+            try await service.removeBenefit(benefit.id, from: project.id)
+            await refreshGate()
+        } catch {
+            status = Status(message: "ลบไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    // MARK: - conformance and closing (§19.12, §19.15)
+
+    /// Writing down that a practice is not being done. The name and the reason
+    /// are both required by `TailoringRecord.decided`, so a blank form comes
+    /// back as an error rather than as a green tick.
+    public func tailor(_ practice: Practice, reason: String, by person: String) async {
+        guard let service, let project = selected else { return }
+        do {
+            try await service.tailor(practice, in: project.id, reason: reason, by: person)
+            await refreshGate()
+            status = Status(message: "บันทึกไว้แล้วว่าไม่ทำ \(practice.label) — พร้อมเหตุผลและชื่อคนตัดสิน",
+                            isError: false)
+        } catch {
+            status = Status(message: "\(error)", isError: true)
+        }
+    }
+
+    public func decideDisposition(action: DataDisposition.Action, policy: String,
+                                  by person: String, note: String = "") async {
+        guard let service, let project = selected else { return }
+        do {
+            _ = try await service.decideDisposition(
+                DataDisposition(action: action, policy: policy, decidedBy: person, note: note),
+                for: project.id)
+            await reload()
+            status = Status(message: "บันทึกแล้วว่าข้อมูลที่เหลือจะ\(action.label) — ระบบไม่ลบไฟล์ให้เอง",
+                            isError: false)
+        } catch {
+            status = Status(message: "\(error)", isError: true)
+        }
+    }
+
     // MARK: - registers (§19.11)
 
     public func record(_ detail: RegisterDetail, title: String) async {
@@ -348,8 +434,9 @@ public final class ProjectsViewModel {
     ///
     /// Each source is the one §19.10 named: spans for time, the spend ledger
     /// for cost, the task ledger's retry count for quality, and the plan's own
-    /// risk classes for risk. Benefit stays unread because nothing measures a
-    /// benefit yet — and it says so rather than showing a zero.
+    /// risk classes for risk, and the benefit ledger for benefit — which reads
+    /// only once somebody has measured one, and says "ยังไม่ได้วัด" until then
+    /// rather than showing a zero.
     private func measure(_ id: ProjectID) async {
         var reading = readings
         var known: Set<ToleranceDimension> = [.scope]
@@ -380,6 +467,15 @@ public final class ProjectsViewModel {
         let openRisk = wbs.openLeaves.map(\.riskClass.rawValue).max() ?? 0
         reading.highestRisk = Double(openRisk)
         known.insert(.risk)
+        // The sixth axis (§19.12, P10.10). Only counts once somebody has
+        // actually measured something — benefits with no result leave the
+        // reading alone and the strip keeps saying "ยังไม่ได้วัด", because a
+        // business case that looks fine because nobody looked is the failure
+        // this dimension exists to catch.
+        if let achieved = benefits.lowestAchievement {
+            reading.benefitRatio = achieved
+            known.insert(.benefit)
+        }
 
         readings = reading
         measured = known
@@ -395,13 +491,6 @@ public final class ProjectsViewModel {
         }
         wbs = await service.breakdown(of: id)
         problems = wbs.problems(inScope: selected?.statement.inScope ?? [])
-        gate = await service.gate(for: id)
-        // The readings the plan itself can answer. Cost and time come from the
-        // budget governor and the span store, which the screen does not hold —
-        // they stay at zero until P10.15 wires the status strip, and a zero
-        // that is honestly zero is better than a number nobody can trace.
-        tolerances = ToleranceCheck.evaluate(selected?.tolerances ?? .balanced,
-                                             readings: readings)
         openExceptions = (try? await service.openExceptions(id)) ?? []
         registers = await service.entries(of: id)
         baselines = await service.baselineHistory(of: id)
@@ -410,6 +499,16 @@ public final class ProjectsViewModel {
         // size of the plan: a project is not off-scope for having a plan, only
         // for having grown one past what was agreed (§19.10).
         readings.addedPackages = drift?.addedCount ?? 0
+        benefits = await service.benefitLedger(of: id)
         await measure(id)
+        // Order matters here: what the app measured has to reach the service
+        // *before* the gate is asked, because G4's conformance condition counts
+        // money and time this screen is the only one that can read (§19.16).
+        await service.observe(ObservedFacts(spent: readings.spent,
+                                            measuredSeconds: elapsed.values.reduce(0, +),
+                                            messagesSent: 0,
+                                            reportsIssued: 0))
+        conformance = await service.conformance(of: id)
+        gate = await service.gate(for: id)
     }
 }

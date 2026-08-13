@@ -104,7 +104,13 @@ struct WalkingSkeletonTests {
             Issue.record("skipped: vendor/helpers/surreal not present")
             return
         }
-        let server = try await TestServer(port: 18_631, binary: binary)
+        // 18_641, not 18_631: the conversation-history suite (P10.14) took that
+        // port, and two servers on one port do not fail — the second client
+        // simply talks to the first one's database. That produced two failures
+        // that looked unrelated and both vanished when run alone: a write
+        // conflict here, and three search hits where the other suite had seeded
+        // one. Ports are shared state, so `check.sh` now refuses duplicates.
+        let server = try await TestServer(port: 18_641, binary: binary)
         defer { Task { await server.shutdown() } }
 
         let client = await server.client
