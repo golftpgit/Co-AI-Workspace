@@ -80,6 +80,11 @@ public final class ProjectsViewModel {
     /// status report exists to answer.
     public private(set) var reports: [ProjectReport] = []
 
+    /// The edit waiting for a person to confirm, once the plan is an agreement
+    /// (§19.2.4). `nil` most of the time — before G2, and for edits that change
+    /// nothing the baseline holds.
+    public private(set) var pendingEdit: PlanChangeProposal?
+
     private var service: ProjectService?
     /// Where a project's documents live (§19.1). Optional because the screen
     /// works without it — a report still becomes a row, it just does not become
@@ -237,49 +242,102 @@ public final class ProjectsViewModel {
         }
     }
 
-    // MARK: - the plan
+    // MARK: - editing the plan (§19.2.4, P10.16)
+
+    /// Makes an edit, or asks first.
+    ///
+    /// Every inline edit in the Plan area comes through here, which is the point:
+    /// after G2 the same edit is a change to an agreement, and the decision about
+    /// whether to say so cannot be made at each call site or it will be made
+    /// differently at each call site. Before a baseline exists nothing is asked —
+    /// editing the plan then *is* writing the plan.
+    public func edit(_ edit: PlanEdit) async {
+        guard let service, let project = selected else { return }
+        if let proposal = await service.proposal(for: edit, in: project.id, basis: basis()) {
+            // §19.2.4: not blocked, not warned about afterwards — put the
+            // consequence where the hand already is and let the person confirm.
+            pendingEdit = proposal
+            return
+        }
+        await commit(edit)
+    }
+
+    /// Confirms the edit the bar is asking about, which also records the change
+    /// request. One call, because they are one event (§19.11).
+    public func confirmPendingEdit() async {
+        guard let proposal = pendingEdit else { return }
+        pendingEdit = nil
+        await commit(proposal.edit, expecting: proposal)
+    }
+
+    public func cancelPendingEdit() {
+        pendingEdit = nil
+        // The screen is still showing the edited value in its local buffers, so
+        // a reload is what puts the agreed plan back in front of the person.
+        Task { await reload() }
+    }
+
+    private func commit(_ edit: PlanEdit, expecting proposal: PlanChangeProposal? = nil) async {
+        guard let service, let project = selected else { return }
+        do {
+            let recorded = try await service.apply(edit, in: project.id, basis: basis())
+            await refreshGate()
+            if let recorded {
+                status = Status(message: "บันทึกแล้ว · เปิดคำขอเปลี่ยนแปลง #\(recorded.requestNumber) "
+                                + "รอคนตัดสิน — ประตูขั้นถัดไปยังไม่เปิดจนกว่าจะตัดสิน",
+                                isError: false)
+            } else if proposal != nil {
+                // The proposal was computed from a plan that has since moved. Say
+                // it rather than silently applying under a stale impact estimate.
+                status = Status(message: "แก้แล้ว แต่ผลกระทบที่แสดงไว้คำนวณจากแผนก่อนหน้า — ตรวจส่วนต่างอีกครั้ง",
+                                isError: true)
+            }
+        } catch {
+            status = Status(message: "แก้แผนไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    /// What the two estimated impacts rest on (§19.2.4). Read from the same
+    /// measurements the status strip shows, so the change request cannot quote a
+    /// number the screen does not.
+    private func basis() -> ChangeEstimateBasis {
+        ChangeEstimateBasis(elapsedByPackage: elapsed,
+                            spent: readings.spent,
+                            costMeasured: measured.contains(.cost))
+    }
 
     public func addPackage(title: String, parent: String?) async {
-        guard let service, let project = selected else { return }
+        guard let project = selected else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let siblings = wbs.children(of: parent)
-        do {
-            try await service.save(WorkPackage(
-                projectID: project.id,
-                parent: parent,
-                title: trimmed,
-                // Pre-filled when the project has exactly one thing in scope,
-                // because that is the common case and an empty required field
-                // teaches people to ignore required fields.
-                scopeRef: project.statement.inScope.count == 1
-                    ? project.statement.inScope.first : nil,
-                acceptanceCriteria: [],
-                order: (siblings.map(\.order).max() ?? -1) + 1))
-            await refreshGate()
-        } catch {
-            status = Status(message: "เพิ่มใบงานไม่สำเร็จ: \(error)", isError: true)
-        }
+        await edit(.savePackage(WorkPackage(
+            projectID: project.id,
+            parent: parent,
+            title: trimmed,
+            // Pre-filled when the project has exactly one thing in scope,
+            // because that is the common case and an empty required field
+            // teaches people to ignore required fields.
+            scopeRef: project.statement.inScope.count == 1
+                ? project.statement.inScope.first : nil,
+            acceptanceCriteria: [],
+            order: (siblings.map(\.order).max() ?? -1) + 1)))
     }
 
     public func update(_ package: WorkPackage) async {
-        guard let service else { return }
-        do {
-            try await service.save(package)
-            await refreshGate()
-        } catch {
-            status = Status(message: "บันทึกใบงานไม่สำเร็จ: \(error)", isError: true)
-        }
+        await edit(.savePackage(package))
     }
 
     public func removePackage(_ packageID: String) async {
-        guard let service, let project = selected else { return }
-        do {
-            try await service.removePackage(packageID, from: project.id)
-            await refreshGate()
-        } catch {
-            status = Status(message: "ลบใบงานไม่สำเร็จ: \(error)", isError: true)
-        }
+        let title = wbs.packages.first { $0.id == packageID }?.title ?? packageID
+        await edit(.removePackage(id: packageID, title: title))
+    }
+
+    /// The scope statement, which a baseline holds as well (§19.11). Split from
+    /// the rest of the project row on purpose: the brief and the board seats are
+    /// not part of the agreement, so editing them is not a change request.
+    public func updateScope(_ statement: ScopeStatement) async {
+        await edit(.scopeStatement(statement))
     }
 
     /// Closing a leaf by hand. The evidence rule lives in `WorkBreakdown`, so
@@ -296,10 +354,20 @@ public final class ProjectsViewModel {
 
     // MARK: - tolerance (§19.10)
 
+    /// The frame is part of the agreement, so changing it after G2 goes through
+    /// change control like the plan does.
     public func setTolerances(_ preset: Tolerances) async {
-        guard var project = selected else { return }
-        project.tolerances = preset
-        await update(project)
+        await edit(.tolerances(preset))
+    }
+
+    /// One axis, typed in. §19.2.4's line between what you *set* and what you
+    /// *measure*: the limit is set, the current value is measured, and only one
+    /// of the two has a text field.
+    public func setTolerance(_ dimension: ToleranceDimension, to limit: Double) async {
+        guard let project = selected else { return }
+        var limits = project.tolerances
+        limits.limits[dimension] = limit
+        await edit(.tolerances(limits))
     }
 
     /// Checks the frame and raises what is newly outside it. Returns the text

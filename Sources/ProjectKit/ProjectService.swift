@@ -368,6 +368,63 @@ public actor ProjectService {
         try await plans.delete(packageID, project: id)
     }
 
+    // MARK: - editing an agreed plan (§19.2.4, §19.11, P10.16)
+
+    /// What confirming this edit would mean, or `nil` when it means nothing —
+    /// no baseline yet, or an edit that changes nothing the baseline holds.
+    public func proposal(for edit: PlanEdit, in id: ProjectID,
+                         basis: ChangeEstimateBasis = ChangeEstimateBasis())
+    async -> PlanChangeProposal? {
+        guard let project = await project(id) else { return nil }
+        return ChangeControl.proposal(
+            for: edit, project: project, wbs: await breakdown(of: id),
+            baseline: await currentBaseline(of: id),
+            existingChanges: await entries(of: id, kind: .change).count,
+            basis: basis)
+    }
+
+    /// The one way the Plan area edits a plan.
+    ///
+    /// The edit and its change request are the same call, because they are the
+    /// same event: §19.11 says a plan cannot move after G2 without a change
+    /// request, and two calls is one call somebody forgets. It does not block —
+    /// §19.2.4 is explicit that the screen says so and applies it — and the
+    /// request lands as `proposed`, so G3 will not open until a person decides.
+    @discardableResult
+    public func apply(_ edit: PlanEdit, in id: ProjectID,
+                      by person: String = "ผู้ใช้",
+                      basis: ChangeEstimateBasis = ChangeEstimateBasis())
+    async throws -> PlanChangeProposal? {
+        guard let project = await project(id) else { throw LifecycleError.alreadyClosed }
+        let proposal = await proposal(for: edit, in: id, basis: basis)
+
+        switch edit {
+        case .savePackage(let package):
+            try await save(package)
+        case .removePackage(let packageID, _):
+            try await removePackage(packageID, from: id)
+        case .scopeStatement(let statement):
+            var updated = project
+            updated.statement = statement
+            try await update(updated)
+        case .tolerances(let limits):
+            var updated = project
+            updated.tolerances = limits
+            try await update(updated)
+        }
+
+        if let proposal {
+            try await record(RegisterEntry(
+                projectID: id, title: proposal.title, detail: proposal.detail,
+                origin: .human(person),
+                // The words the person was shown, kept verbatim: a change
+                // request whose impact is re-derived later is a different
+                // request from the one that was agreed to.
+                note: proposal.headline + "\nส่วนต่างจาก baseline หลังแก้: " + proposal.driftAfter))
+        }
+        return proposal
+    }
+
     /// Closing a leaf. Goes through `WorkBreakdown` so the evidence rule is
     /// enforced in one place rather than at each caller (§19.15 invariant 4).
     public func complete(_ packageID: String, in id: ProjectID,

@@ -171,14 +171,34 @@ struct ProjectFlows {
             return "baseline v1 · \(baseline.packages.count) ใบ"
         }
 
-        await check("[baseline] เพิ่มใบงานหลังตกลงแล้ว = drift ที่มองเห็น") {
+        await check("[baseline] เพิ่มใบงานหลังตกลงแล้ว = คำขอเปลี่ยนแปลงที่บอกผลกระทบ 3 ด้าน") {
             let extra = WorkPackage(projectID: project.id, title: "ภาคผนวก ก",
                                     scopeRef: "ความชุกในพยาบาลวิชาชีพ",
                                     acceptanceCriteria: [Criterion(text: "มีตาราง",
                                                                    evidenceRequired: "ไฟล์")],
                                     raci: RACI(accountable: .teamLead))
             extraLeafID = extra.id
-            try await projects.save(extra)
+
+            // §19.2.4 — the person is told what this becomes *before* confirming,
+            // and the same call that lands the edit opens the request. Two calls
+            // would be one call somebody forgets (P10.16).
+            let preview = await projects.proposal(for: .savePackage(extra), in: project.id)
+            guard let preview, preview.scopeImpact.contains("+1 ใบ") else {
+                throw CheckFailure("ตัวอย่างผลกระทบไม่บอกว่าเพิ่มกี่ใบ: \(String(describing: preview?.scopeImpact))")
+            }
+            guard preview.timeImpact.contains("ยังประเมินไม่ได้"),
+                  preview.costImpact.contains("ยังประเมินไม่ได้") else {
+                throw CheckFailure("ประเมินเวลา/เงินทั้งที่ยังไม่มีใบงานที่วัดได้ — \(preview.headline)")
+            }
+
+            let opened = try await projects.apply(.savePackage(extra), in: project.id)
+            guard let opened, opened.requestNumber == 1 else {
+                throw CheckFailure("ไม่ได้เปิดคำขอเปลี่ยนแปลงตอนแก้แผนหลัง baseline")
+            }
+            let changes = await projects.entries(of: project.id, kind: .change)
+            guard changes.count == 1, changes[0].status == .proposed else {
+                throw CheckFailure("คำขอที่เปิดผิดสถานะ: \(changes.map(\.status))")
+            }
 
             guard let drift = await projects.drift(of: project.id) else {
                 throw CheckFailure("ไม่มี drift ให้ดูทั้งที่มี baseline แล้ว")
@@ -186,7 +206,9 @@ struct ProjectFlows {
             guard drift.addedCount == 1, !drift.isEmpty else {
                 throw CheckFailure("นับส่วนต่างผิด: \(drift.summary)")
             }
-            return drift.summary
+            // Editing before G2 asked nothing; editing now opened a request. The
+            // difference is the whole of §19.2.4.
+            return "\(drift.summary) · เปิดคำขอ #\(opened.requestNumber)"
         }
 
         await check("[ข้อยกเว้น] ทะลุกรอบแล้วโครงการหยุดรับงานใหม่จริง") {
@@ -216,12 +238,21 @@ struct ProjectFlows {
         }
 
         await check("[คำขอเปลี่ยนแปลง] คนตัดสิน แล้ว baseline v2 เกิดขึ้นโดยไม่ทับ v1") {
-            let change = RegisterEntry(
-                projectID: project.id, title: "เพิ่มภาคผนวก ก",
-                detail: .change(scopeImpact: "+1 ใบงาน", timeImpact: "+0.5 วัน",
-                                costImpact: "+฿40"),
-                origin: .agent(.teamLead))
-            try await projects.record(change)
+            // The request the edit above opened — not a fabricated one. That is
+            // the flow a person actually walks: edit, get asked, confirm, and
+            // somebody with the business case decides.
+            let pending = await projects.entries(of: project.id, kind: .change)
+                .filter { $0.status == .proposed }
+            guard pending.count == 1, let change = pending.first else {
+                throw CheckFailure("คำขอที่รอตัดสินควรมีใบเดียวจากการแก้แผน: \(pending.count)")
+            }
+            guard change.note.contains("กระทบ:") else {
+                throw CheckFailure("คำขอไม่ได้เก็บข้อความผลกระทบที่คนเห็นตอนยืนยัน")
+            }
+            do {
+                try await projects.decideChange(change, approve: true, by: "   ")
+                throw CheckFailure("ตัดสินคำขอได้ทั้งที่ไม่มีชื่อคน")
+            } catch RegisterError.emptyDecider {}
 
             let blockedGate = try await requireGate(projects, project.id)
             guard !blockedGate.passed else {

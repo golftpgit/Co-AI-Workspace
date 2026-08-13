@@ -281,6 +281,36 @@ else
   ok "every tool is classified for both risk and stage effect"
 fi
 
+# ARCHITECTURE §19.2.4 / P10.16: two things the Plan screen must NOT be able to
+# do. Both are absences, and an absence is exactly what rots without a rule.
+#
+#  • **No dragging a Gantt bar.** The end date is a result of sequencing and real
+#    speed, so dragging it is editing the measuring instrument. Wanting it sooner
+#    means cutting scope, cutting dependencies, or changing model tier.
+#  • **No second accountable.** `RACI.accountable` is one field and `Accountable`
+#    has no case that takes a `Role`, so "two A" is not a representable state —
+#    the rule here keeps the screen from growing a multi-select that would need a
+#    validator to say no.
+PLAN_UI="Sources/CoAIWorkspaceApp/ProjectsView.swift"
+UI_VIOLATIONS=""
+grep -q "DragGesture" "$PLAN_UI" && UI_VIOLATIONS="$UI_VIOLATIONS draggable-schedule"
+# The letter list the R/C/I toggles iterate. An `accountable` case in it would
+# put A in a row of buttons somebody can tick twice.
+if grep -A 3 "enum RACILetter" "$PLAN_UI" | grep -qE "accountable"; then
+  UI_VIOLATIONS="$UI_VIOLATIONS accountable-as-a-toggle"
+fi
+# Plan edits go through change control, never straight to the store: §19.11 says
+# a plan cannot move after G2 without a change request, and a second write path
+# is a way for it to move without one.
+if grep -nE "service\.(save\(package|removePackage)" Sources/CoAIWorkspaceApp/ProjectsViewModel.swift | grep -q .; then
+  UI_VIOLATIONS="$UI_VIOLATIONS plan-write-bypassing-change-control"
+fi
+if [ -n "$UI_VIOLATIONS" ]; then
+  fail "the Plan screen can do something §19.2.4 says it must not:$UI_VIOLATIONS"
+else
+  ok "the plan is edited through change control, and what is measured cannot be dragged"
+fi
+
 # Every test that needs a database starts its own SurrealDB on its own port, and
 # the "on its own" half is not enforced by anything: two servers on one port do
 # not collide loudly — the second client connects to the first server's data. The
