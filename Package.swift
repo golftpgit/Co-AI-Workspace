@@ -204,7 +204,11 @@ let package = Package(
             dependencies: ["AgentKit", "Config", "Observability", "Sidecar", "Persistence",
                            "LLMProviders", "CoreEngine", "Execution", "ToolBelt",
                            "Knowledge", "EmbeddingRuntime", "MLXRuntime", "Analysis",
-                           "Channels", "DocGen", "Roster", "MCPBridge", "ProjectKit"],
+                           // §1.4.1 / P13.1 — the app owns the headless web view,
+                           // because WebKit is main-actor bound and one browser
+                           // per app is the whole point.
+                           "Channels", "DocGen", "Roster", "MCPBridge", "ProjectKit",
+                           "WebSearch"],
             // §14.3 — what makes an App Intent findable rather than merely
             // written. Shortcuts and Siri read `Metadata.appintents` from the
             // bundle, and that bundle is produced by `appintentsmetadataprocessor`

@@ -91,7 +91,7 @@ public struct KBSearchTool: AgentTool {
 public struct WebSearchTool: AgentTool {
     public let name = "web_search"
     public let toolDescription = """
-    ค้นเว็บทั่วไปผ่าน SearXNG ที่รันในเครื่อง คืน **รายการลิงก์พร้อม tier** เท่านั้น \
+    ค้นเว็บทั่วไปแล้วคืน **รายการลิงก์พร้อม tier** เท่านั้น \
     ห้ามอ้างอิงจาก snippet — ต้องเรียก fetch_page อ่านหน้านั้นจริงก่อนเสมอ
     """
     public let riskLevel: RiskLevel = .low
@@ -106,9 +106,11 @@ public struct WebSearchTool: AgentTool {
     }
     """
 
-    private let source: SearXNGSource
+    private let source: any WebSearching
 
-    public init(source: SearXNGSource = SearXNGSource()) {
+    /// The backend is a protocol so P13.1 can swap SearXNG for the app's own
+    /// headless browser without the agent's contract moving (§1.4.1).
+    public init(source: any WebSearching = SearXNGSource()) {
         self.source = source
     }
 
@@ -161,9 +163,12 @@ public struct FetchPageTool: AgentTool {
     }
     """
 
-    private let fetcher: PageFetcher
+    private let fetcher: any PageReading
 
-    public init(fetcher: PageFetcher = PageFetcher()) {
+    /// A protocol, so P13.1's browser-backed reader can be dropped in and the
+    /// citation rules do not move (§1.4.1). `PageFetcher` remains the default:
+    /// nothing that does not need a DOM should start a web view.
+    public init(fetcher: any PageReading = PageFetcher()) {
         self.fetcher = fetcher
     }
 

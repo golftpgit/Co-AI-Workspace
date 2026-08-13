@@ -458,7 +458,8 @@ private struct RootView: View {
     private func knowledgeArea(_ engine: Engine) -> some View {
         switch knowledgeTab {
         case .conflicts: screenView(.conflicts, engine: engine)
-        case .sources: SourcesView(registry: SourceRegistry())
+        case .sources: SourcesView(registry: SourceRegistry(),
+                                   search: engine.webSource, read: engine.pageReader)
         default: screenView(.knowledge, engine: engine)
         }
     }

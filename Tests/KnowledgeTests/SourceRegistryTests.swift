@@ -119,3 +119,45 @@ struct SourceRegistryTests {
                 == .api(name: "ckan"))
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// Thai sources (found by driving P13.1, 2026-08-14).
+// ─────────────────────────────────────────────────────────────
+
+@Suite("Thai sources are tiered")
+struct ThaiSourceTests {
+
+    @Test("Thai research is not all T5")
+    func thaiSourcesAreRated() throws {
+        let registry = SourceRegistry()
+        // The exact hosts a real Thai-language search returned. Before this,
+        // every one of them was T5 — which under §14.1 means a Thai literature
+        // review can never be corroborated, and that is a property of the
+        // registry rather than of the sources.
+        let peerReviewed = try [#require(URL(string: "https://he01.tci-thaijo.org/index.php/JCCPH/article/view/280176")),
+                                #require(URL(string: "https://he03.tci-thaijo.org/index.php/PBRI/article/view/3054"))]
+        for url in peerReviewed {
+            #expect(registry.tier(for: url) == .t2, "\(url.host() ?? "") ควรเป็น T2")
+        }
+        // A university repository is T3: identifiable author and institution,
+        // no peer review.
+        let repository = try #require(URL(string: "https://digital.car.chula.ac.th/chulaetd/74647/"))
+        #expect(registry.tier(for: repository) == .t3)
+
+        // And the rule that has not changed: a domain nobody vouched for is T5,
+        // not unrated (§1.4).
+        let unknown = try #require(URL(string: "https://some-blog.example/post"))
+        #expect(registry.tier(for: unknown) == .t5)
+    }
+
+    @Test("subdomains inherit, and a lookalike domain does not")
+    func subdomainsAreMatchedProperly() throws {
+        let registry = SourceRegistry()
+        let subdomain = try #require(URL(string: "https://he01.tci-thaijo.org/x"))
+        #expect(registry.tier(for: subdomain) == .t2)
+        // `nottci-thaijo.org` must not inherit: suffix matching without the dot
+        // is how a lookalike domain borrows somebody else's credibility.
+        let lookalike = try #require(URL(string: "https://nottci-thaijo.org/x"))
+        #expect(registry.tier(for: lookalike) == .t5)
+    }
+}

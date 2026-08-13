@@ -183,6 +183,18 @@ extension SourceRegistry {
               disciplines: [.general], access: .api(name: "semanticscholar")),
         .init(domain: "doaj.org", name: "DOAJ", tier: .t2, disciplines: [.general]),
         .init(domain: "eric.ed.gov", name: "ERIC", tier: .t2, disciplines: [.socialScience]),
+        // Thai peer-reviewed publishing, added because driving P13.1's search for
+        // real showed what the registry could not see: a search in Thai returned
+        // eight results and **every one of them was T5** — TCI-indexed journals,
+        // a university repository, a hospital's own publication. Under §14.1's
+        // corroboration rule that means a Thai-language literature review can
+        // never be supported at all, which is not a property of the sources. It
+        // was a hole in this list.
+        .init(domain: "tci-thaijo.org", name: "ThaiJO (TCI)", tier: .t2,
+              disciplines: [.general]),
+        .init(domain: "thaijo.org", name: "ThaiJO", tier: .t2, disciplines: [.general]),
+        .init(domain: "li01.tci-thaijo.org", name: "ThaiJO (TCI)", tier: .t2,
+              disciplines: [.general]),
 
         // T3 — preprint and semi-official
         .init(domain: "medrxiv.org", name: "medRxiv", tier: .t3,
@@ -192,6 +204,17 @@ extension SourceRegistry {
         .init(domain: "arxiv.org", name: "arXiv", tier: .t3,
               disciplines: [.science, .computing, .statistics], access: .api(name: "arxiv")),
         .init(domain: "ssrn.com", name: "SSRN", tier: .t3, disciplines: [.socialScience]),
+        // Thai institutional repositories: a thesis or a faculty report has an
+        // identifiable author and institution, which is T3's definition, and
+        // leaving them at T5 was the other half of the same hole.
+        .init(domain: "chula.ac.th", name: "จุฬาลงกรณ์มหาวิทยาลัย", tier: .t3,
+              disciplines: [.general]),
+        .init(domain: "mahidol.ac.th", name: "มหาวิทยาลัยมหิดล", tier: .t3,
+              disciplines: [.general]),
+        .init(domain: "thailis.or.th", name: "ThaiLIS (คลังวิทยานิพนธ์)", tier: .t3,
+              disciplines: [.general]),
+        .init(domain: "nrct.go.th", name: "วช. (สำนักงานการวิจัยแห่งชาติ)", tier: .t3,
+              disciplines: [.general, .policy]),
 
         // T4 — curated community
         .init(domain: "wikipedia.org", name: "Wikipedia", tier: .t4, disciplines: [.general]),

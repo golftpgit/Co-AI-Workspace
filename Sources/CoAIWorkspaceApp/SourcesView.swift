@@ -1,6 +1,7 @@
 import SwiftUI
 import AgentKit
 import Knowledge
+import WebSearch
 
 // ─────────────────────────────────────────────────────────────
 // The source registry, visible (ARCHITECTURE §1.4, §19.2, P10.12).
@@ -19,10 +20,28 @@ import Knowledge
 
 struct SourcesView: View {
     let registry: SourceRegistry
+    /// The T5 bridge, when the app has one (§1.4.1, P13.1). Optional so this
+    /// screen still lists the registry on a build without it.
+    let search: (any WebSearching)?
+    let read: (any PageReading)?
     @State private var discipline: Discipline?
+    @State private var query = ""
+    @State private var results: [WebResult] = []
+    @State private var searching = false
+    @State private var problem: String?
+    @State private var reading: String?
+    @State private var page: FetchedPage?
+
+    init(registry: SourceRegistry, search: (any WebSearching)? = nil,
+         read: (any PageReading)? = nil) {
+        self.registry = registry
+        self.search = search
+        self.read = read
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if let search { searchPanel(search) ; Divider() }
             HStack(spacing: 10) {
                 Text("แหล่งและชั้นความน่าเชื่อถือ").font(.headline)
                 Picker("สาขา", selection: $discipline) {
@@ -61,6 +80,123 @@ struct SourcesView: View {
                  + "จะทำให้มันหลุดตัวกรองที่ตรวจ tier · แก้รายการยังทำไม่ได้ (P13)")
                 .font(.caption2).foregroundStyle(.secondary)
                 .padding(10)
+        }
+    }
+
+
+    // MARK: - the T5 bridge (§1.4.1, P13.1)
+
+    /// Searching the open web through the app's own web view, and reading one of
+    /// the results with it.
+    ///
+    /// On screen rather than only behind the agent's tool because P13.1 is judged
+    /// on a person getting real results out of the sandboxed `.app` — and because
+    /// the two failure modes that matter are ones a person has to see: a bot wall
+    /// asking for a human, and an extractor that has gone stale.
+    @ViewBuilder
+    private func searchPanel(_ source: any WebSearching) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("ค้นเว็บทั่วไป (T5)").font(.headline)
+                Text("ผ่าน \(source.name) ในเบราว์เซอร์ของแอปเอง")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+            }
+            HStack(spacing: 8) {
+                TextField("คำค้น เช่น ความชุกภาวะหมดไฟในพยาบาลไทย", text: $query)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { run(source) }
+                    .accessibilityLabel("คำค้นสำหรับค้นเว็บทั่วไป")
+                Button("ค้น") { run(source) }
+                    .disabled(searching || query.trimmingCharacters(in: .whitespaces).isEmpty)
+                if searching { ProgressView().controlSize(.small) }
+            }
+
+            if let problem {
+                // The two errors worth their own colour: a wall is a request for
+                // a person, and a stale extractor is a bug in us. Neither is
+                // "no results" (§1.4.1).
+                Text(problem)
+                    .font(.callout).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+
+            ForEach(results, id: \.url) { result in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(result.tier.rawValue.uppercased())
+                            .font(.caption2)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(.quaternary, in: Capsule())
+                        Text(result.title).font(.callout).lineLimit(1)
+                        Spacer()
+                        if read != nil {
+                            Button(reading == result.url.absoluteString ? "กำลังอ่าน…" : "อ่านหน้านี้") {
+                                readPage(result.url)
+                            }
+                            .controlSize(.small)
+                            .disabled(reading != nil)
+                        }
+                    }
+                    Text(result.url.absoluteString)
+                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    if !result.snippet.isEmpty {
+                        // Shown for choosing what to open — never citable (§1.4).
+                        Text(result.snippet).font(.caption).foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("ผลค้น \(result.title) ชั้น \(result.tier.rawValue) จาก \(result.url.host() ?? "")")
+            }
+
+            if let page {
+                Divider()
+                Text("อ่านแล้ว: \(page.title ?? page.finalURL.absoluteString)")
+                    .font(.callout).bold()
+                Text("\(page.paragraphs.count) ย่อหน้า · tier \(page.provenance.tier?.rawValue ?? "—") · "
+                     + "เข้าท่อ ingest เส้นเดิมได้ทั้งหมด")
+                    .font(.caption2).foregroundStyle(.secondary)
+                Text(page.paragraphs.prefix(3).joined(separator: "\n\n"))
+                    .font(.caption).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Text("snippet ใช้เลือกว่าจะเปิดอันไหน ห้ามอ้างอิง — ต้องอ่านหน้าจริงก่อนเสมอ (§1.4) · "
+                 + "ระบบไม่แก้ CAPTCHA: เจอด่านแล้วจะบอกให้คนไปเปิดเอง")
+                .font(.caption2).foregroundStyle(.secondary)
+        }
+        .padding(12)
+    }
+
+    private func run(_ source: any WebSearching) {
+        let text = query
+        searching = true
+        problem = nil
+        results = []
+        page = nil
+        Task {
+            do {
+                results = try await source.search(text, limit: 8)
+            } catch {
+                problem = "\(error)"
+            }
+            searching = false
+        }
+    }
+
+    private func readPage(_ url: URL) {
+        guard let read else { return }
+        reading = url.absoluteString
+        problem = nil
+        Task {
+            do {
+                page = try await read.fetch(url)
+            } catch {
+                problem = "\(error)"
+            }
+            reading = nil
         }
     }
 

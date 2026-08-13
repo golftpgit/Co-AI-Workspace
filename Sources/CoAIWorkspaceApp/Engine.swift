@@ -16,6 +16,7 @@ import Channels
 import Roster
 import DocGen
 import MCPBridge
+import WebSearch
 import ProjectKit
 
 // ─────────────────────────────────────────────────────────────
@@ -31,6 +32,13 @@ struct Engine: Sendable {
     /// Where things go on disk (§19.1). Held because a project report is a file
     /// as well as a row, and the folder it belongs in is the project's own.
     let paths: AppPaths
+    /// §1.4.1 / P13.1 — T5 search and page reading through the app's own headless
+    /// web view. Held so the Sources screen can use the same instances the agent's
+    /// tools do: a second browser would be a second cookie jar and a second
+    /// rate-limit budget.
+    let webSource: HeadlessWebSource
+    let pageReader: HeadlessPageReader
+
     let conversations: ConversationStore
     let spans: SurrealSpanSink
     /// Conflict cards, kept so a decision is made once (§11.6).
@@ -145,6 +153,14 @@ struct Engine: Sendable {
         let spans = SurrealSpanSink(client: client)
         let conversations = ConversationStore(client: client)
 
+        // One browser for the whole app: WebKit is main-actor only, and a second
+        // web view would be a second cookie jar and a second thing to keep
+        // polite about rate limits (§1.4.1).
+        let browser = await MainActor.run { HeadlessBrowser() }
+        let webSource = HeadlessWebSource(browser: browser)
+        let pageReader = HeadlessPageReader(browser: browser)
+
+
         var executors: [any LLMExecutor] = [OnDeviceExecutor()]
         // Tier 0.5 — the floor the rest of the chain falls back to (§9.2 rule
         // 4). Resolved from disk, never downloaded here: boot must not depend
@@ -246,8 +262,20 @@ struct Engine: Sendable {
                     return index
                 },
                 embedder: embedder),
-            WebSearchTool(),
-            FetchPageTool(),
+            // §1.4.1 / P13.1 — T5 through the app's own headless web view. The
+            // tool contract does not change: the agent still calls `web_search`
+            // and still has to `fetch_page` before citing anything. What changes
+            // is that both now work inside the sandboxed .app with nothing
+            // bundled, and that `fetch_page` can read a page whose text is
+            // produced by JavaScript.
+            // §1.4.1 / P13.1 — T5 through the app's own headless web view. The
+            // tool contract does not change: the agent still calls `web_search`
+            // and still has to `fetch_page` before citing anything. What changes
+            // is that both now work inside the sandboxed .app with nothing
+            // bundled, and that `fetch_page` can read a page whose text is
+            // produced by JavaScript.
+            WebSearchTool(source: webSource),
+            FetchPageTool(fetcher: pageReader),
             // §12.3's gate. On the tool list rather than inside the Analyst so
             // it goes through the one hook chain like everything else, and so
             // the notebook's operator can ask for the same check by hand.
@@ -422,7 +450,9 @@ struct Engine: Sendable {
             summary.append("\(executor.identifier) — \(reachable ? "พร้อมใช้" : "ยังต่อไม่ได้")")
         }
 
-        return Engine(client: client, paths: paths, conversations: conversations, spans: spans,
+        return Engine(client: client, paths: paths,
+                      webSource: webSource, pageReader: pageReader,
+                      conversations: conversations, spans: spans,
                       conflicts: ConflictStore(client: client),
                       conflictDetector: ConflictDetector(router: router),
                       relations: RelationStore(client: client),

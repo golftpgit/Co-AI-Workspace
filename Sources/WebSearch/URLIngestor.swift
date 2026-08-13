@@ -18,6 +18,18 @@ public protocol PageReading: Sendable {
     func fetch(_ url: URL) async throws -> FetchedPage
 }
 
+extension PageReading {
+    /// The string form every tool call arrives as. Validating here rather than in
+    /// each reader means a bad address is refused the same way whichever backend
+    /// is behind the protocol (§1.4.1).
+    public func fetch(_ address: String) async throws -> FetchedPage {
+        guard let url = URL(string: address), url.host() != nil else {
+            throw FetchError.invalidURL(address)
+        }
+        return try await fetch(url)
+    }
+}
+
 extension PageFetcher: PageReading {}
 
 public struct URLIngestor: Sendable {

@@ -47,7 +47,15 @@ public enum WebSearchError: Error, CustomStringConvertible, Equatable {
     }
 }
 
-public struct SearXNGSource: Sendable {
+/// Anything that can hand back places to look (§1.4). One protocol so the tool
+/// the agent calls does not change when the backend does — P13.1 adds a second
+/// implementation, and `web_search` is not supposed to notice.
+public protocol WebSearching: Sendable {
+    var name: String { get }
+    func search(_ query: String, limit: Int) async throws -> [WebResult]
+}
+
+public struct SearXNGSource: WebSearching {
     public let name = "SearXNG"
     private let baseURL: URL
     private let registry: SourceRegistry
@@ -68,6 +76,12 @@ public struct SearXNGSource: Sendable {
             return false
         }
         return (response as? HTTPURLResponse)?.statusCode == 200
+    }
+
+    /// `WebSearching`'s shape: the protocol cannot carry the language argument
+    /// because the other backend has no notion of one (§1.4.1).
+    public func search(_ query: String, limit: Int) async throws -> [WebResult] {
+        try await search(query, limit: limit, language: "auto")
     }
 
     public func search(_ query: String, limit: Int = 10,
