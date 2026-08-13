@@ -74,6 +74,38 @@ final class ChatViewModel {
         self.scope = scope
     }
 
+    /// The conversation as the brief drafter reads it (§19.1, P10.3). Tool
+    /// output and system notes are left out: the draft is about what was
+    /// *asked for*, and a transcript full of shell output drowns that.
+    var transcriptTurns: [TranscriptTurn] {
+        bubbles.compactMap { bubble in
+            switch bubble.kind {
+            case .user: TranscriptTurn(fromUser: true, text: bubble.text)
+            case .assistant: TranscriptTurn(fromUser: false, text: bubble.text)
+            case .tool, .note, .failure: nil
+            }
+        }
+    }
+
+    var promotableConversationID: String? {
+        guard case .central = scope else { return nil }
+        return selected?.id
+    }
+
+    func draftBrief() async -> DraftedBrief {
+        await engine.briefDrafter.draft(from: transcriptTurns)
+    }
+
+    /// A project starts with a working directory of its own (§19.1): its
+    /// folder inside the app container, which a sandboxed app reaches without
+    /// the user granting anything. General still starts with none — a shell
+    /// command with nowhere agreed to run is a question, not a default. The
+    /// folder button overrides either.
+    func adoptDefaultWorkingDirectory() async {
+        guard workingDirectory == nil else { return }
+        workingDirectory = await engine.stores(for: scope).workingDirectory
+    }
+
     /// Subscribing is deliberately *not* done in `init`.
     ///
     /// SwiftUI evaluates a view's `init` on every body pass, so building the

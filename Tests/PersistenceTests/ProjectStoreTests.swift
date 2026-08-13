@@ -135,3 +135,52 @@ struct ProjectIsolationTests {
         #expect(try await conversations.list(scope: .central).count == 1)
     }
 }
+
+@Suite("Promotion moves a conversation", .serialized)
+struct ConversationPromotionTests {
+
+    @Test("a General conversation and its messages land in the project",
+          .timeLimit(.minutes(3)))
+    func reassignCarriesTheHistory() async throws {
+        guard let server = try await makeServer(port: 18_605) else { return }
+        defer { Task { await server.shutdown() } }
+        let client = await server.client
+
+        let conversations = ConversationStore(client: client)
+        let chat = try await conversations.create(scope: .central, title: "แบบวัด burnout")
+        try await conversations.append(conversationID: chat.id, role: .user,
+                                       content: "มีฉบับแปลไทยตัวไหนบ้าง")
+        try await conversations.append(conversationID: chat.id, role: .assistant,
+                                       content: "พบ 3 ฉบับ")
+
+        let project = Project(name: "ภาวะหมดไฟในพยาบาล", kind: .research)
+        try await ProjectStore(client: client).save(project)
+        try await conversations.reassign(chat.id, to: project.scope)
+
+        // Gone from General, present in the project — both halves, because a
+        // move that only adds is a copy.
+        #expect(try await conversations.list(scope: .central).isEmpty)
+        let moved = try await conversations.list(scope: project.scope)
+        #expect(moved.map(\.id) == [chat.id])
+
+        // The point of promoting rather than starting over: the conversation
+        // that became the work is still readable inside it.
+        #expect(try await conversations.history(conversationID: chat.id).count == 2)
+    }
+
+    @Test("moving back to General clears the project id rather than leaving it behind",
+          .timeLimit(.minutes(2)))
+    func movingBackClearsTheProject() async throws {
+        guard let server = try await makeServer(port: 18_606) else { return }
+        defer { Task { await server.shutdown() } }
+        let conversations = ConversationStore(client: await server.client)
+
+        let chat = try await conversations.create(scope: .project(ProjectID("pj_x")))
+        try await conversations.reassign(chat.id, to: .central)
+
+        #expect(try await conversations.list(scope: .central).map(\.id) == [chat.id])
+        // A stale project id would leave the row answering to two scopes at
+        // once — visible in General *and* still listed under the project.
+        #expect(try await conversations.list(scope: .project(ProjectID("pj_x"))).isEmpty)
+    }
+}
