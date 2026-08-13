@@ -8,3 +8,4 @@ CREATE probe:c CONTENT { name: type::string("plain name") };
 CREATE probe:d CONTENT { name: type::string("a487d755-9ec0-4b1a-9f8e-1c2b3d4e5f60") };
 SELECT * FROM probe;
 REMOVE TABLE probe;
+SELECT * FROM schema_meta:current; INFO FOR DB;

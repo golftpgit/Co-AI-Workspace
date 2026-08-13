@@ -1,5 +1,6 @@
 import Foundation
 import Knowledge
+import Persistence
 import EmbeddingRuntime
 
 // ─────────────────────────────────────────────────────────────
@@ -135,5 +136,20 @@ await check("a document ingested with the real model is findable") {
 print("")
 print("   — เส้นทางที่หน้าจอใช้จริง —")
 await ScreenFlows(embedder: embedder).run(check: { name, body in await check(name, body) })
+
+// One project from creation to closing (§19, P10). One database for the whole
+// run rather than one per step: a lifecycle checked against a fresh database at
+// every stage would never catch the thing most likely to be wrong, which is
+// state carried between stages.
+print("")
+print("   — โปรเจกต์หนึ่งชิ้น ตั้งแต่สร้างจนปิด —")
+if let database = try await TestDatabase.start(port: 18_499) {
+    await ProjectFlows(client: database.client,
+                       knowledge: KnowledgeStore(client: database.client))
+        .run(check: { name, body in await check(name, body) })
+    await database.stop()
+} else {
+    print("   ⊘ ข้าม — ไม่มี vendor/helpers/surreal")
+}
 
 exit(Failures.shared.count == 0 ? 0 : 1)

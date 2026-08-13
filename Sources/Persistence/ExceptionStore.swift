@@ -1,5 +1,6 @@
 import Foundation
 import AgentKit
+import ProjectKit
 
 // ─────────────────────────────────────────────────────────────
 // Exception reports, made durable (ARCHITECTURE §19.10, P10.6).
@@ -13,7 +14,7 @@ import AgentKit
 // every report ever written.
 // ─────────────────────────────────────────────────────────────
 
-public actor ExceptionStore {
+public actor ExceptionStore: ExceptionPersisting {
     private let client: SurrealClient
 
     public init(client: SurrealClient) {
@@ -32,13 +33,14 @@ public actor ExceptionStore {
         return decoder
     }
 
-    public func save(_ report: ExceptionReportRecord) async throws {
+    public func save(_ report: ExceptionReport) async throws {
+        let json = String(decoding: try Self.encoder.encode(report), as: UTF8.self)
         var content = ContentBuilder()
         content.setString("uid", report.id)
-        content.setString("project_id", report.projectID)
-        content.setString("dimension", report.dimension)
+        content.setString("project_id", report.projectID.rawValue)
+        content.setString("dimension", report.dimension.rawValue)
         content.set("open", report.isOpen)
-        content.setString("report", report.json)
+        content.setString("report", json)
         content.raw("updated_at", "time::now()")
 
         try await client.exec(
@@ -46,41 +48,13 @@ public actor ExceptionStore {
             vars: content.vars)
     }
 
-    public func all(project: String) async throws -> [ExceptionReportRecord] {
+    public func all(project: ProjectID) async throws -> [ExceptionReport] {
         try await client.query(
             "SELECT * FROM exception WHERE project_id = type::string($pid) ORDER BY updated_at DESC",
-            vars: ["pid": project])
+            vars: ["pid": project.rawValue])
             .first?.rows.compactMap { row in
-                guard let id = row["uid"]?.stringValue,
-                      let json = row["report"]?.stringValue else { return nil }
-                return ExceptionReportRecord(
-                    id: id,
-                    projectID: row["project_id"]?.stringValue ?? project,
-                    dimension: row["dimension"]?.stringValue ?? "",
-                    isOpen: row["open"]?.boolValue ?? true,
-                    json: json)
+                guard let json = row["report"]?.stringValue else { return nil }
+                return try? Self.decoder.decode(ExceptionReport.self, from: Data(json.utf8))
             } ?? []
-    }
-}
-
-/// The stored shape, kept deliberately dumb.
-///
-/// `Persistence` does not import `ProjectKit` — the row is columns plus a blob,
-/// and the module that owns the type is the one that decodes it. That keeps the
-/// dependency pointing one way, the same as `ProjectPersisting`.
-public struct ExceptionReportRecord: Sendable, Equatable {
-    public let id: String
-    public let projectID: String
-    public let dimension: String
-    public let isOpen: Bool
-    public let json: String
-
-    public init(id: String, projectID: String, dimension: String,
-                isOpen: Bool, json: String) {
-        self.id = id
-        self.projectID = projectID
-        self.dimension = dimension
-        self.isOpen = isOpen
-        self.json = json
     }
 }

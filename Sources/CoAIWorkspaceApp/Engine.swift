@@ -202,10 +202,10 @@ struct Engine: Sendable {
         let projects = ProjectService(
             store: ProjectStore(client: client),
             plans: WorkPackageStore(client: client),
-            exceptions: ExceptionBridge(store: ExceptionStore(client: client)),
-            registers: RegisterBridge(store: RegisterStore(client: client)),
-            baselines: BaselineBridge(store: BaselineStore(client: client)),
-            lessons: LessonBridge(knowledge: knowledgeStore))
+            exceptions: ExceptionStore(client: client),
+            registers: RegisterStore(client: client),
+            baselines: BaselineStore(client: client),
+            lessons: LessonPublisher(knowledge: knowledgeStore))
         // §19.10 — an exception raised before the app closed must still stop
         // work after it reopens, so the blocked set is read at boot rather
         // than starting empty and filling in when somebody opens the screen.
