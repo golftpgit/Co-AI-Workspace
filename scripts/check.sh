@@ -109,7 +109,7 @@ fi
 UNWIRED=""
 for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer Researcher ContextManager LocalTier ModelInstaller BudgetGovernor EndpointProbe AnalysisStore NotebookKernel NotebookRunner NotebookStore \
                   ProjectService ProjectStore StageGate BriefDrafter WorkspaceStoreCache \
-                  WorkPackageStore WorkBreakdown \
+                  WorkPackageStore WorkBreakdown ExceptionStore ToleranceCheck \
                   StatTestTool GapDetector AnalysisPlanStore ConnectorStore OfficeWriter \
                   MCPRegistry MCPServerStore Notifier AppIntentsChannel \
                   TemplateStore TemplateParser TemplateFiller PluginRegistry WriteSkillTool \
@@ -199,6 +199,17 @@ if [ -n "$UNREGISTERED" ]; then
   fail "built but never registered in the gateway:$UNREGISTERED"
 else
   ok "the new tools are registered where a session can reach them"
+fi
+
+# ARCHITECTURE §19.5 / P10.5: the Executive seat is never an agent's. The rule
+# is carried by the types — `BoardRole` has no case and no initializer that
+# accepts a `Role` — so what this checks is that it stays that way: the moment
+# that file mentions `Role`, the compiler stops being the thing enforcing it.
+if grep -n "Role" Sources/AgentKit/Accountability.swift \
+   | grep -vE "RACIActor|BoardRole|case agent\(Role\)|/// |// " | grep -q .; then
+  fail "Accountability.swift refers to Role outside the participant case — the board seat must stay unassignable to an agent"
+else
+  ok "no agent can hold a board seat, and the types are still what says so"
 fi
 
 # ARCHITECTURE §19.6 / P10.4: a leaf reaches `.done` through the evidence check

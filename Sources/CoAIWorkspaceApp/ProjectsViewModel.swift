@@ -43,6 +43,14 @@ public final class ProjectsViewModel {
     /// thing it is gating.
     public private(set) var wbs = WorkBreakdown()
     public private(set) var problems: [WBSProblem] = []
+    /// The agreed frame and where the project sits inside it (§19.10).
+    public private(set) var tolerances: [ToleranceStatus] = []
+    public private(set) var openExceptions: [ExceptionReport] = []
+    /// Where the readings come from. Held rather than recomputed inside the
+    /// view model because each one belongs to a different subsystem, and P10.6
+    /// wires two of the six for real — the rest are named and left at zero
+    /// rather than invented.
+    public var readings = ToleranceReadings()
 
     private var service: ProjectService?
     private let log = AppLog.logger("projects-ui")
@@ -238,6 +246,41 @@ public final class ProjectsViewModel {
         }
     }
 
+    // MARK: - tolerance (§19.10)
+
+    public func setTolerances(_ preset: Tolerances) async {
+        guard var project = selected else { return }
+        project.tolerances = preset
+        await update(project)
+    }
+
+    /// Checks the frame and raises what is newly outside it. Returns the text
+    /// to send, so the caller decides where it goes — this model does not know
+    /// what a channel is.
+    @discardableResult
+    public func checkTolerances() async -> [String] {
+        guard let service, let project = selected else { return [] }
+        do {
+            let raised = try await service.raiseBreaches(for: project.id, readings: readings)
+            await refreshGate()
+            return raised.map(\.message)
+        } catch {
+            status = Status(message: "ตรวจกรอบไม่สำเร็จ: \(error)", isError: true)
+            return []
+        }
+    }
+
+    public func resolve(_ report: ExceptionReport, decision: String) async {
+        guard let service else { return }
+        do {
+            try await service.resolve(report, decision: decision)
+            await refreshGate()
+            status = Status(message: "ปิดข้อยกเว้นแล้ว — ทีมทำงานต่อได้", isError: false)
+        } catch {
+            status = Status(message: "ปิดข้อยกเว้นไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
     private func refreshGate() async {
         guard let service, case .project(let id) = selection else {
             gate = nil
@@ -248,5 +291,13 @@ public final class ProjectsViewModel {
         wbs = await service.breakdown(of: id)
         problems = wbs.problems(inScope: selected?.statement.inScope ?? [])
         gate = await service.gate(for: id)
+        // The readings the plan itself can answer. Cost and time come from the
+        // budget governor and the span store, which the screen does not hold —
+        // they stay at zero until P10.15 wires the status strip, and a zero
+        // that is honestly zero is better than a number nobody can trace.
+        readings.addedPackages = Double(wbs.leaves.count)
+        tolerances = ToleranceCheck.evaluate(selected?.tolerances ?? .balanced,
+                                             readings: readings)
+        openExceptions = (try? await service.openExceptions(id)) ?? []
     }
 }

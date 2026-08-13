@@ -103,6 +103,12 @@ public struct StageGate: Sendable {
         guard Self.allows(effect, in: stage) else {
             return Self.reason(tool: call.toolName, effect: effect, stage: stage)
         }
+        // §19.10 — an open exception stops new work, and reading is what a
+        // person needs in order to decide. Checked after the stage so the more
+        // specific reason wins when both apply.
+        if effect != .read, await reader.hasOpenException(id) {
+            return "โครงการทะลุกรอบที่ตกลงไว้และกำลังรอคำตัดสิน — '\(call.toolName)' จึงยังไม่ทำงาน (อ่านข้อมูลได้ตามปกติ)"
+        }
         return nil
     }
 

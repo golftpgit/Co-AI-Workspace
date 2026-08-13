@@ -92,6 +92,16 @@ actor ChannelRouter: InboundHandling {
         _ = modes
     }
 
+    /// Sends one message to every channel that is running (§19.10). Used by
+    /// the exception report, which is the one thing whose whole purpose is to
+    /// reach the person wherever they are — the same text everywhere, rendered
+    /// once by the report itself.
+    func broadcast(_ text: String) async {
+        for channel in channels.values {
+            await channel.send(AgentMessage(kind: .summary, text: text))
+        }
+    }
+
     func stopAll() async {
         for channel in channels.values { await channel.stop() }
         channels = [:]

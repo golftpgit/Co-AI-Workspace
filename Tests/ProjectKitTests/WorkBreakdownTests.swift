@@ -23,6 +23,9 @@ private func package(_ title: String,
     WorkPackage(id: id ?? "wp_\(title)", projectID: project, parent: parent,
                 title: title, deliverableType: title, scopeRef: scopeRef,
                 acceptanceCriteria: criteria, role: .analyst,
+                // Accountability is part of a finished plan since P10.5, so
+                // the fixture that stands for "a complete leaf" carries it.
+                raci: RACI(accountable: .teamLead, responsible: [.agent(.analyst)]),
                 status: status, order: order)
 }
 
@@ -32,7 +35,8 @@ private func briefed(inScope: [String] = ["ความชุกในพยา�
                           brief: "วัดความชุก",
                           statement: ScopeStatement(inScope: inScope,
                                                     outOfScope: ["ข้ามวิชาชีพ"],
-                                                    acceptanceCriteria: ["ส่งวารสารได้"]))
+                                                    acceptanceCriteria: ["ส่งวารสารได้"]),
+                          board: [BoardRole(seat: .executive, person: "ผู้ใช้")])
     project.stage = stage
     return project
 }

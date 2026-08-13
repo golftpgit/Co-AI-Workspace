@@ -32,7 +32,8 @@ private func briefed(_ name: String = "ความเครียดพยา�
             brief: "วัดความชุกของภาวะหมดไฟใน รพ. ตติยภูมิ 2 แห่ง",
             statement: ScopeStatement(
                 inScope: ["ความชุกในพยาบาลวิชาชีพ"],
-                outOfScope: ["การเปรียบเทียบข้ามวิชาชีพ"]))
+                outOfScope: ["การเปรียบเทียบข้ามวิชาชีพ"]),
+            board: [BoardRole(seat: .executive, person: "ผู้ใช้")])
 }
 
 @Suite("Project life cycle")
@@ -63,10 +64,12 @@ struct LifecycleTests {
     @Test("a complete brief passes G1 and lands in Planning")
     func advancesThroughG1() async throws {
         let service = ProjectService(store: MemoryProjectStore())
-        let created = try await service.create(name: "ความเครียดพยาบาล",
-                                               kind: .research,
-                                               brief: briefed().brief,
-                                               statement: briefed().statement)
+        var seeded = briefed()
+        seeded.board = [BoardRole(seat: .executive, person: "ผู้ใช้")]
+        let created = try await service.create(name: seeded.name, kind: .research,
+                                               brief: seeded.brief,
+                                               statement: seeded.statement,
+                                               board: seeded.board)
         #expect(created.stage == .initiation)
 
         let moved = try await service.advance(created.id)
@@ -97,7 +100,8 @@ struct LifecycleTests {
         // gate whose input can be wrong.
         let leaf = WorkPackage(projectID: project.id, title: "สคริปต์",
                                scopeRef: project.statement.inScope[0],
-                               acceptanceCriteria: [Criterion(text: "รันได้", evidenceRequired: "exit 0")])
+                               acceptanceCriteria: [Criterion(text: "รันได้", evidenceRequired: "exit 0")],
+                               raci: RACI(accountable: .teamLead))
         var finished = leaf
         finished.status = .done
 

@@ -14,7 +14,9 @@ import AgentKit
 
 private struct StubStage: ProjectStageReading {
     let stages: [String: ProjectStage]
+    var stopped: Set<String> = []
     func stage(of id: ProjectID) async -> ProjectStage? { stages[id.rawValue] }
+    func hasOpenException(_ id: ProjectID) async -> Bool { stopped.contains(id.rawValue) }
 }
 
 /// Records whether it ran, so "refused" can be told apart from "ran and
@@ -39,8 +41,11 @@ private struct SpyTool: AgentTool {
     }
 }
 
-private func gateway(stages: [String: ProjectStage], tools: [any AgentTool]) async -> ToolGateway {
-    let chain = HookChain(stageGate: StageGate(reader: StubStage(stages: stages)))
+private func gateway(stages: [String: ProjectStage],
+                     stopped: Set<String> = [],
+                     tools: [any AgentTool]) async -> ToolGateway {
+    let chain = HookChain(stageGate: StageGate(
+        reader: StubStage(stages: stages, stopped: stopped)))
     let gateway = ToolGateway(chain: chain,
                               modes: OperatingModes(autonomy: .fullAutonomous))
     await gateway.register(tools)
@@ -182,5 +187,24 @@ struct StageGateTests {
         let risk = Set(DefaultRiskScorer.baseline.keys)
         let effect = Set(StageGate.effects.keys)
         #expect(risk == effect, "risk-only: \(risk.subtracting(effect)) · effect-only: \(effect.subtracting(risk))")
+    }
+
+    @Test("a project outside its agreed frame stops taking new work")
+    func openExceptionStopsWork() async throws {
+        let ran = RanFlag(), read = RanFlag()
+        let gateway = await gateway(
+            stages: ["p1": .execution], stopped: ["p1"],
+            tools: [SpyTool(name: "run_shell", riskLevel: .high, flag: ran),
+                    SpyTool(name: "kb_search", riskLevel: .low, flag: read)])
+        let context = ToolContext(scope: .project(ProjectID("p1")))
+
+        // §19.10 — "stops" has to be something the tool layer enforces, or it
+        // means "mentions it in a report and carries on".
+        let blocked = try await gateway.call("run_shell", argumentsJSON: "{}", context: context)
+        #expect(!blocked.didExecute)
+        #expect(!ran.ran)
+
+        // Reading stays open: it is what the person deciding needs.
+        #expect(try await gateway.call("kb_search", argumentsJSON: "{}", context: context).didExecute)
     }
 }

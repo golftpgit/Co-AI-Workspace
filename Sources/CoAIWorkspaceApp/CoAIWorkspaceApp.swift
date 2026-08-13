@@ -100,7 +100,10 @@ private struct RootView: View {
                         // from the project you just left.
                         .id(projects.scope.storageKey)
                 case .projects:
-                    ProjectsView(model: projects)
+                    ProjectsView(model: projects,
+                                 announce: { message in
+                                     await engine.channelRouter.broadcast(message)
+                                 })
                         .task { await projects.attach(service: engine.projects) }
                 case .knowledge:
                     KnowledgeView(model: knowledge)

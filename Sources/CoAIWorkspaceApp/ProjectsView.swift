@@ -20,6 +20,10 @@ struct ProjectsView: View {
     @State private var draft: Project?
     @State private var newPackageTitle = ""
     @State private var selectedParent: String?
+    @State private var decision = ""
+    /// Sends an exception report out through every running channel. Passed in
+    /// rather than reached for: this screen does not know what a channel is.
+    let announce: (String) async -> Void
 
     var body: some View {
         HSplitView {
@@ -179,11 +183,89 @@ struct ProjectsView: View {
 
         wbsBox(project)
 
+        toleranceBox()
+
         if let gate = model.gate {
             gateBox(gate)
         } else {
             Text("โครงการปิดแล้ว — อ่านได้ แต่เครื่องมือที่เปลี่ยนข้อมูลใช้ไม่ได้แล้ว")
                 .font(.callout).foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - tolerance (§19.10)
+
+    @ViewBuilder
+    private func toleranceBox() -> some View {
+        GroupBox("กรอบที่ทีมเดินเองได้") {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(model.tolerances) { status in
+                    HStack(spacing: 8) {
+                        Text(status.dimension.label)
+                            .font(.callout)
+                            .frame(width: 84, alignment: .leading)
+                        // The frame as numbers, which is the whole point: a
+                        // slider labelled "balanced" says nothing a person can
+                        // check against what is happening.
+                        Text("\(format(status.current)) / \(format(status.limit))")
+                            .font(.system(.callout, design: .monospaced))
+                            .foregroundStyle(status.breached ? Color.red : Color.primary)
+                        ProgressView(value: min(status.fraction, 1))
+                            .frame(maxWidth: 120)
+                        Text(status.dimension.unit)
+                            .font(.caption2).foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("กรอบ\(status.dimension.label) ตอนนี้ \(format(status.current)) จาก \(format(status.limit))"
+                                        + (status.breached ? " — ทะลุแล้ว" : ""))
+                }
+
+                HStack {
+                    Text("ตั้งกรอบทั้งชุด").font(.caption).foregroundStyle(.secondary)
+                    Button("ขออนุมัติทุกขั้น") { Task { await model.setTolerances(.approvalRequired) } }
+                    Button("สมดุล") { Task { await model.setTolerances(.balanced) } }
+                    Button("ทำงานเองทั้งหมด") { Task { await model.setTolerances(.fullAutonomous) } }
+                    Spacer()
+                    Button("ตรวจกรอบตอนนี้") { checkTolerances() }
+                }
+                .controlSize(.small)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
+        ForEach(model.openExceptions) { report in
+            GroupBox("ทะลุกรอบ\(report.dimension.label) — โครงการหยุดรอคุณ") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(report.message)
+                        .font(.callout)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack {
+                        TextField("คำตัดสินของคุณ", text: $decision)
+                            .textFieldStyle(.roundedBorder)
+                        Button("ปิดข้อยกเว้น") {
+                            let text = decision
+                            decision = ""
+                            Task { await model.resolve(report, decision: text) }
+                        }
+                        .disabled(decision.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
+            }
+        }
+    }
+
+    private func format(_ value: Double) -> String {
+        value == value.rounded() ? String(Int(value)) : String(format: "%.2f", value)
+    }
+
+    private func checkTolerances() {
+        Task {
+            let messages = await model.checkTolerances()
+            // Every channel, because an exception's whole purpose is to reach
+            // the person wherever they are (§19.10).
+            for message in messages { await announce(message) }
         }
     }
 

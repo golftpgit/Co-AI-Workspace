@@ -16,13 +16,15 @@ public enum Schema {
     /// an interrupted run — run-until-done resumes the second and never the
     /// first. The criteria and deliverable type it needs to rebuild an
     /// assignment ride along on the schemaless part of the row.
+    /// 5: `exception` exists (§19.10, P10.6). An open one stops the project,
+    /// and a stop that does not survive a restart is a pause.
     /// 4: `work_package` exists and `task` points at one (§19.6, P10.4) — the
     /// plan and the record of doing it are finally two ends of one link.
     /// 3: `project` exists (§19.1, P10.1). Every other table already carried
     /// `project_id`; there was simply nothing on the other end of it, so two
     /// projects were indistinguishable and the app wrote the literal id
     /// "default" into all of them.
-    public static let version = 4
+    public static let version = 5
 
     /// Split into statements that are executed one at a time: a single
     /// failing statement should name itself, not abort a 40-line blob.
@@ -160,6 +162,16 @@ public enum Schema {
         "DEFINE FIELD IF NOT EXISTS title ON work_package TYPE string",
         "DEFINE FIELD IF NOT EXISTS status ON work_package TYPE string",
         "DEFINE FIELD IF NOT EXISTS updated_at ON work_package TYPE datetime",
+
+        // ── exceptions (§19.10, P10.6) ──
+        "DEFINE TABLE IF NOT EXISTS exception SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON exception TYPE string",
+        "DEFINE INDEX IF NOT EXISTS exception_uid ON exception FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS project_id ON exception TYPE string",
+        "DEFINE FIELD IF NOT EXISTS dimension ON exception TYPE string",
+        "DEFINE FIELD IF NOT EXISTS open ON exception TYPE bool",
+        "DEFINE INDEX IF NOT EXISTS exception_open ON exception FIELDS project_id, open",
+        "DEFINE FIELD IF NOT EXISTS updated_at ON exception TYPE datetime",
 
         "DEFINE TABLE IF NOT EXISTS schema_meta SCHEMALESS",
     ]
