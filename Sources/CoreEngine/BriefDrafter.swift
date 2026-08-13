@@ -131,7 +131,11 @@ public enum BriefDraft {
     /// A name from the first thing the user asked. Cut at a sentence boundary
     /// where there is one, so the fallback reads like a title rather than the
     /// first 40 characters of a paragraph.
-    static func summarise(_ ask: String) -> String {
+    ///
+    /// Public because the conversation list names itself the same way (§19.2.1):
+    /// a title cut mid-word is the same defect wherever it shows up, and it was
+    /// already solved once here.
+    public static func summarise(_ ask: String) -> String {
         guard !ask.isEmpty else { return "" }
         let firstLine = ask.split(separator: "\n").first.map(String.init) ?? ask
         let trimmed = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -149,28 +149,10 @@ private struct ChatScreen: View {
     // MARK: - sidebar
 
     private var conversationList: some View {
-        List(selection: Binding(get: { model.selected?.id },
-                                set: { id in
-                                    guard let conversation = model.conversations.first(where: { $0.id == id })
-                                    else { return }
-                                    Task { await model.select(conversation) }
-                                })) {
-            ForEach(model.conversations) { conversation in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(conversation.title ?? "บทสนทนาใหม่").lineLimit(1)
-                    Text(conversation.updatedAt, format: .relative(presentation: .named))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                .tag(conversation.id)
-                .contextMenu {
-                    Button("ลบบทสนทนา", role: .destructive) {
-                        Task { await model.delete(conversation) }
-                    }
-                }
-                .accessibilityAction(named: "ลบบทสนทนานี้") {
-                    Task { await model.delete(conversation) }
-                }
-            }
+        VStack(spacing: 0) {
+            searchBar
+            Divider()
+            conversationRows
         }
         .navigationTitle("บทสนทนา")
         .toolbar {
@@ -178,6 +160,106 @@ private struct ChatScreen: View {
                 Label("บทสนทนาใหม่", systemImage: "square.and.pencil")
             }
             .accessibilityLabel("สร้างบทสนทนาใหม่")
+        }
+    }
+
+    // MARK: - history (§19.2.1)
+
+    private var searchBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                TextField("ค้นในบทสนทนา", text: $model.query)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { Task { await model.search() } }
+                    .accessibilityLabel("ค้นข้อความในบทสนทนาเก่า")
+                if !model.query.isEmpty {
+                    Button { model.clearSearch() } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("ล้างคำค้น")
+                }
+            }
+            // A different question, not a wider default: inside a project the
+            // list belongs to the project.
+            Toggle("ค้นข้ามโปรเจกต์", isOn: $model.searchesEverywhere)
+                .font(.caption)
+                .toggleStyle(.checkbox)
+                .onChange(of: model.searchesEverywhere) { _, _ in
+                    Task { await model.search() }
+                }
+        }
+        .padding(10)
+        // Searches as you type, debounced. Driving it showed why: with Enter as
+        // the only trigger there is no button, no spinner and no message — a
+        // box that looks broken until you guess the keystroke. (And the first
+        // attempt hung this off an `EmptyView`, which has no lifecycle to run
+        // a task on, so it never fired at all — caught by driving it again.)
+        .task(id: model.query) {
+            guard !model.query.trimmingCharacters(in: .whitespaces).isEmpty else {
+                model.clearSearch()
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            await model.search()
+        }
+    }
+
+    @ViewBuilder
+    private var conversationRows: some View {
+        if !model.matches.isEmpty {
+            List(model.matches) { match in
+                Button {
+                    Task { await model.select(match.conversation) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(match.conversation.title ?? "บทสนทนาใหม่")
+                            .lineLimit(1).font(.callout)
+                        // The line that matched, because "which conversations
+                        // exist" is not the question somebody searching asked.
+                        Text(match.snippet).font(.caption)
+                            .foregroundStyle(.secondary).lineLimit(2)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+            }
+        } else {
+            List(selection: Binding(get: { model.selected?.id },
+                                    set: { id in
+                                        guard let conversation = model.conversations.first(where: { $0.id == id })
+                                        else { return }
+                                        Task { await model.select(conversation) }
+                                    })) {
+                ForEach(model.conversations) { conversation in
+                    HStack(spacing: 6) {
+                        if conversation.pinned {
+                            Image(systemName: "pin.fill").font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel("ปักหมุดไว้")
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(conversation.title ?? "บทสนทนาใหม่").lineLimit(1)
+                            Text(conversation.updatedAt, format: .relative(presentation: .named))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .tag(conversation.id)
+                    .contextMenu {
+                        Button(conversation.pinned ? "เลิกปักหมุด" : "ปักหมุด") {
+                            Task { await model.togglePin(conversation) }
+                        }
+                        Button("ลบบทสนทนา", role: .destructive) {
+                            Task { await model.delete(conversation) }
+                        }
+                    }
+                    .accessibilityAction(named: conversation.pinned ? "เลิกปักหมุด" : "ปักหมุดบทสนทนานี้") {
+                        Task { await model.togglePin(conversation) }
+                    }
+                    .accessibilityAction(named: "ลบบทสนทนานี้") {
+                        Task { await model.delete(conversation) }
+                    }
+                }
+            }
         }
     }
 
