@@ -45,7 +45,7 @@ let package = Package(
         // SurrealDB access + everything durable: conversations, spans and
         // (from P2) the knowledge base. Client written in-house — see
         // ARCHITECTURE §11.5 for why not surrealdb.swift.
-        .target(name: "Persistence", dependencies: ["AgentKit", "Observability", "Knowledge"]),
+        .target(name: "Persistence", dependencies: ["AgentKit", "Observability", "Knowledge", "ProjectKit"]),
 
         // M5 — every model behind one interface, plus the router that decides
         // which tier serves a request (ARCHITECTURE §9).
@@ -168,7 +168,7 @@ let package = Package(
         // how a run whose writes stopped after the first attempt still passed.
         .executableTarget(name: "EmbeddingCheck",
                           dependencies: ["EmbeddingRuntime", "Knowledge", "Persistence",
-                                         "Sidecar", "Config", "CoreEngine"]),
+                                         "Sidecar", "Config", "CoreEngine", "ProjectKit"]),
 
         // The executor contract, run against Tier 0.5 with the real weights.
         // An executable for the same reason as EmbeddingCheck: MLX finds its
