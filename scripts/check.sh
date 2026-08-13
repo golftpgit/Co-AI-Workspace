@@ -109,6 +109,7 @@ fi
 UNWIRED=""
 for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer Researcher ContextManager LocalTier ModelInstaller BudgetGovernor EndpointProbe AnalysisStore NotebookKernel NotebookRunner NotebookStore \
                   ProjectService ProjectStore StageGate BriefDrafter WorkspaceStoreCache \
+                  WorkPackageStore WorkBreakdown \
                   StatTestTool GapDetector AnalysisPlanStore ConnectorStore OfficeWriter \
                   MCPRegistry MCPServerStore Notifier AppIntentsChannel \
                   TemplateStore TemplateParser TemplateFiller PluginRegistry WriteSkillTool \
@@ -198,6 +199,18 @@ if [ -n "$UNREGISTERED" ]; then
   fail "built but never registered in the gateway:$UNREGISTERED"
 else
   ok "the new tools are registered where a session can reach them"
+fi
+
+# ARCHITECTURE §19.6 / P10.4: a leaf reaches `.done` through the evidence check
+# or not at all. Same shape as the stage rule above, and for the same reason —
+# §19.15 invariant 4 says a finished package has evidence, and a status that can
+# be assigned from anywhere is a status that will be.
+DONE_WRITERS=$(grep -rn "status = \.done" Sources --include='*.swift' \
+  | grep -v "Sources/ProjectKit/WorkBreakdownStructure.swift" || true)
+if [ -n "$DONE_WRITERS" ]; then
+  fail "a work package is marked done outside WorkBreakdown.complete: $DONE_WRITERS"
+else
+  ok "a work package is only done with evidence behind it"
 fi
 
 # ARCHITECTURE §19.4 / P10.2: a stage changes in one place or it is not a gate.

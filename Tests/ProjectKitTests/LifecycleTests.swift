@@ -92,11 +92,19 @@ struct LifecycleTests {
     func executionNeedsEverythingDone() async throws {
         var project = briefed()
         project.stage = .execution
+        // The count comes from the plan itself (P10.4) rather than from a
+        // number the caller supplies — a gate whose input is an argument is a
+        // gate whose input can be wrong.
+        let leaf = WorkPackage(projectID: project.id, title: "สคริปต์",
+                               scopeRef: project.statement.inScope[0],
+                               acceptanceCriteria: [Criterion(text: "รันได้", evidenceRequired: "exit 0")])
+        var finished = leaf
+        finished.status = .done
 
-        let gate = try #require(ProjectLifecycle.evaluate(project, openWorkPackages: 2))
+        let gate = try #require(ProjectLifecycle.evaluate(project, wbs: WorkBreakdown([leaf])))
         #expect(gate.gate == "G3")
         #expect(!gate.passed)
-        #expect(ProjectLifecycle.evaluate(project, openWorkPackages: 0)?.passed == true)
+        #expect(ProjectLifecycle.evaluate(project, wbs: WorkBreakdown([finished]))?.passed == true)
     }
 
     @Test("Closing needs a lesson written down")
