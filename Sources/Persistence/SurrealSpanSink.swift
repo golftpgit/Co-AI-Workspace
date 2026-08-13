@@ -39,6 +39,7 @@ public actor SurrealSpanSink: SpanSink {
         content.set("prompt_tokens", span.promptTokens)
         content.set("completion_tokens", span.completionTokens)
         content.setString("detail", span.detail)
+        content.setString("work_package", span.workPackage)
 
         do {
             try await client.exec(
@@ -95,6 +96,47 @@ public actor SurrealSpanSink: SpanSink {
                     endedAt: date(row["ended_at"]),
                     promptTokens: row["prompt_tokens"]?.intValue,
                     completionTokens: row["completion_tokens"]?.intValue,
-                    detail: row["detail"]?.stringValue)
+                    detail: row["detail"]?.stringValue,
+                    workPackage: row["work_package"]?.stringValue)
+    }
+
+    // MARK: - measurements (§19.7, §19.10, P10.15)
+
+    /// How long has been spent against each leaf of the plan, in seconds.
+    ///
+    /// Summed rather than wall-clocked from first to last: a package worked on
+    /// across three days did not take three days, and the number people act on
+    /// has to be the one they would recognise.
+    public func elapsedByWorkPackage(project: ProjectID) async throws -> [String: TimeInterval] {
+        let rows = try await client.query("""
+            SELECT work_package, started_at, ended_at FROM span
+            WHERE project_id = type::string($pid) AND work_package != NONE
+            """, vars: ["pid": project.rawValue]).first?.rows ?? []
+
+        var totals: [String: TimeInterval] = [:]
+        for row in rows {
+            guard let package = row["work_package"]?.stringValue,
+                  let started = Self.date(row["started_at"]),
+                  let ended = Self.date(row["ended_at"]) else { continue }
+            totals[package, default: 0] += max(0, ended.timeIntervalSince(started))
+        }
+        return totals
+    }
+
+    /// Durations of finished work of the same shape, for the forecast band.
+    /// Deliberately across projects: the whole point of a p90 is that it comes
+    /// from more than the project asking for it.
+    public func durations(forRole role: Role) async throws -> [TimeInterval] {
+        let rows = try await client.query("""
+            SELECT started_at, ended_at FROM span
+            WHERE role = type::string($role) AND status = 'succeeded' AND ended_at != NONE
+            LIMIT 500
+            """, vars: ["role": role.rawValue]).first?.rows ?? []
+
+        return rows.compactMap { row in
+            guard let started = Self.date(row["started_at"]),
+                  let ended = Self.date(row["ended_at"]) else { return nil }
+            return max(0, ended.timeIntervalSince(started))
+        }
     }
 }

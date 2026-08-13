@@ -14,15 +14,21 @@ public struct ToolContext: Sendable {
     public let conversationID: String?
     /// Set when the call is part of an assignment, for span attribution.
     public let role: Role?
+    /// Which leaf of the plan this work is against (§19.6). Carried on the
+    /// context rather than passed separately, so every span the gateway
+    /// records inherits it without any caller remembering to.
+    public let workPackage: String?
 
     public init(scope: Scope,
                 workingDirectory: URL? = nil,
                 conversationID: String? = nil,
-                role: Role? = nil) {
+                role: Role? = nil,
+                workPackage: String? = nil) {
         self.scope = scope
         self.workingDirectory = workingDirectory
         self.conversationID = conversationID
         self.role = role
+        self.workPackage = workPackage
     }
 }
 
