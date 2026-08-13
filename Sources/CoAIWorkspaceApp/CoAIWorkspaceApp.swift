@@ -104,7 +104,13 @@ private struct RootView: View {
                                  announce: { message in
                                      await engine.channelRouter.broadcast(message)
                                  })
-                        .task { await projects.attach(service: engine.projects) }
+                        .task {
+                            await projects.attach(service: engine.projects)
+                            // §19.10 — where each tolerance reading comes from.
+                            await projects.attach(spans: engine.spans,
+                                                  spend: engine.spendLedger,
+                                                  ledger: engine.taskLedger)
+                        }
                 case .knowledge:
                     KnowledgeView(model: knowledge)
                         .task {

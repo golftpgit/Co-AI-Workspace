@@ -315,6 +315,13 @@ struct ProjectsView: View {
                                 .frame(width: 26, height: 12)
                                 .padding(.leading, CGFloat(index) * 14)
                             Text(package.title).font(.callout)
+                            if let seconds = model.elapsed[package.id], seconds > 0 {
+                                // Measured, not estimated — this is time that
+                                // actually happened against this leaf.
+                                Text(formatDuration(seconds))
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                            }
                             if critical.contains(package.id) {
                                 Text("เส้นทางวิกฤต").font(.caption2)
                                     .padding(.horizontal, 5).padding(.vertical, 1)
@@ -340,6 +347,10 @@ struct ProjectsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        seconds < 90 ? "\(Int(seconds)) วิ" : "\(Int(seconds / 60)) นาที"
     }
 
     private func dependencyPicker(_ package: WorkPackage) -> some View {

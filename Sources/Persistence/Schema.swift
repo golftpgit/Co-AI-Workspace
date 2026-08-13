@@ -16,6 +16,9 @@ public enum Schema {
     /// an interrupted run — run-until-done resumes the second and never the
     /// first. The criteria and deliverable type it needs to rebuild an
     /// assignment ride along on the schemaless part of the row.
+    /// 7: `span` carries `work_package` (§19.6, P10.15) — the link that turns
+    /// "how long did this take" into "how long did *this promise* take", and
+    /// with it four of the six tolerances from enforced-but-unread into read.
     /// 6: `register` and `baseline` exist (§19.11, P10.7–P10.8). The baseline's
     /// version is unique per project, so an agreement is superseded rather than
     /// rewritten — the database refuses the second write of a version.
@@ -27,7 +30,7 @@ public enum Schema {
     /// `project_id`; there was simply nothing on the other end of it, so two
     /// projects were indistinguishable and the app wrote the literal id
     /// "default" into all of them.
-    public static let version = 6
+    public static let version = 7
 
     /// Split into statements that are executed one at a time: a single
     /// failing statement should name itself, not abort a 40-line blob.
@@ -61,6 +64,8 @@ public enum Schema {
         "DEFINE INDEX IF NOT EXISTS span_parent ON span FIELDS parent",
         "DEFINE FIELD IF NOT EXISTS scope_kind ON span TYPE option<string>",
         "DEFINE FIELD IF NOT EXISTS project_id ON span TYPE option<string>",
+        "DEFINE FIELD IF NOT EXISTS work_package ON span TYPE option<string>",
+        "DEFINE INDEX IF NOT EXISTS span_work_package ON span FIELDS work_package",
 
         // ── schema metadata ──
         // Knowledge base (P2.7). Text and provenance are the source of truth;

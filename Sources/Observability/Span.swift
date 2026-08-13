@@ -35,6 +35,12 @@ public struct Span: Sendable, Codable, Identifiable {
     public var promptTokens: Int?
     public var completionTokens: Int?
     public var detail: String?
+    /// Which leaf of the plan this happened against (§19.6, P10.15).
+    ///
+    /// The link the schedule and four of the six tolerances were waiting for:
+    /// spans have always known how long something took, and until now nothing
+    /// could say what it took that long *for*.
+    public var workPackage: String?
 
     public var duration: TimeInterval? {
         endedAt.map { $0.timeIntervalSince(startedAt) }
@@ -50,13 +56,15 @@ public struct Span: Sendable, Codable, Identifiable {
                 endedAt: Date? = nil,
                 promptTokens: Int? = nil,
                 completionTokens: Int? = nil,
-                detail: String? = nil) {
+                detail: String? = nil,
+                workPackage: String? = nil) {
         self.id = id
         self.parent = parent
         self.name = name
         self.role = role
         self.scope = scope
         self.status = status
+        self.workPackage = workPackage
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.promptTokens = promptTokens

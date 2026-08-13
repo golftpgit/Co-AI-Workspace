@@ -181,8 +181,11 @@ public actor ToolGateway {
         case .allow(let arguments, let risk, let notes):
             pending.argumentsJSON = arguments
 
+            // The work package rides on the context, so every tool call is
+            // attributed without any caller remembering to (§19.6, P10.15).
             var span = Span(parent: parentSpan, name: "tool:\(name)",
-                            role: context.role, scope: context.scope)
+                            role: context.role, scope: context.scope,
+                            workPackage: context.workPackage)
             await sink?.record(span)
             do {
                 let output = try await tool.call(argumentsJSON: arguments, context: context)
@@ -206,7 +209,8 @@ public actor ToolGateway {
                         status: SpanStatus, detail: String) async {
         guard let sink else { return }
         var span = Span(parent: parent, name: "tool:\(name)",
-                        role: context.role, scope: context.scope, status: status)
+                        role: context.role, scope: context.scope, status: status,
+                        workPackage: context.workPackage)
         span.endedAt = Date()
         span.detail = detail
         await sink.record(span)

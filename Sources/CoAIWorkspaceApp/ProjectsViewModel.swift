@@ -56,7 +56,12 @@ public final class ProjectsViewModel {
     /// "เวลา 0 / 1.50" reads as "time is being tracked and is fine", which is
     /// a lie by omission. Driving the screen by hand is what made that
     /// obvious — the numbers looked measured.
-    public let measured: Set<ToleranceDimension> = [.scope]
+    /// Filled in as the readings become real. Everything not in here renders
+    /// as "ยังไม่ได้วัด" rather than as a zero somebody would read as a
+    /// measurement (§19.10).
+    public private(set) var measured: Set<ToleranceDimension> = [.scope]
+    /// Seconds spent against each leaf, from the span store (§19.7).
+    public private(set) var elapsed: [String: TimeInterval] = [:]
     /// The five registers, the frozen agreements, and how far the plan has
     /// moved from the latest one (§19.11).
     public private(set) var registers: [RegisterEntry] = []
@@ -64,6 +69,9 @@ public final class ProjectsViewModel {
     public private(set) var drift: BaselineDiff?
 
     private var service: ProjectService?
+    private var spans: SurrealSpanSink?
+    private var spend: SurrealSpendLedger?
+    private var ledger: TaskLedgerStore?
     private let log = AppLog.logger("projects-ui")
 
     public init() {}
@@ -87,6 +95,18 @@ public final class ProjectsViewModel {
     public func attach(service: ProjectService) async {
         self.service = service
         await reload()
+    }
+
+    /// The three stores the readings come from (§19.10, P10.15). Passed in
+    /// rather than reached for, and each one named where its number comes from
+    /// — a tolerance whose source nobody can point at is the thing this whole
+    /// section exists to avoid.
+    public func attach(spans: SurrealSpanSink, spend: SurrealSpendLedger,
+                       ledger: TaskLedgerStore) async {
+        self.spans = spans
+        self.spend = spend
+        self.ledger = ledger
+        await refreshGate()
     }
 
     public func reload() async {
@@ -324,6 +344,48 @@ public final class ProjectsViewModel {
         }
     }
 
+    /// Reads what can be read, and says which dimensions those are.
+    ///
+    /// Each source is the one §19.10 named: spans for time, the spend ledger
+    /// for cost, the task ledger's retry count for quality, and the plan's own
+    /// risk classes for risk. Benefit stays unread because nothing measures a
+    /// benefit yet — and it says so rather than showing a zero.
+    private func measure(_ id: ProjectID) async {
+        var reading = readings
+        var known: Set<ToleranceDimension> = [.scope]
+
+        if let spans {
+            elapsed = (try? await spans.elapsedByWorkPackage(project: .init(id.rawValue))) ?? [:]
+            let spent = elapsed.values.reduce(0, +)
+            // The frame is a multiple of how long this kind of work usually
+            // takes, so an unfinished plan with no history has no ratio to
+            // report — not a ratio of zero.
+            let history = (try? await spans.durations(forRole: .analyst)) ?? []
+            if let estimate = Schedule.estimate(from: history), estimate.p90 > 0 {
+                reading.timeRatio = spent / estimate.p90
+                known.insert(.time)
+            }
+        }
+        if let spend {
+            let window = await spend.spend(now: Date())
+            reading.spent = window.today
+            known.insert(.cost)
+        }
+        if let ledger, let rows = try? await ledger.rows(scope: .project(id)) {
+            reading.maxRework = Double(rows.map(\.attempts).max() ?? 0)
+            known.insert(.quality)
+        }
+        // Risk needs no store: the plan already carries what each leaf is
+        // classified as, and the open ones are the ones that could still bite.
+        let openRisk = wbs.openLeaves.map(\.riskClass.rawValue).max() ?? 0
+        reading.highestRisk = Double(openRisk)
+        known.insert(.risk)
+
+        readings = reading
+        measured = known
+        tolerances = ToleranceCheck.evaluate(selected?.tolerances ?? .balanced, readings: reading)
+    }
+
     private func refreshGate() async {
         guard let service, case .project(let id) = selection else {
             gate = nil
@@ -348,5 +410,6 @@ public final class ProjectsViewModel {
         // size of the plan: a project is not off-scope for having a plan, only
         // for having grown one past what was agreed (§19.10).
         readings.addedPackages = drift?.addedCount ?? 0
+        await measure(id)
     }
 }
