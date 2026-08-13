@@ -51,6 +51,12 @@ public final class ProjectsViewModel {
     /// wires two of the six for real — the rest are named and left at zero
     /// rather than invented.
     public var readings = ToleranceReadings()
+    /// Which of the six the app can actually measure today (§19.10). The rest
+    /// are enforced but unread, and the screen has to say so: a row showing
+    /// "เวลา 0 / 1.50" reads as "time is being tracked and is fine", which is
+    /// a lie by omission. Driving the screen by hand is what made that
+    /// obvious — the numbers looked measured.
+    public let measured: Set<ToleranceDimension> = [.scope]
     /// The five registers, the frozen agreements, and how far the plan has
     /// moved from the latest one (§19.11).
     public private(set) var registers: [RegisterEntry] = []

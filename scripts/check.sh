@@ -202,6 +202,26 @@ else
   ok "the new tools are registered where a session can reach them"
 fi
 
+# Driving the project screen by hand (2026-08-13) found text fields that saved
+# on every keystroke: each character wrote to SurrealDB, the reload landed with
+# text older than what had been typed since, and a Thai sentence lost roughly
+# one character per round-trip. Nothing in `swift test` could see it — the view
+# model saved correctly and the store stored correctly; only the two together
+# ate the input. The fix is a local buffer committed after a pause, so a write
+# inside a Binding setter is the shape to keep out.
+KEYSTROKE_WRITES=$(grep -n "Task { await model.update" Sources/CoAIWorkspaceApp/ProjectsView.swift \
+  | grep -v "commitCriteria" || true)
+if [ -n "$KEYSTROKE_WRITES" ]; then
+  # Allowed only from the commit helpers, which run after the debounce.
+  if ! grep -q "private func commitDraft" Sources/CoAIWorkspaceApp/ProjectsView.swift; then
+    fail "the project screen writes on every keystroke again: $KEYSTROKE_WRITES"
+  else
+    ok "the project screen buffers edits and commits after a pause"
+  fi
+else
+  ok "the project screen buffers edits and commits after a pause"
+fi
+
 # ARCHITECTURE §19.5 / P10.5: the Executive seat is never an agent's. The rule
 # is carried by the types — `BoardRole` has no case and no initializer that
 # accepts a `Role` — so what this checks is that it stays that way: the moment
