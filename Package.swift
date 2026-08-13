@@ -173,8 +173,12 @@ let package = Package(
         // ledger store: its own tests assert on the in-memory entries, which is
         // how a run whose writes stopped after the first attempt still passed.
         .executableTarget(name: "EmbeddingCheck",
+                          // Analysis is here for §19.2's Workbench Done-when: that
+                          // General can query a database with no project, proven by
+                          // running one rather than by reading the wiring.
                           dependencies: ["EmbeddingRuntime", "Knowledge", "Persistence",
-                                         "Sidecar", "Config", "CoreEngine", "ProjectKit"]),
+                                         "Sidecar", "Config", "CoreEngine", "ProjectKit",
+                                         "Analysis"]),
 
         // The executor contract, run against Tier 0.5 with the real weights.
         // An executable for the same reason as EmbeddingCheck: MLX finds its

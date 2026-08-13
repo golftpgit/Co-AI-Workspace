@@ -5,6 +5,7 @@ import Persistence
 import EmbeddingRuntime
 import CoreEngine
 import LLMProviders
+import Analysis
 
 // ─────────────────────────────────────────────────────────────
 // Driving the screens' logic the way a person would, against the real
@@ -42,6 +43,40 @@ struct ScreenFlows {
         try? text.write(to: file, atomically: true, encoding: .utf8)
 
         var firstChunkID = ""
+
+        // §19.2 / P10.12 — the Workbench's second Done-when: General can query a
+        // database without anybody creating a project first. General is not the
+        // leftovers, it is a place to work, and the app-wide analysis store is
+        // what makes that true.
+        await check("[โต๊ะทำงาน · General] query ฐานข้อมูลได้โดยไม่ต้องสร้างโปรเจกต์") {
+            let folder = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appending(path: "coai-general-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: folder) }
+
+            let store = try AnalysisStore(fileURL: folder.appending(path: "analysis.duckdb"))
+            // Through the same guard the screen runs statements through, because
+            // a query path that skips it is not the path the person uses.
+            let create = "CREATE TABLE burnout (site TEXT, alpha DOUBLE)"
+            guard SQLGuard.assess(create).effect >= .write else {
+                throw CheckFailure("guard ไม่ถือว่า CREATE TABLE เป็นการเปลี่ยนข้อมูล")
+            }
+            _ = try await store.query(create)
+            _ = try await store.query("INSERT INTO burnout VALUES ('รพ. ก', 0.74)")
+
+            let read = "SELECT site, alpha FROM burnout"
+            guard SQLGuard.assess(read).effect == .read else {
+                throw CheckFailure("guard ถือว่า SELECT เปลี่ยนข้อมูล")
+            }
+            let result = try await store.query(read)
+            guard result.rows.count == 1, result.rows[0].first == "รพ. ก" else {
+                throw CheckFailure("อ่านค่ากลับมาไม่ตรง: \(result.rows)")
+            }
+            guard try await store.tables().contains("burnout") else {
+                throw CheckFailure("ตารางที่สร้างไม่โผล่ในรายชื่อตาราง")
+            }
+            return "สร้าง · เขียน · อ่าน ครบใน General"
+        }
 
         await check("[หน้าคลังความรู้] เพิ่มเอกสารแล้วค้นเจอ") {
             let report = try await pipeline.ingest(file, into: &index, scope: .central,

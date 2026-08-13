@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import Config
 import Sidecar
+import Knowledge
 
 @main
 struct CoAIWorkspaceApp: App {
@@ -26,7 +27,16 @@ struct CoAIWorkspaceApp: App {
 /// visible instead of leaving an empty window with no explanation (v1 bug B4).
 private struct RootView: View {
     let environment: AppEnvironment
-    @State private var showingStatus = false
+    /// Which of the four areas is open (§19.2). The old flat `Screen` list is
+    /// still what draws each surface — see `screenView` — but nobody navigates by
+    /// it any more.
+    @State private var area = Area.chat
+    @State private var workbenchTab = SubTab.console
+    @State private var knowledgeTab = SubTab.documents
+    @State private var systemTab = SubTab.status
+    /// The team rail beside Chat (§19.2.6). Off by default: most turns are a
+    /// question, and a monitor beside a question is noise.
+    @State private var showingRail = false
     @State private var screen = Screen.chat
     /// Owned here rather than built inside the view: a model recreated on each
     /// body pass loses whatever the user just did to it (P1.10's bug).
@@ -42,6 +52,72 @@ private struct RootView: View {
     /// `ProjectID("default")`.
     @State private var projects = ProjectsViewModel()
 
+    /// §19.2's four areas, plus the system. Each one is a different question:
+    /// what to ask for · what was agreed · what to do with the data · what is
+    /// true. The fifth is not a question, which is why it is outside the four.
+    enum Area: String, CaseIterable, Identifiable {
+        case chat, plan, workbench, knowledge, system
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .chat: "สนทนา"
+            case .plan: "แผนงาน"
+            case .workbench: "โต๊ะทำงาน"
+            case .knowledge: "คลังความรู้"
+            case .system: "ระบบ"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .chat: "bubble.left.and.bubble.right"
+            case .plan: "square.stack.3d.up"
+            case .workbench: "tablecells"
+            case .knowledge: "books.vertical"
+            case .system: "gearshape"
+            }
+        }
+
+        /// ⌘1…⌘5, in the order they appear.
+        static func shortcutDigit(for area: Area) -> Character {
+            Character(String((allCases.firstIndex(of: area) ?? 0) + 1))
+        }
+    }
+
+    /// Sub-tabs across every area. One enum rather than four so the shell can
+    /// hold "which tab" without four parallel pieces of state that can disagree.
+    enum SubTab: String, CaseIterable, Identifiable {
+        // Workbench, in the order data travels (§19.2).
+        case collect, internalDB, externalDB, console, results
+        // Knowledge.
+        case documents, conflicts, sources
+        // System.
+        case models, budget, status, inventory
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .collect: "เก็บข้อมูล"
+            case .internalDB: "ฐานข้อมูลภายใน"
+            case .externalDB: "ฐานข้อมูลภายนอก"
+            case .console: "สคริปต์ + คอนโซล"
+            case .results: "ผลลัพธ์ + เอกสาร"
+            case .documents: "เอกสาร"
+            case .conflicts: "ข้อขัดแย้ง"
+            case .sources: "แหล่งและ tier"
+            case .models: "โมเดล"
+            case .budget: "งบ + endpoint"
+            case .status: "สถานะระบบ"
+            case .inventory: "ผังหน้าจอ"
+            }
+        }
+    }
+
+    /// The surfaces themselves, unchanged from before the reorganisation. Not
+    /// navigation any more — `screenView` maps one of these onto a pane inside an
+    /// area, which is how §19.2 could be a re-layout rather than a rewrite.
     enum Screen: String, CaseIterable, Identifiable {
         case chat, projects, knowledge, conflicts, team, analysis, models, endpoints
         var id: String { rawValue }
@@ -80,9 +156,14 @@ private struct RootView: View {
         }
     }
 
-    var body: some View {
-        Group {
-            if let engine = environment.engine, !showingStatus {
+    /// One old screen, drawn. Kept as a function rather than folded into the
+    /// area shell below so the reorganisation moved *where* a screen appears and
+    /// nothing about what it contains — which is the only version of this change
+    /// that R13 permits (§19.2, P10.12).
+    @ViewBuilder
+    private func screenView(_ screen: Screen, engine: Engine,
+                            analysisPane: AnalysisView.Pane? = nil,
+                            explorerFocus: AnalysisView.ExplorerFocus = .both) -> some View {
                 switch screen {
                 case .chat:
                     ChatView(engine: engine, scope: projects.scope,
@@ -93,7 +174,7 @@ private struct RootView: View {
                                  // Land on the project that was just made, so
                                  // the next thing on screen is its brief and
                                  // the G1 conditions still to fill in.
-                                 screen = .projects
+                                 area = .plan
                              })
                         // Identity by scope: switching workspace has to build a
                         // new view model, or the conversation list stays the one
@@ -131,7 +212,8 @@ private struct RootView: View {
                                                   ledger: engine.taskLedger,
                                                   gateway: engine.gateway) }
                 case .analysis:
-                    AnalysisView(model: analysis)
+                    AnalysisView(model: analysis, chosen: analysisPane,
+                                 explorerFocus: explorerFocus)
                         // Same identity trick as Chat: switching workspace has
                         // to rebuild the screen, or it keeps showing the tables
                         // of the project you just left (§19.1).
@@ -174,6 +256,12 @@ private struct RootView: View {
                                 })
                         }
                 }
+    }
+
+    var body: some View {
+        Group {
+            if let engine = environment.engine {
+                areaContent(engine)
             } else {
                 BootStatusView(environment: environment)
             }
@@ -184,44 +272,203 @@ private struct RootView: View {
         // whatever was being worked on. It draws nothing in General: there is no
         // stage, no frame and no baseline to report.
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if environment.engine != nil, !showingStatus, projects.selected != nil {
-                StatusBarView(model: projects, openPlan: { screen = .projects })
+            if environment.engine != nil, projects.selected != nil {
+                StatusBarView(model: projects, openPlan: { area = .plan })
             }
         }
         .toolbar {
-            if environment.engine != nil, !showingStatus {
-                Picker("หน้าจอ", selection: $screen) {
-                    ForEach(Screen.allCases) { screen in
-                        Label(screen.label, systemImage: screen.icon).tag(screen)
+            if environment.engine != nil {
+                // §19.2 — four areas and the system, not fourteen screens laid
+                // out flat. The order is the order of the four questions: what
+                // to ask for, what was agreed, what to do with the data, what is
+                // true.
+                Picker("พื้นที่", selection: $area) {
+                    ForEach(Area.allCases) { area in
+                        Label(area.label, systemImage: area.icon).tag(area)
                     }
                 }
                 .pickerStyle(.segmented)
-                .accessibilityLabel("สลับหน้าจอ")
+                .accessibilityLabel("สลับพื้นที่ทำงาน")
+
+                // The workspace switch at the head of the app (§19.1). It used
+                // to live only in the Plan area's sidebar, which meant leaving
+                // whatever you were doing to change which project you were doing
+                // it in.
+                Menu {
+                    Button("General — คุยทั่วไป") {
+                        Task { await projects.select(.general) }
+                    }
+                    Divider()
+                    ForEach(projects.openProjects) { project in
+                        Button("\(project.name) · ขั้น\(project.stage.label)") {
+                            Task { await projects.select(.project(project.id)) }
+                        }
+                    }
+                } label: {
+                    Label(projects.selected?.name ?? "General", systemImage: "square.stack.3d.up")
+                }
+                .accessibilityLabel("สลับพื้นที่ทำงานระหว่าง General กับโปรเจกต์")
+
+                if area == .chat {
+                    Toggle(isOn: $showingRail) {
+                        Label("เฝ้าดูทีม", systemImage: "sidebar.trailing")
+                    }
+                    .accessibilityLabel("เปิดหรือปิดแถบเฝ้าดูทีมด้านขวา")
+                }
             }
             if environment.engine != nil {
-                Toggle(isOn: $showingStatus) {
+                Button {
+                    area = .system
+                    systemTab = .status
+                } label: {
                     Label("สถานะระบบ", systemImage: "heart.text.square")
                 }
-                .accessibilityLabel("สลับไปดูสถานะระบบ")
+                .accessibilityLabel("ไปที่สถานะระบบ")
                 .keyboardShortcut("0", modifiers: .command)
             }
         }
         // §14.4 / P8.7 — a segmented picker in a toolbar is reachable from the
         // keyboard only if the person has turned Full Keyboard Access on, and
         // "you can get there by changing a system setting" is not the same as
-        // "you can get there". ⌘1…⌘7 is: it works for everybody, including the
+        // "you can get there". ⌘1…⌘5 is: it works for everybody, including the
         // people who use it because it is faster.
         .background {
-            ForEach(Screen.allCases) { target in
+            ForEach(Area.allCases) { target in
                 // Typed step by step: as a single expression with string
                 // interpolation inside a `ForEach` over an enumerated
                 // sequence, the type checker gave up on this line.
-                let digit: Character = Screen.shortcutDigit(for: target)
-                Button("") { screen = target; showingStatus = false }
+                let digit: Character = Area.shortcutDigit(for: target)
+                Button("") { area = target }
                     .keyboardShortcut(KeyEquivalent(digit), modifiers: .command)
                     .opacity(0)
                     .accessibilityHidden(true)
             }
+        }
+    }
+
+    // MARK: - the four areas (§19.2)
+
+    @ViewBuilder
+    private func areaContent(_ engine: Engine) -> some View {
+        VStack(spacing: 0) {
+            // Sub-tabs belong to the area, not to the screen inside it: one
+            // picker per level, so "where am I" has one answer (§19.2.6).
+            if let tabs = subTabs, tabs.count > 1 {
+                Picker("ส่วนของพื้นที่", selection: subTabSelection) {
+                    ForEach(tabs) { tab in Text(tab.label).tag(tab) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal, 12).padding(.top, 8)
+                .accessibilityLabel("เลือกส่วนของ\(area.label)")
+            }
+
+            switch area {
+            case .chat: chatArea(engine)
+            case .plan: planArea(engine)
+            case .workbench: workbenchArea(engine)
+            case .knowledge: knowledgeArea(engine)
+            case .system: systemArea(engine)
+            }
+        }
+    }
+
+    /// Chat is three columns (§19.2.6): history on the left — inside `ChatView`
+    /// since P10.14 — the conversation in the middle, and the team on the right
+    /// when it is wanted. The rail is off by default because most turns are a
+    /// question, and a monitor beside a question is noise.
+    @ViewBuilder
+    private func chatArea(_ engine: Engine) -> some View {
+        if showingRail {
+            HSplitView {
+                screenView(.chat, engine: engine)
+                    .frame(minWidth: 480)
+                screenView(.team, engine: engine)
+                    .frame(minWidth: 320, idealWidth: 380, maxWidth: 520)
+            }
+        } else {
+            screenView(.chat, engine: engine)
+        }
+    }
+
+    @ViewBuilder
+    private func planArea(_ engine: Engine) -> some View {
+        screenView(.projects, engine: engine)
+    }
+
+    /// The data path, in order: collected → stored (inside, outside) → worked on
+    /// → presented. General is missing the first two on purpose (§19.2): there is
+    /// no ethics and no scope to collect under, and no project database to be the
+    /// inside of.
+    @ViewBuilder
+    private func workbenchArea(_ engine: Engine) -> some View {
+        switch workbenchTab {
+        case .collect:
+            ContentUnavailableView(
+                "เครื่องมือเก็บข้อมูลยังไม่ได้ทำ",
+                systemImage: "square.and.pencil",
+                description: Text("แบบสอบถาม/ฟอร์มและการเก็บข้อมูลจากคนอื่นคือ M15 Instruments "
+                                  + "ในแผน P11 — ยังไม่มีในแอปวันนี้ และแท็บนี้อยู่ที่นี่เพราะ "
+                                  + "มันเป็นต้นทางของเส้นทางข้อมูลเดียวกัน ไม่ใช่เพราะมันพร้อม"))
+        case .internalDB:
+            screenView(.analysis, engine: engine,
+                       analysisPane: .explorer, explorerFocus: .internalStore)
+        case .externalDB:
+            screenView(.analysis, engine: engine,
+                       analysisPane: .explorer, explorerFocus: .external)
+        case .console:
+            screenView(.analysis, engine: engine, analysisPane: .notebook)
+        case .results:
+            screenView(.analysis, engine: engine, analysisPane: .plan)
+        default:
+            // Reachable only if a tab from another area were assigned here, which
+            // `subTabs` never does. Showing the console beats an empty pane.
+            screenView(.analysis, engine: engine, analysisPane: .notebook)
+        }
+    }
+
+    @ViewBuilder
+    private func knowledgeArea(_ engine: Engine) -> some View {
+        switch knowledgeTab {
+        case .conflicts: screenView(.conflicts, engine: engine)
+        case .sources: SourcesView(registry: SourceRegistry())
+        default: screenView(.knowledge, engine: engine)
+        }
+    }
+
+    @ViewBuilder
+    private func systemArea(_ engine: Engine) -> some View {
+        switch systemTab {
+        case .models: screenView(.models, engine: engine)
+        case .budget: screenView(.endpoints, engine: engine)
+        // R13's checklist, in the app: where each of §14.2's screens went, and
+        // which of them are honestly not built yet.
+        case .inventory: IAInventoryView()
+        default: BootStatusView(environment: environment)
+        }
+    }
+
+    // MARK: - sub-tab plumbing
+
+    private var subTabs: [SubTab]? {
+        switch area {
+        case .chat, .plan: nil
+        case .workbench: projects.selected == nil
+            ? [.externalDB, .console, .results]
+            : [.collect, .internalDB, .externalDB, .console, .results]
+        case .knowledge: [.documents, .conflicts, .sources]
+        case .system: [.models, .budget, .status, .inventory]
+        }
+    }
+
+    private var subTabSelection: Binding<SubTab> {
+        switch area {
+        case .workbench:
+            Binding(get: { workbenchTab }, set: { workbenchTab = $0 })
+        case .knowledge:
+            Binding(get: { knowledgeTab }, set: { knowledgeTab = $0 })
+        default:
+            Binding(get: { systemTab }, set: { systemTab = $0 })
         }
     }
 }

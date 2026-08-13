@@ -281,6 +281,29 @@ else
   ok "every tool is classified for both risk and stage effect"
 fi
 
+# ARCHITECTURE §19.2 / P10.12, risk R13: collapsing fourteen screens into four
+# areas is the same mistake as `Scope.project` if two of them quietly end up with
+# no home — a reorganisation reads as finished because the new structure is tidy.
+# So every screen §14.2 lists has a row in `IAInventory`, saying which area and
+# sub-tab it lives in and whether it is complete. A screen can be dropped by
+# deciding to drop it, never by being forgotten.
+MISSING_SCREENS=$(/usr/bin/python3 - <<'INVENTORY'
+import re
+arch = open('ARCHITECTURE.md').read()
+table = arch[arch.index('### 14.2 WorkspaceUI'):arch.index('### 14.3 App Intents')]
+# Rows look like: | **Chat** | ... |  — with an optional *(ใหม่)* after the name.
+names = re.findall(r'^\| \*\*([^*]+)\*\*', table, re.M)
+inventory = open('Sources/CoAIWorkspaceApp/IAInventory.swift').read()
+missing = [n for n in names if f'screen: "{n}"' not in inventory]
+print(' '.join(missing) if missing else '')
+INVENTORY
+)
+if [ -n "$MISSING_SCREENS" ]; then
+  fail "หน้าจอใน §14.2 ที่ไม่มีที่อยู่ใน IAInventory (กฎ R13): $MISSING_SCREENS"
+else
+  ok "every screen in §14.2 has a place in the four areas, or says why not"
+fi
+
 # ARCHITECTURE §19.2.4 / P10.16: two things the Plan screen must NOT be able to
 # do. Both are absences, and an absence is exactly what rots without a rule.
 #
