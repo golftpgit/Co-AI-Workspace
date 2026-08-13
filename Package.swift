@@ -92,6 +92,12 @@ let package = Package(
         // tool any more than a channel can.
         .target(name: "Roster", dependencies: ["AgentKit", "Observability"]),
 
+        // M14 (ARCHITECTURE §19.15) — the project life cycle. It does *not*
+        // depend on CoreEngine: the gate reads a stage through
+        // `ProjectStageReading` in AgentKit, so the module that owns the
+        // decision never has to import the module that owns the data.
+        .target(name: "ProjectKit", dependencies: ["AgentKit"]),
+
         // M4 — the channels (ARCHITECTURE §8). **This list is the invariant**
         // (P7.4): no ToolBelt, no CoreEngine, so a channel cannot reach a tool
         // or the gateway even by accident. v1's bug B2 was a Telegram bridge
@@ -188,7 +194,7 @@ let package = Package(
             dependencies: ["AgentKit", "Config", "Observability", "Sidecar", "Persistence",
                            "LLMProviders", "CoreEngine", "Execution", "ToolBelt",
                            "Knowledge", "EmbeddingRuntime", "MLXRuntime", "Analysis",
-                           "Channels", "DocGen", "Roster", "MCPBridge"],
+                           "Channels", "DocGen", "Roster", "MCPBridge", "ProjectKit"],
             // §14.3 — what makes an App Intent findable rather than merely
             // written. Shortcuts and Siri read `Metadata.appintents` from the
             // bundle, and that bundle is produced by `appintentsmetadataprocessor`
@@ -235,6 +241,7 @@ let package = Package(
         // CoreEngine is here so the role→tool table in Roster is checked
         // against the specialists it mirrors, rather than trusted.
         .testTarget(name: "RosterTests", dependencies: ["Roster", "CoreEngine", "ToolBelt"]),
+        .testTarget(name: "ProjectKitTests", dependencies: ["ProjectKit"]),
         // Also hosts the end-to-end walking-skeleton test, which needs a real
         // database and a real sidecar alongside the tools and the gate.
         .testTarget(name: "ToolBeltTests",

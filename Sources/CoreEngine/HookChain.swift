@@ -2,8 +2,9 @@ import Foundation
 import AgentKit
 
 // ─────────────────────────────────────────────────────────────
-// Hook Chain Gate (ARCHITECTURE §5.3) — Critic → Risk Scorer → Policy Gate →
-// HITL, around *every* tool call rather than once at planning time.
+// Hook Chain Gate (ARCHITECTURE §5.3, §19.4) — Critic → Stage Gate → Risk
+// Scorer → Policy Gate → HITL, around *every* tool call rather than once at
+// planning time.
 //
 // The chain is a value, not a service the caller may or may not consult:
 // `ToolGateway` owns one and there is no other way to reach a tool, so
@@ -115,6 +116,10 @@ public enum GateVerdict: Sendable, Equatable {
     case sendBack(reason: String)
     /// A policy hard constraint. Not "approve to continue" — stop.
     case hardStop(policy: String, risk: RiskAssessment)
+    /// The project's current stage does not allow this kind of work (§19.4).
+    /// Like a hard stop and unlike a denial: there is nobody to ask, because
+    /// the answer is "not yet", not "not you".
+    case blockedByStage(reason: String)
     /// A human said no.
     case denied(reason: String?, risk: RiskAssessment)
     /// Plan-only mode is on; nothing executes this session.
@@ -129,15 +134,18 @@ public protocol ApprovalRequesting: Sendable {
 
 public struct HookChain: Sendable {
     public let critics: [any ToolCritic]
+    public let stageGate: StageGate
     public let scorer: any RiskScoring
     public let policyGate: any PolicyGate
     public let postHooks: [any PostToolHook]
 
     public init(critics: [any ToolCritic] = [SchemaCritic()],
+                stageGate: StageGate = .disabled,
                 scorer: any RiskScoring = DefaultRiskScorer(),
                 policyGate: any PolicyGate = NoPolicyGate(),
                 postHooks: [any PostToolHook] = []) {
         self.critics = critics
+        self.stageGate = stageGate
         self.scorer = scorer
         self.policyGate = policyGate
         self.postHooks = postHooks
@@ -165,25 +173,33 @@ public struct HookChain: Sendable {
             }
         }
 
-        // 2 — Risk Scorer. Runs before plan-only so the refusal can still say
+        // 2 — Stage Gate (§19.4). Before the scorer and before a human: how
+        //     dangerous the arguments are does not matter in a stage where the
+        //     work itself is not allowed yet. No-ops outside a project scope,
+        //     which is what General is.
+        if let refusal = await stageGate.refusal(for: call) {
+            return .blockedByStage(reason: refusal)
+        }
+
+        // 3 — Risk Scorer. Runs before plan-only so the refusal can still say
         //     what it was about to refuse.
         let risk = scorer.score(toolName: call.toolName,
                                 declared: call.declaredRisk,
                                 argumentsJSON: call.argumentsJSON,
                                 context: call.context)
 
-        // 3 — Policy Gate. A hard constraint outranks every autonomy setting,
+        // 4 — Policy Gate. A hard constraint outranks every autonomy setting,
         //     including full autonomous.
         if let policy = await policyGate.conflict(with: call, risk: risk) {
             return .hardStop(policy: policy, risk: risk)
         }
 
-        // 4 — Plan-only. Checked after policy so the more specific reason wins.
+        // 5 — Plan-only. Checked after policy so the more specific reason wins.
         if modes.planOnly {
             return .planOnly
         }
 
-        // 5 — HITL.
+        // 6 — HITL.
         guard modes.autonomy.requiresApproval(for: risk.level) else {
             return .allow(argumentsJSON: call.argumentsJSON, risk: risk, notes: notes)
         }

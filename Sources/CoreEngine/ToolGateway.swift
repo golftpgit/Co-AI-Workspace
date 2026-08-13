@@ -28,6 +28,8 @@ public enum GateOutcome: Sendable {
     case executed(ToolOutput, risk: RiskAssessment, warnings: [String])
     case sentBack(reason: String)
     case blockedByPolicy(String)
+    /// The project's stage forbids this kind of work (§19.4).
+    case blockedByStage(String)
     case denied(reason: String?)
     case planOnly
     case unknownTool(String)
@@ -44,6 +46,10 @@ public enum GateOutcome: Sendable {
             return "เครื่องมือยังไม่ถูกเรียก — ตรวจแล้วไม่ผ่าน: \(reason)"
         case .blockedByPolicy(let policy):
             return "หยุดโดยนโยบาย (hard constraint) — ข้อที่ขัด:\n\(policy)"
+        case .blockedByStage(let reason):
+            // Says which stage and what it would take, so the model asks the
+            // user to move the project on instead of retrying the same call.
+            return "หยุดโดยขั้นของโครงการ — \(reason)"
         case .denied(let reason):
             return "ผู้ใช้ไม่อนุมัติ\(reason.map { ": \($0)" } ?? "")"
         case .planOnly:
@@ -156,6 +162,11 @@ public actor ToolGateway {
             await record(name: name, context: context, parent: parentSpan,
                          status: .failed, detail: "policy hard stop [\(risk.level)]: \(policy)")
             return .blockedByPolicy(policy)
+
+        case .blockedByStage(let reason):
+            await record(name: name, context: context, parent: parentSpan,
+                         status: .failed, detail: "stage gate: \(reason)")
+            return .blockedByStage(reason)
 
         case .denied(let reason, let risk):
             await record(name: name, context: context, parent: parentSpan,
