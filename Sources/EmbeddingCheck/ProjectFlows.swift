@@ -229,26 +229,58 @@ struct ProjectFlows {
             guard try await callTool("kb_search").didExecute else {
                 throw CheckFailure("อ่านข้อมูลไม่ได้ ทั้งที่คนต้องใช้มันเพื่อตัดสิน")
             }
-            try await projects.resolve(raised[0], decision: "ขยายเพดานเป็น ฿1,000")
+            // §19.2.3 — decided from the status bar's popover, which is the path
+            // a person actually takes: the same `StatusAction` the button builds,
+            // through the same service call. Deciding it here rather than calling
+            // `resolve` directly is the point: this is what proves the popover's
+            // button does the whole job, record included.
+            do {
+                try await projects.perform(.decideException(raised[0], decision: "  "),
+                                           in: project.id)
+                throw CheckFailure("ปิดข้อยกเว้นได้ทั้งที่ไม่ได้เขียนคำตัดสิน")
+            } catch StatusActionError.emptyDecision {}
+
+            try await projects.perform(
+                .widenTolerance(.cost, to: 1_000, reason: "อนุมัติงบเพิ่มรอบนี้"),
+                in: project.id)
+            guard await projects.project(project.id)?.tolerances.limit(.cost) == 1_000 else {
+                throw CheckFailure("ขยายกรอบแล้วค่าไม่เปลี่ยน")
+            }
+            // Widening the frame that stopped the work releases the stop with it
+            // — otherwise the project stays halted for a limit that no longer
+            // exists, which reads as the system ignoring the decision.
+            guard try await projects.openExceptions(project.id).isEmpty else {
+                throw CheckFailure("ขยายกรอบแล้วยังหยุดอยู่")
+            }
+            let decisions = await projects.entries(of: project.id, kind: .decision)
+            guard decisions.contains(where: { $0.note == "อนุมัติงบเพิ่มรอบนี้" }) else {
+                throw CheckFailure("การกระทำจาก popover ไม่ได้เขียน decision record")
+            }
+
             shell.reset()
             guard try await callTool("run_shell").didExecute, shell.ran else {
                 throw CheckFailure("ปิดข้อยกเว้นแล้วยังทำงานต่อไม่ได้")
             }
-            return "หยุดแล้วเดินต่อได้"
+            return "ตัดสินจาก popover · หยุดแล้วเดินต่อได้ · มี decision record"
         }
 
         await check("[คำขอเปลี่ยนแปลง] คนตัดสิน แล้ว baseline v2 เกิดขึ้นโดยไม่ทับ v1") {
             // The request the edit above opened — not a fabricated one. That is
             // the flow a person actually walks: edit, get asked, confirm, and
             // somebody with the business case decides.
+            // Two requests are waiting, from the two different kinds of edit made
+            // above: the extra work package, and the wider cost frame from the
+            // status bar. A baseline holds both the plan and the frame, so both
+            // are changes to the agreement (§19.11).
             let pending = await projects.entries(of: project.id, kind: .change)
                 .filter { $0.status == .proposed }
-            guard pending.count == 1, let change = pending.first else {
-                throw CheckFailure("คำขอที่รอตัดสินควรมีใบเดียวจากการแก้แผน: \(pending.count)")
+            guard pending.count == 2 else {
+                throw CheckFailure("คำขอที่รอตัดสินควรมี 2 ใบ (แผน + กรอบ): \(pending.map(\.title))")
             }
-            guard change.note.contains("กระทบ:") else {
+            guard pending.allSatisfy({ $0.note.contains("กระทบ:") }) else {
                 throw CheckFailure("คำขอไม่ได้เก็บข้อความผลกระทบที่คนเห็นตอนยืนยัน")
             }
+            guard let change = pending.first else { throw CheckFailure("ไม่มีคำขอให้ตัดสิน") }
             do {
                 try await projects.decideChange(change, approve: true, by: "   ")
                 throw CheckFailure("ตัดสินคำขอได้ทั้งที่ไม่มีชื่อคน")
@@ -259,15 +291,19 @@ struct ProjectFlows {
                 throw CheckFailure("G3 เปิดทั้งที่มีคำขอค้างและแผนต่างจาก baseline")
             }
 
-            try await projects.decideChange(change, approve: true, by: "ผู้ใช้")
+            for request in pending {
+                try await projects.decideChange(request, approve: true, by: "ผู้ใช้")
+            }
+            // One version per approved change, never overwritten: the count is
+            // itself the answer to "how many times did the agreement move".
             let history = await projects.baselineHistory(of: project.id)
-            guard history.map(\.version) == [2, 1] else {
+            guard history.map(\.version) == [3, 2, 1] else {
                 throw CheckFailure("ประวัติ baseline ผิด: \(history.map(\.version))")
             }
             guard await projects.drift(of: project.id)?.isEmpty == true else {
                 throw CheckFailure("อนุมัติแล้วแต่ยังเห็นส่วนต่างจาก baseline ใหม่")
             }
-            return "v1 ยังอ่านได้ · v2 ตรงกับแผนวันนี้"
+            return "v1 ยังอ่านได้ · v3 ตรงกับแผนและกรอบวันนี้"
         }
 
         await check("[G3] ปิดใบงานต้องมีหลักฐาน แล้วถึงเข้าขั้นปิดโครงการได้") {
@@ -535,8 +571,11 @@ struct ProjectFlows {
             guard reloaded.executive?.person == "ผู้ใช้" else {
                 throw CheckFailure("ชื่อ Executive หาย")
             }
-            guard reloaded.tolerances.limit(.cost) == Tolerances.balanced.limit(.cost) else {
-                throw CheckFailure("กรอบค่าใช้จ่ายเพี้ยนหลังโหลดใหม่")
+            // The frame as it was *decided*, not the preset it started from: the
+            // status bar widened cost to ฿1,000 mid-project, and a decision that
+            // does not survive a relaunch is a decision the system forgot.
+            guard reloaded.tolerances.limit(.cost) == 1_000 else {
+                throw CheckFailure("กรอบค่าใช้จ่ายที่ขยายไว้ไม่รอดข้ามการเปิดใหม่: \(reloaded.tolerances.limit(.cost))")
             }
             return reloaded.stage.label
         }
@@ -558,7 +597,7 @@ struct ProjectFlows {
 
         await check("[เปิดใหม่] baseline ทั้งสองเวอร์ชันยังอยู่ และคำตัดสินยังมีชื่อคน") {
             let history = await fresh.baselineHistory(of: project.id)
-            guard history.map(\.version) == [2, 1] else {
+            guard history.map(\.version) == [3, 2, 1] else {
                 throw CheckFailure("ประวัติ baseline หลังเปิดใหม่: \(history.map(\.version))")
             }
             let changes = await fresh.entries(of: project.id, kind: .change)

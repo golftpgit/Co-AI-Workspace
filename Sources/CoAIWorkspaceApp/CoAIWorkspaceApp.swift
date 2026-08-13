@@ -178,6 +178,16 @@ private struct RootView: View {
                 BootStatusView(environment: environment)
             }
         }
+        // §19.2.3 — the strip sits under every screen rather than on the project
+        // page, because the facts that decide what to do next (which gate, which
+        // frame, what stopped the team) were always one screen away from
+        // whatever was being worked on. It draws nothing in General: there is no
+        // stage, no frame and no baseline to report.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if environment.engine != nil, !showingStatus, projects.selected != nil {
+                StatusBarView(model: projects, openPlan: { screen = .projects })
+            }
+        }
         .toolbar {
             if environment.engine != nil, !showingStatus {
                 Picker("หน้าจอ", selection: $screen) {

@@ -305,6 +305,16 @@ fi
 if grep -nE "service\.(save\(package|removePackage)" Sources/CoAIWorkspaceApp/ProjectsViewModel.swift | grep -q .; then
   UI_VIOLATIONS="$UI_VIOLATIONS plan-write-bypassing-change-control"
 fi
+# ARCHITECTURE §19.2.3 / P10.15: every action in the status bar writes a record.
+# The strip can widen a budget or close an exception in one click from any
+# screen, which makes it the easiest place in the system for a decision to be
+# made and forgotten — so its buttons go through `model.perform`, whose actions
+# all record (StatusActionTests iterates them). Any other mutation from this file
+# is a way around that.
+STATUS_BAR="Sources/CoAIWorkspaceApp/StatusBarView.swift"
+if grep -nE "model\.(update|addPackage|removePackage|edit|setTolerance|record|decide|measure|tailor)" "$STATUS_BAR" | grep -q .; then
+  UI_VIOLATIONS="$UI_VIOLATIONS status-bar-mutation-without-a-record"
+fi
 if [ -n "$UI_VIOLATIONS" ]; then
   fail "the Plan screen can do something §19.2.4 says it must not:$UI_VIOLATIONS"
 else

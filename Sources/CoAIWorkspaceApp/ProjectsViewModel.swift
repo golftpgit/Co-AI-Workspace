@@ -80,6 +80,44 @@ public final class ProjectsViewModel {
     /// status report exists to answer.
     public private(set) var reports: [ProjectReport] = []
 
+    /// What the status bar's popovers show (§19.2.3). Read alongside the gate,
+    /// because a dashboard cell whose number is older than the screen it sits
+    /// under is worse than no cell.
+    public private(set) var spendByRole: [Slice] = []
+    public private(set) var spendByModel: [Slice] = []
+    public private(set) var spendTotal: Double = 0
+    public private(set) var toolActivity: [ToolSlice] = []
+    public private(set) var rework: [ReworkRow] = []
+    /// p50–p90 of comparable finished work, for the time popover's band. `nil`
+    /// when this machine has no history to forecast from — which the popover
+    /// says, rather than drawing a band around a guess.
+    public private(set) var forecast: ScheduleEstimate?
+
+    public struct Slice: Sendable, Equatable, Identifiable {
+        public let key: String
+        public let amount: Double
+        public var id: String { key }
+    }
+
+    public struct ToolSlice: Sendable, Equatable, Identifiable {
+        public let tool: String
+        public let calls: Int
+        public let seconds: TimeInterval
+        public var id: String { tool }
+    }
+
+    /// A round of work that had to be done again, with what QA said each time.
+    /// §19.2.3: "งานที่ rework แล้วกี่รอบ พร้อมเหตุผลจาก QA ทุกรอบ" — the count
+    /// on its own is a number nobody can act on.
+    public struct ReworkRow: Sendable, Equatable, Identifiable {
+        public let goal: String
+        public let role: String
+        public let attempts: Int
+        public let findings: [String]
+        public let needsHuman: Bool
+        public var id: String { goal + role }
+    }
+
     /// The edit waiting for a person to confirm, once the plan is an agreement
     /// (§19.2.4). `nil` most of the time — before G2, and for edits that change
     /// nothing the baseline holds.
@@ -602,6 +640,55 @@ public final class ProjectsViewModel {
         tolerances = ToleranceCheck.evaluate(selected?.tolerances ?? .balanced, readings: reading)
     }
 
+    /// The four popovers that read stores rather than the project row
+    /// (§19.2.3). Each source is named where it is read, for the same reason the
+    /// tolerance readings are: a dashboard number nobody can trace is a number
+    /// nobody can argue with when it decides something.
+    private func refreshStatusDetail(_ id: ProjectID) async {
+        if let spend, let split = try? await spend.breakdown(since: startOfMonth()) {
+            spendByRole = split.byRole.map { Slice(key: $0.key, amount: $0.costUSD) }
+            spendByModel = split.byModel.map { Slice(key: $0.key, amount: $0.costUSD) }
+            spendTotal = split.total
+        }
+        if let spans {
+            toolActivity = ((try? await spans.toolActivity(project: id)) ?? [])
+                .map { ToolSlice(tool: $0.tool, calls: $0.calls, seconds: $0.seconds) }
+            // The band the time popover draws. Across projects on purpose: the
+            // whole point of a p90 is that it comes from more than the project
+            // asking for it.
+            forecast = Schedule.estimate(from: (try? await spans.durations(forRole: .analyst)) ?? [])
+        }
+        if let ledger, let rows = try? await ledger.rows(scope: .project(id)) {
+            // Only the rounds that were actually redone. A row with one attempt
+            // is work, not rework, and listing it would bury the ones that hurt.
+            rework = rows.filter { $0.attempts > 1 || $0.needsHuman }
+                .sorted { $0.attempts > $1.attempts }
+                .map { ReworkRow(goal: $0.goal, role: $0.role.rawValue, attempts: $0.attempts,
+                                 findings: $0.findings, needsHuman: $0.needsHuman) }
+        }
+    }
+
+    private func startOfMonth() -> Date {
+        let calendar = Calendar.current
+        return calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
+    }
+
+    // MARK: - the status bar's actions (§19.2.3)
+
+    /// Runs a status-bar action. Every one of them writes to the register on the
+    /// way through (`ProjectService.perform`), which is the half of this feature
+    /// that keeps a one-click dashboard from being a place decisions vanish.
+    public func perform(_ action: StatusAction) async {
+        guard let service, let project = selected else { return }
+        do {
+            try await service.perform(action, in: project.id)
+            await refreshGate()
+            status = Status(message: "\(action.title) — บันทึกลงทะเบียนแล้ว", isError: false)
+        } catch {
+            status = Status(message: "\(error)", isError: true)
+        }
+    }
+
     private func refreshGate() async {
         guard let service, case .project(let id) = selection else {
             gate = nil
@@ -630,5 +717,6 @@ public final class ProjectsViewModel {
         conformance = await service.conformance(of: id)
         gate = await service.gate(for: id)
         reports = await service.reportHistory(of: id)
+        await refreshStatusDetail(id)
     }
 }

@@ -123,6 +123,35 @@ public actor SurrealSpanSink: SpanSink {
         return totals
     }
 
+    /// How many times each tool ran for this project, and for how long
+    /// (§19.2.3, P10.15).
+    ///
+    /// The budget popover asks for a split "by role and by tool", and money is
+    /// only ever charged per model call — so this is the honest half of the
+    /// second question: not what each tool cost, which nothing records, but what
+    /// each tool *did*. A popover that split a bill by tool would be inventing
+    /// the split.
+    public func toolActivity(project: ProjectID) async throws -> [(tool: String, calls: Int,
+                                                                  seconds: TimeInterval)] {
+        let rows = try await client.query("""
+            SELECT name, started_at, ended_at FROM span
+            WHERE project_id = type::string($pid) AND string::starts_with(name, 'tool:')
+            """, vars: ["pid": project.rawValue]).first?.rows ?? []
+
+        var calls: [String: Int] = [:]
+        var seconds: [String: TimeInterval] = [:]
+        for row in rows {
+            guard let name = row["name"]?.stringValue else { continue }
+            let tool = String(name.dropFirst("tool:".count))
+            calls[tool, default: 0] += 1
+            if let started = Self.date(row["started_at"]), let ended = Self.date(row["ended_at"]) {
+                seconds[tool, default: 0] += max(0, ended.timeIntervalSince(started))
+            }
+        }
+        return calls.map { (tool: $0.key, calls: $0.value, seconds: seconds[$0.key] ?? 0) }
+            .sorted { $0.calls > $1.calls }
+    }
+
     /// Durations of finished work of the same shape, for the forecast band.
     /// Deliberately across projects: the whole point of a p90 is that it comes
     /// from more than the project asking for it.
