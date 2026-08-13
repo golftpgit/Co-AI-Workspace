@@ -130,8 +130,15 @@ private struct NotebookPane: View {
             } else {
                 ContentUnavailableView("ยังไม่มีสมุดงาน", systemImage: "square.grid.3x1.below.line.grid.1x2",
                                        description: Text("กด + เพื่อสร้างสมุดงานแรก"))
+                    // Without this the empty state takes its ideal width and the
+                    // whole pane centres itself, leaving 390pt of blank white to
+                    // the left of the notebook list — which reads as a screen
+                    // that failed to draw. Only visible once the pane stopped
+                    // being the whole window (P10.12).
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var library: some View {
@@ -485,6 +492,20 @@ private struct ExplorerPane: View {
             Divider()
             List {
                 if focus.showsInternal {
+                if model.tables.isEmpty {
+                    // Splitting internal from external (P10.12) made this state
+                    // reachable for the first time: before, the external
+                    // placeholders always filled the column, so an empty store
+                    // never looked like a broken screen. §12.2's rule again — a
+                    // list that says nothing is worse than one that says why.
+                    Text("ยังไม่มีตารางในสโตร์ของโปรเจกต์นี้ — นำเข้า CSV/Parquet "
+                         + "หรือดึงตารางจากฐานข้อมูลภายนอกเข้ามา")
+                        .font(.caption).foregroundStyle(.secondary)
+                        // Wraps rather than truncating: the sidebar is 200pt and
+                        // the one-line version ended at "นำเข้า…", which is half
+                        // an instruction.
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 ForEach(model.tables) { table in
                     DisclosureGroup {
                         ForEach(table.columns, id: \.name) { column in
@@ -518,6 +539,10 @@ private struct ExplorerPane: View {
                 }
                 if focus.showsExternal {
                 Section {
+                    if model.connectors.isEmpty {
+                        Text("ยังไม่มีแหล่งข้อมูลภายนอก — กด + เพื่อเพิ่ม")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     ForEach(model.connectors) { connector in
                         ConnectorRow(model: model, connector: connector)
                     }

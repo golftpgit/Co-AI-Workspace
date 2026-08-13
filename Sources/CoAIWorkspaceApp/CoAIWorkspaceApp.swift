@@ -266,30 +266,33 @@ private struct RootView: View {
                 BootStatusView(environment: environment)
             }
         }
-        // §19.2.3 — the strip sits under every screen rather than on the project
-        // page, because the facts that decide what to do next (which gate, which
-        // frame, what stopped the team) were always one screen away from
-        // whatever was being worked on. It draws nothing in General: there is no
-        // stage, no frame and no baseline to report.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if environment.engine != nil, projects.selected != nil {
-                StatusBarView(model: projects, openPlan: { area = .plan })
-            }
-        }
         .toolbar {
-            if environment.engine != nil {
+            // Navigation goes in the middle slot rather than competing with the
+            // screen's own actions on the trailing edge, which is what pushed
+            // them into the overflow chevron.
+            ToolbarItem(placement: .principal) {
+              if environment.engine != nil {
                 // §19.2 — four areas and the system, not fourteen screens laid
                 // out flat. The order is the order of the four questions: what
                 // to ask for, what was agreed, what to do with the data, what is
                 // true.
+                // Text, not `Label`: driving this found the segmented picker
+                // rendering five bare icons at 1500pt, and §19.2's whole claim is
+                // that the four areas are four different *questions* — an icon
+                // does not say which one. The icon stays on the ⌘-shortcut
+                // legend and in the inventory, where there is room for both.
                 Picker("พื้นที่", selection: $area) {
                     ForEach(Area.allCases) { area in
-                        Label(area.label, systemImage: area.icon).tag(area)
+                        Text(area.label).tag(area)
                     }
                 }
                 .pickerStyle(.segmented)
                 .accessibilityLabel("สลับพื้นที่ทำงาน")
+              }
+            }
 
+            ToolbarItemGroup(placement: .automatic) {
+              if environment.engine != nil {
                 // The workspace switch at the head of the app (§19.1). It used
                 // to live only in the Plan area's sidebar, which meant leaving
                 // whatever you were doing to change which project you were doing
@@ -305,9 +308,14 @@ private struct RootView: View {
                         }
                     }
                 } label: {
-                    Label(projects.selected?.name ?? "General", systemImage: "square.stack.3d.up")
+                    // The name, visible. Same finding as the picker: a menu
+                    // whose label collapses to an icon cannot answer "which
+                    // project am I in", which is the one thing moving this
+                    // switch to the header was for.
+                    Text(projects.selected?.name ?? "General")
                 }
-                .accessibilityLabel("สลับพื้นที่ทำงานระหว่าง General กับโปรเจกต์")
+                .accessibilityLabel("สลับพื้นที่ทำงานระหว่าง General กับโปรเจกต์ — ตอนนี้อยู่ "
+                                    + (projects.selected?.name ?? "General"))
 
                 if area == .chat {
                     Toggle(isOn: $showingRail) {
@@ -315,16 +323,7 @@ private struct RootView: View {
                     }
                     .accessibilityLabel("เปิดหรือปิดแถบเฝ้าดูทีมด้านขวา")
                 }
-            }
-            if environment.engine != nil {
-                Button {
-                    area = .system
-                    systemTab = .status
-                } label: {
-                    Label("สถานะระบบ", systemImage: "heart.text.square")
-                }
-                .accessibilityLabel("ไปที่สถานะระบบ")
-                .keyboardShortcut("0", modifiers: .command)
+              }
             }
         }
         // §14.4 / P8.7 — a segmented picker in a toolbar is reachable from the
@@ -333,6 +332,15 @@ private struct RootView: View {
         // "you can get there". ⌘1…⌘5 is: it works for everybody, including the
         // people who use it because it is faster.
         .background {
+            // ⌘0 still goes to the system status, without spending a toolbar slot
+            // on it: with six items the toolbar overflowed into a `»` chevron and
+            // hid the team rail toggle behind it, which is the same
+            // unreachability this project keeps paying for.
+            Button("") { area = .system; systemTab = .status }
+                .keyboardShortcut("0", modifiers: .command)
+                .opacity(0)
+                .accessibilityHidden(true)
+
             ForEach(Area.allCases) { target in
                 // Typed step by step: as a single expression with string
                 // interpolation inside a `ForEach` over an enumerated
@@ -348,6 +356,10 @@ private struct RootView: View {
 
     // MARK: - the four areas (§19.2)
 
+    /// The area, its sub-tabs, and the status strip under all of it (§19.2.3):
+    /// the facts that decide what to do next were always one screen away from
+    /// whatever was being worked on. Nothing is drawn for General — there is no
+    /// stage, no frame and no baseline to report.
     @ViewBuilder
     private func areaContent(_ engine: Engine) -> some View {
         VStack(spacing: 0) {
@@ -363,12 +375,27 @@ private struct RootView: View {
                 .accessibilityLabel("เลือกส่วนของ\(area.label)")
             }
 
-            switch area {
-            case .chat: chatArea(engine)
-            case .plan: planArea(engine)
-            case .workbench: workbenchArea(engine)
-            case .knowledge: knowledgeArea(engine)
-            case .system: systemArea(engine)
+            // `maxWidth/maxHeight: .infinity` because a `VStack` lets its
+            // children take their ideal size: driving this found the notebook
+            // sitting in the middle of the window with 450pt of dead white to
+            // its left, which reads as a broken screen rather than a centred one.
+            Group {
+                switch area {
+                case .chat: chatArea(engine)
+                case .plan: planArea(engine)
+                case .workbench: workbenchArea(engine)
+                case .knowledge: knowledgeArea(engine)
+                case .system: systemArea(engine)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // A row rather than a `safeAreaInset`: as an inset it drew *over* the
+            // bottom of the split views under it — the "สร้างโปรเจกต์" form and
+            // the notebook list were both half-hidden behind it. A strip that
+            // covers the control under it is worse than no strip.
+            if projects.selected != nil {
+                StatusBarView(model: projects, openPlan: { area = .plan })
             }
         }
     }
