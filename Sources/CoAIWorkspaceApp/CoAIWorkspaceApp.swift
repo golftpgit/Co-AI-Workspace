@@ -109,7 +109,8 @@ private struct RootView: View {
                             // §19.10 — where each tolerance reading comes from.
                             await projects.attach(spans: engine.spans,
                                                   spend: engine.spendLedger,
-                                                  ledger: engine.taskLedger)
+                                                  ledger: engine.taskLedger,
+                                                  paths: engine.paths)
                         }
                 case .knowledge:
                     KnowledgeView(model: knowledge)

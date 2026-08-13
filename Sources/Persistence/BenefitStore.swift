@@ -86,6 +86,42 @@ public actor TailoringStore: TailoringPersisting {
     }
 }
 
+/// Issued reports (§19.13, P10.11). Append-only like the tailoring records: a
+/// status report is a claim somebody made on a date, and one that can be edited
+/// afterwards cannot answer "what did we say in June".
+public actor ReportStore: ReportPersisting {
+    private let client: SurrealClient
+
+    public init(client: SurrealClient) {
+        self.client = client
+    }
+
+    public func save(_ report: ProjectReport) async throws {
+        let json = String(decoding: try Coding.encoder.encode(report), as: UTF8.self)
+        var content = ContentBuilder()
+        content.setString("uid", report.id)
+        content.setString("project_id", report.projectID.rawValue)
+        content.setString("kind", report.kind.rawValue)
+        content.setString("report", json)
+        content.raw("generated_at", "time::now()")
+
+        try await client.exec(
+            "UPSERT report CONTENT \(content.content) WHERE uid = type::string($uid)",
+            vars: content.vars)
+    }
+
+    public func all(project: ProjectID) async throws -> [ProjectReport] {
+        try await client.query("""
+            SELECT * FROM report WHERE project_id = type::string($pid)
+            ORDER BY generated_at DESC
+            """, vars: ["pid": project.rawValue])
+            .first?.rows.compactMap { row in
+                guard let json = row["report"]?.stringValue else { return nil }
+                return try? Coding.decoder.decode(ProjectReport.self, from: Data(json.utf8))
+            } ?? []
+    }
+}
+
 /// The two questions G4 asks of stores that predate it (§19.12 conditions 4–5).
 ///
 /// An adapter rather than a conformance bolted onto `ConflictStore` and

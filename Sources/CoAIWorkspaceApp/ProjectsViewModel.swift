@@ -3,6 +3,8 @@ import Observation
 import AgentKit
 import ProjectKit
 import CoreEngine
+import Config
+import DocGen
 import Persistence
 import Observability
 
@@ -73,8 +75,16 @@ public final class ProjectsViewModel {
     /// gate refuses on.
     public private(set) var benefits = BenefitLedger()
     public private(set) var conformance: [PracticeStatus] = []
+    /// Reports already issued, newest first (§19.13). History rather than a
+    /// button that re-renders: "what did we say in June" is the question a
+    /// status report exists to answer.
+    public private(set) var reports: [ProjectReport] = []
 
     private var service: ProjectService?
+    /// Where a project's documents live (§19.1). Optional because the screen
+    /// works without it — a report still becomes a row, it just does not become
+    /// a file, and that is the honest degradation.
+    private var paths: AppPaths?
     private var spans: SurrealSpanSink?
     private var spend: SurrealSpendLedger?
     private var ledger: TaskLedgerStore?
@@ -108,7 +118,8 @@ public final class ProjectsViewModel {
     /// — a tolerance whose source nobody can point at is the thing this whole
     /// section exists to avoid.
     public func attach(spans: SurrealSpanSink, spend: SurrealSpendLedger,
-                       ledger: TaskLedgerStore) async {
+                       ledger: TaskLedgerStore, paths: AppPaths? = nil) async {
+        self.paths = paths
         self.spans = spans
         self.spend = spend
         self.ledger = ledger
@@ -366,6 +377,47 @@ public final class ProjectsViewModel {
         }
     }
 
+    // MARK: - reporting (§19.13)
+
+    /// Issues one of the three reports, keeps it, and writes the file beside the
+    /// project's other documents.
+    ///
+    /// Returns the text so the caller can send it — the same string that is in
+    /// the `.docx`, because a report that reads differently on a phone than in
+    /// the file is two reports.
+    @discardableResult
+    public func issueReport(_ kind: ReportKind) async -> String? {
+        guard let service, let project = selected else { return nil }
+        do {
+            guard let report = try await service.issueReport(kind, for: project.id) else {
+                return nil
+            }
+            var note = "\(kind.label)ออกแล้ว"
+            if let paths {
+                // A row is not a deliverable. §19.13 says these go through
+                // DocGen, and a report nobody can attach to an email is a report
+                // that gets rewritten by hand.
+                let folder = paths.project(project.id).documentsDirectory
+                let file = folder.appending(path: ReportDocument.filename(report) + ".docx")
+                do {
+                    try FileManager.default.createDirectory(at: folder,
+                                                            withIntermediateDirectories: true)
+                    try ReportDocument.docx(report).write(to: file, options: .atomic)
+                    note += " · \(file.lastPathComponent)"
+                } catch {
+                    log.error("writing report: \(error)")
+                    note += " · เก็บเป็นข้อมูลแล้ว แต่เขียนไฟล์ไม่ได้: \(error.localizedDescription)"
+                }
+            }
+            await refreshGate()
+            status = Status(message: note, isError: false)
+            return report.rendered
+        } catch {
+            status = Status(message: "ออกรายงานไม่สำเร็จ: \(error)", isError: true)
+            return nil
+        }
+    }
+
     // MARK: - conformance and closing (§19.12, §19.15)
 
     /// Writing down that a practice is not being done. The name and the reason
@@ -504,11 +556,11 @@ public final class ProjectsViewModel {
         // Order matters here: what the app measured has to reach the service
         // *before* the gate is asked, because G4's conformance condition counts
         // money and time this screen is the only one that can read (§19.16).
-        await service.observe(ObservedFacts(spent: readings.spent,
-                                            measuredSeconds: elapsed.values.reduce(0, +),
-                                            messagesSent: 0,
-                                            reportsIssued: 0))
+        await service.observe(ObservedFacts(readings: readings,
+                                           measured: measured,
+                                           measuredSeconds: elapsed.values.reduce(0, +)))
         conformance = await service.conformance(of: id)
         gate = await service.gate(for: id)
+        reports = await service.reportHistory(of: id)
     }
 }

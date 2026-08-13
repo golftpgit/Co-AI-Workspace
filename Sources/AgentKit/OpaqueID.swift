@@ -26,4 +26,5 @@ public enum OpaqueID {
     public static let baseline = "bl"
     public static let benefit = "bn"
     public static let tailoring = "tr"
+    public static let report = "rp"
 }

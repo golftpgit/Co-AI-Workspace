@@ -16,6 +16,9 @@ public enum Schema {
     /// an interrupted run — run-until-done resumes the second and never the
     /// first. The criteria and deliverable type it needs to rebuild an
     /// assignment ride along on the schemaless part of the row.
+    /// 10: `report` exists (§19.13, P10.11) — a status report is a claim made on
+    /// a date, so it is kept rather than re-rendered, and "how often did anybody
+    /// report" becomes a question the database can answer.
     /// 9: `benefit` and `tailoring_record` exist (§19.12, §19.15, P10.10/P10.13)
     /// — the two things the closing gate reads that no other table could answer:
     /// what the project was *for*, and which practices it decided not to do.
@@ -34,7 +37,7 @@ public enum Schema {
     /// `project_id`; there was simply nothing on the other end of it, so two
     /// projects were indistinguishable and the app wrote the literal id
     /// "default" into all of them.
-    public static let version = 9
+    public static let version = 10
 
     /// Split into statements that are executed one at a time: a single
     /// failing statement should name itself, not abort a 40-line blob.
@@ -224,6 +227,15 @@ public enum Schema {
         "DEFINE FIELD IF NOT EXISTS practice ON tailoring_record TYPE string",
         "DEFINE INDEX IF NOT EXISTS tailoring_project ON tailoring_record FIELDS project_id, practice",
         "DEFINE FIELD IF NOT EXISTS decided_at ON tailoring_record TYPE datetime",
+
+        // ── issued reports (§19.13, P10.11) ──
+        "DEFINE TABLE IF NOT EXISTS report SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON report TYPE string",
+        "DEFINE INDEX IF NOT EXISTS report_uid ON report FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS project_id ON report TYPE string",
+        "DEFINE FIELD IF NOT EXISTS kind ON report TYPE string",
+        "DEFINE INDEX IF NOT EXISTS report_project ON report FIELDS project_id, kind",
+        "DEFINE FIELD IF NOT EXISTS generated_at ON report TYPE datetime",
 
         "DEFINE TABLE IF NOT EXISTS schema_meta SCHEMALESS",
     ]

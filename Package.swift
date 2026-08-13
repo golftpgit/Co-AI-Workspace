@@ -109,7 +109,13 @@ let package = Package(
         // section are logic over what the rest of the system already recorded,
         // so this target knows about provenance and plans and nothing else —
         // no models, no storage, no file formats.
-        .target(name: "DocGen", dependencies: ["AgentKit", "Knowledge", "Observability"]),
+        .target(name: "DocGen", dependencies: ["AgentKit", "Knowledge", "Observability",
+                                            // §19.13 — the three project reports are
+                                            // documents, and the mapping from a report to a
+                                            // draft belongs next to the other renderers. The
+                                            // edge only goes this way: ProjectKit does not
+                                            // know what a .docx is.
+                                            "ProjectKit"]),
 
         // M9 — every process the system runs: sandbox profile, process group
         // signals, registry (ARCHITECTURE §13). Knows nothing about agents.

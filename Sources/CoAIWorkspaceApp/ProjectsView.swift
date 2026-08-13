@@ -308,9 +308,58 @@ struct ProjectsView: View {
         }
 
         if tab == .closing {
+            reportsBox()
             benefitsBox()
             conformanceBox()
             dispositionBox(project)
+        }
+    }
+
+    // MARK: - reporting (§19.13)
+
+    /// The three reports, and the last thing each one said. Issuing is a button
+    /// rather than a schedule because a report on a timer that nobody reads is
+    /// the thing status reporting usually degrades into — the cycle can come
+    /// later; being able to produce one from real rows is the point.
+    @ViewBuilder
+    private func reportsBox() -> some View {
+        GroupBox("รายงาน") {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    ForEach(ReportKind.allCases, id: \.self) { kind in
+                        Button(kind.label) { issue(kind) }
+                    }
+                    Spacer()
+                }
+                .controlSize(.small)
+
+                if model.reports.isEmpty {
+                    Text("ยังไม่มีรายงาน — ทุกบรรทัดในรายงานประกอบจากแผนงาน · ทะเบียน · span · baseline · ทะเบียนประโยชน์ ไม่ใช่ข้อความที่โมเดลแต่ง")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                ForEach(model.reports) { report in
+                    DisclosureGroup {
+                        Text(report.rendered)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } label: {
+                        Text("\(report.kind.label) · ขั้น\(report.stageAtIssue.label) · "
+                             + report.generatedAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.callout)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func issue(_ kind: ReportKind) {
+        Task {
+            // A report is also something to tell people about, on whatever
+            // channel they are on (§19.13, §8.2) — the same text that is in the
+            // file, not a summary of it.
+            if let text = await model.issueReport(kind) { await announce(text) }
         }
     }
 

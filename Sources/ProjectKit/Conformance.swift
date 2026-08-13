@@ -216,18 +216,29 @@ public struct ConformanceFacts: Sendable, Equatable {
 /// strip (§19.2.3), and hands them over rather than making ProjectKit import
 /// three more modules.
 public struct ObservedFacts: Sendable, Equatable {
-    public var spent: Double
+    /// The tolerance readings as the status strip computed them (§19.10), passed
+    /// whole rather than field by field so a report and the strip cannot show
+    /// two different numbers for the same day.
+    public var readings: ToleranceReadings
+    /// Which of the six are real measurements. Everything outside this set
+    /// prints as "ยังไม่ได้วัด" in a report, which matters more there than on
+    /// screen — a report gets quoted.
+    public var measured: Set<ToleranceDimension>
     public var measuredSeconds: TimeInterval
     public var messagesSent: Int
-    public var reportsIssued: Int
 
-    public init(spent: Double = 0, measuredSeconds: TimeInterval = 0,
-                messagesSent: Int = 0, reportsIssued: Int = 0) {
-        self.spent = spent
+    public init(readings: ToleranceReadings = ToleranceReadings(),
+                measured: Set<ToleranceDimension> = [],
+                measuredSeconds: TimeInterval = 0,
+                messagesSent: Int = 0) {
+        self.readings = readings
+        self.measured = measured
         self.measuredSeconds = measuredSeconds
         self.messagesSent = messagesSent
-        self.reportsIssued = reportsIssued
     }
+
+    /// What the cost practice counts, and what a report prints as spend.
+    public var spent: Double { measured.contains(.cost) ? readings.spent : 0 }
 }
 
 /// One practice, and which of the two acceptable states it is in.

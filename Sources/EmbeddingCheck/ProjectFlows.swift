@@ -54,7 +54,8 @@ struct ProjectFlows {
             benefits: BenefitStore(client: client),
             tailoring: TailoringStore(client: client),
             closingLedger: ClosingLedger(conflicts: ConflictStore(client: client),
-                                         plans: AnalysisPlanStore(client: client)))
+                                         plans: AnalysisPlanStore(client: client)),
+            reports: ReportStore(client: client))
 
         let shell = RanFlag()
         let search = RanFlag()
@@ -258,6 +259,49 @@ struct ProjectFlows {
             return "เข้าขั้นปิดโครงการ"
         }
 
+        await check("[รายงาน] สร้างจากแถวจริง — เปลี่ยนข้อมูลต้นทางแล้วรายงานเปลี่ยนตาม") {
+            guard let first = try await projects.issueReport(.highlight, for: project.id) else {
+                throw CheckFailure("ออกรายงานไม่สำเร็จ")
+            }
+            // The evidence that closed a leaf a few checks ago, arriving in a
+            // report without anybody retyping it.
+            guard first.rendered.contains("α = 0.74") else {
+                throw CheckFailure("รายงานไม่มีหลักฐานที่ปิดใบงานจริง")
+            }
+
+            try await projects.record(RegisterEntry(
+                projectID: project.id, title: "โรงพยาบาลที่สองส่งข้อมูลช้า",
+                detail: .issue(severity: 3, kind: .concern), origin: .agent(.analyst)))
+            guard let second = try await projects.issueReport(
+                .highlight, for: project.id, now: Date().addingTimeInterval(60)) else {
+                throw CheckFailure("ออกรายงานฉบับที่สองไม่สำเร็จ")
+            }
+            // The new one carries what is new; the old one is unchanged, because
+            // a report is a claim made on a date rather than a live view.
+            guard second.rendered.contains("โรงพยาบาลที่สองส่งข้อมูลช้า"),
+                  !first.rendered.contains("โรงพยาบาลที่สองส่งข้อมูลช้า") else {
+                throw CheckFailure("รายงานใหม่ไม่ได้เปลี่ยนตามข้อมูล หรือฉบับเก่าถูกเขียนทับ")
+            }
+            let history = await projects.reportHistory(of: project.id)
+            guard history.count == 2, history.first?.id == second.id else {
+                throw CheckFailure("ประวัติรายงานผิด: \(history.count) ฉบับ")
+            }
+            // Which also settles the `reporting` practice with real evidence
+            // instead of a tailoring record (§19.16).
+            let facts = await projects.conformanceFacts(of: project.id)
+            guard Conformance.evidence(for: .reporting, in: facts) != nil else {
+                throw CheckFailure("ออกรายงานแล้วแต่ practice การรายงานยังว่าง")
+            }
+            // Closing the issue again, so it does not sit in front of G4 — the
+            // point above was that the report saw it, not that it stays open.
+            for entry in await projects.entries(of: project.id, kind: .issue) {
+                var closed = entry
+                closed.status = .closed
+                try await projects.record(closed)
+            }
+            return "2 ฉบับ · ฉบับใหม่เห็นของใหม่ ฉบับเก่าไม่ถูกแก้"
+        }
+
         await check("[G4] แปดเงื่อนไขปิดงาน อ่านจากของจริงทีละข้อ") {
             // Every step here removes exactly one blocker and asserts the gate
             // is still shut. A gate tested only against "everything missing"
@@ -359,6 +403,27 @@ struct ProjectFlows {
             return "ปิดแล้ว · บทเรียนอยู่ใน central"
         }
 
+        await check("[รายงานปิดโครงการ] ส่งมอบ · ประโยชน์ · บทเรียน · สิ่งที่ยกให้คนอื่น") {
+            guard let report = try await projects.issueReport(.endProject, for: project.id) else {
+                throw CheckFailure("ออกรายงานปิดโครงการไม่สำเร็จ")
+            }
+            for expected in ["α = 0.74",                       // ส่งมอบอะไรบ้าง
+                             "ได้ 75% ของเป้า",                 // ประโยชน์ที่วัดได้
+                             "ขอฉบับเต็มจากผู้แปลตั้งแต่ต้น",     // บทเรียน
+                             "ย้ายเข้าคลังเก็บถาวร"] {          // สิ่งที่ยกให้คนอื่นรับต่อ
+                guard report.rendered.contains(expected) else {
+                    throw CheckFailure("รายงานปิดโครงการไม่มี '\(expected)'")
+                }
+            }
+            // The report is written *after* closing and still reads correctly,
+            // which is the case that matters: everything it quotes is a row, so
+            // nothing needed to be captured while the project was still open.
+            guard report.stageAtIssue == .closed else {
+                throw CheckFailure("รายงานไม่ได้บันทึกว่าเขียนตอนขั้นไหน")
+            }
+            return "ครบ 4 หัวข้อจากแถวจริง"
+        }
+
         await check("[เวลา] งานที่ทำผ่านประตูถูกนับเข้าใบงานที่ทำอยู่") {
             // The pipe P10.15 built, end to end: a tool call carrying a work
             // package on its context must show up as time against that leaf,
@@ -423,7 +488,8 @@ struct ProjectFlows {
             benefits: BenefitStore(client: client),
             tailoring: TailoringStore(client: client),
             closingLedger: ClosingLedger(conflicts: ConflictStore(client: client),
-                                         plans: AnalysisPlanStore(client: client)))
+                                         plans: AnalysisPlanStore(client: client)),
+            reports: ReportStore(client: client))
 
         await check("[เปิดใหม่] โปรเจกต์กลับมาพร้อมขอบเขต หมวก และกรอบที่ตั้งไว้") {
             guard let reloaded = await fresh.project(project.id) else {

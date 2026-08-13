@@ -25,6 +25,7 @@ public actor ProjectService {
     private let benefits: (any BenefitPersisting)?
     private let tailoring: (any TailoringPersisting)?
     private let closingLedger: (any ClosingLedgerReading)?
+    private let reports: (any ReportPersisting)?
     /// What the app measured last time it looked (§19.16). Held rather than
     /// asked for, because `advance` evaluates the gate itself and cannot call
     /// back into a screen.
@@ -45,7 +46,9 @@ public actor ProjectService {
                 lessons: (any LessonPublishing)? = nil,
                 benefits: (any BenefitPersisting)? = nil,
                 tailoring: (any TailoringPersisting)? = nil,
-                closingLedger: (any ClosingLedgerReading)? = nil) {
+                closingLedger: (any ClosingLedgerReading)? = nil,
+                reports: (any ReportPersisting)? = nil) {
+        self.reports = reports
         self.store = store
         self.plans = plans
         self.exceptions = exceptions
@@ -121,6 +124,41 @@ public actor ProjectService {
         try await benefits?.delete(benefitID, project: id)
     }
 
+    // MARK: - reporting (§19.13)
+
+    public func reportHistory(of id: ProjectID) async -> [ProjectReport] {
+        ((try? await reports?.all(project: id)) ?? []).sorted { $0.generatedAt > $1.generatedAt }
+    }
+
+    /// Assembles one of the three reports out of the rows, and keeps it.
+    ///
+    /// Kept rather than only rendered because a report is a claim made on a
+    /// date: "what did we say in June" is the question a status report exists to
+    /// be able to answer, and it also makes `reporting` a practice with real
+    /// evidence rather than one that needs a tailoring record (§19.16).
+    @discardableResult
+    public func issueReport(_ kind: ReportKind, for id: ProjectID,
+                            now: Date = Date()) async throws -> ProjectReport? {
+        guard let project = await project(id) else { return nil }
+        let previous = await reportHistory(of: id).first { $0.kind == kind }
+        let report = ReportBuilder.build(kind, from: ReportInputs(
+            project: project,
+            wbs: await breakdown(of: id),
+            registers: await entries(of: id),
+            benefits: await benefitLedger(of: id),
+            baselines: await baselineHistory(of: id),
+            drift: await drift(of: id),
+            tolerances: ToleranceCheck.evaluate(project.tolerances, readings: observed.readings),
+            measured: observed.measured,
+            elapsedSeconds: observed.measuredSeconds,
+            exceptions: (try? await openExceptions(id)) ?? [],
+            gate: await gate(for: id),
+            conformance: await conformance(of: id),
+            since: previous?.generatedAt), now: now)
+        try await reports?.save(report)
+        return report
+    }
+
     // MARK: - conformance and tailoring (§19.15–§19.16)
 
     public func tailoringRecords(of id: ProjectID) async -> [TailoringRecord] {
@@ -171,7 +209,7 @@ public actor ProjectService {
             evidenceCount: leaves.reduce(0) { $0 + $1.evidence.count(where: \.passed) },
             boardSeats: project?.board.count { $0.isFilled } ?? 0,
             messagesSent: observed.messagesSent + raised,
-            reportsIssued: observed.reportsIssued,
+            reportsIssued: await reportHistory(of: id).count,
             dataDispositionDecided: project?.dataDisposition?.isDecided == true)
     }
 
