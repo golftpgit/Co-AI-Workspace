@@ -19,10 +19,19 @@ import AgentKit
 public struct GateCondition: Sendable, Equatable {
     public let text: String
     public let satisfied: Bool
+    /// True when the condition holds only because there is nothing to check.
+    ///
+    /// Driving the screen showed why this exists: with no work packages yet,
+    /// every per-leaf condition rendered a green tick, and a tick that means
+    /// "nothing was checked" looks exactly like one that means "checked and
+    /// fine". It still does not block the gate — vacuous is not failing — but
+    /// it must not read as passed.
+    public let vacuous: Bool
 
-    public init(text: String, satisfied: Bool) {
+    public init(text: String, satisfied: Bool, vacuous: Bool = false) {
         self.text = text
         self.satisfied = satisfied
+        self.vacuous = vacuous
     }
 }
 
@@ -50,6 +59,13 @@ public enum LifecycleError: Error, CustomStringConvertible, Equatable {
         case .alreadyClosed:
             return "โครงการปิดแล้ว"
         }
+    }
+}
+
+extension GateCondition {
+    /// Same condition, tagged as unchecked when the plan is still empty.
+    init(vacuousWhenEmpty empty: Bool, text: String, satisfied: Bool) {
+        self.init(text: text, satisfied: satisfied, vacuous: empty)
     }
 }
 
@@ -106,6 +122,7 @@ public enum ProjectLifecycle {
                               satisfied: project.executive?.isFilled == true),
             ]
         case .planning:
+            let noLeaves = wbs.leaves.isEmpty
             // G2 is where the plan stops being a list of intentions. Each
             // condition names a plan that looks finished and is not (§19.6).
             let uncovered = wbs.uncoveredScope(inScope: project.statement.inScope)
@@ -114,21 +131,25 @@ public enum ProjectLifecycle {
                               satisfied: !project.statement.acceptanceCriteria.isEmpty),
                 GateCondition(text: "มีใบงานอย่างน้อย 1 ใบ",
                               satisfied: !wbs.leaves.isEmpty),
-                GateCondition(text: "ทุกใบงานบอกว่าเสร็จแปลว่าอะไร",
+                GateCondition(vacuousWhenEmpty: noLeaves, text: "ทุกใบงานบอกว่าเสร็จแปลว่าอะไร",
                               satisfied: !problems.contains { $0.kind == .noAcceptanceCriteria }),
-                GateCondition(text: "ทุกใบงานผูกกับข้อในขอบเขต 'ทำ'",
+                GateCondition(vacuousWhenEmpty: noLeaves, text: "ทุกใบงานผูกกับข้อในขอบเขต 'ทำ'",
                               satisfied: !problems.contains {
                                   $0.kind == .noScopeRef || $0.kind == .danglingScopeRef
                               }),
-                GateCondition(text: "ไม่มีงานแม่ที่ไม่มีใบงานอยู่ข้างใน",
+                GateCondition(vacuousWhenEmpty: noLeaves, text: "ไม่มีงานแม่ที่ไม่มีใบงานอยู่ข้างใน",
                               satisfied: !problems.contains { $0.kind == .emptyGroup }),
-                GateCondition(text: "ทุกใบงานมีผู้รับผิดชอบผล (A) หนึ่งคน",
+                GateCondition(vacuousWhenEmpty: noLeaves, text: "ทุกใบงานมีผู้รับผิดชอบผล (A) หนึ่งคน",
                               satisfied: !problems.contains { $0.kind == .noAccountable }),
-                GateCondition(text: "งานเสี่ยงสูงมีคนเป็นผู้รับผิดชอบผล",
+                GateCondition(vacuousWhenEmpty: noLeaves, text: "งานเสี่ยงสูงมีคนเป็นผู้รับผิดชอบผล",
                               satisfied: !problems.contains { $0.kind == .highRiskWithoutHuman }),
-                GateCondition(text: "โครงสร้างไม่ขาด (ไม่มีใบงานลอย)",
+                GateCondition(vacuousWhenEmpty: noLeaves, text: "โครงสร้างไม่ขาด (ไม่มีใบงานลอย)",
                               satisfied: !problems.contains {
                                   $0.kind == .missingParent || $0.kind == .cycle
+                              }),
+                GateCondition(vacuousWhenEmpty: noLeaves, text: "เส้นพึ่งพาไม่รอกันเอง",
+                              satisfied: !problems.contains {
+                                  $0.kind == .dependencyCycle || $0.kind == .missingDependency
                               }),
                 // The other half of the 100% rule: work that covers nothing is
                 // caught above, scope that nothing covers is caught here.
