@@ -1,4 +1,5 @@
 import Foundation
+import AgentKit
 
 // ─────────────────────────────────────────────────────────────
 // Where a piece of knowledge came from and how much it is worth
@@ -23,6 +24,24 @@ public enum SourceTier: String, Sendable, Codable, CaseIterable, Comparable {
 
     public var isMoreCredibleThan: (SourceTier) -> Bool { { self < $0 } }
 }
+extension SourceTier {
+    /// The same five tiers as `AgentKit.CredibilityTier`, which is the vocabulary
+    /// the rest of the system shares (§14.1's rule, the QA gate, conflict
+    /// weighting). Two enums for one idea is a duplication this project's own
+    /// §0.2 rule 3 forbids — the mapping is exhaustive and `TierParityTests`
+    /// fails if either side grows a case the other does not have, so the
+    /// duplication cannot drift while it waits to be collapsed.
+    public var credibility: CredibilityTier {
+        switch self {
+        case .t1: .t1
+        case .t2: .t2
+        case .t3: .t3
+        case .t4: .t4
+        case .t5: .t5
+        }
+    }
+}
+
 
 public enum Origin: Sendable, Codable, Equatable {
     case upload(filename: String)

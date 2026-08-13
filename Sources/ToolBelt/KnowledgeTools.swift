@@ -191,7 +191,12 @@ public struct FetchPageTool: AgentTool {
             ? "\n\n… เหลืออีก \(page.paragraphs.count - maximum) ย่อหน้า"
             : ""
 
+        // The tier goes on the first line, in a form the Researcher's evidence
+        // builder reads back (§14.1, P13.2). Before this, QA counted citations
+        // and could not see how good they were — so two blog posts passed the
+        // corroboration rule that exists to stop exactly that.
         return ToolOutput(text: """
+        \(CitationTier.marker(page.provenance.tier?.credibility))
         \(page.title ?? page.finalURL.absoluteString)
         \(page.finalURL.absoluteString) · \(page.provenance.tier?.rawValue.uppercased() ?? "T5")
 

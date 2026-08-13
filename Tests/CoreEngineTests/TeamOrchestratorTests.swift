@@ -221,11 +221,79 @@ struct TeamOrchestratorTests {
         ])
         #expect(reviewer.review(oneSource, against: assignment, standard: []).passed == false)
 
+        // Two sources that were read, and both good enough to carry a claim.
         let readTwo = Deliverable(assignmentID: "r1", summary: "พบแล้ว", evidence: [
-            Evidence(kind: .citation, summary: "https://who.int/x", passed: true),
-            Evidence(kind: .citation, summary: "https://pubmed.ncbi.nlm.nih.gov/1/", passed: true),
+            Evidence(kind: .citation, summary: "https://who.int/x", passed: true, tier: .t1),
+            Evidence(kind: .citation, summary: "https://pubmed.ncbi.nlm.nih.gov/1/",
+                     passed: true, tier: .t2),
         ])
         #expect(reviewer.review(readTwo, against: assignment, standard: []).passed)
+    }
+
+    @Test("two T5 sources do not pass QA, however many there are (§14.1, P13.2)")
+    func tierRuleIsNotRelaxedByCount() async {
+        let reviewer = QAReviewer()
+        let assignment = Assignment(
+            id: "r1", role: .researcher, goal: "ค้น",
+            acceptanceCriteria: [Criterion(text: "2 แหล่ง", evidenceRequired: "citation")],
+            deliverableType: "สรุป")
+
+        // The Done-when of P13.2, exactly: opening T5 must not weaken the rule.
+        // Before this, QA counted citations and never looked at what they were,
+        // so two blog posts passed — and the corroboration rule appeared only in
+        // a Limitations paragraph, after the work had been accepted.
+        let blogsOnly = Deliverable(assignmentID: "r1", summary: "พบแล้ว", evidence: [
+            Evidence(kind: .citation, summary: "https://blog.example/a", passed: true, tier: .t5),
+            Evidence(kind: .citation, summary: "https://forum.example/b", passed: true, tier: .t5),
+            Evidence(kind: .citation, summary: "https://blog2.example/c", passed: true, tier: .t4),
+        ])
+        let refused = reviewer.review(blogsOnly, against: assignment, standard: [])
+        #expect(!refused.passed)
+        #expect(refused.findings.contains { $0.contains("ต้องมีแหล่ง T1–T3 ยืนยันอย่างน้อยหนึ่งแหล่ง") })
+
+        // One T3 standing behind them is enough to state something.
+        var supported = blogsOnly.evidence
+        supported.append(Evidence(kind: .citation, summary: "https://medrxiv.org/x",
+                                  passed: true, tier: .t3))
+        #expect(reviewer.review(Deliverable(assignmentID: "r1", summary: "พบแล้ว",
+                                            evidence: supported),
+                                against: assignment, standard: []).passed)
+    }
+
+    @Test("a citation with no tier cannot carry a claim either")
+    func untieredCitationsAreNotStrong() async {
+        let reviewer = QAReviewer()
+        let assignment = Assignment(
+            id: "r1", role: .researcher, goal: "ค้น",
+            acceptanceCriteria: [Criterion(text: "2 แหล่ง", evidenceRequired: "citation")],
+            deliverableType: "สรุป")
+        // `nil` is not "probably fine". A tool that did not say what it read
+        // leaves QA with no reason to believe it, which is the same position as
+        // a blog post.
+        let untiered = Deliverable(assignmentID: "r1", summary: "พบแล้ว", evidence: [
+            Evidence(kind: .citation, summary: "https://a.example/x", passed: true),
+            Evidence(kind: .citation, summary: "https://b.example/y", passed: true),
+        ])
+        #expect(!reviewer.review(untiered, against: assignment, standard: []).passed)
+    }
+
+    @Test("reading one page twice is one source")
+    func duplicateReadsAreOneSource() async {
+        let reviewer = QAReviewer()
+        let assignment = Assignment(
+            id: "r1", role: .researcher, goal: "ค้น",
+            acceptanceCriteria: [Criterion(text: "2 แหล่ง", evidenceRequired: "citation")],
+            deliverableType: "สรุป")
+        // The transcript is where this duplication comes from: a retry re-reads
+        // the same page, and counting it twice would turn one source into a
+        // consensus.
+        let sameTwice = Deliverable(assignmentID: "r1", summary: "พบแล้ว", evidence: [
+            Evidence(kind: .citation, summary: "https://who.int/x", passed: true, tier: .t1),
+            Evidence(kind: .citation, summary: "https://who.int/x", passed: true, tier: .t1),
+        ])
+        let verdict = reviewer.review(sameTwice, against: assignment, standard: [])
+        #expect(!verdict.passed)
+        #expect(verdict.findings.contains { $0.contains("มีแหล่งเดียว") })
     }
 
     @Test("a specialist that throws is retried, not treated as a failure to review")

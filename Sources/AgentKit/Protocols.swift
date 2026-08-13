@@ -231,11 +231,17 @@ public struct Evidence: Sendable, Equatable, Codable {
     public let kind: Kind
     public let summary: String
     public let passed: Bool
+    /// For a citation: how credible the source is (§14.1). `nil` for every other
+    /// kind, and also for a citation whose tier could not be established — which
+    /// QA treats as a source that cannot carry a claim rather than as a good one.
+    public let tier: CredibilityTier?
 
-    public init(kind: Kind, summary: String, passed: Bool) {
+    public init(kind: Kind, summary: String, passed: Bool,
+                tier: CredibilityTier? = nil) {
         self.kind = kind
         self.summary = summary
         self.passed = passed
+        self.tier = tier
     }
 }
 
@@ -262,4 +268,34 @@ public protocol Specialist: Actor {
     nonisolated var role: Role { get }
     nonisolated var definitionOfDone: [Criterion] { get }
     func execute(_ assignment: Assignment) async throws -> Deliverable
+}
+
+/// How a tool tells the evidence builder how credible a source was (§14.1,
+/// P13.2).
+///
+/// A marker in the text rather than a field on `ToolOutput`, because a tool's
+/// output is what a model reads and this has to be visible to it too — and
+/// because widening the tool protocol for one kind of tool is how a protocol
+/// stops meaning anything. Written and read in one place, with a test on the
+/// round trip, so the two halves cannot drift.
+public enum CitationTier {
+    static let prefix = "tier:"
+
+    /// The line a tool puts *first* in its output, so it survives any truncation
+    /// of the text into an evidence summary.
+    public static func marker(_ tier: CredibilityTier?) -> String {
+        "\(prefix) \(tier?.label.lowercased() ?? "unknown")"
+    }
+
+    /// The tier a piece of tool output declared, or `nil` when it declared none.
+    /// `nil` is not "probably fine": QA treats an untiered citation as one that
+    /// cannot carry a claim.
+    public static func tier(in text: String) -> CredibilityTier? {
+        guard let line = text.split(separator: "\n").first(where: {
+            $0.trimmingCharacters(in: .whitespaces).hasPrefix(prefix)
+        }) else { return nil }
+        let value = line.replacingOccurrences(of: prefix, with: "")
+            .trimmingCharacters(in: .whitespaces).lowercased()
+        return CredibilityTier.allCases.first { $0.label.lowercased() == value }
+    }
 }

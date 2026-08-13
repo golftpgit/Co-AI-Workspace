@@ -57,25 +57,10 @@ public struct CitedText: Sendable, Equatable, Identifiable {
     var workKey: String { provenance.documentID }
 }
 
-/// The rule §14.1 states for how confidently something may be written.
-public enum Corroboration: Sendable, Equatable {
-    /// Two or more sources at T1–T2.
-    case strong
-    /// Enough to state, with the qualification that goes with it.
-    case adequate
-    /// Only weak sources, or only one of anything.
-    case weak(reason: String)
-
-    public var mayStatePlainly: Bool { self == .strong }
-
-    public var note: String? {
-        switch self {
-        case .strong: nil
-        case .adequate: "มีแหล่งรองรับพอสมควร แต่ยังไม่ถึงเกณฑ์ 'แหล่งชั้นต้นสองแหล่งขึ้นไป'"
-        case .weak(let reason): reason
-        }
-    }
-}
+/// §14.1's rule now lives in `AgentKit.Corroboration`: QA refuses work over it
+/// and this file explains it to a reader, and two copies of one rule drift the
+/// first time either is tuned (§0.2 rule 3, P13.2).
+public typealias Corroboration = AgentKit.Corroboration
 
 public enum CrossSource {
     /// §14.1's tier-aware rule, as arithmetic.
@@ -84,22 +69,12 @@ public enum CrossSource {
     /// times is one source, and a rule that counted otherwise would let a
     /// single blog post look like a consensus.
     public static func assess(_ citations: [CitedText]) -> Corroboration {
+        // One tier per work, then the shared rule. The de-duplication by
+        // `workKey` is the part that belongs here: what counts as one source is a
+        // question about citations, not about arithmetic.
         var tiers: [String: SourceTier?] = [:]
         for citation in citations { tiers[citation.workKey] = citation.provenance.tier }
-        let works = tiers.values.map { $0 }
-        guard !works.isEmpty else { return .weak(reason: "ไม่มีแหล่งอ้างอิงเลย") }
-
-        let strongCount = works.filter { $0 == .t1 || $0 == .t2 }.count
-        let midCount = works.filter { $0 == .t3 }.count
-        if strongCount >= 2 { return .strong }
-        if works.count == 1 {
-            return .weak(reason: "มีแหล่งเดียว — ยังยืนยันข้ามแหล่งไม่ได้")
-        }
-        if strongCount + midCount >= 1 { return .adequate }
-        // Ten weak sources are not two strong ones; §14.1 is explicit that
-        // T5s need at least one T1–T3 standing behind them.
-        return .weak(reason: "มีแต่แหล่งชั้นรอง (T4–T5) \(works.count) แหล่ง — "
-                     + "ต้องมีแหล่ง T1–T3 ยืนยันอย่างน้อยหนึ่งแหล่ง")
+        return Corroboration.assess(tiers: tiers.values.map { $0?.credibility })
     }
 }
 

@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import AgentKit
 @testable import Knowledge
 
 // ─────────────────────────────────────────────────────────────
@@ -159,5 +160,22 @@ struct ThaiSourceTests {
         // is how a lookalike domain borrows somebody else's credibility.
         let lookalike = try #require(URL(string: "https://nottci-thaijo.org/x"))
         #expect(registry.tier(for: lookalike) == .t5)
+    }
+}
+
+@Suite("Tier parity")
+struct TierParityTests {
+
+    @Test("SourceTier and CredibilityTier are the same five tiers")
+    func enumsStayAligned() {
+        // Two enums for one idea is a duplication §0.2 rule 3 forbids, and it is
+        // still here because collapsing it touches every module. This test is what
+        // keeps it from drifting in the meantime: if either side grows a case, the
+        // counts stop matching and the mapping stops being total.
+        #expect(SourceTier.allCases.count == CredibilityTier.allCases.count)
+        #expect(SourceTier.allCases.map(\.credibility) == CredibilityTier.allCases)
+        // And the *order* matches, which is what makes `<` mean the same thing on
+        // both sides: more credible sorts first.
+        #expect(SourceTier.allCases.map(\.rawValue) == CredibilityTier.allCases.map { $0.label.lowercased() })
     }
 }

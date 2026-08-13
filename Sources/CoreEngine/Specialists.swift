@@ -322,18 +322,22 @@ enum EvidenceReader {
 
             case "fetch_page":
                 // A citation exists because a page was read, not because a
-                // search returned a link.
+                // search returned a link — and it carries the tier the tool
+                // declared, because "two sources" without tiers is the claim
+                // §14.1 exists to refuse (P13.2).
                 evidence.append(Evidence(
                     kind: .citation,
                     summary: String(entry.text.prefix(200)),
-                    passed: true))
+                    passed: true,
+                    tier: CitationTier.tier(in: entry.text)))
 
             case "kb_search":
                 let found = !entry.text.contains("ไม่พบข้อมูล")
                 evidence.append(Evidence(
                     kind: .citation,
                     summary: String(entry.text.prefix(200)),
-                    passed: found))
+                    passed: found,
+                    tier: CitationTier.tier(in: entry.text)))
 
             default:
                 break
