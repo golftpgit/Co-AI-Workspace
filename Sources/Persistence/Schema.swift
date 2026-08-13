@@ -16,6 +16,7 @@ public enum Schema {
     /// an interrupted run — run-until-done resumes the second and never the
     /// first. The criteria and deliverable type it needs to rebuild an
     /// assignment ride along on the schemaless part of the row.
+    /// 8: `conversation` can be pinned (§19.2.1, P10.14).
     /// 7: `span` carries `work_package` (§19.6, P10.15) — the link that turns
     /// "how long did this take" into "how long did *this promise* take", and
     /// with it four of the six tolerances from enforced-but-unread into read.
@@ -30,7 +31,7 @@ public enum Schema {
     /// `project_id`; there was simply nothing on the other end of it, so two
     /// projects were indistinguishable and the app wrote the literal id
     /// "default" into all of them.
-    public static let version = 7
+    public static let version = 8
 
     /// Split into statements that are executed one at a time: a single
     /// failing statement should name itself, not abort a 40-line blob.
@@ -45,6 +46,7 @@ public enum Schema {
         "DEFINE FIELD IF NOT EXISTS created_at ON conversation TYPE datetime",
         "DEFINE FIELD IF NOT EXISTS updated_at ON conversation TYPE datetime",
         "DEFINE INDEX IF NOT EXISTS conversation_updated ON conversation FIELDS updated_at",
+        "DEFINE FIELD IF NOT EXISTS pinned ON conversation TYPE bool DEFAULT false",
 
         "DEFINE TABLE IF NOT EXISTS message SCHEMALESS",
         "DEFINE FIELD IF NOT EXISTS uid ON message TYPE string",

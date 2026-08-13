@@ -31,6 +31,14 @@ final class ChatViewModel {
     }
 
     private(set) var conversations: [Conversation] = []
+    /// What the sidebar shows when a search is running. Separate from
+    /// `conversations` so clearing the query brings the list back instead of
+    /// re-fetching it.
+    private(set) var matches: [ConversationMatch] = []
+    var query = ""
+    /// §19.2.1 — "ค้นข้ามโปรเจกต์" is a different question, not a wider
+    /// default: inside a project the list is the project's.
+    var searchesEverywhere = false
     private(set) var selected: Conversation?
     private(set) var bubbles: [Bubble] = []
     private(set) var isRunning = false
@@ -162,6 +170,57 @@ final class ChatViewModel {
         }
     }
 
+    func search() async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            matches = []
+            return
+        }
+        do {
+            matches = try await engine.conversations.search(
+                trimmed, scope: searchesEverywhere ? nil : scope)
+            loadError = matches.isEmpty ? "ไม่พบข้อความที่ตรงกับ “\(trimmed)”" : nil
+        } catch {
+            loadError = "ค้นบทสนทนาไม่สำเร็จ: \(error)"
+        }
+    }
+
+    func clearSearch() {
+        query = ""
+        matches = []
+        loadError = nil
+    }
+
+    func togglePin(_ conversation: Conversation) async {
+        do {
+            try await engine.conversations.setPinned(conversation.id, !conversation.pinned)
+            await load()
+        } catch {
+            loadError = "ปักหมุดไม่สำเร็จ: \(error)"
+        }
+    }
+
+    func rename(_ conversation: Conversation, to title: String) async {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        try? await engine.conversations.rename(conversation.id, title: trimmed)
+        await load()
+    }
+
+    /// Names a conversation after the first thing asked in it, once.
+    ///
+    /// Reuses the drafter's title helper rather than a second rule: a title cut
+    /// mid-word is the same defect wherever it appears, and it was already
+    /// solved for the project brief.
+    private func titleIfUnnamed(from text: String) async {
+        guard let conversation = selected,
+              (conversation.title ?? "").trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        let title = BriefDraft.summarise(text)
+        guard !title.isEmpty else { return }
+        try? await engine.conversations.rename(conversation.id, title: title)
+        await load()
+    }
+
     func newConversation() async {
         do {
             let conversation = try await engine.conversations.create(scope: scope)
@@ -232,6 +291,9 @@ final class ChatViewModel {
         isRunning = true
         routedVia = nil
         bubbles.append(Bubble(id: UUID().uuidString, kind: .user, text: text))
+        // Named from the first thing asked, before the answer arrives — a list
+        // of "บทสนทนาใหม่" is a list nobody can search by eye.
+        await titleIfUnnamed(from: text)
 
         let stream = await engine.runner.run(userText: text,
                                              conversationID: conversation.id,

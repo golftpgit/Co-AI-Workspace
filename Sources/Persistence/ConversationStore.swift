@@ -1,5 +1,6 @@
 import Foundation
 import AgentKit
+import Knowledge
 
 // ─────────────────────────────────────────────────────────────
 // Conversation persistence (ARCHITECTURE §7, IMPLEMENTATION P1.3).
@@ -14,14 +15,33 @@ public struct Conversation: Sendable, Identifiable, Equatable {
     public let scope: Scope
     public let createdAt: Date
     public var updatedAt: Date
+    /// Kept at the top of the list until unpinned. The one piece of ordering a
+    /// person controls, because "most recent" is the wrong answer for the
+    /// conversation somebody keeps coming back to.
+    public var pinned: Bool
 
-    public init(id: String, title: String?, scope: Scope, createdAt: Date, updatedAt: Date) {
+    public init(id: String, title: String?, scope: Scope,
+                createdAt: Date, updatedAt: Date, pinned: Bool = false) {
         self.id = id
         self.title = title
         self.scope = scope
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.pinned = pinned
     }
+}
+
+/// A conversation that matched a search, with the message that matched it.
+///
+/// The snippet is the point: a list of titles answers "which conversations
+/// exist", and what somebody searching actually asked was "where did I say
+/// that".
+public struct ConversationMatch: Sendable, Equatable, Identifiable {
+    public let conversation: Conversation
+    public let snippet: String
+    public let score: Double
+
+    public var id: String { conversation.id }
 }
 
 public struct StoredMessage: Sendable, Identifiable, Equatable {
@@ -59,18 +79,34 @@ public actor ConversationStore {
     // MARK: - conversations
 
     public func create(scope: Scope, title: String? = nil) async throws -> Conversation {
-        let id = OpaqueID.make(OpaqueID.conversation)
-        var content = ContentBuilder()
-        content.setString("uid", id)               // our own key; see note below
-        content.setString("title", title)          // omitted when nil: NULL != NONE in v3
-        content.setString("scope_kind", ScopeColumns.kind(scope))
-        content.setString("project_id", ScopeColumns.projectID(scope))
-        content.raw("created_at", "time::now()")
-        content.raw("updated_at", "time::now()")
-
-        let results = try await client.exec(
-            "CREATE conversation CONTENT \(content.content)",
-            vars: content.vars)
+        let id = OpaqueID.make(OpaqueID.conversation)   // our own key; see note below
+                                                       // title omitted when nil: NULL != NONE in v3
+        // Same burst problem as `append`, one step earlier: creating a
+        // conversation and writing its first message land back to back, and
+        // "the store was busy" must not be how a conversation fails to exist.
+        // The row carries our own `uid`, so a retry cannot produce two of it.
+        // Retried inline rather than through the closure helper: the bindings
+        // are `[String: Any]`, which cannot cross an isolation boundary.
+        var results: [QueryResult] = []
+        for attempt in 0..<3 {
+            // Rebuilt per attempt: the bindings are `[String: Any]`, which the
+            // compiler will not let cross into the actor twice from one value.
+            var content = ContentBuilder()
+            content.setString("uid", id)
+            content.setString("title", title)
+            content.setString("scope_kind", ScopeColumns.kind(scope))
+            content.setString("project_id", ScopeColumns.projectID(scope))
+            content.raw("created_at", "time::now()")
+            content.raw("updated_at", "time::now()")
+            do {
+                results = try await client.exec(
+                    "CREATE conversation CONTENT \(content.content)", vars: content.vars)
+                break
+            } catch let error as SurrealError {
+                guard Self.isWriteConflict(error), attempt < 2 else { throw error }
+                try? await Task.sleep(for: .milliseconds(40 * (attempt + 1)))
+            }
+        }
 
         guard let row = results.first?.rows.first ?? results.first?.result.objectValue else {
             throw SurrealError.decoding("CREATE conversation returned no row")
@@ -90,10 +126,78 @@ public actor ConversationStore {
                 sql += " WHERE scope_kind = $kind"
             }
         }
-        sql += " ORDER BY updated_at DESC LIMIT $limit"
+        // Pinned first, then most recent. Two keys rather than one because
+        // "recent" is the wrong answer for the conversation somebody keeps
+        // coming back to, which is the whole point of a pin.
+        sql += " ORDER BY pinned DESC, updated_at DESC LIMIT $limit"
 
         let results = try await client.query(sql, vars: vars)
         return (results.first?.rows ?? []).compactMap { try? Self.conversation(from: $0) }
+    }
+
+    public func setPinned(_ id: String, _ pinned: Bool) async throws {
+        try await client.exec("""
+        UPDATE conversation SET pinned = $pinned, updated_at = updated_at
+        WHERE uid = type::string($id)
+        """, vars: ["id": id, "pinned": pinned])
+    }
+
+    /// Searches what was *said*, not what conversations are called.
+    ///
+    /// Same BM25 and the same tokenizer as the knowledge base — which is the
+    /// whole reason this is not a `CONTAINS` query: Thai has no spaces, so
+    /// substring matching finds either everything or nothing, and neither is a
+    /// search (§11 / P2.2).
+    ///
+    /// `scope` nil searches everywhere, which is the "ค้นข้ามโปรเจกต์" button.
+    public func search(_ query: String, scope: Scope?,
+                       limit: Int = 20, conversationLimit: Int = 300) async throws -> [ConversationMatch] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        let conversations = try await list(scope: scope, limit: conversationLimit)
+        guard !conversations.isEmpty else { return [] }
+        let byID = Dictionary(uniqueKeysWithValues: conversations.map { ($0.id, $0) })
+
+        // One query for the messages of every visible conversation, then the
+        // ranking happens here — the same shape the knowledge index uses.
+        let rows = try await client.query("""
+            SELECT uid, conversation_id, content FROM message
+            WHERE conversation_id IN $ids AND role != 'system'
+            LIMIT 20000
+            """, vars: ["ids": conversations.map(\.id)]).first?.rows ?? []
+
+        var index = BM25Index()
+        var text: [String: (conversation: String, content: String)] = [:]
+        for row in rows {
+            guard let id = row["uid"]?.stringValue,
+                  let conversation = row["conversation_id"]?.stringValue,
+                  let content = row["content"]?.stringValue, !content.isEmpty else { continue }
+            index.index(id: id, text: content)
+            text[id] = (conversation, content)
+        }
+
+        var best: [String: (score: Double, snippet: String)] = [:]
+        for scored in index.search(trimmed, limit: rows.count) {
+            guard let hit = text[scored.id] else { continue }
+            // Best message per conversation: five hits in one conversation is
+            // one answer to "where did I say that", not five.
+            if let existing = best[hit.conversation], existing.score >= scored.score { continue }
+            best[hit.conversation] = (scored.score, Self.snippet(hit.content))
+        }
+
+        return best.compactMap { id, hit in
+            byID[id].map { ConversationMatch(conversation: $0, snippet: hit.snippet, score: hit.score) }
+        }
+        .sorted { $0.score > $1.score }
+        .prefix(limit)
+        .map { $0 }
+    }
+
+    private static func snippet(_ content: String, limit: Int = 140) -> String {
+        let flat = content.replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return flat.count <= limit ? flat : String(flat.prefix(limit)) + "…"
     }
 
     public func rename(_ id: String, title: String) async throws {
@@ -145,16 +249,47 @@ public actor ConversationStore {
                        role: StoredMessage.Role,
                        content: String) async throws -> StoredMessage {
         let id = OpaqueID.make(OpaqueID.message)
-        try await client.exec("""
-        CREATE message CONTENT {
-            uid: type::string($id), conversation_id: type::string($cid),
-            role: type::string($role), content: type::string($content), created_at: time::now()
-        };
-        UPDATE conversation SET updated_at = time::now() WHERE uid = type::string($cid);
-        """, vars: ["id": id, "cid": conversationID, "role": role.rawValue, "content": content])
+        // Two statements, one busy store: SurrealKV rejects a write that
+        // conflicts with another in flight, and appending a message is the one
+        // call that arrives in bursts — a streamed answer and the user's next
+        // line land within milliseconds of each other. Found by the history
+        // tests failing only while the machine was busy, which is exactly when
+        // losing a message would matter.
+        //
+        // The retry is bounded and only for the conflict: an error that means
+        // something else must not be swallowed by a loop.
+        try await retryingWriteConflict {
+            try await client.exec("""
+            CREATE message CONTENT {
+                uid: type::string($id), conversation_id: type::string($cid),
+                role: type::string($role), content: type::string($content), created_at: time::now()
+            };
+            UPDATE conversation SET updated_at = time::now() WHERE uid = type::string($cid);
+            """, vars: ["id": id, "cid": conversationID, "role": role.rawValue, "content": content])
+        }
 
         return StoredMessage(id: id, conversationID: conversationID,
                              role: role, content: content, createdAt: Date())
+    }
+
+    /// Retries a write that lost a race, and nothing else.
+    private func retryingWriteConflict(_ body: () async throws -> Void) async throws {
+        for attempt in 0..<3 {
+            do {
+                try await body()
+                return
+            } catch let error as SurrealError {
+                guard Self.isWriteConflict(error), attempt < 2 else { throw error }
+                try? await Task.sleep(for: .milliseconds(40 * (attempt + 1)))
+            }
+        }
+    }
+
+    /// The store telling us it lost a race, which is the one error worth
+    /// trying again. Anything else is a fact about the statement.
+    private static func isWriteConflict(_ error: SurrealError) -> Bool {
+        guard case .server(_, let message) = error else { return false }
+        return message.localizedCaseInsensitiveContains("conflict")
     }
 
     /// Full history in order — loaded from the database on every turn rather
@@ -198,7 +333,8 @@ public actor ConversationStore {
                             title: row["title"]?.stringValue,
                             scope: scope,
                             createdAt: date(row["created_at"]) ?? Date(),
-                            updatedAt: date(row["updated_at"]) ?? Date())
+                            updatedAt: date(row["updated_at"]) ?? Date(),
+                            pinned: row["pinned"]?.boolValue ?? false)
     }
 
     private static func date(_ value: SurrealValue?) -> Date? {
