@@ -18,12 +18,76 @@ import AgentKit
 public actor ProjectService {
     private let store: any ProjectPersisting
     private let plans: (any WorkPackagePersisting)?
+    private let exceptions: (any ExceptionPersisting)?
+    /// Which projects are outside their frame. Cached because the hook chain
+    /// asks on every tool call, and refreshed on every write that could change
+    /// the answer — the cost of being wrong here is work that should have
+    /// stopped carrying on.
+    private var blocked: Set<ProjectID> = []
     private var byID: [ProjectID: Project] = [:]
     private var loaded = false
 
-    public init(store: any ProjectPersisting, plans: (any WorkPackagePersisting)? = nil) {
+    public init(store: any ProjectPersisting,
+                plans: (any WorkPackagePersisting)? = nil,
+                exceptions: (any ExceptionPersisting)? = nil) {
         self.store = store
         self.plans = plans
+        self.exceptions = exceptions
+    }
+
+    // MARK: - exceptions (§19.10)
+
+    /// Raises the report and stops the project until somebody answers.
+    @discardableResult
+    public func raise(_ report: ExceptionReport) async throws -> ExceptionReport {
+        try await exceptions?.save(report)
+        blocked.insert(report.projectID)
+        return report
+    }
+
+    /// Raises one report per breached dimension that does not already have an
+    /// open one. Returns what was newly raised, so the caller sends exactly the
+    /// messages that are new rather than repeating them every check.
+    @discardableResult
+    public func raiseBreaches(for id: ProjectID,
+                              readings: ToleranceReadings) async throws -> [ExceptionReport] {
+        guard let project = await project(id) else { return [] }
+        let open = Set((try? await openExceptions(id))?.map(\.dimension) ?? [])
+        var raised: [ExceptionReport] = []
+        for status in ToleranceCheck.breaches(project.tolerances, readings: readings)
+        where !open.contains(status.dimension) {
+            raised.append(try await raise(.automatic(projectID: id, status: status)))
+        }
+        return raised
+    }
+
+    public func openExceptions(_ id: ProjectID) async throws -> [ExceptionReport] {
+        guard let exceptions else { return [] }
+        return try await exceptions.all(project: id).filter(\.isOpen)
+    }
+
+    public func resolve(_ report: ExceptionReport, decision: String) async throws {
+        guard let exceptions else { return }
+        var resolved = report
+        resolved.resolvedAt = Date()
+        resolved.resolution = decision
+        try await exceptions.save(resolved)
+        blocked = try await openExceptions(report.projectID).isEmpty
+            ? blocked.subtracting([report.projectID])
+            : blocked.union([report.projectID])
+    }
+
+    /// Reloads the blocked set from the store. Called at boot: an exception
+    /// raised before the app was closed must still stop work after it reopens.
+    public func refreshExceptions() async {
+        guard let exceptions else { return }
+        var stopped: Set<ProjectID> = []
+        for project in (try? await projects()) ?? [] {
+            if let open = try? await exceptions.all(project: project.id), open.contains(where: \.isOpen) {
+                stopped.insert(project.id)
+            }
+        }
+        blocked = stopped
     }
 
     // MARK: - the plan
@@ -88,8 +152,10 @@ public actor ProjectService {
     public func create(name: String,
                        kind: ProjectKind = .blank,
                        brief: String = "",
-                       statement: ScopeStatement = ScopeStatement()) async throws -> Project {
-        let project = Project(name: name, kind: kind, brief: brief, statement: statement)
+                       statement: ScopeStatement = ScopeStatement(),
+                       board: [BoardRole] = []) async throws -> Project {
+        let project = Project(name: name, kind: kind, brief: brief,
+                              statement: statement, board: board)
         try await store.save(project)
         byID[project.id] = project
         return project
@@ -159,5 +225,9 @@ public actor ProjectService {
 extension ProjectService: ProjectStageReading {
     public func stage(of id: ProjectID) async -> ProjectStage? {
         await project(id)?.stage
+    }
+
+    public func hasOpenException(_ id: ProjectID) async -> Bool {
+        blocked.contains(id)
     }
 }

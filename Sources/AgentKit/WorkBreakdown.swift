@@ -58,6 +58,13 @@ public struct WorkPackage: Sendable, Codable, Equatable, Identifiable {
     public var acceptanceCriteria: [Criterion]
     /// Who it is for. `nil` until the lead assigns it.
     public var role: Role?
+    /// Who answers for it (§19.9). `nil` until the plan says — G2 refuses to
+    /// close over a leaf that nobody is accountable for.
+    public var raci: RACI?
+    /// How much is at stake in this deliverable. Declared by whoever plans it,
+    /// and it decides one thing: work classified `.high` must be accountable
+    /// to a person, not to the team lead (§19.9).
+    public var riskClass: RiskLevel
     public var status: WorkPackageStatus
     /// Position among its siblings. Explicit rather than implied by insertion
     /// order, because a plan gets reordered and the order is part of it.
@@ -74,6 +81,8 @@ public struct WorkPackage: Sendable, Codable, Equatable, Identifiable {
                 scopeRef: String? = nil,
                 acceptanceCriteria: [Criterion],
                 role: Role? = nil,
+                raci: RACI? = nil,
+                riskClass: RiskLevel = .low,
                 status: WorkPackageStatus = .backlog,
                 order: Int = 0,
                 evidence: [Evidence] = []) {
@@ -85,6 +94,8 @@ public struct WorkPackage: Sendable, Codable, Equatable, Identifiable {
         self.scopeRef = scopeRef
         self.acceptanceCriteria = acceptanceCriteria
         self.role = role
+        self.raci = raci
+        self.riskClass = riskClass
         self.status = status
         self.order = order
         self.evidence = evidence

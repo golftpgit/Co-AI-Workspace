@@ -97,6 +97,11 @@ public enum ProjectLifecycle {
                               satisfied: !project.statement.inScope.isEmpty),
                 GateCondition(text: "ขอบเขต 'ไม่ทำ' อย่างน้อย 1 ข้อ",
                               satisfied: !project.statement.outOfScope.isEmpty),
+                // §19.5 — the seat that is never an agent's. Empty by default
+                // rather than filled in with a plausible name: the point of
+                // the rule is that somebody put their own name there.
+                GateCondition(text: "มีชื่อผู้รับผิดชอบทางธุรกิจ (Executive) ที่เป็นคน",
+                              satisfied: project.executive?.isFilled == true),
             ]
         case .planning:
             // G2 is where the plan stops being a list of intentions. Each
@@ -115,6 +120,10 @@ public enum ProjectLifecycle {
                               }),
                 GateCondition(text: "ไม่มีงานแม่ที่ไม่มีใบงานอยู่ข้างใน",
                               satisfied: !problems.contains { $0.kind == .emptyGroup }),
+                GateCondition(text: "ทุกใบงานมีผู้รับผิดชอบผล (A) หนึ่งคน",
+                              satisfied: !problems.contains { $0.kind == .noAccountable }),
+                GateCondition(text: "งานเสี่ยงสูงมีคนเป็นผู้รับผิดชอบผล",
+                              satisfied: !problems.contains { $0.kind == .highRiskWithoutHuman }),
                 GateCondition(text: "โครงสร้างไม่ขาด (ไม่มีใบงานลอย)",
                               satisfied: !problems.contains {
                                   $0.kind == .missingParent || $0.kind == .cycle

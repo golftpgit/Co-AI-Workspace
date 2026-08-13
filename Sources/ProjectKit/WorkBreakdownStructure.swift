@@ -28,6 +28,8 @@ public struct WBSProblem: Sendable, Equatable, Identifiable {
         case danglingScopeRef
         case missingParent
         case cycle
+        case noAccountable
+        case highRiskWithoutHuman
     }
 
     public let kind: Kind
@@ -44,6 +46,9 @@ public struct WBSProblem: Sendable, Equatable, Identifiable {
         case .danglingScopeRef: "“\(title)” ผูกกับข้อที่ไม่มีอยู่ในขอบเขตแล้ว"
         case .missingParent: "“\(title)” อ้างถึงงานแม่ที่ไม่มีอยู่"
         case .cycle: "“\(title)” วนกลับมาหาตัวเอง"
+        case .noAccountable: "“\(title)” ยังไม่มีผู้รับผิดชอบผล (A)"
+        case .highRiskWithoutHuman:
+            "“\(title)” จัดชั้นความเสี่ยงสูง — ผู้รับผิดชอบผล (A) ต้องเป็นคน ไม่ใช่หัวหน้าทีม"
         }
     }
 }
@@ -140,6 +145,20 @@ public struct WorkBreakdown: Sendable, Equatable {
                 problems.append(.init(kind: .noAcceptanceCriteria, packageID: package.id,
                                       title: package.title))
             }
+            switch package.raci {
+            case nil:
+                problems.append(.init(kind: .noAccountable, packageID: package.id,
+                                      title: package.title))
+            case .some(let raci):
+                // The one rule about accountability that a type cannot carry:
+                // it depends on what is at stake, which is a judgement about
+                // the deliverable rather than a shape (§19.9).
+                if package.riskClass >= .high, !raci.accountable.isHuman {
+                    problems.append(.init(kind: .highRiskWithoutHuman,
+                                          packageID: package.id, title: package.title))
+                }
+            }
+
             let ref = package.scopeRef?.trimmingCharacters(in: .whitespaces)
             if ref == nil || ref?.isEmpty == true {
                 problems.append(.init(kind: .noScopeRef, packageID: package.id,

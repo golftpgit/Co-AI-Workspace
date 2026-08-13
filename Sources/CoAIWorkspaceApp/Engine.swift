@@ -195,8 +195,14 @@ struct Engine: Sendable {
         // `HookChain()` with no reader refuses every project-scoped call, which
         // is the safe default for a library; the app is the place that knows
         // where stages come from.
-        let projects = ProjectService(store: ProjectStore(client: client),
-                                      plans: WorkPackageStore(client: client))
+        let projects = ProjectService(
+            store: ProjectStore(client: client),
+            plans: WorkPackageStore(client: client),
+            exceptions: ExceptionBridge(store: ExceptionStore(client: client)))
+        // §19.10 — an exception raised before the app closed must still stop
+        // work after it reopens, so the blocked set is read at boot rather
+        // than starting empty and filling in when somebody opens the screen.
+        await projects.refreshExceptions()
         let gateway = ToolGateway(chain: HookChain(stageGate: StageGate(reader: projects)),
                                   approver: broker,
                                   spanSink: spans,

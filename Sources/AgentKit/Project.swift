@@ -129,6 +129,14 @@ public struct Project: Sendable, Codable, Equatable, Identifiable {
     public var stage: ProjectStage
     public var brief: String
     public var statement: ScopeStatement
+    /// The seats a person holds (§19.5). Stored as a list because Senior User
+    /// may or may not be a different person, and empty because nobody should
+    /// be given this seat by a default.
+    public var board: [BoardRole]
+    /// The agreed frame, as raw numbers (§19.10). Stored on the project rather
+    /// than derived from the autonomy slider, because the slider is a shortcut
+    /// for setting these and the project is what the gate reads.
+    public var toleranceLimits: [String: Double]
     public let createdAt: Date
     public var updatedAt: Date
     public var closedAt: Date?
@@ -140,6 +148,8 @@ public struct Project: Sendable, Codable, Equatable, Identifiable {
                 stage: ProjectStage = .initiation,
                 brief: String = "",
                 statement: ScopeStatement = ScopeStatement(),
+                board: [BoardRole] = [],
+                toleranceLimits: [String: Double] = [:],
                 createdAt: Date = Date(),
                 updatedAt: Date = Date(),
                 closedAt: Date? = nil,
@@ -150,6 +160,8 @@ public struct Project: Sendable, Codable, Equatable, Identifiable {
         self.stage = stage
         self.brief = brief
         self.statement = statement
+        self.board = board
+        self.toleranceLimits = toleranceLimits
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.closedAt = closedAt
@@ -162,6 +174,8 @@ public struct Project: Sendable, Codable, Equatable, Identifiable {
     public var scope: Scope { .project(id) }
 
     public var isOpen: Bool { stage != .closed }
+
+    public var executive: BoardRole? { board.first { $0.seat == .executive } }
 }
 
 /// What the hook chain needs to know about a project, and nothing more.
@@ -175,6 +189,11 @@ public protocol ProjectStageReading: Sendable {
     /// as permission — an unknown id is exactly the case where guessing is
     /// worst.
     func stage(of id: ProjectID) async -> ProjectStage?
+
+    /// Whether the project is outside its agreed frame and waiting on a person
+    /// (§19.10). "Stops" has to mean something the tool layer enforces, or it
+    /// means "mentions it in a report and carries on".
+    func hasOpenException(_ id: ProjectID) async -> Bool
 }
 
 /// Where projects are kept, as the lifecycle sees it.

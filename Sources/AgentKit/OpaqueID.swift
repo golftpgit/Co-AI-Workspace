@@ -21,4 +21,5 @@ public enum OpaqueID {
     public static let assignment = "as"
     public static let project = "pj"
     public static let workPackage = "wp"
+    public static let exception = "ex"
 }
