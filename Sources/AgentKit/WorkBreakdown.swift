@@ -66,6 +66,10 @@ public struct WorkPackage: Sendable, Codable, Equatable, Identifiable {
     /// to a person, not to the team lead (§19.9).
     public var riskClass: RiskLevel
     public var status: WorkPackageStatus
+    /// Leaves that must finish before this one starts (§19.7). Finish-to-start
+    /// only: the other three relationships exist in project management, and
+    /// none of them mean anything for work an agent picks up and finishes.
+    public var dependsOn: [String]
     /// Position among its siblings. Explicit rather than implied by insertion
     /// order, because a plan gets reordered and the order is part of it.
     public var order: Int
@@ -83,6 +87,7 @@ public struct WorkPackage: Sendable, Codable, Equatable, Identifiable {
                 role: Role? = nil,
                 raci: RACI? = nil,
                 riskClass: RiskLevel = .low,
+                dependsOn: [String] = [],
                 status: WorkPackageStatus = .backlog,
                 order: Int = 0,
                 evidence: [Evidence] = []) {
@@ -96,6 +101,7 @@ public struct WorkPackage: Sendable, Codable, Equatable, Identifiable {
         self.role = role
         self.raci = raci
         self.riskClass = riskClass
+        self.dependsOn = dependsOn
         self.status = status
         self.order = order
         self.evidence = evidence

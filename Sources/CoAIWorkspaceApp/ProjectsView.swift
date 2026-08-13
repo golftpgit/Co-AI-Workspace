@@ -27,6 +27,24 @@ struct ProjectsView: View {
     @State private var saving = false
     /// Per-leaf editing buffers, keyed by package id. Same reason as `draft`.
     @State private var criteriaDrafts: [String: String] = [:]
+    @State private var tab = PlanTab.overview
+
+    /// The Plan area's sections (§19.2). Driving the screen by hand is what
+    /// showed why they are needed: with everything on one page, reaching the
+    /// registers meant scrolling past four boxes, and the gate — the one thing
+    /// that says what to do next — was below all of them.
+    enum PlanTab: String, CaseIterable, Identifiable {
+        case overview, plan, board, team
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .overview: "ภาพรวม"
+            case .plan: "แผนงาน + ลำดับ"
+            case .board: "กระดานงาน"
+            case .team: "ทีม & RACI"
+            }
+        }
+    }
     /// Sends an exception report out through every running channel. Passed in
     /// rather than reached for: this screen does not know what a channel is.
     let announce: (String) async -> Void
@@ -189,6 +207,14 @@ struct ProjectsView: View {
                 .font(.callout).foregroundStyle(.secondary)
         }
 
+        Picker("ส่วนของแผน", selection: $tab) {
+            ForEach(PlanTab.allCases) { Text($0.label).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .accessibilityLabel("เลือกส่วนของแผน")
+
+        if tab == .overview {
         GroupBox("เหตุผลที่ทำ") {
             VStack(alignment: .leading, spacing: 4) {
                 TextEditor(text: $draft.brief)
@@ -236,14 +262,231 @@ struct ProjectsView: View {
             }
         }
 
-        wbsBox(project)
-
         toleranceBox()
 
-        registerBox()
-
         baselineBox()
+        }
 
+        if tab == .plan {
+            wbsBox(project)
+            scheduleBox()
+        }
+
+        if tab == .board {
+            kanbanBox()
+            registerBox()
+        }
+
+        if tab == .team {
+            raciBox(project)
+        }
+    }
+
+    // MARK: - order, board and RACI (§19.7–§19.9)
+
+    /// Not a Gantt, and it says so. §19.7: the horizontal axis of a real Gantt
+    /// is calendar time, and this system has no honest number to put there yet
+    /// — the spans do not carry a work package. What *is* true today is the
+    /// order and which chain decides the end, so that is what is drawn.
+    @ViewBuilder
+    private func scheduleBox() -> some View {
+        let ordered = Schedule.order(model.wbs)
+        let paths = Schedule.criticalPaths(model.wbs)
+        let critical = Set(paths.flatMap { $0 })
+        let ready = Set(Schedule.ready(model.wbs).map(\.id))
+
+        GroupBox("ลำดับงานและเส้นทางวิกฤต") {
+            VStack(alignment: .leading, spacing: 6) {
+                if ordered.isEmpty {
+                    Text("ยังไม่มีใบงาน").font(.callout).foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(ordered.enumerated()), id: \.element.id) { index, package in
+                        HStack(spacing: 8) {
+                            Text("\(index + 1)")
+                                .font(.system(.caption, design: .monospaced))
+                                .frame(width: 22, alignment: .trailing)
+                                .foregroundStyle(.secondary)
+                            // The bar is position in the order, not duration.
+                            // Drawing a length here would be drawing a number
+                            // nobody measured.
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(critical.contains(package.id)
+                                      ? Color.accentColor : Color.secondary.opacity(0.35))
+                                .frame(width: 26, height: 12)
+                                .padding(.leading, CGFloat(index) * 14)
+                            Text(package.title).font(.callout)
+                            if critical.contains(package.id) {
+                                Text("เส้นทางวิกฤต").font(.caption2)
+                                    .padding(.horizontal, 5).padding(.vertical, 1)
+                                    .background(Color.accentColor.opacity(0.15), in: Capsule())
+                            }
+                            if ready.contains(package.id) {
+                                Text("เริ่มได้แล้ว").font(.caption2).foregroundStyle(.green)
+                            }
+                            Spacer()
+                            dependencyPicker(package)
+                        }
+                    }
+                    if paths.isEmpty {
+                        Text("ยังไม่มีเส้นพึ่งพา — ทุกใบเริ่มพร้อมกันได้ จึงยังไม่มีเส้นทางไหนเป็นตัวตัดสิน")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    } else if paths.count > 1 {
+                        Text("มี \(paths.count) เส้นทางที่ยาวเท่ากัน — ช้าเส้นไหนก็ช้าทั้งโครงการ")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    Text("แกนนอนคือลำดับ ไม่ใช่เวลา — span ยังไม่ผูกกับใบงาน จึงยังไม่มีแถบเวลาจริงหรือช่วงประมาณการ (§19.7, P10.15)")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func dependencyPicker(_ package: WorkPackage) -> some View {
+        Menu {
+            ForEach(model.wbs.leaves.filter { $0.id != package.id }) { other in
+                Button {
+                    var next = package
+                    if let index = next.dependsOn.firstIndex(of: other.id) {
+                        next.dependsOn.remove(at: index)
+                    } else {
+                        next.dependsOn.append(other.id)
+                    }
+                    Task { await model.update(next) }
+                } label: {
+                    Label(other.title,
+                          systemImage: package.dependsOn.contains(other.id) ? "checkmark" : "")
+                }
+            }
+        } label: {
+            Text(package.dependsOn.isEmpty ? "รอ: —" : "รอ \(package.dependsOn.count) ใบ")
+                .font(.caption)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .accessibilityLabel("เลือกใบงานที่ \(package.title) ต้องรอ")
+    }
+
+    /// §19.8 — the columns are the ledger's statuses, and the WIP limit is the
+    /// fan-out cap that already exists in config rather than a second number.
+    @ViewBuilder
+    private func kanbanBox() -> some View {
+        GroupBox("กระดานงาน") {
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: 10) {
+                    ForEach(WorkPackageStatus.allCases, id: \.self) { status in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(status.label).font(.caption).bold()
+                                Spacer()
+                                Text("\(model.wbs.leaves.count { $0.status == status })")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                            ForEach(model.wbs.leaves.filter { $0.status == status }) { package in
+                                cardView(package)
+                            }
+                        }
+                        .frame(width: 190, alignment: .leading)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+
+    private func cardView(_ package: WorkPackage) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(package.title).font(.caption)
+            HStack(spacing: 4) {
+                if let role = package.role {
+                    Text(role.rawValue).font(.caption2)
+                        .padding(.horizontal, 4).padding(.vertical, 1)
+                        .background(.quaternary, in: Capsule())
+                }
+                if !package.evidence.isEmpty {
+                    Text("หลักฐาน \(package.evidence.count)").font(.caption2)
+                        .foregroundStyle(.green)
+                }
+            }
+            Menu("ย้าย") {
+                ForEach(WorkPackageStatus.allCases, id: \.self) { target in
+                    Button(target.label) { move(package, to: target) }
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .font(.caption2)
+            .accessibilityLabel("ย้ายใบงาน \(package.title)")
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+    }
+
+    /// Moving a card is not a way around the evidence rule (§19.15 invariant
+    /// 4): "เสร็จ" goes through the same refusal an agent gets.
+    private func move(_ package: WorkPackage, to status: WorkPackageStatus) {
+        guard status == .done else {
+            var next = package
+            next.status = status
+            Task { await model.update(next) }
+            return
+        }
+        Task { await model.complete(package.id, evidence: package.evidence) }
+    }
+
+    /// §19.9 — one accountable per package, and the screen cannot express two.
+    @ViewBuilder
+    private func raciBox(_ project: Project) -> some View {
+        GroupBox("ทีม & RACI") {
+            VStack(alignment: .leading, spacing: 8) {
+                if model.wbs.leaves.isEmpty {
+                    Text("ยังไม่มีใบงานให้มอบหมาย").font(.callout).foregroundStyle(.secondary)
+                }
+                ForEach(model.wbs.leaves) { package in
+                    HStack(spacing: 8) {
+                        Text(package.title).font(.callout).frame(width: 220, alignment: .leading)
+                        Picker("A", selection: accountableBinding(package, project: project)) {
+                            Text("— ยังไม่มี —").tag(Accountable?.none)
+                            Text("หัวหน้าทีม").tag(Accountable?.some(.teamLead))
+                            if let person = project.executive?.person, !person.isEmpty {
+                                Text(person).tag(Accountable?.some(.human(person)))
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 180)
+                        .accessibilityLabel("ผู้รับผิดชอบผลของ \(package.title)")
+                        if package.riskClass >= .high, package.raci?.accountable.isHuman != true {
+                            Text("งานเสี่ยงสูงต้องให้คนรับผิดชอบ")
+                                .font(.caption2).foregroundStyle(.orange)
+                        }
+                        Spacer()
+                    }
+                }
+                Text("A มีได้คนเดียวต่อใบงาน — ตัวเลือกนี้จึงเป็นค่าเดียว ไม่ใช่รายการติ๊กถูก")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func accountableBinding(_ package: WorkPackage,
+                                    project: Project) -> Binding<Accountable?> {
+        Binding(get: { package.raci?.accountable },
+                set: { chosen in
+                    var next = package
+                    if let chosen {
+                        var raci = next.raci ?? RACI(accountable: chosen)
+                        raci.accountable = chosen
+                        if let role = next.role, raci.responsible.isEmpty {
+                            raci.responsible = [.agent(role)]
+                        }
+                        next.raci = raci
+                    } else {
+                        next.raci = nil
+                    }
+                    Task { await model.update(next) }
+                })
     }
 
     // MARK: - registers and baselines (§19.11)
@@ -586,10 +829,20 @@ struct ProjectsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(gate.conditions.enumerated()), id: \.offset) { _, condition in
                     Label {
-                        Text(condition.text)
+                        HStack(spacing: 6) {
+                            Text(condition.text)
+                            if condition.vacuous {
+                                Text("ยังไม่มีอะไรให้ตรวจ")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
                     } icon: {
-                        Image(systemName: condition.satisfied ? "checkmark.circle" : "circle")
-                            .foregroundStyle(condition.satisfied ? Color.green : Color.secondary)
+                        // A tick that means "nothing was checked" must not look
+                        // like one that means "checked and fine".
+                        Image(systemName: condition.vacuous ? "minus.circle"
+                              : (condition.satisfied ? "checkmark.circle" : "circle"))
+                            .foregroundStyle(condition.vacuous ? Color.secondary
+                                             : (condition.satisfied ? Color.green : Color.secondary))
                     }
                     .font(.callout)
                 }

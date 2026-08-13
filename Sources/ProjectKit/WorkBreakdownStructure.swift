@@ -30,6 +30,8 @@ public struct WBSProblem: Sendable, Equatable, Identifiable {
         case cycle
         case noAccountable
         case highRiskWithoutHuman
+        case missingDependency
+        case dependencyCycle
     }
 
     public let kind: Kind
@@ -49,6 +51,8 @@ public struct WBSProblem: Sendable, Equatable, Identifiable {
         case .noAccountable: "“\(title)” ยังไม่มีผู้รับผิดชอบผล (A)"
         case .highRiskWithoutHuman:
             "“\(title)” จัดชั้นความเสี่ยงสูง — ผู้รับผิดชอบผล (A) ต้องเป็นคน ไม่ใช่หัวหน้าทีม"
+        case .missingDependency: "“\(title)” รอใบงานที่ไม่มีอยู่แล้ว"
+        case .dependencyCycle: "“\(title)” อยู่ในวงจรที่รอกันเอง — ไม่มีใบไหนเริ่มได้"
         }
     }
 }
@@ -159,6 +163,16 @@ public struct WorkBreakdown: Sendable, Equatable {
                 }
             }
 
+            for dependency in package.dependsOn where index[dependency] == nil {
+                problems.append(.init(kind: .missingDependency, packageID: package.id,
+                                      title: package.title))
+                break
+            }
+            if dependencyCycle(from: package, index: index) {
+                problems.append(.init(kind: .dependencyCycle, packageID: package.id,
+                                      title: package.title))
+            }
+
             let ref = package.scopeRef?.trimmingCharacters(in: .whitespaces)
             if ref == nil || ref?.isEmpty == true {
                 problems.append(.init(kind: .noScopeRef, packageID: package.id,
@@ -209,6 +223,23 @@ public struct WorkBreakdown: Sendable, Equatable {
             if isLeaf(child) { found.append(child) } else { found += leavesUnder(child) }
         }
         return found
+    }
+
+    /// Depth-first over `dependsOn`. Separate from the parent-cycle check
+    /// because they are different graphs over the same nodes, and a plan can
+    /// be a clean tree while its dependencies wait on each other.
+    private func dependencyCycle(from start: WorkPackage,
+                                 index: [String: WorkPackage]) -> Bool {
+        var stack = [start.id]
+        var seen = Set<String>()
+        while let current = stack.popLast() {
+            guard let package = index[current] else { continue }
+            for next in package.dependsOn {
+                if next == start.id { return true }
+                if seen.insert(next).inserted { stack.append(next) }
+            }
+        }
+        return false
     }
 
     private func reachesItself(_ package: WorkPackage, index: [String: WorkPackage]) -> Bool {

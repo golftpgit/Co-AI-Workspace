@@ -11,3 +11,4 @@ REMOVE TABLE probe;
 SELECT * FROM schema_meta:current; INFO FOR DB;
 SELECT name, string::len(project) AS json_len, project FROM project;
 SELECT project FROM project LIMIT 1;
+SELECT package FROM work_package;
