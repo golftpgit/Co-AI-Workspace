@@ -142,11 +142,15 @@ public actor AgentTurnRunner {
 
     /// Runs a turn. The stream finishes with `.finished` or `.failed`;
     /// cancelling the consuming task cancels the turn.
+    /// `workPackage` is which leaf of the plan this turn is work against
+    /// (§19.6). It rides on the tool context, so every span the turn produces
+    /// is attributed without the runner knowing what a project is.
     public func run(userText: String,
                     conversationID: String,
                     scope: Scope,
                     workingDirectory: URL? = nil,
                     role: Role? = nil,
+                    workPackage: String? = nil,
                     policy: RoutingPolicy = .disposable) -> AsyncStream<TurnEvent> {
         AsyncStream { continuation in
             let task = Task {
@@ -155,6 +159,7 @@ public actor AgentTurnRunner {
                               scope: scope,
                               workingDirectory: workingDirectory,
                               role: role,
+                              workPackage: workPackage,
                               policy: policy,
                               emit: { continuation.yield($0) })
                 continuation.finish()
@@ -170,9 +175,13 @@ public actor AgentTurnRunner {
                          scope: Scope,
                          workingDirectory: URL?,
                          role: Role?,
+                         workPackage: String?,
                          policy: RoutingPolicy,
                          emit: @Sendable (TurnEvent) -> Void) async {
-        var turnSpan = Span(name: "turn", role: role, scope: scope)
+        // The turn's own span is attributed too, not just the tool calls it
+        // makes: thinking time against a promise is still time against it.
+        var turnSpan = Span(name: "turn", role: role, scope: scope,
+                            workPackage: workPackage)
         await sink?.record(turnSpan)
 
         func close(_ status: SpanStatus, _ detail: String?) async {
@@ -225,7 +234,8 @@ public actor AgentTurnRunner {
         let context = ToolContext(scope: scope,
                                   workingDirectory: workingDirectory,
                                   conversationID: conversationID,
-                                  role: role)
+                                  role: role,
+                                  workPackage: workPackage)
         /// Calls the human has already refused this turn, by tool and arguments.
         var denied = Set<String>()
         var tools = adverts.map {
