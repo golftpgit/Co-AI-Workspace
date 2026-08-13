@@ -108,6 +108,7 @@ fi
 # wiring, not just from its own tests.
 UNWIRED=""
 for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer Researcher ContextManager LocalTier ModelInstaller BudgetGovernor EndpointProbe AnalysisStore NotebookKernel NotebookRunner NotebookStore \
+                  ProjectService ProjectStore StageGate \
                   StatTestTool GapDetector AnalysisPlanStore ConnectorStore OfficeWriter \
                   MCPRegistry MCPServerStore Notifier AppIntentsChannel \
                   TemplateStore TemplateParser TemplateFiller PluginRegistry WriteSkillTool \
@@ -197,6 +198,42 @@ if [ -n "$UNREGISTERED" ]; then
   fail "built but never registered in the gateway:$UNREGISTERED"
 else
   ok "the new tools are registered where a session can reach them"
+fi
+
+# ARCHITECTURE §19.4 / P10.2: a stage changes in one place or it is not a gate.
+# `Project.stage` is a `var` because the store has to decode one — so the rule
+# that keeps G1–G4 meaningful is that nothing else assigns it. Without this,
+# passing a gate becomes a matter of remembering to ask.
+STAGE_WRITERS=$(grep -rn "\.stage = " Sources --include='*.swift' \
+  | grep -v "Sources/ProjectKit/ProjectService.swift" \
+  | grep -v "Sources/AgentKit/Project.swift" || true)
+if [ -n "$STAGE_WRITERS" ]; then
+  fail "a project's stage is set outside ProjectService.advance/terminate: $STAGE_WRITERS"
+else
+  ok "a stage only changes by passing its gate"
+fi
+
+# ARCHITECTURE §19.4 / P10.2: every tool the risk table classifies must also be
+# classified for *effect*, and vice versa. They answer different questions — how
+# much damage a call could do, and whether the project's stage allows that kind
+# of work at all — and a name in one table but not the other fails quietly: it
+# falls to `.mutating` and stops working outside Execution, or it skips the risk
+# floor. Quiet is the failure mode this project keeps paying for.
+TABLE_DIFF=$(/usr/bin/python3 - <<'TABLES'
+import re
+risk = open('Sources/CoreEngine/RiskScorer.swift').read()
+gate = open('Sources/CoreEngine/StageGate.swift').read()
+block = lambda s, start, end: s[s.index(start):s.index(end)]
+risky = set(re.findall(r'"([a-z_]+)":', block(risk, 'static let baseline', '/// Names classified above')))
+effect = set(re.findall(r'"([a-z_]+)":', block(gate, 'static let effects', '/// What each stage allows')))
+print(' '.join(sorted('risk-only:' + n for n in risky - effect) +
+               sorted('effect-only:' + n for n in effect - risky)))
+TABLES
+)
+if [ -n "$TABLE_DIFF" ]; then
+  fail "RiskScorer and StageGate classify different tools:$TABLE_DIFF"
+else
+  ok "every tool is classified for both risk and stage effect"
 fi
 
 # ARCHITECTURE §14.4 / P8.7: accessibility is a requirement from the start, not

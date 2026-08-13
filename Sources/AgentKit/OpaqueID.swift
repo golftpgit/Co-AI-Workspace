@@ -19,4 +19,5 @@ public enum OpaqueID {
     public static let span = "sp"
     public static let approval = "ap"
     public static let assignment = "as"
+    public static let project = "pj"
 }

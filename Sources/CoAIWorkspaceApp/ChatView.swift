@@ -23,6 +23,11 @@ import CoreEngine
 /// banner on screen. One instance, created once, attached once.
 struct ChatView: View {
     let engine: Engine
+    /// Which workspace this conversation belongs to (§19.1). The root view
+    /// gives the view a new identity when it changes, so the model — and with
+    /// it the conversation list — is rebuilt rather than left showing the
+    /// project you just left.
+    let scope: Scope
     @State private var model: ChatViewModel?
 
     var body: some View {
@@ -35,7 +40,7 @@ struct ChatView: View {
         }
         .task {
             guard model == nil else { return }
-            let created = ChatViewModel(engine: engine)
+            let created = ChatViewModel(engine: engine, scope: scope)
             model = created
             await created.attach()
             await created.load()

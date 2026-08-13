@@ -36,14 +36,20 @@ private struct RootView: View {
     @State private var models = ModelsViewModel()
     @State private var endpoints = EndpointsViewModel()
     @State private var analysis = AnalysisViewModel()
+    /// Which workspace everything else is looking at (§19.1). Held at the root
+    /// because it is not one screen's state: chat, knowledge and the ledger all
+    /// read the same selection, which is what replaced the hardcoded
+    /// `ProjectID("default")`.
+    @State private var projects = ProjectsViewModel()
 
     enum Screen: String, CaseIterable, Identifiable {
-        case chat, knowledge, conflicts, team, analysis, models, endpoints
+        case chat, projects, knowledge, conflicts, team, analysis, models, endpoints
         var id: String { rawValue }
 
         var label: String {
             switch self {
             case .chat: "สนทนา"
+            case .projects: "โปรเจกต์"
             case .knowledge: "คลังความรู้"
             case .conflicts: "ข้อขัดแย้ง"
             case .team: "ทีม"
@@ -56,6 +62,7 @@ private struct RootView: View {
         var icon: String {
             switch self {
             case .chat: "bubble.left.and.bubble.right"
+            case .projects: "square.stack.3d.up"
             case .knowledge: "books.vertical"
             case .conflicts: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90"
             case .team: "person.3"
@@ -70,7 +77,15 @@ private struct RootView: View {
         Group {
             if let engine = environment.engine, !showingStatus {
                 switch screen {
-                case .chat: ChatView(engine: engine)
+                case .chat:
+                    ChatView(engine: engine, scope: projects.scope)
+                        // Identity by scope: switching workspace has to build a
+                        // new view model, or the conversation list stays the one
+                        // from the project you just left.
+                        .id(projects.scope.storageKey)
+                case .projects:
+                    ProjectsView(model: projects)
+                        .task { await projects.attach(service: engine.projects) }
                 case .knowledge:
                     KnowledgeView(model: knowledge)
                         .task {
@@ -79,6 +94,7 @@ private struct RootView: View {
                                                    extractor: engine.relationExtractor)
                             knowledge.attach(conflicts: engine.conflicts,
                                              detector: engine.conflictDetector)
+                            knowledge.currentProject = projects.selected?.id
                         }
                 case .conflicts:
                     ConflictView(model: conflicts)

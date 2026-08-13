@@ -16,6 +16,7 @@ import Channels
 import Roster
 import DocGen
 import MCPBridge
+import ProjectKit
 
 // ─────────────────────────────────────────────────────────────
 // Everything the running system is made of, assembled once at boot.
@@ -54,6 +55,10 @@ struct Engine: Sendable {
     /// nothing but those tests, which is the fourth time that has happened.
     let team: TeamOrchestrator
     let taskLedger: TaskLedgerStore
+    /// §19.1 — projects, and the stage the hook chain reads (§19.4). One
+    /// service, held here, so the stage the gate checks and the stage the
+    /// screen shows are the same value rather than two copies that drift.
+    let projects: ProjectService
     /// Which executors were actually reachable at boot — shown in the UI so
     /// "why is it slow / why can't it run commands" has a visible answer.
     let executorSummary: [String]
@@ -177,7 +182,12 @@ struct Engine: Sendable {
 
         let processes = ProcessRegistry(spanSink: spans)
         let broker = ApprovalBroker(spanSink: spans)
-        let gateway = ToolGateway(chain: HookChain(),
+        // §19.4 — the stage gate is wired here rather than defaulted off.
+        // `HookChain()` with no reader refuses every project-scoped call, which
+        // is the safe default for a library; the app is the place that knows
+        // where stages come from.
+        let projects = ProjectService(store: ProjectStore(client: client))
+        let gateway = ToolGateway(chain: HookChain(stageGate: StageGate(reader: projects)),
                                   approver: broker,
                                   spanSink: spans,
                                   modes: .default)
@@ -382,7 +392,7 @@ struct Engine: Sendable {
                       knowledge: knowledgeStore,
                       router: router, processes: processes, gateway: gateway,
                       broker: broker, runner: runner,
-                      team: team, taskLedger: taskLedger,
+                      team: team, taskLedger: taskLedger, projects: projects,
                       executorSummary: summary, localTier: localTier,
                       modelCatalog: modelCatalog, modelInstaller: modelInstaller,
                       endpoints: endpoints, endpointChecks: endpointChecks,

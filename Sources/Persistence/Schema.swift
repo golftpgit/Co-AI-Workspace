@@ -16,7 +16,11 @@ public enum Schema {
     /// an interrupted run — run-until-done resumes the second and never the
     /// first. The criteria and deliverable type it needs to rebuild an
     /// assignment ride along on the schemaless part of the row.
-    public static let version = 2
+    /// 3: `project` exists (§19.1, P10.1). Every other table already carried
+    /// `project_id`; there was simply nothing on the other end of it, so two
+    /// projects were indistinguishable and the app wrote the literal id
+    /// "default" into all of them.
+    public static let version = 3
 
     /// Split into statements that are executed one at a time: a single
     /// failing statement should name itself, not abort a 40-line blob.
@@ -122,6 +126,20 @@ public enum Schema {
         "DEFINE FIELD IF NOT EXISTS approved ON analysis_plan TYPE bool",
         "DEFINE INDEX IF NOT EXISTS analysis_plan_approved ON analysis_plan FIELDS approved",
         "DEFINE FIELD IF NOT EXISTS updated_at ON analysis_plan TYPE datetime",
+
+        // ── projects (§19.1, P10.1) ──
+        // The row that everything else's `project_id` finally points at.
+        // `open` is denormalised so the sidebar can list what is live without
+        // decoding every stored project.
+        "DEFINE TABLE IF NOT EXISTS project SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON project TYPE string",
+        "DEFINE INDEX IF NOT EXISTS project_uid ON project FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS name ON project TYPE string",
+        "DEFINE FIELD IF NOT EXISTS kind ON project TYPE string",
+        "DEFINE FIELD IF NOT EXISTS stage ON project TYPE string",
+        "DEFINE FIELD IF NOT EXISTS open ON project TYPE bool",
+        "DEFINE INDEX IF NOT EXISTS project_open ON project FIELDS open",
+        "DEFINE FIELD IF NOT EXISTS updated_at ON project TYPE datetime",
 
         "DEFINE TABLE IF NOT EXISTS schema_meta SCHEMALESS",
     ]

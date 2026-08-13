@@ -34,6 +34,10 @@ public final class KnowledgeViewModel {
     public private(set) var isWorking = false
     public var query = ""
     public var scope: Scope = .central
+    /// Which project the app is in, so the scope picker's "โปรเจกต์" option
+    /// means a real one (§19.1). `nil` in General, where that option is
+    /// disabled rather than filled in with a made-up id.
+    public var currentProject: ProjectID?
 
     private var index: KnowledgeIndex
     private let embedder: MLXEmbedder

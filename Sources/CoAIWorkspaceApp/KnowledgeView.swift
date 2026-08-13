@@ -80,8 +80,17 @@ struct KnowledgeView: View {
         VStack(alignment: .leading, spacing: 8) {
             Picker("ขอบเขต", selection: Binding(
                 get: { ScopeChoice(model.scope) },
-                set: { choice in Task { await model.changeScope(to: choice.scope) } })) {
-                ForEach(ScopeChoice.allCases) { Text($0.label).tag($0) }
+                set: { choice in
+                    // A project scope needs a project. Before P10.1 this read
+                    // `ProjectID("default")`, which meant every project's
+                    // documents landed in one pile.
+                    guard let scope = choice.scope(of: model.currentProject) else { return }
+                    Task { await model.changeScope(to: scope) }
+                })) {
+                ForEach(ScopeChoice.allCases) { choice in
+                    Text(choice.label).tag(choice)
+                        .disabled(choice == .project && model.currentProject == nil)
+                }
             }
             .pickerStyle(.segmented)
             // A segmented picker still lays out its label, and the sidebar has
@@ -354,10 +363,13 @@ private enum ScopeChoice: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var scope: Scope {
+    /// `nil` when the choice cannot be made yet: "โปรเจกต์" with no project
+    /// selected is not a scope, and inventing an id for it is exactly the bug
+    /// this replaced.
+    func scope(of project: ProjectID?) -> Scope? {
         switch self {
         case .central: .central
-        case .project: .project(ProjectID("default"))
+        case .project: project.map { Scope.project($0) }
         case .policy: .policy
         }
     }
