@@ -1,4 +1,5 @@
 import Foundation
+import AgentKit
 
 /// Every filesystem location the app owns, derived from one root.
 /// Created on demand so a wiped Application Support directory self-heals.
@@ -20,12 +21,25 @@ public struct AppPaths: Sendable {
     /// of thing that gets deleted by hand and takes the data with it.
     public var analysisDirectory: URL { root.appending(path: "analysis") }
     public var logsDirectory: URL { root.appending(path: "logs") }
+    /// One folder per project (§19.1). Everything a project owns that is a
+    /// *file* lives under here — its analysis database, its notebooks, its
+    /// documents, and the working directory shell commands run in.
+    ///
+    /// The database rows were already partitioned by `Scope`; the disk was not,
+    /// which meant two projects shared one `analysis.duckdb` and one notebook
+    /// folder. Deleting a project could not be done without reading every file
+    /// to see whose it was.
+    public var projectsDirectory: URL { root.appending(path: "projects") }
+
+    public func project(_ id: ProjectID) -> ProjectPaths {
+        ProjectPaths(root: projectsDirectory.appending(path: id.rawValue))
+    }
 
     /// All directories that must exist before the app is usable.
     public var managedDirectories: [URL] {
         [root, databaseDirectory, modelsDirectory, agentsDirectory,
          skillsDirectory, pluginsDirectory, documentsDirectory, analysisDirectory,
-         logsDirectory]
+         logsDirectory, projectsDirectory]
     }
 
     public init(root: URL) { self.root = root }
@@ -47,6 +61,46 @@ public struct AppPaths: Sendable {
     public func createDirectories(fileManager: FileManager = .default) throws -> [URL] {
         var created: [URL] = []
         for dir in managedDirectories where !fileManager.fileExists(atPath: dir.path(percentEncoded: false)) {
+            try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+            created.append(dir)
+        }
+        return created
+    }
+}
+
+/// Where one project's files live (§19.1).
+///
+/// A value, not a service: it computes paths and creates them on demand, and it
+/// deliberately cannot delete anything. Removing a project's row is cheap and
+/// reversible; removing its folder is neither, so that stays a decision a
+/// person makes with the files in front of them.
+public struct ProjectPaths: Sendable {
+    public let root: URL
+
+    /// DuckDB writes a `.wal` beside its database, so the store gets a
+    /// directory of its own for the same reason the app-wide one does.
+    public var analysisDirectory: URL { root.appending(path: "analysis") }
+    public var notebooksDirectory: URL { root.appending(path: "notebooks") }
+    public var documentsDirectory: URL { root.appending(path: "documents") }
+    /// Where this project's shell commands run and its files are written.
+    /// Inside the app container, so a sandboxed app reaches it without the
+    /// user having to grant anything.
+    public var filesDirectory: URL { root.appending(path: "files") }
+
+    public var analysisDatabase: URL { analysisDirectory.appending(path: "analysis.duckdb") }
+    public var connectorsFile: URL { analysisDirectory.appending(path: "connectors.json") }
+
+    public var managedDirectories: [URL] {
+        [root, analysisDirectory, notebooksDirectory, documentsDirectory, filesDirectory]
+    }
+
+    public init(root: URL) { self.root = root }
+
+    @discardableResult
+    public func createDirectories(fileManager: FileManager = .default) throws -> [URL] {
+        var created: [URL] = []
+        for dir in managedDirectories
+        where !fileManager.fileExists(atPath: dir.path(percentEncoded: false)) {
             try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
             created.append(dir)
         }

@@ -59,6 +59,13 @@ private struct RootView: View {
             }
         }
 
+        /// ⌘1…⌘8. A number rather than a mnemonic because the order on screen
+        /// is the order in the toolbar, and that is what a person counts.
+        static func shortcutDigit(for screen: Screen) -> Character {
+            let index = (allCases.firstIndex(of: screen) ?? 0) + 1
+            return Character(String(index))
+        }
+
         var icon: String {
             switch self {
             case .chat: "bubble.left.and.bubble.right"
@@ -78,7 +85,16 @@ private struct RootView: View {
             if let engine = environment.engine, !showingStatus {
                 switch screen {
                 case .chat:
-                    ChatView(engine: engine, scope: projects.scope)
+                    ChatView(engine: engine, scope: projects.scope,
+                             promote: { draft, conversationID in
+                                 await projects.promote(draft,
+                                                        conversationID: conversationID,
+                                                        conversations: engine.conversations)
+                                 // Land on the project that was just made, so
+                                 // the next thing on screen is its brief and
+                                 // the G1 conditions still to fill in.
+                                 screen = .projects
+                             })
                         // Identity by scope: switching workspace has to build a
                         // new view model, or the conversation list stays the one
                         // from the project you just left.
@@ -106,11 +122,18 @@ private struct RootView: View {
                                                   gateway: engine.gateway) }
                 case .analysis:
                     AnalysisView(model: analysis)
+                        // Same identity trick as Chat: switching workspace has
+                        // to rebuild the screen, or it keeps showing the tables
+                        // of the project you just left (§19.1).
+                        .id(projects.scope.storageKey)
                         .task {
-                            await analysis.attach(store: engine.analysis,
+                            // Per-project files: its own DuckDB, its own
+                            // notebooks, its own connectors.
+                            let stores = await engine.stores(for: projects.scope)
+                            await analysis.attach(store: stores.analysis,
                                                   kernel: engine.notebookKernel,
-                                                  library: engine.notebooks)
-                            analysis.attach(connectors: engine.connectors)
+                                                  library: stores.notebooks)
+                            analysis.attach(connectors: stores.connectors)
                             await analysis.attach(plans: engine.plans,
                                                   detector: engine.gapDetector,
                                                   knowledge: engine.knowledge)
@@ -169,10 +192,13 @@ private struct RootView: View {
         // "you can get there". ⌘1…⌘7 is: it works for everybody, including the
         // people who use it because it is faster.
         .background {
-            ForEach(Array(Screen.allCases.enumerated()), id: \.element) { index, target in
+            ForEach(Screen.allCases) { target in
+                // Typed step by step: as a single expression with string
+                // interpolation inside a `ForEach` over an enumerated
+                // sequence, the type checker gave up on this line.
+                let digit: Character = Screen.shortcutDigit(for: target)
                 Button("") { screen = target; showingStatus = false }
-                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")),
-                                      modifiers: .command)
+                    .keyboardShortcut(KeyEquivalent(digit), modifiers: .command)
                     .opacity(0)
                     .accessibilityHidden(true)
             }

@@ -28,12 +28,16 @@ struct ChatView: View {
     /// it the conversation list — is rebuilt rather than left showing the
     /// project you just left.
     let scope: Scope
+    /// Called when the user promotes this conversation (§19.1, P10.3). Owned
+    /// by the root view because creating a project changes which workspace the
+    /// whole app is in, which is not chat's decision to make.
+    let promote: (DraftedBrief, String?) async -> Void
     @State private var model: ChatViewModel?
 
     var body: some View {
         Group {
             if let model {
-                ChatScreen(model: model)
+                ChatScreen(model: model, promote: promote)
             } else {
                 ProgressView().controlSize(.small)
             }
@@ -42,6 +46,7 @@ struct ChatView: View {
             guard model == nil else { return }
             let created = ChatViewModel(engine: engine, scope: scope)
             model = created
+            await created.adoptDefaultWorkingDirectory()
             await created.attach()
             await created.load()
         }
@@ -50,7 +55,10 @@ struct ChatView: View {
 
 private struct ChatScreen: View {
     @Bindable var model: ChatViewModel
+    let promote: (DraftedBrief, String?) async -> Void
     @State private var choosingFolder = false
+    @State private var draft: DraftedBrief?
+    @State private var drafting = false
 
     var body: some View {
         NavigationSplitView {
@@ -86,6 +94,34 @@ private struct ChatScreen: View {
             // Picking the folder is what grants the sandbox access to it, so
             // this is also how `run_shell` gets somewhere it may write.
             if case .success(let url) = result { model.workingDirectory = url }
+        }
+        .sheet(item: $draft) { drafted in
+            PromotionSheet(draft: drafted) { edited in
+                let conversationID = model.promotableConversationID
+                draft = nil
+                Task { await promote(edited, conversationID) }
+            } cancel: {
+                draft = nil
+            }
+        }
+    }
+
+    /// Only in General, and only with something to promote. A project cannot
+    /// be promoted again, and an empty conversation has nothing to draft from.
+    @ViewBuilder
+    private var promotionButton: some View {
+        if model.promotableConversationID != nil, !model.transcriptTurns.isEmpty {
+            Button {
+                drafting = true
+                Task {
+                    draft = await model.draftBrief()
+                    drafting = false
+                }
+            } label: {
+                Label("ยกระดับเป็นโปรเจกต์", systemImage: "square.stack.3d.up")
+            }
+            .disabled(drafting)
+            .accessibilityLabel("ยกระดับบทสนทนานี้เป็นโปรเจกต์")
         }
     }
 
@@ -142,6 +178,8 @@ private struct ChatScreen: View {
                 .help("ทำงานต่อกันหลายขั้นโดยไม่รอให้พิมพ์ใหม่")
 
             Spacer()
+
+            promotionButton
 
             Button { choosingFolder = true } label: {
                 Label(model.workingDirectory?.lastPathComponent ?? "เลือกโฟลเดอร์งาน",
@@ -354,5 +392,100 @@ private struct BubbleView: View {
         if awaitingApproval { return "รออนุมัติจากคุณ" }
         if bubble.running { return "กำลังทำงาน…" }
         return bubble.blocked ? "ไม่ได้รัน" : "เสร็จแล้ว"
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// The promotion sheet (§19.1, P10.3).
+//
+// Everything the model drafted is editable, and the questions it could not
+// answer are listed rather than left blank and hoped over — a form that looks
+// complete when the conversation was not is how a scope statement ends up
+// meaning nothing.
+// ─────────────────────────────────────────────────────────────
+
+private struct PromotionSheet: View {
+    let draft: DraftedBrief
+    let confirm: (DraftedBrief) -> Void
+    let cancel: () -> Void
+
+    @State private var name: String
+    @State private var brief: String
+    @State private var inScope: String
+    @State private var outOfScope: String
+
+    init(draft: DraftedBrief,
+         confirm: @escaping (DraftedBrief) -> Void,
+         cancel: @escaping () -> Void) {
+        self.draft = draft
+        self.confirm = confirm
+        self.cancel = cancel
+        _name = State(initialValue: draft.name)
+        _brief = State(initialValue: draft.brief)
+        _inScope = State(initialValue: draft.statement.inScope.joined(separator: "\n"))
+        _outOfScope = State(initialValue: draft.statement.outOfScope.joined(separator: "\n"))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("ยกระดับบทสนทนานี้เป็นโปรเจกต์").font(.headline)
+            Text("ร่างจากสิ่งที่คุยกันไว้ — แก้ได้ทุกช่องก่อนสร้าง")
+                .font(.callout).foregroundStyle(.secondary)
+
+            TextField("ชื่อโปรเจกต์", text: $name)
+                .textFieldStyle(.roundedBorder)
+
+            field("เหตุผลที่ทำ", text: $brief, height: 54)
+            field("ขอบเขต — ทำ (บรรทัดละข้อ)", text: $inScope, height: 54)
+            field("ขอบเขต — ไม่ทำ (บรรทัดละข้อ)", text: $outOfScope, height: 54)
+
+            if !draft.openQuestions.isEmpty {
+                GroupBox("บทสนทนายังไม่ได้ตอบ") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(draft.openQuestions, id: \.self) { question in
+                            Text("• " + question).font(.callout)
+                        }
+                        Text("สร้างได้เลย แล้วเติมทีหลังก็ได้ — แต่ G1 จะยังไม่ผ่านจนกว่าจะครบ")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button("ยกเลิก", role: .cancel) { cancel() }
+                    .keyboardShortcut(.cancelAction)
+                Button("สร้างโปรเจกต์") { confirm(edited) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(18)
+        .frame(width: 520)
+    }
+
+    private func field(_ title: String, text: Binding<String>, height: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            TextEditor(text: text)
+                .frame(height: height)
+                .font(.body)
+                .accessibilityLabel(title)
+        }
+    }
+
+    private var edited: DraftedBrief {
+        DraftedBrief(name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                     brief: brief.trimmingCharacters(in: .whitespacesAndNewlines),
+                     statement: ScopeStatement(inScope: lines(inScope),
+                                               outOfScope: lines(outOfScope)),
+                     openQuestions: draft.openQuestions)
+    }
+
+    private func lines(_ text: String) -> [String] {
+        text.split(separator: "\n", omittingEmptySubsequences: true)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
     }
 }

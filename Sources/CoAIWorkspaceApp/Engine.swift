@@ -80,6 +80,7 @@ struct Engine: Sendable {
     /// The analysis store (§12.1, P6.1). Opened at boot like everything else
     /// on this struct: a capability that only its own tests can reach is the
     /// mistake this project has made four times.
+    /// General's analysis store. A project uses its own — see `stores(for:)`.
     let analysis: AnalysisStore?
     /// Where notebooks are kept, and the interpreter that runs their Python
     /// cells (§12.5, P6.4). The kernel is *constructed* here and started by the
@@ -88,11 +89,19 @@ struct Engine: Sendable {
     let notebooks: NotebookStore
     let notebookKernel: NotebookKernel?
     let connectors: ConnectorStore
+    /// §19.1 — per-project files. Opened on first use and kept, because two
+    /// `AnalysisStore` instances on one file is a second writer, not a slow
+    /// path.
+    let workspaceStores: WorkspaceStoreCache
     /// §12.4 — the pre-registration and the model that reads a proposal into
     /// one. The plan store is durable for the same reason the conflict ledger
     /// is: a method agreed only in memory was never agreed.
     let plans: AnalysisPlanStore
     let gapDetector: GapDetector
+    /// §19.1 / P10.3 — turns the conversation that became work into a draft
+    /// brief. Held here for the usual reason: a capability the app cannot
+    /// reach is not a feature.
+    let briefDrafter: BriefDrafter
     /// §14.1 / P7.9 — templates learned from documents the user uploaded. A
     /// file rather than a row: a template is a thing people copy between
     /// machines, and it has to be readable without the database being up.
@@ -293,6 +302,10 @@ struct Engine: Sendable {
         // password is not in it.
         let connectors = ConnectorStore(
             file: paths.analysisDirectory.appending(path: "connectors.json"))
+        let workspaceStores = WorkspaceStoreCache(
+            paths: paths,
+            shared: WorkspaceStores(analysis: analysis, notebooks: notebooks,
+                                    connectors: connectors, workingDirectory: nil))
         // §12 — registered here rather than above because this is where the
         // store exists. The Analyst's tool list was `kb_search`, `run_shell`,
         // `run_stat_test`: the specialist whose whole job is analysis could not
@@ -399,8 +412,10 @@ struct Engine: Sendable {
                       governor: governor, spendLedger: spendLedger,
                       analysis: analysis, notebooks: notebooks,
                       notebookKernel: notebookKernel, connectors: connectors,
+                      workspaceStores: workspaceStores,
                       plans: AnalysisPlanStore(client: client),
                       gapDetector: GapDetector(router: router),
+                      briefDrafter: BriefDrafter(router: router),
                       templates: TemplateStore(
                         file: paths.root.appending(path: "templates.json")),
                       channelAccounts: channelAccounts, channelRouter: channelRouter,
@@ -437,5 +452,13 @@ struct Engine: Sendable {
         await appIntents.stop()
         await channelRouter.stopAll()
         await client.close()
+    }
+}
+
+extension Engine {
+    /// The stores for a workspace. General gets the app-wide ones; a project
+    /// gets its own folder, opened the first time it is asked for.
+    func stores(for scope: Scope) async -> WorkspaceStores {
+        await workspaceStores.stores(for: scope)
     }
 }

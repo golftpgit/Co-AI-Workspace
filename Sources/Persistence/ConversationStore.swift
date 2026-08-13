@@ -102,6 +102,29 @@ public actor ConversationStore {
         """, vars: ["id": id, "title": title])
     }
 
+    /// Moves a conversation into another scope (§19.1, P10.3).
+    ///
+    /// Only the conversation row moves: messages are keyed by
+    /// `conversation_id`, so they travel with it rather than being rewritten.
+    /// Knowledge ingested along the way stays in `central` on purpose — a
+    /// project can read central, so moving the chunks would take shared
+    /// material *away* from General to no benefit.
+    public func reassign(_ id: String, to scope: Scope) async throws {
+        var vars: [String: Any] = ["id": id, "kind": ScopeColumns.kind(scope)]
+        var sql = "UPDATE conversation SET scope_kind = type::string($kind), "
+        if let projectID = ScopeColumns.projectID(scope) {
+            sql += "project_id = type::string($pid), "
+            vars["pid"] = projectID
+        } else {
+            // NONE, not NULL: v3 rejects a JSON null bound into an
+            // `option<string>` field (App. C.0), and leaving a stale project id
+            // behind would make the row answer to two scopes.
+            sql += "project_id = NONE, "
+        }
+        sql += "updated_at = time::now() WHERE uid = type::string($id)"
+        try await client.exec(sql, vars: vars)
+    }
+
     public func delete(_ id: String) async throws {
         try await client.exec("DELETE message WHERE conversation_id = type::string($id)", vars: ["id": id])
         try await client.exec("DELETE conversation WHERE uid = type::string($id)", vars: ["id": id])

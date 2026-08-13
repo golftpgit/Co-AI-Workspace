@@ -2,6 +2,8 @@ import Foundation
 import Observation
 import AgentKit
 import ProjectKit
+import CoreEngine
+import Persistence
 import Observability
 
 // ─────────────────────────────────────────────────────────────
@@ -139,6 +141,37 @@ public final class ProjectsViewModel {
                             isError: false)
         } catch {
             status = Status(message: "ปิดโครงการไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    /// General → Project (§19.1, P10.3).
+    ///
+    /// Creates the project from the drafted brief and moves the conversation
+    /// that produced it. Order matters: the project has to exist before the
+    /// conversation can point at it, and a failed move must not leave a
+    /// project with no history behind it — so the failure is reported with the
+    /// project already made, and the conversation stays where it is.
+    public func promote(_ draft: DraftedBrief,
+                        conversationID: String?,
+                        conversations: ConversationStore) async {
+        guard let service else { return }
+        do {
+            let project = try await service.create(name: draft.name,
+                                                   kind: .blank,
+                                                   brief: draft.brief,
+                                                   statement: draft.statement)
+            if let conversationID {
+                try await conversations.reassign(conversationID, to: project.scope)
+            }
+            await reload()
+            await select(.project(project.id))
+            status = Status(
+                message: draft.isReadyForG1
+                    ? "ยกระดับเป็นโปรเจกต์แล้ว — ตรวจขอบเขตอีกครั้งแล้วกดผ่าน G1 ได้เลย"
+                    : "ยกระดับเป็นโปรเจกต์แล้ว — ยังผ่าน G1 ไม่ได้จนกว่าจะเติมช่องที่ค้าง",
+                isError: false)
+        } catch {
+            status = Status(message: "ยกระดับเป็นโปรเจกต์ไม่สำเร็จ: \(error)", isError: true)
         }
     }
 
