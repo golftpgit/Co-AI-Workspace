@@ -19,6 +19,9 @@ public actor ProjectService {
     private let store: any ProjectPersisting
     private let plans: (any WorkPackagePersisting)?
     private let exceptions: (any ExceptionPersisting)?
+    private let registers: (any RegisterPersisting)?
+    private let baselines: (any BaselinePersisting)?
+    private let lessons: (any LessonPublishing)?
     /// Which projects are outside their frame. Cached because the hook chain
     /// asks on every tool call, and refreshed on every write that could change
     /// the answer — the cost of being wrong here is work that should have
@@ -29,10 +32,71 @@ public actor ProjectService {
 
     public init(store: any ProjectPersisting,
                 plans: (any WorkPackagePersisting)? = nil,
-                exceptions: (any ExceptionPersisting)? = nil) {
+                exceptions: (any ExceptionPersisting)? = nil,
+                registers: (any RegisterPersisting)? = nil,
+                baselines: (any BaselinePersisting)? = nil,
+                lessons: (any LessonPublishing)? = nil) {
         self.store = store
         self.plans = plans
         self.exceptions = exceptions
+        self.registers = registers
+        self.baselines = baselines
+        self.lessons = lessons
+    }
+
+    // MARK: - registers (§19.11)
+
+    public func entries(of id: ProjectID, kind: RegisterKind? = nil) async -> [RegisterEntry] {
+        let all = (try? await registers?.all(project: id)) ?? []
+        let filtered = kind.map { wanted in all.filter { $0.kind == wanted } } ?? all
+        return filtered.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    public func record(_ entry: RegisterEntry) async throws {
+        try await registers?.save(entry)
+    }
+
+    /// Deciding a change request, and the one place a baseline is superseded.
+    ///
+    /// Approving is what creates the next version — the plan does not quietly
+    /// become the new agreement by being edited (§19.11).
+    public func decideChange(_ entry: RegisterEntry, approve: Bool,
+                             by person: String) async throws {
+        let decided = try entry.decided(approve: approve, by: person)
+        try await record(decided)
+        guard approve, let project = await project(entry.projectID) else { return }
+        try await freezeBaseline(project, reason: "คำขอเปลี่ยนแปลง: \(entry.title)")
+    }
+
+    // MARK: - baselines (§19.11)
+
+    public func baselineHistory(of id: ProjectID) async -> [Baseline] {
+        ((try? await baselines?.all(project: id)) ?? []).sorted { $0.version > $1.version }
+    }
+
+    public func currentBaseline(of id: ProjectID) async -> Baseline? {
+        await baselineHistory(of: id).first
+    }
+
+    /// Freezes the next version. Never overwrites: the count of versions is
+    /// itself the answer to "how many times did the plan change".
+    @discardableResult
+    public func freezeBaseline(_ project: Project, reason: String) async throws -> Baseline? {
+        guard let baselines else { return nil }
+        let next = (await baselineHistory(of: project.id).first?.version ?? 0) + 1
+        let baseline = Baseline.freeze(project, wbs: await breakdown(of: project.id),
+                                       version: next, reason: reason)
+        try await baselines.save(baseline)
+        return baseline
+    }
+
+    /// What has moved since the plan was agreed. Empty when there is no
+    /// baseline yet — before G2 there is nothing to have drifted from.
+    public func drift(of id: ProjectID) async -> BaselineDiff? {
+        guard let project = await project(id), let baseline = await currentBaseline(of: id) else {
+            return nil
+        }
+        return BaselineDiff.between(baseline, and: project, wbs: await breakdown(of: id))
     }
 
     // MARK: - exceptions (§19.10)
@@ -79,6 +143,16 @@ public actor ProjectService {
 
     /// Reloads the blocked set from the store. Called at boot: an exception
     /// raised before the app was closed must still stop work after it reopens.
+    /// Sends the project's lessons to wherever the next project will look for
+    /// them. Nothing here knows what a knowledge base is — that is the point of
+    /// `LessonPublishing`.
+    private func publishLessons(of project: Project) async throws {
+        guard let lessons else { return }
+        let entries = await entries(of: project.id, kind: .lesson)
+        guard !entries.isEmpty else { return }
+        try await lessons.publish(entries, from: project)
+    }
+
     public func refreshExceptions() async {
         guard let exceptions else { return }
         var stopped: Set<ProjectID> = []
@@ -169,20 +243,23 @@ public actor ProjectService {
     }
 
     /// The gate for the *next* stage boundary, or nil for a closed project.
-    public func gate(for id: ProjectID, hasLessons: Bool = true) async -> GateEvaluation? {
+    public func gate(for id: ProjectID) async -> GateEvaluation? {
         guard let project = await project(id) else { return nil }
-        return ProjectLifecycle.evaluate(project, wbs: await breakdown(of: id),
-                                         hasLessons: hasLessons)
+        return ProjectLifecycle.evaluate(
+            project,
+            wbs: await breakdown(of: id),
+            hasLessons: !(await entries(of: id, kind: .lesson)).isEmpty,
+            drift: await drift(of: id),
+            undecidedChanges: await entries(of: id, kind: .change)
+                .count { $0.status == .proposed })
     }
 
     /// The only way a stage changes. Refuses rather than reports: a gate that
     /// returns "you probably should not" is a gate that gets ignored.
     @discardableResult
-    public func advance(_ id: ProjectID, hasLessons: Bool = true) async throws -> Project {
+    public func advance(_ id: ProjectID) async throws -> Project {
         guard var project = await project(id) else { throw LifecycleError.alreadyClosed }
-        guard let evaluation = ProjectLifecycle.evaluate(project,
-                                                         wbs: await breakdown(of: id),
-                                                         hasLessons: hasLessons) else {
+        guard let evaluation = await gate(for: id) else {
             throw LifecycleError.alreadyClosed
         }
         guard evaluation.passed else {
@@ -194,6 +271,17 @@ public actor ProjectService {
             project.closure = .completed
         }
         try await update(project)
+
+        // §19.11 — the plan becomes an agreement at G2, and the agreement is a
+        // frozen copy rather than a promise to remember what it said.
+        if project.stage == .execution {
+            try await freezeBaseline(project, reason: "ผ่าน G2")
+        }
+        // §19.12 condition 7 — a lesson that never leaves the project it came
+        // from has taught nobody.
+        if project.stage == .closed {
+            try await publishLessons(of: project)
+        }
         return byID[project.id] ?? project
     }
 
@@ -207,6 +295,7 @@ public actor ProjectService {
         project.stage = .closed
         project.closedAt = Date()
         project.closure = .terminated
+        defer { Task { try? await self.publishLessons(of: project) } }
         project.brief = project.brief.isEmpty
             ? "ยุติก่อนกำหนด: \(reason)"
             : project.brief + "\n\nยุติก่อนกำหนด: \(reason)"

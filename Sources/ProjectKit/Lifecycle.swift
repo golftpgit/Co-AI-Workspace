@@ -75,7 +75,9 @@ public enum ProjectLifecycle {
     /// left out, so the gate reads as incomplete instead of as passed.
     public static func evaluate(_ project: Project,
                                 wbs: WorkBreakdown = WorkBreakdown(),
-                                hasLessons: Bool = true) -> GateEvaluation? {
+                                hasLessons: Bool = true,
+                                drift: BaselineDiff? = nil,
+                                undecidedChanges: Int = 0) -> GateEvaluation? {
         guard let to = next(after: project.stage), let gate = project.stage.exitGate else {
             return nil
         }
@@ -137,6 +139,14 @@ public enum ProjectLifecycle {
             conditions = [
                 GateCondition(text: "ไม่มีใบงานที่ยังไม่เสร็จ",
                               satisfied: openWorkPackages == 0),
+                // §19.11 — the plan may have moved, but it may not have moved
+                // *quietly*: drift that no change request accounts for is the
+                // difference between a project that changed and one that was
+                // rewritten.
+                GateCondition(text: "ไม่มีคำขอเปลี่ยนแปลงที่ยังไม่ตัดสิน",
+                              satisfied: undecidedChanges == 0),
+                GateCondition(text: "แผนตรงกับ baseline ล่าสุด",
+                              satisfied: drift?.isEmpty ?? true),
             ]
         case .closing:
             // §19.12 condition 7. The rest of the eight arrive with the

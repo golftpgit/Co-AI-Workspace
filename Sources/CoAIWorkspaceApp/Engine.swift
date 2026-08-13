@@ -191,6 +191,10 @@ struct Engine: Sendable {
 
         let processes = ProcessRegistry(spanSink: spans)
         let broker = ApprovalBroker(spanSink: spans)
+        // Built before the project service: lessons from a closed project land
+        // in the central knowledge base, so the service needs somewhere to put
+        // them (§19.12 condition 7).
+        let knowledgeStore = KnowledgeStore(client: client)
         // §19.4 — the stage gate is wired here rather than defaulted off.
         // `HookChain()` with no reader refuses every project-scoped call, which
         // is the safe default for a library; the app is the place that knows
@@ -198,7 +202,10 @@ struct Engine: Sendable {
         let projects = ProjectService(
             store: ProjectStore(client: client),
             plans: WorkPackageStore(client: client),
-            exceptions: ExceptionBridge(store: ExceptionStore(client: client)))
+            exceptions: ExceptionBridge(store: ExceptionStore(client: client)),
+            registers: RegisterBridge(store: RegisterStore(client: client)),
+            baselines: BaselineBridge(store: BaselineStore(client: client)),
+            lessons: LessonBridge(knowledge: knowledgeStore))
         // §19.10 — an exception raised before the app closed must still stop
         // work after it reopens, so the blocked set is read at boot rather
         // than starting empty and filling in when somebody opens the screen.
@@ -209,7 +216,6 @@ struct Engine: Sendable {
                                   modes: .default)
         // Everything P2 and P3 built is only a feature once it is on the tool
         // list — v1 shipped an MCP client that no session could reach (D6).
-        let knowledgeStore = KnowledgeStore(client: client)
         let embedder = MLXEmbedder()
         await gateway.register([
             RunShellTool(registry: processes),

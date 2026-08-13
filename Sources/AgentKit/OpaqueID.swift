@@ -22,4 +22,6 @@ public enum OpaqueID {
     public static let project = "pj"
     public static let workPackage = "wp"
     public static let exception = "ex"
+    public static let register = "rg"
+    public static let baseline = "bl"
 }

@@ -51,6 +51,11 @@ public final class ProjectsViewModel {
     /// wires two of the six for real — the rest are named and left at zero
     /// rather than invented.
     public var readings = ToleranceReadings()
+    /// The five registers, the frozen agreements, and how far the plan has
+    /// moved from the latest one (§19.11).
+    public private(set) var registers: [RegisterEntry] = []
+    public private(set) var baselines: [Baseline] = []
+    public private(set) var drift: BaselineDiff?
 
     private var service: ProjectService?
     private let log = AppLog.logger("projects-ui")
@@ -281,6 +286,38 @@ public final class ProjectsViewModel {
         }
     }
 
+    // MARK: - registers (§19.11)
+
+    public func record(_ detail: RegisterDetail, title: String) async {
+        guard let service, let project = selected else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            try await service.record(RegisterEntry(projectID: project.id, title: trimmed,
+                                                   detail: detail, origin: .human("ผู้ใช้")))
+            await refreshGate()
+        } catch {
+            status = Status(message: "บันทึกไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    /// Deciding a change. The person's name goes in because that is what the
+    /// register records — "approved" with nobody attached is the state §19.11
+    /// exists to prevent.
+    public func decide(_ entry: RegisterEntry, approve: Bool, by person: String) async {
+        guard let service else { return }
+        do {
+            try await service.decideChange(entry, approve: approve, by: person)
+            await refreshGate()
+            status = Status(message: approve
+                            ? "อนุมัติแล้ว — baseline เวอร์ชันใหม่ถูก freeze ไว้ ของเดิมยังอ่านได้"
+                            : "ปฏิเสธแล้ว — baseline เดิมไม่ถูกแตะ",
+                            isError: false)
+        } catch {
+            status = Status(message: "\(error)", isError: true)
+        }
+    }
+
     private func refreshGate() async {
         guard let service, case .project(let id) = selection else {
             gate = nil
@@ -295,9 +332,15 @@ public final class ProjectsViewModel {
         // budget governor and the span store, which the screen does not hold —
         // they stay at zero until P10.15 wires the status strip, and a zero
         // that is honestly zero is better than a number nobody can trace.
-        readings.addedPackages = Double(wbs.leaves.count)
         tolerances = ToleranceCheck.evaluate(selected?.tolerances ?? .balanced,
                                              readings: readings)
         openExceptions = (try? await service.openExceptions(id)) ?? []
+        registers = await service.entries(of: id)
+        baselines = await service.baselineHistory(of: id)
+        drift = await service.drift(of: id)
+        // The scope tolerance reads drift from the agreement rather than the
+        // size of the plan: a project is not off-scope for having a plan, only
+        // for having grown one past what was agreed (§19.10).
+        readings.addedPackages = drift?.addedCount ?? 0
     }
 }
