@@ -16,6 +16,9 @@
 | [§5](#5-m1-coreengine)–[§16](#16-m12-observability--eval) | รายละเอียดต่อ Module (M1–M12) |
 | [§17](#17-hardware-topology--deployment) | Hardware Topology & Deployment |
 | [§18](#18-non-functional-requirements) | Non-Functional Requirements |
+| [§19](#19-project-environment--project-management-m14-projectkit) | **Project Environment & Project Management** — General/Project · IA ใหม่ · life cycle 5 ขั้น · WBS/Gantt/Kanban/RACI · tolerance & exception · conformance matrix (M14) |
+| [§20](#20-research-program--งานวิจัยที่เดินบนโครง-pm-m15-instruments) | **Research Program** — 8 ขั้นตอนวิจัยบนโครง PM · ออกแบบเครื่องมือ + ความตรง/ความเที่ยง (M15) · เว็บฟอร์ม/เซิร์ฟเวอร์/ฐานข้อมูลคำตอบ (M16) |
+| [§21](#21-agent-competence-model--อะไรทำให้-agent-แต่ละตัวต่างกัน) | **Agent Competence Model** — 6 ชั้นที่ทำให้ agent ต่างกัน · knowledge view ต่อบทบาทบนกราฟเดียว · tool proficiency |
 | [ภาคผนวก A](#ภาคผนวก-a--legacy-feature-inventory-เก็บครบจากระบบเดิม) | Legacy Feature Inventory (จากระบบเดิมครบทุกข้อ) |
 | [ภาคผนวก B](#ภาคผนวก-b--decisions-log-ที่ยังมีผลกับ-v2) | Decisions Log |
 | [ภาคผนวก C](#ภาคผนวก-c--engineering-notes-ที่ยังใช้ได้กับ-v2) | Engineering Notes (SurrealDB quirks ฯลฯ) |
@@ -282,12 +285,15 @@ graph TB
 | **M5** | **LLMProviders** — ชั้นเชื่อมโมเดลทั้งหมด | FoundationModelsAdapter · **MLXRuntime** ([§9.4](#94-mlx-local-tier-05--model-management)) · VLLMExecutor · EndpointRegistry · TokenAccountant · **BudgetGovernor** ([§9.5](#95-budget-governor--คุมค่าใช้จ่ายของ-tier-1b)) | ตั้งค่าหลาย endpoint พร้อมกัน, **โหลดโมเดล MLX จาก HuggingFace หรือเลือกจากที่มีอยู่**, กำหนดโมเดลต่อ role, **ตั้งเพดานค่าใช้จ่ายของ endpoint ที่คิดเงิน**, สถานะการเชื่อมต่อ, ดู token/ค่าใช้จ่ายที่ใช้ | `LLMExecutor` impl · `MLXRuntime.download(repo:)`/`.loadLocal(path:)` · `EndpointRegistry.probe(_:)` · `BudgetGovernor.authorize(_:)` · `TokenAccountant.usage(session:)` |
 | **M6** | **ToolBelt** — tool ทั้งหมดที่ agent เรียกได้ | ShellTool · FileTool · KBTool · **WebSearchTool + PageReader** · AnalysisTool · DocGenTool · InstallPackageTool · MCPBridge · SkillTool | agent รันคำสั่ง, ค้น KB, **ค้นเว็บแบบจัด tier ทุกแขนง + อ่านเนื้อหาหน้าเว็บจริง**, query ข้อมูล, สร้างเอกสาร, ติดตั้ง package, ใช้ MCP tool | `run_shell` · `kb_search` · `web_search` · **`fetch_page`** · **`ingest_url`** · `analysis_query`/`analysis_execute` · `save_document` · `install_package` · `write_skill` · `fetch_docs` |
 | **M7** | **Knowledge** — GraphRAG + KB store | Ingestion · Chunker · Dedup · EntityExtractor · Embedder · HybridSearch · **CredibilityIndex** · **ConflictLedger** ([§11.6](#116-conflict-ledger--เมื่อความรู้ขัดกัน)) · KBStore · SidecarManager | อัปโหลด PDF/DOCX/PPTX/รูป, **ดึงหน้าเว็บเข้า KB**, ดู/แก้ entity-relation graph, ค้นแบบ hybrid, **เห็น tier ความน่าเชื่อถือของทุกผลลัพธ์**, **ตัดสินความรู้ที่ขัดกันเอง**, KB แยก central/project/policy, export/import | `Knowledge.ingest(file:scope:)` · `Knowledge.ingest(url:)` · `hybridSearch(_:)` · `ConflictLedger.detect(_:)`/`.resolve(_:by:)` · `KBStore.runQuery(_:)` · `SidecarManager.start()` |
-| **M8** | **Analysis** — งานข้อมูล/สถิติ | AnalysisStore(DuckDB) · DBConnectors · NotebookKernel · StatGate | Notebook (SQL+Python cell), DB Explorer, ดึงตารางจาก external DB, federated query, ตรวจ assumption อัตโนมัติ | `AnalysisStore.query(_:)` · `pull_db_table` · `NotebookKernel.execute(cell:)` · `StatGate.check(test:result:)` |
+| **M8** | **Analysis** — งานข้อมูล/สถิติ | AnalysisStore(DuckDB) · **OLTPStore(SQLite WAL — ทางเขียนของ M16, [§19.17](#1917-ฐานข้อมูลภายในของโปรเจกต์--sql-nosql-และช่องว่างจริงที่ต้องเติม))** · DBConnectors · NotebookKernel · StatGate | Notebook (SQL+Python cell), DB Explorer, ดึงตารางจาก external DB, federated query, ตรวจ assumption อัตโนมัติ | `AnalysisStore.query(_:)` · `pull_db_table` · `NotebookKernel.execute(cell:)` · `StatGate.check(test:result:)` |
 | **M9** | **Execution** — รันของจริงอย่างปลอดภัย | ProcessRunner · SandboxPolicy · VenvManager · WorktreeManager · ProcessRegistry | ดู/หยุด/พัก process ทุกตัว, isolation ต่อ project, worktree สำหรับงานเสี่ยง | `Execution.run(spec:)` · `RunningProcess.pause()/resume()/terminate()` · `Worktree.create(for:)` |
 | **M10** | **DocGen** — งานเอกสาร | TemplateEngine · CitationEngine · Exporters | สร้าง manuscript/slide, upload ตัวอย่าง→auto-parse เป็น template, แก้ template เอง, bibliography อัตโนมัติ | `DocGen.render(template:data:)` · `CitationEngine.attach(provenance:)` · `export(.docx/.pptx)` |
 | **M11** | **Config & Secrets** | SettingsSchema · Layering · Migration · KeychainStore | หน้า Settings ทุกหมวด, export/import profile, hot-reload | `Config.effective()` · `Config.validate(_:)` · `Keychain.set(_:for:)` |
 | **M12** | **Observability & Eval** | SpanStore · LiveMonitorFeed · GoldenTaskHarness · UsageLog | Live Monitor หน้าเดียว (session + global), audit ย้อนหลัง, regression eval | `Span.begin(_:)/end(_:)` · `GoldenTask.run(suite:)` |
-| **M13** | **WorkspaceUI** (App target) | ChatView · TeamView · LiveMonitorView · ApprovalsView · NotebookView · DbExplorerView · KnowledgeView · WorkflowView · TemplatesView · SettingsView · FileViewer · ProcessView | ทุกหน้าจอของแอป | SwiftUI views |
+| **M13** | **WorkspaceUI** (App target) | 4 พื้นที่ + sub-tab ตาม [§19.2](#192-information-architecture--พื้นที่-และ-sub-tab-ของแต่ละพื้นที่): **Chat** (ประวัติ·บทสนทนา·จอเฝ้าทีม·แถบสถานะที่กดได้) · **Plan** (ภาพรวม·WBS+Gantt·Kanban·ทีม&RACI·ทะเบียน·รายงาน — แก้ inline) · **Workbench** (เก็บข้อมูล·DB ภายใน·DB ภายนอก·สคริปต์+คอนโซล·ผลลัพธ์) · **Knowledge** (เอกสาร·กราฟ·ข้อขัดแย้ง·แหล่ง) + Settings/Models/Budget/Audit | ทุกหน้าจอของแอป | SwiftUI views |
+| **M14** | **ProjectKit** — โปรเจกต์เป็น first-class ([§19](#19-project-environment--project-management-m14-projectkit)) | ProjectStore · StageGate · WBS · Schedule · Board · RACI · Registers · Tolerance/Exception · Baseline/ChangeControl · Benefits · Reporting | สร้าง/ปิดโปรเจกต์, ขอบเขต in/out, WBS, Gantt, Kanban, RACI, ตั้ง tolerance, อนุมัติ gate, register 5 ตัว, รายงาน 3 แบบ | `StageGate.evaluate(_:)` · `WBS.validate(_:)` · `Schedule.criticalPath(_:)` · `Tolerance.check(_:)` · `Baseline.freeze(_:)` · `Report.render(_:)` |
+| **M15** | **Instruments** — ออกแบบเครื่องมือวิจัย ([§20.3](#203-m15-instruments--เครื่องมือเก็บข้อมูล)) · **ไม่แตะเครือข่าย** | Builder · Blueprint · Versioning · Validity · Qualitative | สร้าง/แก้แบบสอบถาม-แบบสัมภาษณ์, ผังข้อ↔construct↔คำถามวิจัย, ตรวจความตรงเชิงเนื้อหาด้วยผู้เชี่ยวชาญ, α/ω/ICC/κ/EFA, ลงรหัสข้อมูลเชิงคุณภาพ | `InstrumentGate.approve(_:)` → `PublishedInstrument` · `Validity.ioc(_:)`/`.cvi(_:)`/`.alpha(_:)`/`.efa(_:)` |
+| **M16** | **FieldServer** — เว็บฟอร์ม + เซิร์ฟเวอร์ + ฐานข้อมูลคำตอบ ([§20.7](#207-m16-fieldserver--เว็บฟอร์ม-เซิร์ฟเวอร์-และฐานข้อมูลคำตอบ)) · **พื้นผิวเดียวของระบบที่รับ input จากคนนอก** | HTTPServer · FormRuntime · SessionStore · ConsentGate · ResponseStore · Linkage · Waves | เปิดฟอร์มให้คนอื่นเข้ามากรอก, กรอกต่อทีหลัง, หน้าความยินยอม, เก็บคำตอบเป็นฐานข้อมูลของงานวิจัยนั้น, งานระยะยาวหลายรอบแบบนิรนาม | `FieldServer.start(_:)/.stop()` · `Wave.open(_:)/.close(_:)` · `ResponseStore.append(_:)` · `Linkage.resolve(_:)` (เขียน audit เสมอ) |
 
 **หมายเหตุการจัดกลุ่มที่ต่างจาก v1 อย่างมีเจตนา**:
 
@@ -366,7 +372,7 @@ hook ที่วิ่ง**รอบทุก tool call** ไม่ใช่แ
 
 | สวิตช์ | คุมอะไร | ค่า |
 |---|---|---|
-| **Autonomy Slider** | step ระดับไหนต้อง approve | Full autonomous ↔ Approval-required (ตั้งต่อ workspace/project) |
+| **Autonomy Slider** | step ระดับไหนต้อง approve | Full autonomous ↔ Approval-required (ตั้งต่อ workspace/project) — ใน Project สวิตช์นี้คือหน้าตาย่อของชุด **tolerance 6 แกน** [§19.10](#1910-tolerance--exception--กลไกที่ทำให้-autonomy-มีความหมาย) ไม่ใช่ค่าลอย ๆ |
 | **Plan-only Mode** | ห้าม execute tool ทั้ง session (คิด/เสนอแผนอย่างเดียว) | on/off |
 | **Run-until-done** | ทำหลาย task ต่อกันเองโดยไม่รอ user พิมพ์ | on/off ต่อ conversation — **explicit toggle เท่านั้น ไม่ auto-detect** |
 
@@ -380,7 +386,7 @@ hook ที่วิ่ง**รอบทุก tool call** ไม่ใช่แ
 
 ### 5.7 Task Ledger (sub-module)
 
-task list ของ session เก็บใน SurrealDB เป็น source of truth (ไม่ใช่ในหัวโมเดล) — fields: `conversation_id, step_index, description, role, status, result_summary, retry_count`
+task list ของ session เก็บใน SurrealDB เป็น source of truth (ไม่ใช่ในหัวโมเดล) — fields: `conversation_id, step_index, description, role, status, result_summary, retry_count` (+ `work_package` เมื่ออยู่ใน Project — ผูกแผนกับผลการเดินเข้าด้วยกัน [§19.6](#196-scope--wbs-product-based))
 
 - อ่านใหม่จาก DB ก่อนเริ่มทุก task (plan re-grounding)
 - Stop flag ระดับ session: กด Stop → task ที่รันอยู่จบตามปกติ แล้วไม่เริ่มตัวถัดไป (ไม่ kill กลางคันเพื่อกัน state ค้างครึ่งๆ) — คนละชั้นจาก process signal ของ M9
@@ -821,6 +827,8 @@ graph LR
 
 ### 14.2 WorkspaceUI — หน้าจอทั้งหมด
 
+> **โครงหน้าจอถูกจัดใหม่ใน [§19.2](#192-information-architecture--พื้นที่-และ-sub-tab-ของแต่ละพื้นที่)** — ตารางนี้ยังเป็นรายการเนื้อหาที่แต่ละหน้าต้องมี (ไม่มีข้อไหนถูกตัดทิ้ง) แต่การจัดวางจริงคือ 4 พื้นที่ (Chat · Plan · Workbench · Knowledge) + Settings/ข้อมูลระบบ และหน้า **Plan** เป็นของใหม่ที่ตารางนี้ยังไม่มี
+
 | หน้า | เนื้อหา |
 |---|---|
 | **Chat** | multi-turn, multi-project, upload/paste รูปคุยตรง, conversation sidebar, เลือกคุยกับทีมหรือ specialist ตรงๆ, approval banner inline, โหมด 3 สวิตช์ |
@@ -915,6 +923,608 @@ graph LR
 | **Auditability** | ทุก tool call มี span · ทุก decision ของ Analysis Plan มี origin tag · ทุกประโยคใน manuscript ที่มาจาก KB มี citation |
 | **Maintainability** | 1 concern = 1 module ([§0.2](#02-คำนิยาม-module--sub-module--feature--function)) · ห้าม type ซ้ำข้าม module · ห้าม logic ก็อปกัน 2 ที่ |
 | **i18n** | UI ไทย/อังกฤษ · ตัดคำไทยถูกต้องใน chunking + BM25 |
+
+---
+
+## 19. Project Environment & Project Management (M14 ProjectKit)
+
+> **ที่มาของ section นี้**: จนถึง P9 `Scope.project` เป็นแค่**ป้ายกำกับ** — UI ยัง hardcode `ProjectID("default")` (`KnowledgeView.swift:360`) และไม่มีที่ไหนในระบบที่รู้ว่าโปรเจกต์หนึ่ง *เริ่มเมื่อไร ขอบเขตแค่ไหน ตอนนี้อยู่ขั้นไหน และปิดได้หรือยัง*
+> ผลคือทีม AI ทำงานได้แต่ไม่มีใครตอบได้ว่า "งานนี้เสร็จตามอะไร" — section นี้ทำให้ **โปรเจกต์เป็น first-class** และยืมโครงควบคุมจากมาตรฐานสากลแทนที่จะคิดเอง
+
+### 19.1 สองสภาพแวดล้อม: General กับ Project
+
+ระบบแยกตั้งแต่หน้าแรก ไม่ใช่ให้ผู้ใช้เดาเองว่างานนี้ควรหนักแค่ไหน:
+
+| | **General** | **Project** |
+|---|---|---|
+| ใช้กับ | คุย ถาม สั่งงานสั้น ที่ไม่ต้องบันทึกอะไรต่อ | งานหนึ่งชิ้นที่มีเป้าหมาย ขอบเขต และวันจบ |
+| ทีม | ไม่มีทีม — คุยกับ agent ตัวเดียว (Tier ตาม router) | **สร้าง AI Team ต่อโปรเจกต์** (roster + DoD ต่อ role ตาม project type) |
+| Knowledge scope | `central` อ่าน/เขียน | `project(id)` เป็น default · อ่าน `central` ได้ · `policy` บังคับเสมอ |
+| Task Ledger | ไม่เขียน (conversation อย่างเดียว) | เขียนทุก assignment ผูกกับ work package |
+| Lifecycle | ไม่มี | 5 ขั้น + stage gate ([§19.4](#194-project-life-cycle-5-ขั้น--stage-gate)) |
+| Analysis store | ไม่มี schema ของตัวเอง | DuckDB schema + connector ต่อโปรเจกต์ |
+| งบ/สิทธิ์ | ใช้ค่า global | เพดาน token/เงิน + autonomy + sandbox policy **ต่อโปรเจกต์** |
+| ปิดงาน | ปิดแชตทิ้งได้ | ต้องผ่าน Closing gate ถึงจะปิดได้ ([§19.12](#1912-benefits--closing-gate)) |
+| หน้าจอ | Chat · Knowledge | Chat · Plan · Workbench · Knowledge |
+
+**Promotion — General → Project** (flow ที่เกิดจริงบ่อยที่สุด: คุยเล่นแล้วมันกลายเป็นงานจริง):
+กด "ยกระดับเป็นโปรเจกต์" จากหน้า Chat → ระบบสร้าง `project` record, ย้าย conversation + ไฟล์ที่แนบ + เอกสารที่ ingest ไประหว่างคุยเข้า scope ใหม่, แล้ว**ร่าง Project Brief ให้จาก transcript** (เป้าหมาย/ขอบเขต/ข้อสมมติที่พูดไปแล้ว) ให้ผู้ใช้แก้ก่อนอนุมัติ — ไม่ใช่เริ่มจากฟอร์มเปล่า
+
+**Invariant**: ไม่มี code path ไหนสร้าง work package / assignment / baseline ได้ในสภาพแวดล้อม General — `ProjectKit` ทุก entry point รับ `ProjectID` แบบ non-optional ตั้งแต่ signature
+
+### 19.2 Information Architecture — พื้นที่ และ sub-tab ของแต่ละพื้นที่
+
+ปัญหาของ [§14.2](#142-workspaceui--หน้าจอทั้งหมด) เดิม: หน้าจอ 14 หน้าวางแบนเท่ากันหมด ทั้งที่จริงมันแบ่งตาม**วิธีทำงาน**ได้ชัด — สั่งให้ทำ / วางแผนและติดตาม / ลงมือเอง / เก็บข้อมูลจากคนอื่น / จัดการความรู้
+
+| พื้นที่ | General | Project | Sub-tab | ยุบหน้าเดิมเข้ามา |
+|---|---|---|---|---|
+| **Chat** — สั่งการ | ✅ | ✅ | ประวัติบทสนทนา (แถบซ้าย) · บทสนทนา · จอเฝ้าทีม+โปรเซส (แถบขวา) | Chat · Live Monitor · Approvals · Processes |
+| **Plan** — วางแผน · กำกับ · ตั้งทีม | — | ✅ | ภาพรวม · WBS+Gantt · Kanban · **ทีม &amp; RACI** · ทะเบียน · รายงาน | Team View *(ส่วนตั้งค่า)* + *(ใหม่ทั้งหมด)* |
+| **Workbench** — ทำงานกับข้อมูล | ✅ | ✅ | **เก็บข้อมูล** · ฐานข้อมูลภายใน · ฐานข้อมูลภายนอก · สคริปต์+คอนโซล · ผลลัพธ์ | Notebook · DB Explorer · File Viewer/Editor · Templates · Workflow Builder + M15/M16 |
+| **Knowledge** — ความหมายและที่มา | ✅ | ✅ | เอกสาร · กราฟ · ข้อขัดแย้ง · แหล่งและ tier | Knowledge Base · Conflict Ledger · Sources |
+| *(นอกพื้นที่งาน)* | ✅ | ✅ | — | Settings · Models · Budget · Observability/Audit · About |
+
+**4 พื้นที่ = 4 คำถามที่ต่างกัน** — Chat: *จะให้ใครทำอะไร* · Plan: *ตกลงกันว่าอะไรคือเสร็จ และใครรับผิดชอบ* · Workbench: *ข้อมูลอยู่ที่ไหนและทำอะไรกับมัน* · Knowledge: *อะไรจริง และรู้ได้ยังไง*
+
+**Workbench เรียง sub-tab ตามเส้นทางของข้อมูล ไม่ใช่ตามชนิดเครื่องมือ**:
+
+```
+เก็บเข้ามา  →  เก็บไว้ (ภายใน · ภายนอก)  →  วิเคราะห์  →  นำเสนอ
+เก็บข้อมูล      ฐานข้อมูลภายใน/ภายนอก        สคริปต์+คอนโซล    ผลลัพธ์
+```
+
+- **"เก็บข้อมูล" อยู่ใต้ Workbench ไม่ใช่แท็บบนสุด** — มันคือต้นทางของเส้นทางเดียวกัน การแยกไว้ข้างนอกทำให้คนต้องกระโดดข้ามแท็บระหว่างสร้างฟอร์มกับดูว่าข้อมูลที่ได้หน้าตาเป็นยังไง ซึ่งเป็นสองอย่างที่ทำติดกันตลอด
+- **ตัวแก้ไฟล์และโค้ดอยู่ในแท็บ "สคริปต์+คอนโซล"** — โค้ดที่เขียนกับสคริปต์ที่รันคือของสิ่งเดียวกัน ไม่ต้องแยกแท็บ
+- **General เห็น Workbench แค่ 3 sub-tab**: ฐานข้อมูลภายนอก · สคริปต์+คอนโซล · ผลลัพธ์ — ไม่มีการเก็บข้อมูล (ต้องมีจริยธรรมและขอบเขตซึ่งเป็นของโปรเจกต์) และไม่มีฐานข้อมูลภายใน (มีแค่ scratch ที่ไม่ผูกกับใคร)
+
+#### 19.2.1 ประวัติบทสนทนา — ทั้งสองสภาพแวดล้อม
+
+แถบซ้ายของหน้า Chat: รายการบทสนทนาเรียงตามเวลาแก้ไขล่าสุด · ค้นด้วยข้อความเต็ม (BM25 ตัวเดียวกับ KB จึงค้นภาษาไทยได้จริง) · ปักหมุด · เปลี่ยนชื่อ (AI ตั้งชื่อให้จากเทิร์นแรก แก้ได้) · เปิดกลับมาคุยต่อได้ทุกอัน
+
+| | General | Project |
+|---|---|---|
+| ขอบเขตที่เห็น | บทสนทนาทั้งหมดของ General | เฉพาะของโปรเจกต์นี้ + ปุ่มค้นข้ามโปรเจกต์ |
+| ที่เก็บ | `conversation` ใน SurrealDB (**มีอยู่แล้ว**) | เหมือนกัน + คอลัมน์ scope ที่มีอยู่แล้ว |
+| สิ่งที่ติดกลับมาด้วยตอนเปิด | โมเดล/tier ที่ใช้ตอนนั้น, ไฟล์ที่แนบ, span ของ tool call | เพิ่ม: work package ที่บทสนทนานั้นแตะ |
+
+#### 19.2.2 Chat ต้องต่ออินเทอร์เน็ตได้ในทั้งสองสภาพแวดล้อม
+
+`web_search` + `fetch_page` + `ingest_url` เดิน hook chain เส้นเดิม ไม่มีทางลัด — สิ่งที่ต่างคือปลายทางของสิ่งที่ค้นเจอ: General ingest เข้า `central`, Project ingest เข้า `project(id)`
+
+> **สถานะวันนี้**: ชั้นค้นเว็บทั่วไป (T5 · SearXNG) ยังแพ็กเข้าแอปที่ sandbox ไม่ได้ ([README §6](README.md)) — Chat จึงค้นได้จริงเฉพาะแหล่งวิชาการที่ต่อตรง (T1–T3)
+> **ถือเป็นงานที่รอได้** — โครงทั้งหมดรองรับไว้แล้ว (source registry, tier, `web_search`/`fetch_page` เดินประตูเดียวกัน) การเปิด T5 จึงเป็นการ*เติมแหล่ง* ไม่ใช่การ*แก้สถาปัตยกรรม* ทำเมื่อภาพรวมนิ่งแล้วได้ผลเท่ากัน (แผน P13)
+
+#### 19.2.3 แถบสถานะเป็นแดชบอร์ดที่กดได้ ไม่ใช่ป้ายบอกสถานะ
+
+ทุกช่องบนแถบเปิด popover ที่มีทั้ง *ที่มา* และ *ปุ่มที่ทำอะไรได้จริง* — ไม่ใช่ตัวเลขที่ต้องไปหาความหมายเอาเองในหน้าอื่น:
+
+| ช่อง | กดแล้วเห็น | ทำอะไรได้ตรงนั้น |
+|---|---|---|
+| **ขั้น** | เงื่อนไขของ gate ถัดไป ข้อไหนผ่านแล้ว/ค้าง | กดข้อที่ค้างเพื่อกระโดดไปที่ต้นเหตุ |
+| **เวลา** | เส้นเวลาที่ใช้ไปเทียบ p50–p90 ของงานชนิดเดียวกัน | ขยายกรอบ (บันทึกเป็นการตัดสินใจ) |
+| **งบ** | แยกตาม role และตามทูล + กราฟการเผาไหม้ของขั้นนี้ | ปรับเพดานขั้นนี้ · สลับ tier ของ role |
+| **คุณภาพ** | งานที่ rework แล้วกี่รอบ พร้อมเหตุผลจาก QA ทุกรอบ | สั่ง rework เพิ่ม · ผ่อน DoD (บันทึกเป็นการตัดสินใจ) |
+| **ขอบเขต** | ส่วนต่างจาก baseline ล่าสุดแบบรายใบ | เปิดคำขอเปลี่ยนแปลง |
+| **Exception** | Exception Report เต็ม | ตัดสินตรงนั้น — ไม่ต้องย้ายหน้า |
+
+#### 19.2.4 Plan แก้ได้ตรงนั้น — แต่แก้สิ่งที่ *ตั้ง* ไม่ใช่สิ่งที่ *วัด*
+
+หน้า Plan ต้องแก้ได้ inline ทุกช่อง แต่มีเส้นแบ่งที่ต้องชัดตั้งแต่ออกแบบ:
+
+| แก้ได้ตรงนั้น (สิ่งที่คนตั้ง) | แก้ไม่ได้เพราะมันคือผลการวัด |
+|---|---|
+| เพิ่ม/ลบ/เปลี่ยนชื่อ/จัดลำดับใบใน WBS · เกณฑ์ DoD ต่อใบ | แถบเวลาจริง (มาจาก span ที่เกิดขึ้นแล้ว) |
+| เส้นพึ่งพา (ลากเชื่อม/ตัด) | critical path (คำนวณจากเส้นพึ่งพา) |
+| ช่อง RACI (dropdown ต่อช่อง) | ประมาณการ p50–p90 (มาจากประวัติงานชนิดเดียวกัน) |
+| ค่า tolerance ทั้ง 6 แกน · ขอบเขต in/out · ข้อสมมติ | ตัวเลขในแผงสุขภาพ 7 แกน |
+| ทะเบียนทั้ง 5 (เพิ่ม/แก้/ปิดรายการ) | สถานะการ์ด Kanban ที่ยังไม่ผ่าน QA |
+
+**ลากแถบ Gantt เพื่อเปลี่ยนวันจบไม่ได้โดยตั้งใจ** — วันจบของงาน AI ไม่ใช่สิ่งที่ตกลงกันแล้วเกิดขึ้น มันคือผลของลำดับงานกับความเร็วจริง การลากมันคือการแก้เครื่องวัด อยากให้จบเร็วขึ้นต้องแก้สิ่งที่มันขึ้นกับ: ตัดขอบเขต ลดเส้นพึ่งพา หรือเปลี่ยน tier ของโมเดล
+
+**แก้หลัง baseline = คำขอเปลี่ยนแปลง และ UI พูดตรง ๆ ตอนแก้** — ไม่บล็อก ไม่เตือนทีหลัง แต่ขึ้นแถบตรงนั้นว่า *"การแก้นี้จะกลายเป็นคำขอเปลี่ยนแปลง #4 · กระทบ: ขอบเขต +1 ใบ, เวลา +0.5 วัน, เงิน +฿40"* พร้อมปุ่มยืนยัน/ยกเลิก ([§19.11](#1911-registers--change-control))
+
+#### 19.2.5 "ตั้งค่าทีม" กับ "เฝ้าดูทีม" เป็นคนละที่โดยตั้งใจ
+
+สองอย่างนี้ถูกใช้คนละจังหวะและคนละความถี่ — รวมไว้หน้าเดียวแล้วหน้าที่ใช้ทุกนาทีจะถูกกลบด้วยหน้าที่ใช้เดือนละครั้ง:
+
+| | อยู่ที่ไหน | ใช้ตอนไหน | มีอะไร |
+|---|---|---|---|
+| **เฝ้าดูทีม** | แถบขวาของ **Chat** | ตลอดเวลาที่ทีมทำงาน | ใครถือ work package ไหน · rework กี่รอบ · โปรเซสที่รันอยู่ · กดหยุดรายตัว |
+| **ตั้งค่าทีม** | sub-tab **ทีม &amp; RACI** ใน **Plan** | ตอนตั้งโปรเจกต์ และตอนปรับหลังเจอปัญหา | 6 ชั้นของแต่ละ agent ([§21.1](#211-agent--6-ชั้นที่ประกาศไว้-ไม่ใช่-prompt-ก้อนเดียว)) · tool grant + proficiency · knowledge view · DoD ต่อบทบาท · ตาราง RACI ต่อใบงาน · หมวกที่คนถือ |
+
+**ทำไมอยู่ใต้ Plan ไม่ใช่ Settings** — การกำหนดว่าใครรับผิดชอบอะไรคือ practice "Organization" ของ PRINCE2 และเป็นเงื่อนไขของ G2 ([§19.4](#194-project-life-cycle-5-ขั้น--stage-gate)) มันคือการวางแผน ไม่ใช่การตั้งค่าเครื่องมือ — และมันอยู่ติดกับตาราง RACI ที่ใช้ข้อมูลชุดเดียวกันพอดี
+
+---
+
+### 19.3 มาตรฐาน 4 ฉบับ — เอามาใช้ตรงไหน และไม่อ้างอะไร
+
+ทั้ง 4 ฉบับเขียนไว้สำหรับ**องค์กรที่มีคนรับผิดชอบ** ไม่ได้เขียนไว้สำหรับทีม AI — เอามาใช้ได้ที่ *โครงควบคุมและ artifact ที่ต้องมี* ไม่ใช่ที่ *คำรับรอง*
+
+| มาตรฐาน | สิ่งที่ยืมมา | ลงมาเป็นอะไรในระบบ |
+|---|---|---|
+| **PRINCE2 7 (2023)** — 7 principle / 7 practice / 7 process | **โครงควบคุม**: manage by stages, **manage by exception**, product-based planning, continued business justification, defined roles | Stage gate ([§19.4](#194-project-life-cycle-5-ขั้น--stage-gate)) · Tolerance/Exception ([§19.10](#1910-tolerance--exception--กลไกที่ทำให้-autonomy-มีความหมาย)) · WBS แบบผลิตภัณฑ์ ([§19.6](#196-scope--wbs-product-based)) · Business case ที่ตรวจซ้ำทุกขั้น |
+| **PMBOK Guide 8 (พ.ย. 2025)** — 6 principle / 7 performance domain / 5 focus area / 40 process | **5 focus area = 5 ขั้นของ life cycle** ที่โจทย์ต้องการพอดี · **7 performance domain = แกนวัดสุขภาพโครงการ** | ขั้น Initiating→Closing ([§19.4](#194-project-life-cycle-5-ขั้น--stage-gate)) · แผงสุขภาพ 7 แกน: Governance · Scope · Schedule · Finance · Stakeholders · Resources · Risk |
+| **ISO 21502:2020** — clause 6 integrated practices, clause 7 management practices | **เช็กลิสต์ความครบ**: planning, benefit, scope, resource, schedule, cost, risk, issue, change control, quality, stakeholder, communication, org change, reporting, information/documentation, procurement, lessons learned | `Practice` enum 17 ตัว → ทุกโปรเจกต์ต้อง**มีของจริงหรือมี tailoring record ว่าตัดออกเพราะอะไร** ([§19.16](#1916-conformance-matrix)) |
+| **IPMA ICB4** — 28 competence element (Perspective 5 · People 10 · Practice 13) | **คำศัพท์สำหรับนิยามบทบาทและขีดจำกัดของมัน** — ICB รับรอง *คน* ไม่ใช่โครงการหรือซอฟต์แวร์ | agent manifest ประกาศ Practice element ที่บทบาทนั้นครอบคลุม · **People/Perspective element เป็นของมนุษย์เสมอ** ไม่มี agent ตัวไหนอ้าง |
+
+**สิ่งที่ระบบนี้ไม่อ้าง**: ไม่ใช่ certified/compliant กับฉบับไหน · ไม่ทดแทน Project Manager ที่เป็นคน · ไม่มี agent ตัวใดถือ accountability ตามความหมายของมาตรฐาน (ดู [§19.5](#195-organization--ใครถือหมวกอะไร))
+
+**Tailoring ต้องบันทึก ไม่ใช่เงียบ** — ทั้ง 4 ฉบับอนุญาตให้ตัดแต่งได้ แต่ต้องบอกว่าตัดอะไรเพราะอะไร ระบบจึงบังคับ `tailoring_record` ต่อโปรเจกต์: practice ไหนไม่ใช้ + เหตุผล + ใครตัดสิน — ปิดโปรเจกต์ไม่ได้ถ้ามี practice ที่ไม่มีทั้งของจริงและ record
+
+### 19.4 Project Life Cycle 5 ขั้น + Stage Gate
+
+```mermaid
+stateDiagram-v2
+    [*] --> Initiation
+    Initiation --> Planning: G1 อนุมัติ Brief — เป้าหมาย ขอบเขต in/out เหตุผลที่ทำ
+    Planning --> Execution: G2 อนุมัติ PID — WBS RACI baseline tolerance
+    Execution --> Execution: งานเดินตาม WBS
+    Execution --> Exception: tolerance ทะลุ
+    Exception --> Execution: คนตัดสิน แก้แผนหรือขยายเพดาน
+    Exception --> Closing: คนสั่งยุติ
+    Execution --> Closing: G3 ส่งมอบครบ และ QA ผ่านทุก work package
+    Closing --> [*]: G4 ไม่มีรายการค้าง และ lessons เข้าคลังความรู้
+    note right of Exception
+        Monitoring & Control ไม่ใช่ขั้นที่เดินผ่าน
+        แต่เป็นสิ่งที่ทำงานตลอด Execution
+        (ตรงกับ PMBOK 8: focus area ที่ทับซ้อนกัน)
+    end note
+```
+
+| ขั้น | เข้าได้เมื่อ | ของที่ต้องได้ | ออกได้เมื่อ (gate) | ใครอนุมัติ |
+|---|---|---|---|---|
+| **Initiation** | สร้างโปรเจกต์ | Project Brief: เป้าหมาย, **ขอบเขต in/out**, เหตุผลที่ทำ, ผู้มีส่วนได้เสีย, ความเสี่ยงระดับสูง, project type | ขอบเขตมีทั้ง in และ out (ห้ามว่างข้างใดข้างหนึ่ง) + เกณฑ์ความสำเร็จวัดได้ | **คน** (Executive) |
+| **Planning** | ผ่าน G1 | PID: WBS, RACI, ตารางงาน + dependency, baseline, tolerance 6 แกน, register ตั้งต้น, แผนคุณภาพ (DoD ต่อ deliverable) | ทุก work package มี DoD + มี R และ A ครบ + งบต่อขั้นตั้งแล้ว | **คน** |
+| **Execution** | ผ่าน G2 | deliverable ตาม WBS + evidence ต่อชิ้น | ทุก work package สถานะ done และผ่าน QA | ระบบตรวจ + คนรับรอง |
+| **Monitoring & Control** | ตลอด Execution | highlight report, tolerance status, exception report | *(ไม่ใช่ขั้นที่ออก — เป็นวงตรวจที่วิ่งคู่ไป)* | — |
+| **Closing** | ผ่าน G3 หรือคนสั่งยุติ | รายงานปิดโครงการ, benefit review, lessons learned, การจัดการข้อมูล/ไฟล์ที่เหลือ | **ไม่มีรายการค้าง** — ไม่มี work package เปิด, ไม่มี conflict ค้าง, ไม่มี assumption ที่ยังไม่ยืนยัน, ไม่มี practice ที่ไม่มี tailoring record | **คน** |
+
+**Gate เป็น hook ตัวใหม่ในโซ่เดิม ไม่ใช่โซ่ใหม่** — hook chain ปัจจุบันคือ Critic → Risk → Policy → HITL ([§5.3](#53-hook-chain-gate-sub-module)) เพิ่ม **StageGate** ไว้ก่อน Risk: tool ที่มี side effect ถูกปฏิเสธถ้าโปรเจกต์อยู่ขั้น `initiation` หรือ `closed` และถูกจำกัดชุดถ้าอยู่ `planning` (อ่าน/ค้น/ร่างได้ · เขียนไฟล์/รันคำสั่ง/แก้ข้อมูลไม่ได้) — เหตุผลเดียวกับที่ v1 เจ็บมาแล้ว: ถ้ากติกาไม่อยู่ในเส้นทางบังคับ มันจะถูกข้าม
+
+### 19.5 Organization — ใครถือหมวกอะไร
+
+ทีม 6 บทบาทที่มีอยู่แล้ว ([§2](#2-ai-team-model--แกนหลักของ-v2)) แมปกับ PRINCE2 organization ได้เกือบพอดี — ที่ขาดคือฝั่งที่**ต้องเป็นคน**:
+
+| PRINCE2 | ในระบบนี้ | บังคับยังไง |
+|---|---|---|
+| Executive / Senior User | **มนุษย์เท่านั้น** — เจ้าของ business case, อนุมัติทุก gate, ตัดสินทุก exception | `BoardRole` เป็น type คนละตัวกับ `Role` (enum ของ agent) — ไม่มี initializer ที่รับ `Role` ได้ ⇒ compiler ปฏิเสธการมอบหมวก Executive ให้ agent |
+| Project Manager | **Team Lead** | มีอยู่แล้ว — tool set ไม่มี `run_shell` ([§2.2](#22-กติกาของหัวหน้าทีม-supervisor-contract)) |
+| Team Manager / ผู้ผลิตงาน | Researcher · Analyst · Engineer · Writer | มีอยู่แล้ว (actor แยก, คืนแค่ `Deliverable`) |
+| Project Assurance | **Reviewer (QA)** — อิสระจากผู้ทำ | มีอยู่แล้ว: QA ตรวจด้วยหลักฐาน ไม่ใช่คำกล่าวอ้าง ([§2.5](#25-qa-loop--ตรวจตามมาตรฐาน)) |
+| Project Support | ตัวระบบ — ledger, registers, span store | ไม่ใช่ agent โดยตั้งใจ (ไม่มีอะไรให้ตัดสิน) |
+
+**Senior Supplier ไม่มีใครถือ** — ในบริบทนี้ "ผู้จัดหา" คือโมเดลและ endpoint ซึ่งไม่ใช่คู่สัญญาที่รับผิดชอบอะไรได้ บันทึกไว้เป็น tailoring record ถาวรของทุกโปรเจกต์ แทนที่จะแกล้งมีให้ครบ
+
+### 19.6 Scope & WBS (product-based)
+
+**Scope statement** บังคับ 5 ช่อง — ว่างไม่ได้: `inScope[]` · `outOfScope[]` · `assumptions[]` · `constraints[]` · `acceptanceCriteria[]`
+ช่อง `outOfScope` บังคับให้มีอย่างน้อย 1 ข้อโดยตั้งใจ: ขอบเขตที่ไม่เคยเขียนว่า "ไม่ทำอะไร" คือขอบเขตที่จะบานทุกครั้ง — และมันคือช่องที่ทำให้ agent ปฏิเสธงานนอกขอบเขตได้โดยมีที่อ้าง
+
+**WBS แตกตามผลิตภัณฑ์ ไม่ใช่ตามกิจกรรม** (product-based planning ของ PRINCE2) — ใบสุดท้ายของต้นไม้คือ *ของที่ส่งมอบได้* ไม่ใช่ *สิ่งที่ต้องทำ* เหตุผลเชิงระบบ: ของที่ส่งมอบได้เท่านั้นที่ QA ตรวจได้ด้วยหลักฐาน
+
+```
+1  บทความวิจัยฉบับส่งวารสาร            ← deliverable ราก
+   1.1  ชุดข้อมูลที่ทำความสะอาดแล้ว
+        1.1.1  สคริปต์ดึงข้อมูล + log การรัน       ← work package (ใบ)
+        1.1.2  รายงานการทำความสะอาด + rule ที่ใช้  ← work package (ใบ)
+   1.2  ผลการวิเคราะห์ที่ผ่าน StatGate
+   1.3  ต้นฉบับ 5 บท + bibliography
+```
+
+| กฎของ WBS | บังคับยังไง |
+|---|---|
+| ใบทุกใบ = 1 work package = **1 `Assignment`** | `Assignment.acceptanceCriteria` เป็น non-optional อยู่แล้ว ⇒ ใบที่ไม่มี DoD สร้างไม่ได้ตั้งแต่ type |
+| 100% rule — ลูกรวมกันต้องครอบคลุมพ่อพอดี ไม่ขาดไม่เกิน | ตรวจตอนปิด G2: node ที่ไม่มีใบ = แผนไม่ครบ, ใบที่ไม่มีพ่อ = งานนอกขอบเขต ⇒ gate ไม่ผ่าน |
+| ใบทุกใบผูกกับข้อใดข้อหนึ่งใน `inScope` | field `scopeRef` บังคับ ⇒ ตรวจ scope creep ได้ด้วยเครื่อง ไม่ใช่ด้วยสายตา |
+| การเพิ่มใบหลัง baseline = change request | ผ่าน change control ([§19.11](#1911-registers--change-control)) ไม่ใช่แก้เงียบ ๆ |
+
+Task Ledger ที่มีอยู่ ([§5.7](#57-task-ledger-sub-module)) เก็บ `scope_kind` + `project_id` อยู่แล้ว — เพิ่ม `work_package_id` แล้ว **แผน (WBS) กับ ผลการเดิน (ledger) ผูกกันได้ทั้งสองทาง**: ดูจากแผนว่างานนี้ใครทำถึงไหน หรือดูจาก ledger ว่ารอบนี้ไปโดนแผนข้อไหน
+
+### 19.7 Gantt — เวลาของทีม AI ไม่ใช่ "คน-วัน"
+
+**ปัญหาที่ต้องพูดตรง ๆ**: Gantt ของงานคนวัดเป็นคน-วัน แต่ทีม AI ไม่มีหน่วยนั้น ถ้าให้โมเดลเดา "งานนี้ใช้ 3 วัน" ตัวเลขนั้นคือเรื่องแต่ง — และ Gantt ที่สร้างจากตัวเลขแต่งคือแผนภูมิที่ดูดีแล้วผิดทุกวัน
+
+แผนภูมิของที่นี่จึงยืนบน 3 แกนที่**วัดได้จริงจากของที่ระบบเก็บอยู่แล้ว**:
+
+| แกน | มาจากไหน | ใช้ตอบอะไร |
+|---|---|---|
+| **ลำดับและการพึ่งพา** | `dependency` ใน WBS (finish-to-start เป็นหลัก) | critical path — งานไหนที่ช้าแล้วทั้งโครงการช้าตาม |
+| **เวลาจริงที่ใช้ไป** | span store ที่มีอยู่ ([§16](#16-m12-observability--eval)) รวมต่อ work package | แถบ actual บน Gantt — ของจริง ไม่ใช่ประมาณการ |
+| **ประมาณการล่วงหน้า** | สถิติจาก span เก่าของ **role + deliverableType เดียวกัน** แสดงเป็นช่วง p50–p90 | แถบ forecast — และเป็นช่วงเสมอ ไม่ใช่ตัวเลขเดียว |
+
+โปรเจกต์แรก ๆ ที่ยังไม่มีประวัติ: แถบ forecast แสดงเป็น "ยังไม่มีข้อมูล" ตรง ๆ **ห้ามเดาแทน** — พอมีงานปิดไปพอสมควรค่อยมีแถบขึ้นเอง นี่คือการใช้ประโยชน์จาก span ที่ [README §4](README.md) บอกว่าเป็น "วัตถุดิบของสิ่งที่ยังไม่ได้ทำ"
+
+แกนแนวนอนสลับได้ 2 หน่วย: **เวลานาฬิกา** และ **งบที่เผาไป** (token/บาท จาก BudgetGovernor [§9.5](#95-budget-governor--คุมค่าใช้จ่ายของ-tier-1b)) — สำหรับงานที่คอขวดจริงคือเพดานเงิน ไม่ใช่เวลา แกนที่สองอ่านง่ายกว่ามาก
+
+**Baseline vs actual** อยู่บนแถบเดียวกัน: เส้นบางคือ baseline ที่ freeze ตอน G2, แถบทึบคือของจริง — ส่วนต่างคือสิ่งที่ต้องอธิบายใน end-stage report
+
+### 19.8 Kanban
+
+การ์ด = work package (ไม่ใช่ "task ที่โมเดลคิดขึ้นเอง") คอลัมน์ผูกกับสถานะใน ledger ตรง ๆ ไม่ประกาศสถานะซ้ำ:
+
+`Backlog` → `Ready` (dependency ครบแล้ว) → `In Progress` (มี assignment วิ่ง) → `In QA` → `Blocked / Exception` → `Done` (QA ผ่าน + evidence ครบ)
+
+- **WIP limit ของคอลัมน์ In Progress = `maxAssignmentsPerRound`** ที่มีอยู่แล้วใน config (default 5) — ไม่ต้องตั้งค่าซ้ำสองที่
+- การ์ดแสดง: role ที่ถือ · รอบ rework ที่ใช้ไป (`retry_count`) · gate ที่ค้าง · evidence ที่มีแล้ว
+- ลากการ์ดด้วยมือได้ แต่ลากเข้า `Done` ไม่ได้ถ้า QA ยังไม่ผ่าน — **การเลื่อนสถานะด้วยมือไม่ใช่ทางลัดข้ามหลักฐาน** (คนสั่ง override ได้ แต่ต้องบันทึกเหตุผล และมันจะโผล่ใน end-stage report)
+
+### 19.9 RACI
+
+| ตัวอักษร | ใครถือได้ | กฎ |
+|---|---|---|
+| **R** (ผู้ลงมือ) | agent role ใดก็ได้ / คน | ≥1 ต่อ work package |
+| **A** (ผู้รับผิดชอบผล) | **Team Lead หรือคนเท่านั้น** | **1 คนเท่านั้นต่อ work package** (กฎมาตรฐาน) — และถ้า work package นั้น risk class สูงตาม `RiskScorer` ที่มีอยู่ ⇒ **A ต้องเป็นคน** |
+| **C** (ปรึกษา) | agent / คน / แหล่งภายนอก | 0..n |
+| **I** (แจ้งให้ทราบ) | agent / คน / channel | 0..n — ผูกกับ Notifier ได้ตรง ๆ (จบงานแล้วใครควรได้ noti) |
+
+ตาราง RACI ไม่ใช่แค่เอกสาร — **มันคือสิ่งที่ Team Lead ใช้ตัดสินว่าจะมอบหมายให้ใคร** และเป็นสิ่งที่ทำให้คำถาม "AI ตัวไหนทำอะไร" ตอบได้จากข้อมูล ไม่ใช่จากการอ่าน transcript ย้อนหลัง
+
+### 19.10 Tolerance & Exception — กลไกที่ทำให้ autonomy มีความหมาย
+
+นี่คือชิ้นที่ได้จาก PRINCE2 แล้วคุ้มที่สุด: **manage by exception** — ทีมเดินเองได้เต็มที่ *ภายในกรอบที่ตกลงไว้ล่วงหน้า* ทะลุกรอบเมื่อไรต้องหยุดแล้วยกให้คนตัดสิน ไม่ใช่ตัดสินใจเอง
+
+ปัจจุบันระบบมี escalation อยู่แล้วแต่มีเงื่อนไขเดียว (rework เกิน retry cap) — ขยายเป็น 6 แกนตามมาตรฐาน โดย**ทุกแกนดึงตัวเลขจากระบบที่มีอยู่แล้ว ไม่ได้สร้างกลไกวัดใหม่**:
+
+| Tolerance | ตั้งที่ | วัดจาก | ทะลุแล้วเกิดอะไร |
+|---|---|---|---|
+| **เวลา** | ต่อขั้น/ต่อ work package | span รวม เทียบ forecast p90 | Exception Report + หยุดรับ assignment ใหม่ในขั้นนั้น |
+| **ค่าใช้จ่าย** | ต่อขั้น | BudgetGovernor ([§9.5](#95-budget-governor--คุมค่าใช้จ่ายของ-tier-1b)) | เหมือนกัน — และ Governor ปฏิเสธ request ต่อไปอยู่แล้ว |
+| **ขอบเขต** | จำนวน work package ที่เพิ่มจาก baseline | baseline diff | change request บังคับ ก่อนจะทำงานต่อได้ |
+| **คุณภาพ** | รอบ rework ต่อ work package | `retry_count` (มีอยู่แล้ว, cap 3) | escalate หาคน (พฤติกรรมเดิม — แต่ตอนนี้มีชื่อและมีบันทึก) |
+| **ความเสี่ยง** | risk class สูงสุดที่ยอมให้ทำเองได้ | `RiskScorer` (มีอยู่แล้ว) | ตกไปที่ HITL — ต่อกับ Approval Broker ที่มีอยู่ |
+| **ประโยชน์** | เกณฑ์ขั้นต่ำของผลที่ต้องได้ | benefit ledger ([§19.12](#1912-benefits--closing-gate)) | ทบทวน business case — อาจจบโครงการก่อนกำหนดโดยไม่ถือว่าล้มเหลว |
+
+**Autonomy Slider ที่มีอยู่ ([§5.5](#55-โหมดการทำงาน-operating-modes)) จึงไม่ใช่สวิตช์ลอย ๆ อีกต่อไป** — มันคือหน้าตาแบบย่อของชุด tolerance: เลื่อนไปทาง autonomous = ขยายกรอบทั้ง 6 แกน, เลื่อนกลับ = แคบลง และหน้า Plan แสดงกรอบจริงเป็นตัวเลขให้เห็นว่าเลื่อนแล้วแปลว่าอะไร
+
+**Exception Report** (โครงตามมาตรฐาน): สาเหตุ · ผลกระทบต่อ business case · ทางเลือกพร้อมข้อดีข้อเสีย · ข้อเสนอของ Team Lead · **สิ่งที่ต้องการจากคน** — ส่งออกทุก channel ที่มี (GUI/Telegram/Discord/LINE) ผ่านทางเดิม ไม่ต้องเขียน delivery ใหม่
+
+### 19.11 Registers & Change Control
+
+register 5 ตัว โครงเหมือนกันหมด (id, ที่มา, สถานะ, เจ้าของ, ประวัติการเปลี่ยน) ต่างที่ field เฉพาะ:
+
+| Register | field เฉพาะ | ใครเขียนได้ |
+|---|---|---|
+| **Risk** | probability, impact, proximity, response (avoid/reduce/transfer/accept), owner | agent เสนอ · คนอนุมัติ response |
+| **Issue** | ประเภท (problem/concern/off-spec), severity, ผลกระทบ | ใครก็ได้ |
+| **Change** | สิ่งที่ขอเปลี่ยน, ผลต่อ baseline 3 ด้าน (ขอบเขต/เวลา/เงิน), การตัดสิน | agent เสนอ · **คนตัดสินเสมอ** |
+| **Decision** | ทางเลือกที่พิจารณา, เหตุผล, ใครตัดสิน, ย้อนกลับได้ไหม | ทั้งคู่ — โครงเดียวกับ Conflict Ledger ที่มีอยู่ |
+| **Lesson** | สิ่งที่เกิด, สาเหตุ, สิ่งที่จะทำต่างไป, ใช้กับโปรเจกต์แบบไหนได้ | ทั้งคู่ — ไหลเข้า `central` KB ตอนปิดโครงการ |
+
+**Baseline & change control**: ตอนผ่าน G2 ระบบ freeze snapshot ของ WBS + schedule + งบ เก็บเป็น `baseline` record (immutable) หลังจากนั้นการแก้แผนต้องผ่าน change request ที่บอกผลกระทบต่อ 3 ด้าน — และ baseline ใหม่จะถูกสร้างเป็น version ถัดไป **ไม่ทับของเดิม** เพื่อให้ตอบได้ว่าแผนเปลี่ยนไปกี่ครั้ง เพราะอะไร
+
+### 19.12 Benefits & Closing Gate
+
+**Benefit ต่างจาก deliverable** — deliverable คือของที่ส่ง, benefit คือผลที่อยากได้จากของนั้น ISO 21502 ให้ความสำคัญกับ benefit realization เป็นพิเศษ และมันคือช่องที่หายบ่อยที่สุดในงานจริง
+
+`benefit { คำอธิบาย, ตัววัด, ค่าฐาน, ค่าเป้าหมาย, วัดเมื่อไร, ใครวัด }` — ตั้งตอน Initiation, ทบทวนทุก stage boundary, สรุปตอน Closing และถ้าวัดได้จริงหลังปิดโครงการ (เช่น 3 เดือนถัดมา) ระบบเปิด **post-project review** ให้บันทึกย้อนได้โดยไม่ต้องเปิดโปรเจกต์ใหม่
+
+**Closing gate = กติกาข้อที่โปรเจกต์นี้ใช้กับตัวเองอยู่แล้ว** — [README §5](README.md) เขียนว่า *"ห้าม mark งานเป็นเสร็จถ้ายังมีรายการค้าง"* กติกาข้อนั้นถูกยกขึ้นมาเป็นเงื่อนไขของ gate ตรง ๆ:
+
+1. ไม่มี work package ที่ยังไม่ `done`
+2. ทุก deliverable มี evidence ที่ QA ตรวจแล้ว
+3. ไม่มี issue/risk/change ที่ยังเปิดอยู่ (หรือถูกโอนออกไปพร้อมผู้รับ)
+4. ไม่มี conflict ค้างใน Conflict Ledger ที่เกี่ยวกับข้อสรุปของโปรเจกต์
+5. ไม่มี assumption ที่ยัง `agent_suggested` โดยไม่ได้ขึ้นบัญชี Limitations
+6. ทุก ISO 21502 practice มีของจริงหรือมี tailoring record
+7. lessons learned ถูกเขียนแล้วอย่างน้อย 1 ข้อ และไหลเข้า `central` KB
+8. ข้อมูล/ไฟล์ที่เหลือถูกจัดการตามนโยบายเก็บรักษา (ผูกกับ `policy` scope)
+
+ปิดไม่ผ่าน gate ได้ทางเดียว: **คนสั่งยุติ** ซึ่งบันทึกเป็น "ปิดก่อนกำหนด" พร้อมเหตุผล ไม่ใช่ "สำเร็จ"
+
+### 19.13 Reporting
+
+รายงาน 3 แบบตามจังหวะของมาตรฐาน — ทั้งหมดสร้างจากข้อมูลที่มีอยู่แล้ว (ledger + span + register) ผ่าน DocGen ที่มีอยู่ ไม่ใช่ให้โมเดลเขียนจากความทรงจำ:
+
+| รายงาน | จังหวะ | เนื้อหา |
+|---|---|---|
+| **Highlight Report** | ตามรอบที่ตั้ง (หรือกดขอ) | ทำอะไรไปแล้ว · จะทำอะไรต่อ · tolerance ตอนนี้ · issue/risk ใหม่ · งบที่ใช้ |
+| **End-Stage Report** | ทุก stage boundary | ผลเทียบ baseline · ส่วนต่างและเหตุผล · business case ยังคุ้มไหม · ขอเข้าขั้นถัดไป |
+| **End-Project Report** | ตอนปิด | ส่งมอบอะไรบ้าง · benefit ที่วัดได้ · ส่วนต่างรวม · lessons · สิ่งที่ยกให้คนอื่นรับต่อ |
+
+### 19.14 Data model (SurrealDB)
+
+```
+project(id, name, type, stage, brief, scope{in,out,assumptions,constraints,acceptance},
+        autonomy, created, closed_at, closure_kind)
+work_package(id, project, parent, title, deliverable_type, scope_ref, dod[], status, order)
+dependency(from, to, kind)
+raci(work_package, actor{agent(role)|human(name)}, letter)
+baseline(id, project, version, frozen_at, wbs_snapshot, schedule_snapshot, budget_snapshot)
+tolerance(project, stage, dimension, limit, current)      exception(id, project, dimension, raised_by, report, resolution)
+risk / issue / change / decision / lesson (โครงร่วม + field เฉพาะ)
+benefit(project, description, measure, baseline_value, target, review_at, result)
+stakeholder(project, name, interest, influence, channel)
+tailoring_record(project, practice, reason, decided_by)
+```
+
+ผูกกับของเดิม: `task` (ledger) เพิ่ม `work_package` · `span` เพิ่ม `project`+`work_package` (ทำให้ Gantt/forecast มีข้อมูล) · `knowledge` ใช้ `Scope.project` ที่มีอยู่แล้ว · `assignment` ↔ `work_package` เป็น 1:n (หนึ่ง work package อาจถูกทำหลายรอบ)
+
+### 19.15 M14 ProjectKit — module และ invariant
+
+| ระดับ | รายการ |
+|---|---|
+| **Module** | `ProjectKit` — 1 Swift target ผ่านเกณฑ์ [§0.2](#02-คำนิยาม-module--sub-module--feature--function) ครบ 4 ข้อ (มี lifecycle ของตัวเอง · มี interface ที่ module อื่นใช้โดยไม่รู้ข้างใน · ทดสอบแยกได้ · ลบแล้วความสามารถหายทั้งก้อน) |
+| **Sub-modules** | ProjectStore · StageGate · WBS · Schedule (dependency + critical path + forecast) · Board · RACI · Registers · Tolerance/Exception · Baseline/ChangeControl · Benefits · Reporting |
+| **Dependencies** | `AgentKit`, `Observability` (span), `Persistence` (store), `Config` — **ไม่ขึ้นกับ `CoreEngine`** เพื่อไม่ให้เกิด cycle: CoreEngine เรียก ProjectKit ผ่าน protocol ที่ประกาศใน AgentKit |
+| **Features (user เห็น)** | สร้าง/ปิดโปรเจกต์ · แก้ขอบเขต · ดู/แก้ WBS · Gantt · Kanban · RACI · ตั้ง tolerance · อนุมัติ gate · จัดการ register · ขอรายงาน 3 แบบ |
+
+**Invariant ที่ต้องทำให้ `check.sh` แดง** (ตามธรรมเนียมของโปรเจกต์นี้ — กฎที่คนต้องจำ = กฎที่จะถูกลืม):
+
+1. ไม่มีทางเปลี่ยน `project.stage` โดยไม่ผ่าน `StageGate.evaluate` (grep หา assignment ตรงไปที่ field)
+2. tool ที่มี side effect ทุกตัวต้องผ่าน StageGate — ทดสอบด้วยโปรเจกต์ที่อยู่ขั้น `initiation` แล้วต้องถูกปฏิเสธ
+3. `BoardRole` ไม่มี initializer ที่รับ `Role` — agent ถือหมวก Executive ไม่ได้แม้แต่ใน test
+4. work package ที่ `status == .done` ต้องมี evidence ≥ 1 เสมอ
+5. ทุกค่าใน `Practice` enum (ISO 21502 17 ข้อ) ต้องมีทั้ง object ที่รองรับ **หรือ** มีทางบันทึก tailoring — ทดสอบแบบ exhaustive switch
+6. ทุก feature ของ M14 ต้องเข้าถึงได้จากแอปจริง ไม่ใช่แค่จาก test (กฎเดิมที่เกิดจากการเจ็บ 4 ครั้ง)
+
+### 19.16 Conformance Matrix
+
+ตารางนี้คือคำตอบของ "follow มาตรฐานตรงไหน" แบบตรวจได้ — ไม่ใช่คำโฆษณา
+
+| ข้อกำหนด | มาตรฐาน | ของจริงในระบบ |
+|---|---|---|
+| Continued business justification | PRINCE2 P1 | business case ใน brief + ทบทวนทุก end-stage report |
+| Learn from experience | PRINCE2 P2 | lesson register → `central` KB ตอนปิด → ค้นเจอตอนวางแผนโปรเจกต์ถัดไป |
+| Defined roles & responsibilities | PRINCE2 P3 · ISO 21502 §6 | RACI + BoardRole ที่ agent ถือไม่ได้ |
+| Manage by stages | PRINCE2 P4 | 5 ขั้น + G1–G4 |
+| Manage by exception | PRINCE2 P5 | tolerance 6 แกน + Exception Report |
+| Focus on products | PRINCE2 P6 | WBS แบบ product-based + DoD ต่อใบ |
+| Tailor to suit the project | PRINCE2 P7 · ทุกฉบับ | `tailoring_record` บังคับ |
+| Initiating / Planning / Executing / Monitoring / Closing | PMBOK 8 focus areas | 5 ขั้นของ life cycle |
+| Governance · Scope · Schedule · Finance · Stakeholders · Resources · Risk | PMBOK 8 performance domains | แผงสุขภาพ 7 แกนบนหน้า Plan (แต่ละแกนมีที่มาเป็นข้อมูลจริง ไม่ใช่ไฟเขียว/แดงที่คนกดเอง) |
+| Planning · Benefits · Scope · Resource · Schedule · Cost · Risk · Issue · Change control · Quality · Stakeholder · Communication · Org change · Reporting · Information · Procurement · Lessons | ISO 21502 clause 7 | `Practice` enum 17 ตัว + กฎข้อ 5 ของ [§19.15](#1915-m14-projectkit--module-และ-invariant) |
+| Competence elements (Practice) | IPMA ICB4 | agent manifest ประกาศ element ที่ครอบคลุม — ใช้เลือก role ตอนมอบหมาย |
+| Competence elements (People / Perspective) | IPMA ICB4 | **ของมนุษย์** — บันทึกไว้ว่าไม่ได้อ้าง ไม่ใช่ทำเป็นมองไม่เห็น |
+
+---
+
+### 19.17 ฐานข้อมูลภายในของโปรเจกต์ — SQL, NoSQL และช่องว่างจริงที่ต้องเติม
+
+โจทย์คือ "ต้องมี sidecar SQL และ NoSQL สำหรับฐานข้อมูลภายใน" — ตรวจของที่มีอยู่แล้วก่อนเพิ่ม:
+
+| ต้องการ | มีอยู่แล้วไหม | ตัวไหน |
+|---|---|---|
+| NoSQL (document · graph · KV) | ✅ **มีแล้ว** | SurrealDB sidecar — ความรู้, ledger, registers, บทสนทนา, ข้อมูลกึ่งโครงสร้างของโปรเจกต์ |
+| SQL เชิงวิเคราะห์ (OLAP) | ✅ **มีแล้ว** | DuckDB ฝังในแอป — สมุดงาน, federated query, ตารางผลวิเคราะห์ |
+| SQL รับเขียนพร้อมกันจากภายนอก (OLTP) | ❌ **นี่คือช่องว่างจริง** | — |
+
+**ช่องว่างที่สาม เพิ่งโผล่เพราะ M16** — DuckDB เป็น OLAP ที่ออกแบบมาให้มีผู้เขียนทีละราย การให้เว็บเซิร์ฟเวอร์ยิง `INSERT` เข้ามาพร้อมกันหลายคนคือการใช้มันผิดชนิดงาน และจะพังตอนมีคนกรอกฟอร์มพร้อมกัน 20 คน ซึ่งเป็นสถานการณ์ปกติของการเก็บข้อมูลจริง
+
+**ทางเลือกที่เลือก: SQLite (WAL) ฝังในแอป — ไม่เพิ่ม sidecar ตัวที่สาม**
+
+| เหตุผล | รายละเอียด |
+|---|---|
+| ชนิดงานตรง | WAL รองรับผู้อ่านพร้อมกันหลายราย + ผู้เขียนที่ต่อคิว ซึ่งตรงกับรูปแบบ "หลายคนกรอกฟอร์ม หนึ่งแอปอ่าน" พอดี |
+| ไม่เพิ่มภาระแพ็กเกจ | มากับระบบปฏิบัติการ ไม่ต้อง bundle ไม่ต้องจัดการ lifecycle — ตรงกับหลัก [§0.3](#03-design-principles-ที่มีผลต่อทุก-section) ข้อ 6 และหลีกเลี่ยงความเสี่ยงแบบเดียวกับที่ SearXNG เจอ |
+| ต่อกับ DuckDB ได้ตรง ๆ | DuckDB `ATTACH` ไฟล์ SQLite แล้วอ่านข้ามได้ — ไม่ต้องเขียน ETL เอง |
+| ต่อขึ้นไปได้ถ้าโตเกิน | ถ้าวันหนึ่งต้องรับหลายเครื่องจริง ย้ายไป PostgreSQL ผ่าน DB connector ที่มีอยู่แล้ว โดยไม่แตะโครงส่วนอื่น |
+
+```mermaid
+graph LR
+    W["ผู้ตอบกรอกฟอร์ม<br/>(หลายคนพร้อมกัน)"] -->|POST| M16["M16 FieldServer"]
+    M16 -->|append-only| SQ[("SQLite (WAL)<br/>คำตอบดิบ + session")]
+    SQ -->|"ATTACH + materialize<br/>(บันทึก span ทุกครั้ง)"| DD[("DuckDB<br/>ตารางวิเคราะห์")]
+    DD --> NB["สมุดงาน · ผลลัพธ์ · เอกสาร"]
+    SU[("SurrealDB<br/>ความรู้ · ทะเบียน · บทสนทนา")] -.->|นิยามตัวแปร · provenance| DD
+```
+
+**หน้า "คำตอบ" ทำงานเหมือน Sheet แต่ไม่ใช่ Sheet** — ตารางคำตอบดิบเป็น append-only แก้ทับไม่ได้ การแก้ค่าหนึ่งช่องถูกเก็บเป็น **record การแก้ไข** (ค่าเดิม, ค่าใหม่, เหตุผล, ใครแก้, เมื่อไร) แล้ว view แสดงค่าที่แก้แล้วพร้อมเครื่องหมาย — เหตุผลตรงไปตรงมา: ข้อมูลวิจัยที่แก้ทับได้เงียบ ๆ คือข้อมูลที่พิสูจน์ไม่ได้ว่าไม่ถูกแก้
+
+**Invariant**:
+
+1. M16 เขียนได้เฉพาะ SQLite — **ไม่มี code path จาก M16 ไป DuckDB โดยตรง** (structural rule)
+2. ตารางคำตอบดิบไม่มี `UPDATE`/`DELETE` ทางใดในโค้ด — มีแต่ append และ correction record
+3. การ materialize เข้า DuckDB เขียน span ทุกครั้ง ⇒ ตอบได้เสมอว่าตัวเลขในตารางที่ 2 มาจากการดึงข้อมูลรอบไหน
+4. ฐานข้อมูลภายในเป็นของโปรเจกต์ — ไฟล์อยู่ใต้โฟลเดอร์ของโปรเจกต์นั้น ลบโปรเจกต์แล้วไม่มีของค้างที่อื่น
+
+---
+
+## 20. Research Program — งานวิจัยที่เดินบนโครง PM (M15 Instruments)
+
+งานวิจัยไม่ใช่ project type พิเศษที่มีกลไกของตัวเอง — มันคือ **โปรเจกต์ที่ WBS มีรูปร่างตายตัว** เพราะระเบียบวิธีวิจัยกำหนดลำดับไว้แล้ว สิ่งที่ต้องเพิ่มจริง ๆ มีอย่างเดียว: **เครื่องมือเก็บข้อมูล** ที่ระบบยังไม่มี
+
+### 20.1 8 ขั้นตอนงานวิจัย → 5 ขั้นของ Life Cycle
+
+| # | ขั้นตอนวิจัย | อยู่ในขั้น PM | Deliverable (ใบใน WBS) | ใครทำ | ผ่านเมื่อ (DoD) | ใช้ของที่มีอยู่ |
+|---|---|---|---|---|---|---|
+| 1 | กำหนดและเลือกหัวข้อ | **Initiation** | Concept Note: ปัญหา, คำถามวิจัย, วัตถุประสงค์, ความเป็นไปได้, ประโยชน์ | Researcher | คำถามวิจัยเข้ารูป (PICO/PEO สำหรับเชิงปริมาณ · SPIDER สำหรับเชิงคุณภาพ) ครบทุกช่อง + ประเมินความเป็นไปได้ 4 ด้าน (ข้อมูล/เวลา/จริยธรรม/ทรัพยากร) | web search + KB |
+| 2 | ทบทวนวรรณกรรม | **Planning** | ตารางสังเคราะห์วรรณกรรม + กรอบแนวคิด + สมมติฐาน | Researcher | DoD ของ Researcher ที่มีอยู่: ≥2 แหล่ง **อ่านเนื้อหาจริง** ไม่ใช่ snippet · ข้อขัดแย้งเข้า Conflict Ledger · แหล่ง T1–T2 สำหรับข้อสรุปหลัก | Researcher DoD + Conflict Ledger ([§11.6](#116-conflict-ledger--เมื่อความรู้ขัดกัน)) |
+| 3 | ออกแบบการวิจัย | **Planning** | Research Design (ส่วนหนึ่งของ PID): รูปแบบ (quan/qual/mixed), หน่วยวิเคราะห์, ตัวแปร, แผนวิเคราะห์ล่วงหน้า | Analyst + Researcher | แผนวิเคราะห์ระบุสถิติที่จะใช้**ก่อนเห็นข้อมูล** และผ่าน StatGate ระดับ design (สถิติที่เลือกเข้ากับ scale ของตัวแปร) | StatGate ([§12.3](#123-statistical-verification-gate-feature)) · Analysis Plan ที่มี origin tag |
+| 4 | ประชากร กลุ่มตัวอย่าง เครื่องมือ | **Planning** → **Execution** | เกณฑ์คัดเข้า/ออก, วิธีสุ่ม, **การคำนวณขนาดตัวอย่างพร้อมสมมติฐานที่ใช้**, ร่างเครื่องมือ | Analyst + Researcher | ขนาดตัวอย่างมี power analysis ที่ตรวจซ้ำได้ (ไม่ใช่ "n=400 ตามตารางสำเร็จรูป") + ทุกข้อคำถามผูกกับ construct/RQ | **M15** ([§20.3](#203-m15-instruments--เครื่องมือเก็บข้อมูล)) |
+| 5 | เก็บรวบรวมข้อมูล | **Execution** | ฟอร์มออนไลน์ที่เผยแพร่แล้ว + ชุดข้อมูลดิบ + log การเก็บ | M15 + Analyst | **ผ่าน gate ก่อนเผยแพร่**: content validity ผ่านเกณฑ์ · ข้อความยินยอมมีและถูกอนุมัติ · บันทึกจริยธรรมครบ ([§20.5](#205-จริยธรรม-ความเป็นส่วนตัว-และข้อจำกัดที่ยอมรับ)) | **M15** |
+| 6 | วิเคราะห์ข้อมูล | **Execution** | ผลวิเคราะห์ + สมุดงานที่รันซ้ำได้ | Analyst | DoD ของ Analyst ที่มีอยู่: ผ่าน Statistical Verification Gate + ทุกนิยามตัวแปร `human_confirmed` | Analysis ([§12](#12-m8-analysis)) + Notebook |
+| 7 | แปลความหมายผล | **Execution / M&C** | การตีความเทียบสมมติฐานและวรรณกรรม + ข้อจำกัด | Analyst + Researcher | ทุกข้อสรุปโยงกลับสมมติฐานข้อใดข้อหนึ่ง · ผลที่ขัดกับวรรณกรรมต้องเข้า Conflict Ledger ไม่ใช่เลี่ยงไม่พูด | Conflict Ledger |
+| 8 | เขียนรายงาน | **Execution** → **Closing** | ต้นฉบับ 5 บท + bibliography | Writer | DoD ของ Writer ที่มีอยู่: ทุกประโยคจาก KB มี citation ผูก provenance · assumption ที่ agent เดาขึ้นบัญชี Limitations อัตโนมัติ · แหล่งที่ไม่มีผู้เขียน/ปี **หยุดการสร้างเอกสาร** | DocGen ([§14.1](#141-docgen)) |
+
+**Stage gate ของงานวิจัยที่แข็งที่สุดคือระหว่างข้อ 4 กับ 5** — เก็บข้อมูลไปแล้วแก้เครื่องมือไม่ได้ ข้อมูลที่เก็บด้วยเครื่องมือที่ยังไม่ผ่าน validity คือข้อมูลที่ทิ้งทั้งชุด นี่จึงเป็น gate ที่ระบบบังคับ ไม่ใช่คำแนะนำ
+
+### 20.2 Project Type = manifest ไม่ใช่โค้ด
+
+`project-type` เป็นไฟล์ประกาศแบบเดียวกับ agent/skill manifest ที่ [M3 Roster](#7-m3-roster) โหลดอยู่แล้ว — **ใช้ parser ตัวเดิม** ไม่เขียนทะเบียนใหม่ (กฎ [§0.2](#02-คำนิยาม-module--sub-module--feature--function))
+
+```yaml
+---
+type: research.quantitative
+roles: [teamLead, researcher, analyst, writer, reviewer]
+stages: [initiation, planning, execution, closing]
+wbs_template: research-5-chapter
+gates:
+  - id: G-instrument
+    after: instrument.draft
+    requires: [content_validity_passed, consent_approved, ethics_recorded]
+practices_tailored_out:
+  - practice: procurement
+    reason: งานวิจัยส่วนบุคคล ไม่มีการจัดซื้อ
+dod_overrides:
+  writer: manuscript.5chapter
+---
+```
+
+type ที่ให้มาตั้งต้น: `research.quantitative` · `research.qualitative` · `research.mixed` · `software` · `analysis` · `blank`
+
+### 20.3 M15 Instruments — เครื่องมือเก็บข้อมูล
+
+M15 เป็น **โมดูลออกแบบเครื่องมือ — ไม่แตะเครือข่ายเลย** (แยกจาก M8 Analysis เพราะ lifecycle ยาวกว่ามาก: ร่าง → ตรวจความตรง → เผยแพร่ → เก็บ → ปิดรอบ) ส่วนการ**เปิดเว็บ เสิร์ฟฟอร์ม และรับคำตอบ** แยกเป็น [M16 FieldServer](#207-m16-fieldserver--เว็บฟอร์ม-เซิร์ฟเวอร์-และฐานข้อมูลคำตอบ) ด้วยเหตุผลใน [§20.7](#207-m16-fieldserver--เว็บฟอร์ม-เซิร์ฟเวอร์-และฐานข้อมูลคำตอบ)
+
+| Sub-module | ทำอะไร |
+|---|---|
+| **Builder** | สร้าง/แก้แบบสอบถามและแบบสัมภาษณ์ · ชนิดข้อ: Likert n ระดับ, เลือกเดียว/หลายข้อ, ข้อความเปิด, ตัวเลข, วันที่, matrix, จัดอันดับ, อัปโหลดไฟล์ · เงื่อนไขข้าม (skip logic) · สุ่มลำดับข้อ · สองภาษาไทย/อังกฤษในข้อเดียวกัน |
+| **Blueprint** | ตารางผังข้อสอบ/ข้อคำถาม — ผูก **ข้อ ↔ construct ↔ คำถามวิจัย** · ข้อที่ไม่ผูกกับอะไรเลยต้องติดป้าย `demographic` มิฉะนั้น **เผยแพร่ไม่ผ่าน** (นี่คือ content validity ในรูปแบบโครงสร้าง) |
+| **Versioning** | instrument เป็น immutable ต่อ version — แก้ฟอร์มที่เผยแพร่แล้ว = สร้าง version ใหม่เสมอ (ผูกกับ change control [§19.11](#1911-registers--change-control)) |
+| **Validity** | ชุดคำนวณความตรง/ความเที่ยง ([§20.4](#204-ความตรงและความเที่ยง--คำนวณที่ไหน)) |
+| **Qualitative** | แนวคำถามสัมภาษณ์ · ถอดเทป → เข้า Knowledge พร้อม provenance · การลงรหัส (open/axial) + codebook · ความสอดคล้องระหว่างผู้ลงรหัส · ติดตามภาวะอิ่มตัวของข้อมูล |
+
+**ผู้ใช้แก้ได้ทุกชั้นเสมอ** ตาม design principle #2: AI ร่างฟอร์มให้จาก research design แล้วคนแก้ข้อความ ลำดับ เงื่อนไข และหน้าตาได้ตรง ๆ ในหน้า Workbench — ไม่มีอะไรที่ agent สร้างแล้วแก้เองไม่ได้
+
+### 20.4 ความตรงและความเที่ยง — คำนวณที่ไหน
+
+| การตรวจ | เกณฑ์ที่ใช้ | รันที่ไหน |
+|---|---|---|
+| **ความตรงเชิงเนื้อหา** — IOC (ค่าความสอดคล้องข้อคำถามกับวัตถุประสงค์) | ≥ 0.5 ต่อข้อ | Swift — เลขคณิตล้วน · ผู้เชี่ยวชาญให้คะแนนผ่าน **โหมดผู้เชี่ยวชาญของ Host ตัวเดียวกัน** ไม่ต้องสร้างช่องทางใหม่ |
+| **ความตรงเชิงเนื้อหา** — CVI (I-CVI/S-CVI) | I-CVI ≥ 0.78 · S-CVI/Ave ≥ 0.90 | Swift |
+| **ความเที่ยง** — Cronbach's α, item-total correlation, ค่าอำนาจจำแนก | α ≥ 0.70 ต่อ subscale | Swift (ต่อยอด `Statistics.swift` ที่มีอยู่) |
+| **ความเที่ยง** — McDonald's ω, ICC (test-retest), Cohen's/Fleiss' κ | ตามชนิดข้อมูล | Swift — ω ต้องการ factor loading จึงพึ่ง EFA ข้างล่าง |
+| **ความตรงเชิงโครงสร้าง** — EFA | KMO, Bartlett, eigenvalue, loading | Swift + **Accelerate/LAPACK** (eigen-decomposition มีในระบบปฏิบัติการอยู่แล้ว — ตรงกับหลัก "OS-native ก่อนเขียนเอง") |
+| **ความตรงเชิงโครงสร้าง** — CFA / SEM | fit indices | ⚠️ **ยังไม่ทำในเฟสแรก** — ต้องการ ML estimator ที่ซับซ้อนกว่ามาก บันทึกเป็นข้อจำกัดที่รู้ตัว ไม่ใช่ทำครึ่ง ๆ |
+
+> **ข้อจำกัดที่กระทบตรงนี้**: Python ในแอปที่ sandbox ยังไม่มี pandas/numpy ([§18](#18-non-functional-requirements) และ [README §6](README.md)) — ถ้าให้ validity ทั้งชุดไปรันบน Python มันจะพังบนเครื่องที่ติดตั้งแอปจริง จึงเลือกเขียนใน Swift ทั้งหมด (ทุกตัวยกเว้น CFA เป็นเลขคณิต/พีชคณิตเชิงเส้นที่ Accelerate ทำได้) — ผลพลอยได้คือมันตรวจซ้ำได้จาก test suite โดยไม่ต้องมี Python บนเครื่อง
+
+### 20.5 จริยธรรม ความเป็นส่วนตัว และข้อจำกัดที่ยอมรับ
+
+การเปิดฟอร์มให้คนอื่นกรอกคือ **การเก็บข้อมูลจากมนุษย์** — ไม่ใช่ฟีเจอร์เว็บธรรมดา ระบบจึงบังคับ:
+
+| กฎ | บังคับยังไง |
+|---|---|
+| ต้องมีหน้าความยินยอมก่อนข้อแรกเสมอ | ไม่มีทาง publish ได้ถ้า `consent` ว่าง — ตรวจที่ gate ไม่ใช่ที่ UI |
+| ต้องมีบันทึกจริยธรรม | เลขรับรอง IRB/EC **หรือ** คำประกาศชัดเจนว่าไม่เข้าข่ายวิจัยในมนุษย์ พร้อมผู้ประกาศ |
+| นโยบายเก็บรักษาและการทำให้ไม่ระบุตัวตน | เก็บใน `policy` scope ที่มีอยู่ ⇒ Policy Gate บังคับได้เหมือน SOP อื่น |
+| ข้อมูลระบุตัวตนแยกจากคำตอบ | ตารางเชื่อมรอบเก็บแยก + คีย์อยู่ Keychain ไม่ใช่ในไฟล์ฐานข้อมูล |
+| ค่าเริ่มต้นคือ **เครือข่ายภายในเท่านั้น** | เปิดออกอินเทอร์เน็ตไม่ใช่ค่าเริ่มต้น และไม่มี tunnel ในตัว — ถ้าจะเปิดต้องเป็นการกระทำของคนพร้อมคำเตือนที่บอกความเสี่ยงตรง ๆ |
+
+**ข้อจำกัดที่ต้องบอกก่อนใช้จริง**: แอปยังเซ็นแบบ ad-hoc และยังไม่มี security review · เครื่องต้องเปิดอยู่ฟอร์มถึงจะรับคำตอบได้ · ไม่มีระบบสำรองข้อมูลอัตโนมัติ · ไม่รองรับผู้กรอกจำนวนมากพร้อมกัน — งานวิจัยที่เดิมพันสูงยังควรใช้บริการที่ผ่านการตรวจสอบแล้ว จนกว่าข้อจำกัดเหล่านี้จะถูกปิด
+
+### 20.6 M15 — module และ invariant
+
+| ระดับ | รายการ |
+|---|---|
+| **Module** | `Instruments` — 1 Swift target · depends on `Knowledge` (ข้อมูลเชิงคุณภาพ), `AgentKit`, `Observability` · **ไม่ import networking ใด ๆ** |
+| **Features** | สร้าง/แก้เครื่องมือ · ผังข้อ↔construct↔RQ · ตรวจความตรงเชิงเนื้อหาด้วยผู้เชี่ยวชาญ · คำนวณความเที่ยง/ความตรง · ลงรหัสข้อมูลเชิงคุณภาพ |
+| **Invariant** | (1) แก้ instrument ที่เผยแพร่แล้วต้องได้ version ใหม่เสมอ ไม่มีทางแก้ทับ (2) instrument ที่ยังไม่ผ่าน gate **ไม่มี representation ที่ M16 รับได้** — ดู [§20.7](#207-m16-fieldserver--เว็บฟอร์ม-เซิร์ฟเวอร์-และฐานข้อมูลคำตอบ) (3) ทุก feature เข้าถึงได้จากแอปจริง |
+
+### 20.7 M16 FieldServer — เว็บฟอร์ม เซิร์ฟเวอร์ และฐานข้อมูลคำตอบ
+
+**ทำไมต้องแยกเป็น Module ไม่ใช่ sub-module ของ M15** — ผ่านเกณฑ์ [§0.2](#02-คำนิยาม-module--sub-module--feature--function) ครบทั้ง 4 ข้อ และมีเหตุผลข้อที่ 5 ที่หนักกว่าทั้งสี่:
+
+1. **มี lifecycle ของตัวเอง** ที่ไม่เกี่ยวกับการออกแบบเครื่องมือเลย — start/stop, ผูก port, เปิด-ปิดรอบรับคำตอบ, จัดการ session ที่ค้าง
+2. **มี interface ชัด** — M15 ส่ง `PublishedInstrument` (ผ่าน gate แล้วเท่านั้น) เข้ามา, ส่งคำตอบออกไปให้ M8 Analysis
+3. **ทดสอบแยกได้จริง** — ยิง HTTP จริงใส่ได้โดยไม่ต้องมีเครื่องมือวิจัยจริง
+4. **ลบทิ้งแล้วความสามารถหายทั้งก้อน** — "ให้คนอื่นเข้ามากรอก" หายไปทันที ส่วนการออกแบบเครื่องมือยังอยู่ครบ
+5. **มันคือ module เดียวในระบบที่รับ input จากคนที่ไม่ใช่เจ้าของเครื่อง** — ทุกอย่างอื่นรับคำสั่งจากเจ้าของหรือจาก channel ที่ยืนยันตัวตนแล้ว การรวมมันไว้กับ M15 คือการเอาพื้นผิวที่ไม่น่าเชื่อถือไปปนกับตรรกะที่เชื่อถือได้ ซึ่งเป็นความผิดพลาดแบบเดียวกับ bug B2 ของ v1 (Telegram bridge ที่เอื้อมข้าม hook chain)
+
+| Sub-module | ทำอะไร |
+|---|---|
+| **HTTPServer** | เปิด listener ในเครื่อง (entitlement `network.server` มีอยู่แล้วจาก LINE webhook) · bind `LAN-only` เป็นค่าเริ่มต้น · จำกัดขนาด payload + rate limit · **ไม่มี admin endpoint ใด ๆ บนเซิร์ฟเวอร์นี้** — การจัดการทั้งหมดอยู่ในแอป |
+| **FormRuntime** | แปลง `PublishedInstrument` เป็นหน้าเว็บ (HTML/CSS/JS ล้วน ไม่มี framework) · skip logic + validation ฝั่ง client **และตรวจซ้ำฝั่ง server เสมอ** · เข้าถึงได้ด้วยคีย์บอร์ด/screen reader · มือถือใช้ได้ |
+| **SessionStore** | resume token สำหรับกรอกต่อทีหลัง · บันทึกร่างระหว่างทาง · ไม่มีบัญชีผู้ใช้ ไม่มี cookie ติดตาม |
+| **ConsentGate** | หน้าความยินยอมก่อนข้อแรกเสมอ · บันทึกเวอร์ชันของข้อความที่ผู้ตอบเห็นจริง (ไม่ใช่ฉบับล่าสุด) |
+| **ResponseStore** | **ฐานข้อมูลคำตอบของโปรเจกต์** — DuckDB หนึ่งตารางต่อ instrument version · append-only + timestamp · ไม่มี endpoint ไหนอ่านคำตอบกลับออกไปทางเว็บได้ |
+| **Linkage** | รหัสผู้เข้าร่วมแบบนิรนามสำหรับงานหลายรอบ (longitudinal) · **ตารางเชื่อมตัวตนอยู่คนละไฟล์กับตารางคำตอบ** คีย์อยู่ Keychain · ติดตาม attrition |
+| **Waves** | รอบเก็บ: เปิด/ปิด, เตือนรอบถัดไป, สถานะต่อผู้เข้าร่วม |
+
+**ทางเข้าจากฝั่ง agent**: agent เอื้อมถึง M16 โดยตรงไม่ได้เลย — ผ่านทูล (`publish_instrument`, `close_wave`, `pull_responses`) ที่เดิน hook chain ปกติเท่านั้น กฎเดียวกับที่ channel ห้ามแตะ tool layer
+
+**Invariant ของ M16**:
+
+1. `PublishedInstrument` สร้างได้จาก `InstrumentGate.approve(...)` ทางเดียว — **ไม่มี initializer สาธารณะ** ⇒ ฟอร์มที่ยังไม่ผ่าน content validity/consent/ethics ไปถึงเซิร์ฟเวอร์ไม่ได้ตั้งแต่ระดับ type ไม่ใช่ด้วยการเช็คตอน runtime
+2. ทุก field ที่รับต้องมีอยู่ใน instrument schema — field แปลกปลอมถูกทิ้งและบันทึก ไม่ใช่เก็บไว้เผื่อ
+3. ตารางเชื่อมตัวตนกับตารางคำตอบ join กันได้เฉพาะผ่าน API ที่เขียน audit span
+4. ค่าเริ่มต้นคือ LAN-only — เปิดออกอินเทอร์เน็ตต้องเป็นการกระทำของคนพร้อมคำเตือน และไม่มี tunnel ในตัว
+5. ปิดรอบเก็บแล้ว endpoint ต้องปฏิเสธคำตอบใหม่ทันที (ไม่ใช่ซ่อนปุ่มบนหน้าเว็บ)
+6. ทดสอบบน `.app` ที่ build และ sandbox แล้วจริง ไม่ใช่จาก `swift run` — บทเรียนจาก P8.4/P9.6 ที่ปลั๊กอินผ่านเทสแต่พังใน sandbox
+
+---
+
+## 21. Agent Competence Model — อะไรทำให้ agent แต่ละตัวต่างกัน
+
+> **คำถามที่ section นี้ตอบ**: ตอนนี้ "ความต่าง" ระหว่าง agent อยู่ที่ `Role` enum กับรายการทูลใน manifest เท่านั้น — ซึ่งเทียบกับคนแล้วเหมือนบอกว่า "คนนี้ตำแหน่งนักวิจัย" โดยไม่บอกว่าเขา*รู้อะไร* และ*ใช้เครื่องมืออะไรเป็น*
+> ในคน บทบาทหนึ่งประกอบด้วย **ความรู้ที่เกี่ยวข้อง + ทักษะ + เครื่องมือที่ใช้เป็น + มาตรฐานที่ยึด** — section นี้ทำให้ agent มีครบทั้ง 4 อย่างโดยไม่ทำสำเนาความรู้แยกต่อตัว
+
+### 21.1 Agent = 6 ชั้นที่ประกาศไว้ ไม่ใช่ prompt ก้อนเดียว
+
+| ชั้น | คืออะไร | เก็บที่ไหน | ใครแก้ได้ |
+|---|---|---|---|
+| **1. Role** | ตำแหน่งในทีม + สิ่งที่คืนกลับได้ (`Deliverable` เท่านั้น) | `Role` enum + `Specialist` actor | โค้ด (compiler บังคับ) |
+| **2. Competence claim** | ความสามารถที่บทบาทนี้อ้าง — ใช้คำศัพท์ **IPMA ICB4 Practice element** ([§19.3](#193-มาตรฐาน-4-ฉบับ--เอามาใช้ตรงไหน-และไม่อ้างอะไร)) | agent manifest | คน |
+| **3. Tool grant** | ทูลที่เอื้อมถึงได้ + เพดานความเสี่ยงที่ตามมา | manifest → `RosterEntry.riskCeiling` (**มีอยู่แล้ว** คำนวณจากรายการทูลจริง ไม่ใช่ field ที่ประกาศเอง) | คน |
+| **4. Skill** | วิธีทำงานที่เขียนเป็นข้อความ (procedural) — "ทบทวนวรรณกรรมยังไง", "ตรวจ assumption ยังไง" | skill file (**มีอยู่แล้ว** · agent เขียนเองได้ผ่าน gate ปกติ) | คน + agent |
+| **5. Knowledge view** | มุมของกราฟความรู้ที่ agent ตัวนี้เห็นเป็นค่าเริ่มต้น | manifest + KB ([§21.2](#212-knowledge-view--กราฟเดียว-หลายมุมมอง)) | คน |
+| **6. Model tier + งบ** | สมองที่ใช้และเพดานที่ใช้ได้ | ModelRouter + BudgetGovernor | คน |
+
+ชั้น 1–4 และ 6 **มีของอยู่แล้วในระบบ** — ที่ section นี้เพิ่มจริง ๆ คือชั้น 5 กับการทำให้ทั้ง 6 ชั้นถูกอ่านจากที่เดียวตอนมอบหมายงาน
+
+### 21.2 Knowledge View — กราฟเดียว หลายมุมมอง
+
+**สิ่งที่ไม่ทำ**: ไม่แบ่งกราฟเป็นชิ้นแล้วแจกให้ agent ตัวละก้อน — นั่นคือ state ที่ต้อง sync กันเอง ซึ่งผิดกฎ [§0.2](#02-คำนิยาม-module--sub-module--feature--function) ข้อ 2 และเป็นความผิดพลาดแบบเดียวกับที่ v1 เคยเก็บ process list ไว้สองที่
+
+**สิ่งที่ทำ**: ทุก agent ค้น**กราฟเดียวกัน** ต่างกันที่ *ตัวกรองเริ่มต้นที่ประกาศไว้ล่วงหน้า* — knowledge view คือ **query ที่ประกาศไว้ ไม่ใช่ข้อมูลที่คัดลอก**
+
+```yaml
+# ในไฟล์ manifest ของ Researcher
+knowledge_view:
+  scope: [project, central]        # policy ถูกบังคับเพิ่มให้ทุกตัวเสมอ ปิดไม่ได้
+  entity_types: [study, construct, measure, population, finding]
+  min_tier: T3                     # ข้อสรุปหลักต้องมาจากแหล่งที่น่าเชื่อถือพอ
+  hops: 2                          # เดินกราฟจาก entity ที่เจอได้ 2 ชั้น
+  boost: [systematic_review, rct]
+  recency: {prefer_after: 2020}
+```
+
+| Role | เห็นอะไรเป็นหลัก | ตั้งใจให้ต่างเพราะ |
+|---|---|---|
+| **Researcher** | study · construct · measure · population · finding · แหล่ง T1–T3 | ข้อสรุปที่อ้างงานวิจัยต้องยืนบนแหล่งที่ตรวจได้ ไม่ใช่บล็อกที่เจอก่อน |
+| **Analyst** | variable · dataset · codebook · analysis_plan · statistical_test · **policy ด้าน data governance** | งานสถิติผิดพลาดจากนิยามตัวแปรมากกว่าจากสูตร — view จึงเน้นสิ่งที่นิยามข้อมูล |
+| **Engineer** | file · module · api · error · decision · **เน้นความสดใหม่มากกว่าความน่าเชื่อถือ** | เอกสาร API ปีที่แล้วอันตรายกว่าบล็อกที่เขียนเมื่อวาน — เกณฑ์กลับด้านกับ Researcher |
+| **Writer** | **เฉพาะ chunk ที่มี provenance ครบ (ผู้เขียน+ปี+ที่มา)** | ทำให้ DoD ของ Writer เป็นจริง**ตั้งแต่ตอนค้น** ไม่ใช่ตรวจเจอตอนท้าย — chunk ที่ไม่มีผู้เขียน/ปี Writer **มองไม่เห็นเลย** จึงเขียนประโยคที่อ้างมันไม่ได้ตั้งแต่แรก |
+| **Team Lead** | ระดับสรุป + pointer เท่านั้น ไม่เห็น chunk ดิบ | ตรงกับกติกาที่หัวหน้าไม่ลงมือทำเอง ([§2.2](#22-กติกาของหัวหน้าทีม-supervisor-contract)) และกัน context บวมที่หัวหน้า |
+| **Reviewer (QA)** | **evidence + DoD + policy เท่านั้น** — ไม่เห็นสิ่งที่ผู้ทำใช้ประกอบการตัดสินใจ | การตรวจที่เห็นเหตุผลของผู้ทำก่อน คือการตรวจที่ถูกชักจูงไปแล้ว — ความอิสระของ QA ต้องมาจากสิ่งที่มันเห็น ไม่ใช่จากคำสั่งใน prompt |
+
+**Role memory** — lesson register ([§19.11](#1911-registers--change-control)) ที่ปิดโปรเจกต์แล้วไหลเข้า `central` ถูกกรองด้วย role ตอนเริ่ม assignment ใหม่: *"โปรเจกต์ก่อน Analyst พลาดเรื่องนิยาม X"* เข้ามาเป็น context ของ Analyst เท่านั้น ไม่กวน role อื่น
+
+### 21.3 กับดักของ view ที่แคบ และตัวกัน
+
+view ที่แคบเกินไปทำให้**ความรู้หายเงียบ ๆ** ซึ่งอันตรายกว่าการค้นเจอของไม่เกี่ยวข้อง เพราะไม่มีใครเห็นว่ามันหาย กฎที่กันไว้:
+
+1. **ทุกการค้นบันทึกว่าใช้ view ไหน** — ลงใน evidence ที่ QA อ่าน (QA เห็นได้ว่าข้อสรุปนี้มาจากการค้นที่แคบผิดปกติ)
+2. **agent ขอขยาย view ได้** — เป็น tool call ที่ผ่าน hook chain ปกติ และการขยายถูกบันทึก ไม่ใช่สิทธิ์เงียบ
+3. **ไม่มี view ไหนปิด `policy` ได้** — hard constraint ต้องมองเห็นจากทุกบทบาท ([§11.2](#112-scope-3-ระดับ))
+4. **ห้าม agent เก็บสำเนา KB ของตัวเอง** — บังคับด้วย structural rule
+5. ผลการค้นที่ **0 ผลลัพธ์เพราะ filter** ต้องรายงานต่างจาก "ไม่มีข้อมูลจริง ๆ" — สองอย่างนี้พาไปคนละการตัดสินใจ
+
+### 21.4 ทูล: มีสิทธิ์ ≠ ใช้เป็น
+
+manifest ประกาศว่า agent **เอื้อมถึง**ทูลอะไร แต่ *ใช้ได้ดีแค่ไหน* เป็นสิ่งที่วัดได้จาก span ที่เก็บอยู่แล้ว:
+
+- **Tool proficiency** = อัตราสำเร็จ/จำนวนรอบที่ต้องลองซ้ำ ต่อ (role × tool) จากประวัติจริง
+- แสดงในหน้า Team เพื่อให้**คน**ตัดสินใจปรับ tool grant — **ระบบไม่ปรับสิทธิ์ให้เอง** เพราะพฤติกรรมที่เปลี่ยนเองจะเดาไม่ได้ และจะทำให้ผลการทดสอบซ้ำไม่ได้
+- Team Lead ใช้ proficiency เป็นหนึ่งในเกณฑ์เลือกผู้รับงาน ร่วมกับ competence claim + RACI ที่วางไว้ ([§19.9](#199-raci)) — ไม่ใช่เลือกจากชื่อ role อย่างเดียวเหมือนตอนนี้
+
+### 21.5 agent เก่งขึ้นได้ยังไง (และไม่ได้ยังไง)
+
+| ทางที่รองรับ | กลไก |
+|---|---|
+| เขียนวิธีทำงานของตัวเองเพิ่ม | `write_skill` ผ่าน gate ปกติ (**มีอยู่แล้ว**) |
+| เรียนจากโปรเจกต์ที่ปิดไปแล้ว | lesson register → `central` → role memory ([§21.2](#212-knowledge-view--กราฟเดียว-หลายมุมมอง)) |
+| พิสูจน์ว่าดีขึ้นจริง | golden-task eval (P9.1) เทียบก่อน/หลัง — ไม่ใช่ความรู้สึกว่าดีขึ้น |
+| **ที่ไม่ทำ** | fine-tune โมเดลต่อบทบาท — ต้นทุนสูง ย้อนกลับยาก และทำให้ debug ไม่ได้ว่าพฤติกรรมมาจากไหน |
+
+### 21.6 Invariant
+
+1. ทุก knowledge view เห็น `policy` scope เสมอ — ทดสอบแบบ exhaustive ทุก role
+2. ไม่มี agent ใดถือสำเนาความรู้ของตัวเอง (structural rule)
+3. **Writer หา chunk ที่ไม่มีผู้เขียน/ปีไม่เจอ** — ทดสอบด้วยการใส่ chunk ที่ metadata ไม่ครบแล้วค้นจาก view ของ Writer ต้องได้ 0 ผล
+4. QA ไม่เห็นทั้ง transcript และ knowledge view ของผู้ทำ (actor isolation มีอยู่แล้ว — เพิ่มฝั่ง view)
+5. เพิ่มทูลใน manifest แล้ว `riskCeiling` ต้องขยับตาม (**กฎเดิม P8.2** ยังบังคับอยู่)
+6. ทุกการค้นมี view ที่ใช้บันทึกใน evidence
 
 ---
 
