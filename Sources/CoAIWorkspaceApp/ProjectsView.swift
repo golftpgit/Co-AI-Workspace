@@ -21,6 +21,9 @@ struct ProjectsView: View {
     @State private var newPackageTitle = ""
     @State private var selectedParent: String?
     @State private var decision = ""
+    @State private var decider = ""
+    @State private var registerTitle = ""
+    @State private var registerKind = RegisterKind.risk
     /// Sends an exception report out through every running channel. Passed in
     /// rather than reached for: this screen does not know what a channel is.
     let announce: (String) async -> Void
@@ -185,12 +188,114 @@ struct ProjectsView: View {
 
         toleranceBox()
 
+        registerBox()
+
+        baselineBox()
+
         if let gate = model.gate {
             gateBox(gate)
         } else {
             Text("โครงการปิดแล้ว — อ่านได้ แต่เครื่องมือที่เปลี่ยนข้อมูลใช้ไม่ได้แล้ว")
                 .font(.callout).foregroundStyle(.secondary)
         }
+    }
+
+    // MARK: - registers and baselines (§19.11)
+
+    @ViewBuilder
+    private func registerBox() -> some View {
+        GroupBox("ทะเบียน") {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(model.registers) { entry in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text(entry.kind.label)
+                                .font(.caption2)
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(.quaternary, in: Capsule())
+                            Text(entry.title).font(.callout)
+                            Spacer()
+                            Text(entry.status.label).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Text("เสนอโดย \(entry.origin.label)"
+                             + (entry.decidedBy.map { " · ตัดสินโดย \($0)" } ?? ""))
+                            .font(.caption2).foregroundStyle(.secondary)
+
+                        // Only a change is decided, and only by a person.
+                        if entry.kind == .change, entry.status == .proposed {
+                            HStack {
+                                TextField("ชื่อผู้ตัดสิน", text: $decider)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(maxWidth: 160)
+                                Button("อนุมัติ") { decide(entry, approve: true) }
+                                Button("ปฏิเสธ") { decide(entry, approve: false) }
+                            }
+                            .controlSize(.small)
+                            .disabled(decider.trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                    }
+                }
+                if model.registers.isEmpty {
+                    Text("ยังไม่มีรายการ").font(.callout).foregroundStyle(.secondary)
+                }
+
+                HStack {
+                    TextField("บันทึกรายการใหม่", text: $registerTitle)
+                        .textFieldStyle(.roundedBorder)
+                    Picker("ชนิด", selection: $registerKind) {
+                        ForEach(RegisterKind.allCases, id: \.self) { kind in
+                            Text(kind.label).tag(kind)
+                        }
+                    }
+                    .labelsHidden()
+                    .accessibilityLabel("ชนิดของรายการที่จะบันทึก")
+                    Button("บันทึก") { addRegister() }
+                        .disabled(registerTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                .controlSize(.small)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func baselineBox() -> some View {
+        if !model.baselines.isEmpty {
+            GroupBox("แผนที่ตกลงไว้ (baseline)") {
+                VStack(alignment: .leading, spacing: 5) {
+                    if let drift = model.drift {
+                        Text("ตอนนี้เทียบกับ v\(model.baselines.first?.version ?? 1): \(drift.summary)")
+                            .font(.callout)
+                            .foregroundStyle(drift.isEmpty ? Color.secondary : Color.orange)
+                    }
+                    ForEach(model.baselines) { baseline in
+                        Text("v\(baseline.version) · \(baseline.reason) · \(baseline.packages.count) ใบงาน")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Text("เวอร์ชันเก่ายังอ่านได้เสมอ — จำนวนเวอร์ชันคือคำตอบของ “แผนเปลี่ยนไปกี่ครั้ง”")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private func addRegister() {
+        let title = registerTitle
+        registerTitle = ""
+        let detail: RegisterDetail = switch registerKind {
+        case .risk: .risk(probability: 3, impact: 3, response: .reduce)
+        case .issue: .issue(severity: 3, kind: .problem)
+        case .change: .change(scopeImpact: "—", timeImpact: "—", costImpact: "—")
+        case .decision: .decision(options: [], reversible: true)
+        case .lesson: .lesson(cause: "", doDifferently: "", appliesTo: "")
+        }
+        Task { await model.record(detail, title: title) }
+    }
+
+    private func decide(_ entry: RegisterEntry, approve: Bool) {
+        let person = decider
+        Task { await model.decide(entry, approve: approve, by: person) }
     }
 
     // MARK: - tolerance (§19.10)

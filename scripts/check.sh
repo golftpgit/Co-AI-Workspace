@@ -110,6 +110,7 @@ UNWIRED=""
 for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer Researcher ContextManager LocalTier ModelInstaller BudgetGovernor EndpointProbe AnalysisStore NotebookKernel NotebookRunner NotebookStore \
                   ProjectService ProjectStore StageGate BriefDrafter WorkspaceStoreCache \
                   WorkPackageStore WorkBreakdown ExceptionStore ToleranceCheck \
+                  RegisterStore BaselineStore LessonBridge \
                   StatTestTool GapDetector AnalysisPlanStore ConnectorStore OfficeWriter \
                   MCPRegistry MCPServerStore Notifier AppIntentsChannel \
                   TemplateStore TemplateParser TemplateFiller PluginRegistry WriteSkillTool \
