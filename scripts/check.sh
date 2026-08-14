@@ -362,6 +362,32 @@ else
   ok "M16 writes answers to SQLite only, and never over one already given"
 fi
 
+# ARCHITECTURE §14.2: SwiftUI parses markdown in `Text` only when the argument is
+# a string *literal*. Split a long one with `+` and the argument becomes a
+# `String`, so `**bold**` stops being emphasis and starts being asterisks on
+# screen. Driving found one in the middle of a sentence explaining a privacy
+# guarantee; nothing in the test suite can see it. `Text(markdown:)` is the fix
+# and this is the rule that keeps it applied.
+LITERAL_STARS=$(/usr/bin/python3 - <<'MD'
+import re, glob
+bad = []
+for path in glob.glob('Sources/CoAIWorkspaceApp/*.swift'):
+    text = open(path, encoding='utf-8').read()
+    # A `Text("…` whose argument runs on with `+` before the closing paren.
+    for found in re.finditer(r'Text\((?!markdown:|verbatim:)"(?:[^"\\]|\\.)*"\s*\n?\s*\+', text):
+        chunk = text[found.start():found.start() + 600]
+        argument = chunk[:chunk.find(')\n')] if ')\n' in chunk else chunk
+        if '**' in argument:
+            bad.append('%s:%d' % (path.split('/')[-1], text[:found.start()].count('\n') + 1))
+print(' '.join(sorted(set(bad))))
+MD
+)
+if [ -n "$LITERAL_STARS" ]; then
+  fail "markdown in a concatenated Text will print its own asterisks: $LITERAL_STARS"
+else
+  ok "bold in a caption is bold, not two asterisks"
+fi
+
 # ARCHITECTURE §20.7 / P11.7b: who answered is kept in a different file from what
 # they answered, and the server cannot reach the first one at all. Two rules,
 # because they defend against different things — the separate file means a copy

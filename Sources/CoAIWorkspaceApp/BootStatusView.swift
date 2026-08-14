@@ -191,7 +191,10 @@ struct BootStatusView: View {
             // exactly the setting the people who need it are using.
             Text(label).foregroundStyle(.secondary)
                 .frame(width: labelColumn, alignment: .leading)
-            Text(value).textSelection(.enabled)
+            // `markdown:` rather than `Text(value)`: these come from `describe`,
+            // which builds them with `+`, and a concatenated string is not a
+            // string literal — so its `**bold**` would print its own asterisks.
+            Text(markdown: value).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .font(.callout)

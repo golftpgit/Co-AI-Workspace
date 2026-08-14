@@ -12,3 +12,6 @@ SELECT * FROM schema_meta:current; INFO FOR DB;
 SELECT name, string::len(project) AS json_len, project FROM project;
 SELECT project FROM project LIMIT 1;
 SELECT package FROM work_package;
+SELECT name, detail, started_at FROM span WHERE name = 'linkage.resolve' ORDER BY started_at DESC LIMIT 3;
+SELECT name, detail FROM span WHERE name = 'linkage.resolve' LIMIT 3;
+SELECT name, detail FROM span WHERE name = 'linkage.resolve';
