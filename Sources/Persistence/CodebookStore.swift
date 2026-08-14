@@ -53,6 +53,39 @@ public actor CodebookStore {
             } ?? []
     }
 
+    // MARK: - transcripts (§20.3, P11.8 second half)
+
+    /// The text a coding unit's offsets point into.
+    ///
+    /// Kept whole rather than only as chunks in the knowledge base: the index
+    /// holds what is searchable, and a quotation needs the source it was sliced
+    /// from. Re-assembling a transcript out of overlapping chunks to check one
+    /// citation is the kind of thing that works until the chunker's version
+    /// changes.
+    public func save(_ transcript: Transcript) async throws {
+        let json = String(decoding: try Coding.encoder.encode(transcript), as: UTF8.self)
+        var content = ContentBuilder()
+        content.setString("uid", transcript.id)
+        content.setString("project_id", transcript.projectID.rawValue)
+        content.setString("transcript", json)
+        content.raw("updated_at", "time::now()")
+
+        try await client.exec(
+            "UPSERT transcript CONTENT \(content.content) WHERE uid = type::string($uid)",
+            vars: content.vars)
+    }
+
+    public func transcripts(project: ProjectID) async throws -> [Transcript] {
+        try await client.query("""
+            SELECT * FROM transcript WHERE project_id = type::string($pid)
+            ORDER BY updated_at DESC
+            """, vars: ["pid": project.rawValue])
+            .first?.rows.compactMap { row in
+                guard let json = row["transcript"]?.stringValue else { return nil }
+                return try? Coding.decoder.decode(Transcript.self, from: Data(json.utf8))
+            } ?? []
+    }
+
     // MARK: - the passages
 
     public func save(_ unit: CodingUnit, codebook: String) async throws {

@@ -32,6 +32,10 @@ public final class CodingViewModel {
     public private(set) var selectedID: String?
     public private(set) var units: [CodingUnit] = []
     public private(set) var assignments: [CodeAssignment] = []
+    /// The texts the units' offsets point into (§20.3, P11.8). Held so a
+    /// quotation can be *taken* from the source rather than read off the unit's
+    /// own copy — the two drift, and only one of them is evidence.
+    public private(set) var transcripts: [Transcript] = []
     public private(set) var status: Status?
 
     /// Who is coding right now. Deliberately not persisted — see the note above.
@@ -92,6 +96,7 @@ public final class CodingViewModel {
             return
         }
         do {
+            transcripts = (try? await store.transcripts(project: project)) ?? []
             codebooks = try await store.all(project: project)
             if selectedID == nil || !codebooks.contains(where: { $0.id == selectedID }) {
                 selectedID = codebooks.first?.id
@@ -113,6 +118,9 @@ public final class CodingViewModel {
             units = []
             assignments = []
             return
+        }
+        if case .project(let project) = scope {
+            transcripts = (try? await store.transcripts(project: project)) ?? []
         }
         units = (try? await store.units(codebook: selected.id)) ?? []
         assignments = (try? await store.assignments(codebook: selected.id)) ?? []
@@ -146,30 +154,68 @@ public final class CodingViewModel {
         _ = store
     }
 
-    /// Adds a passage to be coded.
+    // MARK: - transcripts
+
+    public func transcript(_ id: String) -> Transcript? {
+        transcripts.first { $0.id == id }
+    }
+
+    /// The quotation behind a coded passage, taken from the transcript.
     ///
-    /// The range is where it sits in the transcript, so a quotation in chapter 4
-    /// can be traced back to the passage rather than to the whole interview.
-    public func addUnit(documentID: String, text: String, start: Int) async {
-        guard let store, var book = selected else { return }
-        let document = documentID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !document.isEmpty, !trimmed.isEmpty else { return }
+    /// `nil` when the transcript is not loaded or the offsets no longer fit it —
+    /// which is the honest answer for a transcript that was corrected after
+    /// coding, and the reason this goes through `TranscriptQuotation` rather
+    /// than reading `unit.text`.
+    public func quotation(for unit: CodingUnit) -> TranscriptQuotation? {
+        guard let source = transcript(unit.documentID) else { return nil }
+        return TranscriptQuotation.of(source, unit: unit)
+    }
+
+    /// Adds a transcript and turns its paragraphs into passages to code.
+    ///
+    /// One step rather than two because the offsets are the point: a passage
+    /// typed in by hand has a range somebody made up, and a citation resting on
+    /// a made-up range is exactly what P11.8's Done-when is about. Splitting the
+    /// text the app is holding gives ranges that are true by construction.
+    public func addTranscript(title: String, participantCode: String,
+                              transcribedBy: String, text: String) async {
+        guard let store, var book = selected, case .project(let project) = scope else { return }
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !body.isEmpty else { return }
+
+        let code = participantCode.trimmingCharacters(in: .whitespaces)
+        let transcript = Transcript(projectID: project, title: name,
+                                    participantCode: code.isEmpty ? nil : code,
+                                    transcribedBy: transcribedBy
+                                        .trimmingCharacters(in: .whitespaces),
+                                    text: body)
         do {
-            try await store.save(CodingUnit(documentID: document,
-                                            range: start..<(start + trimmed.count),
-                                            text: trimmed),
-                                 codebook: book.id)
+            try await store.save(transcript)
+            let spans = transcript.paragraphs
+            guard !spans.isEmpty else {
+                status = Status(message: "ไม่พบย่อหน้าในบทถอดเทปนี้", isError: true)
+                return
+            }
+            for span in spans {
+                guard let quotation = TranscriptQuotation.of(transcript, at: span) else { continue }
+                try await store.save(CodingUnit(documentID: transcript.id, range: span.range,
+                                                text: quotation.text),
+                                     codebook: book.id)
+            }
             // The order transcripts were coded in is a claim the saturation curve
             // rests on, so it is recorded when a document first appears rather
             // than inferred later from row order.
-            if !book.documentOrder.contains(document) {
-                book.documentOrder.append(document)
+            if !book.documentOrder.contains(transcript.id) {
+                book.documentOrder.append(transcript.id)
                 try await store.save(book)
             }
             await reload()
+            status = Status(message: "เพิ่ม “\(name)” แล้ว — แบ่งเป็น \(spans.count) ช่วงตามย่อหน้า "
+                            + "· ตำแหน่งของทุกช่วงอ้างกลับไปที่ข้อความจริง ไม่ใช่เลขที่พิมพ์เอง",
+                            isError: false)
         } catch {
-            status = Status(message: "บันทึกช่วงข้อความไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: "บันทึกบทถอดเทปไม่สำเร็จ: \(error)", isError: true)
         }
     }
 

@@ -37,4 +37,5 @@ public enum OpaqueID {
     public static let codebook = "cb"
     public static let code = "cd"
     public static let codingUnit = "cu"
+    public static let transcript = "ts"
 }

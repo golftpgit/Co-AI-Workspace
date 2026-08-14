@@ -163,6 +163,11 @@ public actor KnowledgeStore {
         case .web(let url): "web|\(url.absoluteString)"
         case .database(let name): "database|\(name)"
         case .userAuthored(let runID): "authored|\(runID)"
+        // An empty value is a transcript with no participant code, which is a
+        // legitimate anonymous single-round study — decoded back to `nil`
+        // rather than to the empty string, so the two do not have to be told
+        // apart everywhere downstream.
+        case .fieldwork(let code): "fieldwork|\(code ?? "")"
         }
     }
 
@@ -175,6 +180,7 @@ public actor KnowledgeStore {
         case "web": return URL(string: value).map { .web(url: $0) }
         case "database": return .database(name: value)
         case "authored": return .userAuthored(runID: value)
+        case "fieldwork": return .fieldwork(participantCode: value.isEmpty ? nil : value)
         default: return nil
         }
     }
