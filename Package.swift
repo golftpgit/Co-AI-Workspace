@@ -153,6 +153,23 @@ let package = Package(
         // are not evidence; anything worth citing is fetched and read.
         .target(name: "WebSearch", dependencies: ["AgentKit", "Observability", "Knowledge"]),
 
+        // §19.17 — the OLTP gap M16 opened. SQLite (WAL) from the system, no
+        // sidecar, no DuckDB. **Its own target on purpose**: it is what makes
+        // "no code path from M16 to DuckDB" a fact about the package graph
+        // rather than a sentence in a document. DuckDB reads these rows by
+        // `ATTACH`ing the file, which is a read the app performs — never a write
+        // the server performs.
+        .target(name: "OLTP", dependencies: ["AgentKit", "Observability"]),
+
+        // M16 FieldServer — the only surface in the system that takes input from
+        // somebody who is not the owner of this machine (§20.7). Its dependency
+        // list is an invariant too, in the other direction from M15's: it may
+        // reach `Instruments` (to be handed something the gate approved) and
+        // `OLTP` (to write answers), and it may **not** reach `Analysis` — there
+        // is no code path from M16 to DuckDB (§19.17 invariant 1).
+        .target(name: "FieldServer",
+                dependencies: ["AgentKit", "Observability", "Instruments", "OLTP"]),
+
         // M15 Instruments — designing what data is collected with (ARCHITECTURE
         // §20.3). **The dependency list is the invariant**: no networking target
         // here, because serving a form is M16's job and an instrument that could
@@ -219,7 +236,7 @@ let package = Package(
                            // because WebKit is main-actor bound and one browser
                            // per app is the whole point.
                            "Channels", "DocGen", "Roster", "MCPBridge", "ProjectKit",
-                           "WebSearch", "Instruments"],
+                           "WebSearch", "Instruments", "FieldServer", "OLTP"],
             // §14.3 — what makes an App Intent findable rather than merely
             // written. Shortcuts and Siri read `Metadata.appintents` from the
             // bundle, and that bundle is produced by `appintentsmetadataprocessor`
@@ -250,6 +267,8 @@ let package = Package(
         .testTarget(name: "KnowledgeTests", dependencies: ["Knowledge"]),
         .testTarget(name: "WebSearchTests", dependencies: ["WebSearch", "Knowledge"]),
         .testTarget(name: "InstrumentsTests", dependencies: ["Instruments"]),
+        .testTarget(name: "OLTPTests", dependencies: ["OLTP"]),
+        .testTarget(name: "FieldServerTests", dependencies: ["FieldServer", "Instruments", "OLTP"]),
         .testTarget(name: "EmbeddingRuntimeTests", dependencies: ["EmbeddingRuntime"]),
         .testTarget(name: "ExecutionTests", dependencies: ["Execution", "Config"]),
         .testTarget(name: "AnalysisTests", dependencies: ["Analysis"]),

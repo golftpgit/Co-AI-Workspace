@@ -87,11 +87,23 @@ public struct ProjectPaths: Sendable {
     /// user having to grant anything.
     public var filesDirectory: URL { root.appending(path: "files") }
 
+    /// Where M16 writes what people answered (§19.17). Its own directory beside
+    /// the analysis one, and for the same reason: SQLite in WAL mode keeps a
+    /// `-wal` and a `-shm` beside the database, and those three files are one
+    /// database — a stray write-ahead log loose in a folder is the sort of thing
+    /// somebody deletes by hand and takes the data with it.
+    public var fieldDirectory: URL { root.appending(path: "field") }
+
     public var analysisDatabase: URL { analysisDirectory.appending(path: "analysis.duckdb") }
     public var connectorsFile: URL { analysisDirectory.appending(path: "connectors.json") }
+    /// The raw answers, in the one database shape that takes concurrent writers
+    /// (§19.17). Separate from `analysisDatabase` on purpose: DuckDB is where
+    /// answers are *read* from, through `ATTACH`, and never where they land.
+    public var responsesDatabase: URL { fieldDirectory.appending(path: "responses.sqlite") }
 
     public var managedDirectories: [URL] {
-        [root, analysisDirectory, notebooksDirectory, documentsDirectory, filesDirectory]
+        [root, analysisDirectory, notebooksDirectory, documentsDirectory, filesDirectory,
+         fieldDirectory]
     }
 
     public init(root: URL) { self.root = root }
