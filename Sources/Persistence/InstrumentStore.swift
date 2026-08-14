@@ -48,6 +48,21 @@ public actor InstrumentStore: InstrumentPersisting {
             } ?? []
     }
 
+    /// Removes a draft, together with the expert ratings that only meant
+    /// something as part of it.
+    ///
+    /// It takes a `DiscardableInstrument` rather than an id, so the conditions in
+    /// `InstrumentDisposal` are not a check this method could be called without —
+    /// there is no other way to obtain the argument. Same shape as `save(_:)`
+    /// taking a `PublishedInstrument` on the serving side (§20.6).
+    public func delete(_ discardable: DiscardableInstrument) async throws {
+        let id = discardable.instrument.id
+        try await client.exec(
+            "DELETE expert_rating WHERE instrument_id = type::string($iid)", vars: ["iid": id])
+        try await client.exec(
+            "DELETE instrument WHERE uid = type::string($iid)", vars: ["iid": id])
+    }
+
     // MARK: - expert ratings (§20.4)
 
     public func save(_ rating: ExpertRating, instrument: String) async throws {

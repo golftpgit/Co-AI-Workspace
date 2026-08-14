@@ -71,6 +71,49 @@ public final class InstrumentsViewModel {
     /// What the last pull into the analytical store produced (§19.17).
     public private(set) var materialized: MaterializedResponses?
 
+    // ── reliability and construct validity (§20.4, P11.3) ──
+    /// α, ω and the factor solution over the answers that came back. Computed on
+    /// request rather than with every reload: it is an eigen-decomposition per
+    /// iteration plus a hundred more for parallel analysis, and nobody wants that
+    /// running while they type into the form above it.
+    private(set) var scaleAnalysis: ScaleReport?
+    /// Which instrument, and which answers, the report on screen came from.
+    ///
+    /// Driving the screen by hand is what made these necessary. The first version
+    /// dropped the report whenever the answers reloaded, which is correct in
+    /// principle and useless in practice: while a round is open this screen
+    /// re-reads the answers every three seconds, so the report was erased before
+    /// anybody could read it. It looked exactly like a button that does nothing.
+    private var analysedInstrumentID: String?
+    private var analysedFingerprint: String?
+    /// Which retention rule the last run used. Held so the screen can offer the
+    /// other one and show that the answer did (or did not) change.
+    public private(set) var retentionRule: RetentionRule = .parallelAnalysis
+    public private(set) var isAnalysingScale = false
+
+    /// The report, but only when it belongs to the instrument now on screen —
+    /// a loading table drawn under another instrument's title is worse than none.
+    var scaleReport: ScaleReport? {
+        analysedInstrumentID == selectedID ? scaleAnalysis : nil
+    }
+
+    /// The answers have moved since the report was computed. Said rather than
+    /// acted on: erasing it throws away work somebody waited for, and leaving it
+    /// unmarked puts numbers beside answers they were not computed from.
+    var scaleReportIsStale: Bool {
+        scaleReport != nil && analysedFingerprint != responsesFingerprint
+    }
+
+    /// Cheap to compute, and it changes exactly when the answers do — a new
+    /// submission moves the count and the last id, and a correction moves the
+    /// third field without moving either of the others.
+    private var responsesFingerprint: String {
+        let corrections = responseRows.reduce(0) { running, row in
+            running + row.answers.values.count { $0.wasCorrected }
+        }
+        return "\(responseRows.count)|\(responseRows.last?.submission.id ?? "")|\(corrections)"
+    }
+
     // ── who answered (§20.7, P11.7b) ──
     public private(set) var participants: [Participant] = []
     public private(set) var attrition: [Attrition] = []
@@ -97,6 +140,8 @@ public final class InstrumentsViewModel {
     private var host: FieldServerHost?
     private var analysis: AnalysisStore?
     private var linkage: LinkageStore?
+    /// Whether an identity pass is already waiting on the linkage file.
+    private var linkingIdentities = false
     private let log = AppLog.logger("instruments-ui")
 
     public init() {}
@@ -256,6 +301,43 @@ public final class InstrumentsViewModel {
         }
     }
 
+    /// Why the selected instrument cannot be thrown away, or an empty list.
+    ///
+    /// Read from what is on screen rather than by querying again: `approval`,
+    /// `responseRows` and `rounds` are already loaded for this instrument, and a
+    /// second read could disagree with what the person is looking at.
+    var disposalRefusals: [DisposalRefusal] {
+        guard selected != nil else { return [] }
+        return InstrumentDisposal.refusals(
+            InstrumentFootprint(isApproved: isApproved,
+                                responses: responseRows.count,
+                                rounds: rounds.count))
+    }
+
+    /// Throws away a draft nothing depends on.
+    ///
+    /// The refusal comes from `InstrumentDisposal.check`, which is also the only
+    /// producer of the value the store will accept — so this cannot delete
+    /// something it did not first ask about.
+    public func discardSelected() async {
+        guard let store, let instrument = selected else { return }
+        do {
+            let discardable = try InstrumentDisposal.check(
+                instrument,
+                footprint: InstrumentFootprint(isApproved: isApproved,
+                                               responses: responseRows.count,
+                                               rounds: rounds.count))
+            try await store.delete(discardable)
+            log.info("discarded draft instrument \(instrument.id)")
+            selectedID = nil
+            scaleAnalysis = nil
+            await reload()
+            status = Status(message: "ลบร่าง “\(instrument.title.thai)” แล้ว", isError: false)
+        } catch {
+            status = Status(message: "\(error)", isError: true)
+        }
+    }
+
     /// The next version, for editing something already published (§20.6).
     public func newVersion() async {
         guard let instrument = selected else { return }
@@ -394,18 +476,48 @@ public final class InstrumentsViewModel {
             let answers = try await store.answers(instrument: instrument.id,
                                                   version: instrument.version)
             let bySubmission = Dictionary(grouping: answers, by: \.submissionID)
-            await recordResponses(submissions)
-            await loadParticipants()
+            // The answers go on screen **before** anything touches the identity
+            // file, and this order is the point rather than a detail. §20.7 keeps
+            // who answered in a separate file behind a separate Keychain key, so
+            // that a copy of the answers carries no identities — which also means
+            // the answers must not need that key to be readable.
+            //
+            // Driving the screen found the version where they did: the Keychain
+            // refused (a re-signed build, but a locked keychain or a key from
+            // another machine does the same), the linkage step never returned, and
+            // the table said "ยังไม่มีคำตอบสำหรับเวอร์ชันนี้" beside a round
+            // header that said forty. Forty answers were in the database the whole
+            // time, and the screen was telling the researcher to go collect some.
             responseRows = submissions.map { submission in
                 let keyed = Dictionary(
                     (bySubmission[submission.id] ?? []).map { ($0.itemID, $0) },
                     uniquingKeysWith: { first, _ in first })
                 return ResponseRow(submission: submission, answers: keyed)
             }
+            // Not awaited, for the same reason and one step further. While a
+            // round is open this method runs every three seconds; awaiting the
+            // identity file here meant one unanswered Keychain prompt stopped the
+            // count from ever moving again — the screen sat at forty while the
+            // database went to forty-one.
+            let arrived = submissions
+            Task { await self.linkIdentities(arrived) }
         } catch {
             log.error("loading responses: \(error)")
             responseRows = []
         }
+    }
+
+    /// Marks who answered and reloads the participants box.
+    ///
+    /// One at a time: the refresh loop calls this every three seconds, and a
+    /// Keychain request that is waiting for a person must not have four more
+    /// queued behind it by the time they answer.
+    private func linkIdentities(_ submissions: [SubmissionRecord]) async {
+        guard !linkingIdentities else { return }
+        linkingIdentities = true
+        await recordResponses(submissions)
+        await loadParticipants()
+        linkingIdentities = false
     }
 
     /// Records a change to an answer. The row that arrived is never touched
@@ -503,6 +615,40 @@ public final class InstrumentsViewModel {
                             isError: false)
         } catch {
             status = Status(message: "ส่งเข้าฐานข้อมูลวิเคราะห์ไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    // MARK: - reliability and construct validity (§20.4)
+
+    /// Runs α, ω and EFA over the answers on screen.
+    ///
+    /// Off the main actor's back for the duration: parallel analysis alone is a
+    /// hundred eigen-decompositions, and a screen that freezes while it thinks is
+    /// a screen people stop pressing the button on.
+    public func analyseScale(rule: RetentionRule? = nil) async {
+        guard let instrument = selected else { return }
+        if let rule { retentionRule = rule }
+        let chosen = retentionRule
+        let rows = responseRows
+        guard !rows.isEmpty else {
+            scaleAnalysis = nil
+            status = Status(message: "ยังไม่มีคำตอบให้วิเคราะห์ — ความเที่ยงและองค์ประกอบคำนวณจากคำตอบจริงเท่านั้น",
+                            isError: true)
+            return
+        }
+        isAnalysingScale = true
+        // Scoring reads `ResponseRow`, which lives here; everything after it is
+        // arithmetic on numbers, which must not.
+        let scored = ScoredResponses.of(instrument: instrument, rows: rows)
+        let result = await Task.detached(priority: .userInitiated) {
+            ScaleReport.of(instrument: instrument, scored: scored, rule: chosen)
+        }.value
+        scaleAnalysis = result
+        analysedInstrumentID = selectedID
+        analysedFingerprint = responsesFingerprint
+        isAnalysingScale = false
+        if let refusal = result.refusal, result.subscales.isEmpty {
+            status = Status(message: refusal, isError: true)
         }
     }
 

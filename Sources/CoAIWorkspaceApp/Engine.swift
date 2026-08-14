@@ -462,6 +462,15 @@ struct Engine: Sendable {
         let projectTypes = typesByName.values.sorted { $0.type < $1.type }
         let rosterProblems = (agents.errors + skills.errors).map { "\($0)" } + typeProblems
 
+        // §20.2 — the `gate:` lines stop being data here. Wired after the types
+        // are loaded rather than at construction because the parser that reads
+        // them needs the tool list, which needs the gateway, which needs the
+        // project service; the alternative was reading the type files twice.
+        await projects.attach(typeGates: ProjectTypeGateReader(
+            gatesByType: Dictionary(projectTypes.map { ($0.type, $0.gates) },
+                                    uniquingKeysWith: { first, _ in first }),
+            instruments: InstrumentStore(client: client)))
+
         var summary: [String] = []
         for executor in executors {
             let reachable = await executor.isAvailable()

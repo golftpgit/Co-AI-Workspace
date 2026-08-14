@@ -26,6 +26,10 @@ public actor ProjectService {
     private let tailoring: (any TailoringPersisting)?
     private let closingLedger: (any ClosingLedgerReading)?
     private let reports: (any ReportPersisting)?
+    /// The gates this project's *type* declared, and what can be said about them
+    /// (§20.2). `nil` means nothing is wired to read the type files — in which
+    /// case a type gate cannot block, because there is no declaration to block on.
+    private var typeGates: (any ProjectTypeGateReading)?
     /// What the app measured last time it looked (§19.16). Held rather than
     /// asked for, because `advance` evaluates the gate itself and cannot call
     /// back into a screen.
@@ -47,8 +51,10 @@ public actor ProjectService {
                 benefits: (any BenefitPersisting)? = nil,
                 tailoring: (any TailoringPersisting)? = nil,
                 closingLedger: (any ClosingLedgerReading)? = nil,
-                reports: (any ReportPersisting)? = nil) {
+                reports: (any ReportPersisting)? = nil,
+                typeGates: (any ProjectTypeGateReading)? = nil) {
         self.reports = reports
+        self.typeGates = typeGates
         self.store = store
         self.plans = plans
         self.exceptions = exceptions
@@ -484,6 +490,16 @@ public actor ProjectService {
         return project
     }
 
+    /// Wires the reader for the gates a project's *type* declared.
+    ///
+    /// Set after construction rather than in `init` because the type files are
+    /// read with the same parser as the agent roster, which needs the tool list,
+    /// which needs the gateway, which needs this service — a cycle that would
+    /// otherwise have to be broken by loading the types twice.
+    public func attach(typeGates reader: any ProjectTypeGateReading) {
+        typeGates = reader
+    }
+
     public func update(_ project: Project) async throws {
         var updated = project
         updated.updatedAt = Date()
@@ -501,7 +517,14 @@ public actor ProjectService {
             drift: await drift(of: id),
             undecidedChanges: await entries(of: id, kind: .change)
                 .count { $0.status == .proposed },
-            closing: project.stage == .closing ? await closingFacts(of: id) : ClosingFacts())
+            closing: project.stage == .closing ? await closingFacts(of: id) : ClosingFacts(),
+            // Only asked for at the boundary that checks them, so a project in
+            // planning does not pay for reading instrument records it will not
+            // use — and so the answer cannot go stale between here and there.
+            typeGates: project.stage == .execution
+                ? await (typeGates?.declaredGates(forType: project.typeName) ?? []) : [],
+            typeFacts: project.stage == .execution
+                ? await (typeGates?.gateFacts(for: id) ?? TypeGateFacts()) : TypeGateFacts())
     }
 
     /// The only way a stage changes. Refuses rather than reports: a gate that
