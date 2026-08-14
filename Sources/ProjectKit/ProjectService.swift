@@ -464,13 +464,23 @@ public actor ProjectService {
 
     public func create(name: String,
                        kind: ProjectKind = .blank,
+                       typeName: String? = nil,
                        brief: String = "",
                        statement: ScopeStatement = ScopeStatement(),
-                       board: [BoardRole] = []) async throws -> Project {
-        let project = Project(name: name, kind: kind, brief: brief,
+                       board: [BoardRole] = [],
+                       startingPlan: @Sendable (ProjectID) -> [WorkPackage] = { _ in [] })
+        async throws -> Project {
+        let project = Project(name: name, kind: kind, typeName: typeName, brief: brief,
                               statement: statement, board: board)
         try await store.save(project)
         byID[project.id] = project
+        // The plan the type asked for, written as real work packages. Saved here
+        // rather than by the caller so a project cannot exist, even for a moment,
+        // with a type that says "five chapters" and no chapters. The plan is
+        // built from the id because a work package belongs to one project and
+        // says so in a `let`.
+        let plan = startingPlan(project.id)
+        if !plan.isEmpty, let plans { try await plans.save(plan) }
         return project
     }
 

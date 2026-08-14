@@ -91,7 +91,10 @@ let package = Package(
         // (ARCHITECTURE §7). Knows the *names* of tools and their declared
         // risk, and nothing else about them: it must not be able to reach a
         // tool any more than a channel can.
-        .target(name: "Roster", dependencies: ["AgentKit", "Observability"]),
+        // ProjectKit came in with P11.1: a project-type manifest names roles,
+        // stages and practices, and every one of those is checked at load time
+        // rather than where it is used. Checking them means knowing them.
+        .target(name: "Roster", dependencies: ["AgentKit", "Observability", "ProjectKit"]),
 
         // M14 (ARCHITECTURE §19.15) — the project life cycle. It does *not*
         // depend on CoreEngine: the gate reads a stage through
@@ -285,7 +288,7 @@ let package = Package(
         .testTarget(name: "DocGenTests", dependencies: ["DocGen", "Knowledge"]),
         // CoreEngine is here so the role→tool table in Roster is checked
         // against the specialists it mirrors, rather than trusted.
-        .testTarget(name: "RosterTests", dependencies: ["Roster", "CoreEngine", "ToolBelt"]),
+        .testTarget(name: "RosterTests", dependencies: ["Roster", "CoreEngine", "ToolBelt", "ProjectKit"]),
         .testTarget(name: "ProjectKitTests", dependencies: ["ProjectKit"]),
         // Also hosts the end-to-end walking-skeleton test, which needs a real
         // database and a real sidecar alongside the tools and the gate.

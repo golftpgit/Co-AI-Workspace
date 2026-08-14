@@ -188,6 +188,7 @@ private struct RootView: View {
                         .id(projects.scope.storageKey)
                 case .projects:
                     ProjectsView(model: projects,
+                                 types: engine.projectTypes,
                                  announce: { message in
                                      await engine.channelRouter.broadcast(message)
                                  })

@@ -69,12 +69,16 @@ struct ResponsesBox: View {
                             .foregroundStyle(round.isOpen ? Color.green : Color.secondary)
                         // The dates are the claim a methods section makes, so they
                         // are shown rather than summarised.
+                        // The date format puts a comma before the time, so the
+                        // count needs its own separator or the line reads
+                        // "…at 10:58, 0 ชุด" as though the count were part of
+                        // the timestamp.
                         Text(round.isOpen
                              ? "รอบที่เปิดอยู่ · เริ่ม \(round.openedAt.formatted(date: .abbreviated, time: .shortened))"
                              : "ปิดแล้ว · \(round.openedAt.formatted(date: .abbreviated, time: .omitted))"
                                 + " – \(round.closedAt?.formatted(date: .abbreviated, time: .shortened) ?? "")")
                             .font(.caption)
-                        Text("\(round.submissions) ชุด").font(.caption).foregroundStyle(.secondary)
+                        Text("· \(round.submissions) ชุด").font(.caption).foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .combine)
                 }

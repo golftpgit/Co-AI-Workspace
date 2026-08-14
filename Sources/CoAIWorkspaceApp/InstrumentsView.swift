@@ -302,6 +302,20 @@ struct InstrumentsView: View {
                         Spacer()
                     }
                     .controlSize(.small)
+                    // Said here rather than in the header. Driving this found the
+                    // same shape as the publish refusal: the button is at the
+                    // bottom of a page that scrolls and the header is a long way
+                    // above it, so "the round is still open, starting again
+                    // continues it" was announced where nobody could read it.
+                    if let open = model.rounds.first(where: \.isOpen) {
+                        Label("รอบเก็บข้อมูลยังเปิดค้างอยู่ (เริ่ม "
+                              + open.openedAt.formatted(date: .abbreviated, time: .shortened)
+                              + " · \(open.submissions) ชุด) — เปิดเซิร์ฟเวอร์อีกครั้งแล้วเก็บต่อรอบเดิม "
+                              + "ไม่ใช่รอบใหม่",
+                              systemImage: "pause.circle")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 Text("ค่าเริ่มต้นคือ LAN-only และไม่มี tunnel ในตัว — เปิดออกอินเทอร์เน็ตต้องเป็นการตั้งค่า "

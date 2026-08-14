@@ -27,6 +27,11 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/Helpers"
 cp "$BIN_PATH" "$APP/Contents/MacOS/$BIN_NAME"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 
+# §20.2 — the project types the app ships with. Copied in rather than compiled:
+# adding a type has to be a file, and a file the app cannot find on a fresh
+# install is a picker with nothing in it.
+cp -R "$ROOT/Resources/project-types" "$APP/Contents/Resources/"
+
 # Bundled sidecars (surreal arrives in P1.2, searxng in P3.1). Anything placed
 # in vendor/helpers is copied in and signed as part of the app.
 if [ -d "$ROOT/vendor/helpers" ]; then
