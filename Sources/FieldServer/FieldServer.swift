@@ -195,6 +195,14 @@ public actor FieldServerHost {
         current.close()
         wave = current
         try? await store.closeWave(id: current.id, at: current.closedAt ?? Date())
+        // Half-finished forms belong to the round that is now over. They were
+        // collected under a consent for that round and nobody will ever submit
+        // them, so keeping them is holding personal data with no purpose left
+        // (§20.5).
+        let discarded = (try? await store.discardDrafts(wave: current.id)) ?? 0
+        if discarded > 0 {
+            log.info("discarded \(discarded, privacy: .public) unfinished draft(s) with the round")
+        }
         await spans?.record(Span(name: "field.wave.close", status: .succeeded,
                                  endedAt: Date(), detail: "wave \(current.id)"))
     }
@@ -256,14 +264,22 @@ public actor FieldServerHost {
             // else's. Passed straight through: to this module it is an opaque
             // string, and the file that could turn it into a person is not in
             // its module graph.
+            //
+            // `?resume=…` is somebody coming back to a form they started.
+            if let token = request.query["resume"], !token.isEmpty {
+                return await resume(token: token, published: published)
+            }
             return HTTPResponse.html(200, FormRuntime.page(for: published,
                                                            wave: wave?.id ?? "",
                                                            code: request.query["code"]))
 
+        case ("POST", "/save"):
+            return await saveDraft(request, published: published)
+
         case ("POST", "/submit"):
             return await submit(request, published: published)
 
-        case (_, "/submit"), (_, "/"):
+        case (_, "/save"), (_, "/submit"), (_, "/"):
             return HTTPResponse.html(405, FormRuntime.message(
                 title: "วิธีเรียกไม่ถูกต้อง", text: "หน้านี้รับเฉพาะการเปิดหน้าและการส่งแบบฟอร์ม"))
 
@@ -303,6 +319,11 @@ public actor FieldServerHost {
                                         answers: validated.answers,
                                         droppedFields: validated.droppedFields)
             try await store.append(submission)
+            // A submitted form is not a draft any more. Left behind, it would be
+            // a copy of somebody's answers with no purpose and no expiry.
+            if let token = fields["__resume"]?.first, !token.isEmpty {
+                try? await store.removeDraft(token: token)
+            }
 
             if !validated.droppedFields.isEmpty {
                 // Written down twice on purpose: a row, so it can be counted
@@ -327,6 +348,75 @@ public actor FieldServerHost {
                 title: "บันทึกไม่สำเร็จ",
                 text: "ระบบบันทึกคำตอบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง หรือแจ้งผู้วิจัย"))
         }
+    }
+
+    /// Brings somebody back to the form they started (§20.7's SessionStore).
+    ///
+    /// A draft that belongs to a different instrument or version is refused
+    /// rather than half-applied: the questions have changed underneath it, and
+    /// pouring old answers into a new form is how a value ends up against a
+    /// question nobody asked it for.
+    private func resume(token: String, published: PublishedInstrument) async -> HTTPResponse {
+        guard let wave, wave.isOpen else { return closedPage() }
+        guard let draft = try? await store.draft(token: token),
+              draft.instrumentID == published.instrument.id,
+              draft.version == published.instrument.version else {
+            return HTTPResponse.html(404, FormRuntime.message(
+                title: "ไม่พบคำตอบที่บันทึกไว้",
+                text: "ลิงก์นี้ไม่ตรงกับแบบสอบถามที่เปิดอยู่ หรือคำตอบที่บันทึกไว้ถูกลบไปแล้ว "
+                    + "(คำตอบที่ยังไม่ได้ส่งจะถูกลบเมื่อปิดรอบเก็บข้อมูล)"))
+        }
+        let answered = HTTPRequest.parseForm(draft.fields)
+        return HTTPResponse.html(200, FormRuntime.page(
+            for: published, wave: wave.id,
+            code: draft.participantCode, resume: draft.token, answered: answered,
+            notice: "นี่คือคำตอบที่คุณบันทึกไว้เมื่อ "
+                + draft.updatedAt.formatted(date: .abbreviated, time: .shortened)
+                + " — กรอกต่อได้เลย"))
+    }
+
+    /// Saves a half-finished form and hands back the link that returns to it.
+    private func saveDraft(_ request: HTTPRequest,
+                           published: PublishedInstrument) async -> HTTPResponse {
+        guard let wave, wave.isOpen else { return closedPage() }
+        let fields = request.formFields
+        guard fields["__instrument"]?.first == published.instrument.id,
+              fields["__version"]?.first == "\(published.instrument.version)" else {
+            return HTTPResponse.html(400, FormRuntime.message(
+                title: "แบบฟอร์มไม่ตรงกัน",
+                text: "แบบฟอร์มที่ส่งมาไม่ตรงกับแบบสอบถามที่เปิดอยู่"))
+        }
+        // Reuse the token if this is somebody saving a second time: one person
+        // continuing their own form is not two drafts.
+        let existing = fields["__resume"]?.first.flatMap { $0.isEmpty ? nil : $0 }
+        let token = existing ?? Self.freshToken()
+        let body = String(decoding: request.body, as: UTF8.self)
+
+        do {
+            try await store.save(Draft(token: token,
+                                       instrumentID: published.instrument.id,
+                                       version: published.instrument.version,
+                                       waveID: wave.id,
+                                       participantCode: fields["__code"]?.first
+                                           .flatMap { $0.isEmpty ? nil : $0 },
+                                       fields: body,
+                                       updatedAt: Date()))
+        } catch {
+            log.error("could not save a draft: \(error)")
+            return HTTPResponse.html(503, FormRuntime.message(
+                title: "บันทึกไม่สำเร็จ", text: "บันทึกคำตอบที่กรอกไว้ไม่สำเร็จ กรุณาลองใหม่"))
+        }
+        let host = Self.lanAddresses().first ?? "127.0.0.1"
+        return HTTPResponse.html(200, FormRuntime.saved(
+            for: published, link: "http://\(host):\(port)/?resume=\(token)"))
+    }
+
+    /// A bearer credential for somebody's partial answers, living in a URL they
+    /// keep — so it is long and random rather than short and readable, which is
+    /// the opposite of a participant code and for the opposite reason.
+    static func freshToken() -> String {
+        let alphabet = Array("abcdefghijkmnopqrstuvwxyz0123456789")
+        return String((0..<32).map { _ in alphabet.randomElement()! })
     }
 
     private func closedPage(status: Int = 410) -> HTTPResponse {

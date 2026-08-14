@@ -97,6 +97,38 @@ public struct SubmissionRecord: Sendable, Equatable, Identifiable {
     public let participantCode: String?
 }
 
+/// A questionnaire somebody started and has not finished (§20.7's SessionStore).
+///
+/// Not a submission: it has no consent digest and no id in the answer tables,
+/// because a half-filled form is not an answer to anything yet. It exists so a
+/// nurse interrupted by a patient can come back after their shift instead of
+/// starting again — which is a response-rate problem before it is a feature.
+public struct Draft: Sendable, Equatable, Identifiable {
+    /// The only thing that identifies it. Long and random because it is a bearer
+    /// credential for somebody's partial answers, living in a URL they keep.
+    public let token: String
+    public let instrumentID: String
+    public let version: Int
+    public let waveID: String
+    public let participantCode: String?
+    /// The form fields as they stood, encoded the way the form sends them.
+    public let fields: String
+    public let updatedAt: Date
+
+    public var id: String { token }
+
+    public init(token: String, instrumentID: String, version: Int, waveID: String,
+                participantCode: String?, fields: String, updatedAt: Date = Date()) {
+        self.token = token
+        self.instrumentID = instrumentID
+        self.version = version
+        self.waveID = waveID
+        self.participantCode = participantCode
+        self.fields = fields
+        self.updatedAt = updatedAt
+    }
+}
+
 /// A change to an answer already given, kept beside it rather than over it.
 public struct Correction: Sendable, Equatable {
     public let submissionID: String
@@ -213,7 +245,79 @@ public actor ResponseStore {
         )
         """,
         "CREATE INDEX IF NOT EXISTS wave_instrument ON wave (instrument_id, version)",
+        // Partial answers, kept only while their round is open (§20.7).
+        """
+        CREATE TABLE IF NOT EXISTS draft (
+            token TEXT PRIMARY KEY,
+            instrument_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            wave_id TEXT NOT NULL,
+            participant_code TEXT,
+            fields TEXT NOT NULL,
+            updated_at REAL NOT NULL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS draft_wave ON draft (wave_id)",
     ]
+
+    // MARK: - drafts (§20.7)
+
+    /// Saves or replaces a draft. Replaces, because a person continuing their
+    /// own form is not two drafts.
+    public func save(_ draft: Draft) async throws {
+        try await database.execute("""
+            INSERT INTO draft (token, instrument_id, version, wave_id,
+                               participant_code, fields, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(token) DO UPDATE SET
+                fields = excluded.fields, updated_at = excluded.updated_at
+            """,
+            [.text(draft.token), .text(draft.instrumentID), .integer(Int64(draft.version)),
+             .text(draft.waveID),
+             draft.participantCode.map { SQLiteValue.text($0) } ?? .null,
+             .text(draft.fields), .double(draft.updatedAt.timeIntervalSince1970)])
+    }
+
+    public func draft(token: String) async throws -> Draft? {
+        try await database.query("""
+            SELECT token, instrument_id, version, wave_id, participant_code, fields, updated_at
+            FROM draft WHERE token = ?
+            """, [.text(token)])
+            .compactMap { row -> Draft? in
+                guard let token = row.string("token"),
+                      let instrument = row.string("instrument_id"),
+                      let wave = row.string("wave_id"),
+                      let fields = row.string("fields"),
+                      case .double(let updated)? = row["updated_at"] else { return nil }
+                return Draft(token: token, instrumentID: instrument,
+                             version: Int(row.integer("version") ?? 0), waveID: wave,
+                             participantCode: row.string("participant_code"),
+                             fields: fields,
+                             updatedAt: Date(timeIntervalSince1970: updated))
+            }.first
+    }
+
+    /// Drops a draft — after it is submitted, or when its round closes.
+    public func removeDraft(token: String) async throws {
+        try await database.execute("DELETE FROM draft WHERE token = ?", [.text(token)])
+    }
+
+    /// Everything left half-finished when a round ended.
+    ///
+    /// Deleted rather than kept: a draft is personal data collected under a
+    /// consent that covered a round which is now over, and keeping partial
+    /// answers nobody will ever submit is holding data with no purpose left
+    /// (§20.5).
+    @discardableResult
+    public func discardDrafts(wave: String) async throws -> Int {
+        try await database.execute("DELETE FROM draft WHERE wave_id = ?", [.text(wave)])
+    }
+
+    public func draftCount(wave: String) async throws -> Int {
+        let rows = try await database.query(
+            "SELECT COUNT(*) AS n FROM draft WHERE wave_id = ?", [.text(wave)])
+        return Int(rows.first?.integer("n") ?? 0)
+    }
 
     /// Columns added after the first version shipped. `CREATE TABLE IF NOT
     /// EXISTS` does nothing to a table that already exists, so a database made
