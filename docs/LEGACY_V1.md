@@ -100,7 +100,7 @@
 | Skill self-authoring | P8.5 | ✅ ใช้ได้จริง |
 | Process manager | P1.9, P8.6 | 🔶 หยุด/พัก/ดู process ได้ · หน้าจอ Processes ยังไม่ครบ |
 | Workflow builder + palette | P8.6 | 🔴 **ยังไม่ได้ทำ** — v1 มี v2 ยังไม่มี |
-| File viewer/editor | P8.6 | 🔴 **ยังไม่ได้ทำ** — v1 มี v2 ยังไม่มี |
+| File viewer/editor | P8.6 | 🔶 **ทำแล้ว 2026-08-15** — เปิด/แก้/บันทึกข้อความและโค้ด · เอกสารอ่านอย่างเดียว · ยังไม่มีตัวแสดงรูป และยังสร้าง/ลบ/เปลี่ยนชื่อไฟล์ไม่ได้ |
 | Scope ต่อ entity | P1.1 (`Scope` ตัวเดียว) | ✅ ใช้ได้จริง |
 | Connection status badge | P5.5 | ✅ ใช้ได้จริง |
 | Completion notification | P7.5 | 🔶 ตรรกะครบ · ยังไม่ได้ยิงกับของจริง |
