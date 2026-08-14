@@ -350,6 +350,12 @@ DEPS
 # a correction record — research data that can be quietly overwritten is research
 # data nobody can prove was not overwritten.
 ANSWER_MUTATION=$(grep -rniE "(UPDATE|DELETE) +(FROM +)?(answer|submission)\b" Sources/OLTP Sources/FieldServer 2>/dev/null || true)
+# The pull is one-directional: Analysis reads OLTP, OLTP knows nothing about
+# DuckDB. If that edge ever reversed, M16 would have a path to the analytical
+# store through the module it writes to.
+OLTP_ANALYSIS=$(grep -rlE "^import (Analysis|DuckDB)" Sources/OLTP 2>/dev/null || true)
+FIELD_DUCK="$FIELD_DUCK $OLTP_ANALYSIS"
+FIELD_DUCK=$(echo "$FIELD_DUCK" | xargs)
 if [ -n "$FIELD_DUCK" ] || [ -n "$FIELD_DEPS" ] || [ -n "$ANSWER_MUTATION" ]; then
   fail "M16 reached past SQLite:$FIELD_DUCK $FIELD_DEPS $ANSWER_MUTATION"
 else

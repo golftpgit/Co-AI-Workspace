@@ -83,8 +83,11 @@ let package = Package(
         // a process that outlives every cell, and §13 owns processes — spawning
         // one from this target would be a second way to start a child that the
         // kill switch does not know about.
+        // OLTP arrived with P11.6b: answers land in SQLite and are pulled into
+        // DuckDB from here (§19.17). The edge only goes this way — `OLTP` does
+        // not know DuckDB exists, which is what keeps M16 unable to reach it.
         .target(name: "Analysis",
-                dependencies: ["AgentKit", "Observability", "Execution",
+                dependencies: ["AgentKit", "Observability", "Execution", "OLTP",
                                .product(name: "DuckDB", package: "duckdb-swift")]),
 
         // M3 — the roster: agents, skills and plugins loaded from files
@@ -274,7 +277,7 @@ let package = Package(
         .testTarget(name: "FieldServerTests", dependencies: ["FieldServer", "Instruments", "OLTP"]),
         .testTarget(name: "EmbeddingRuntimeTests", dependencies: ["EmbeddingRuntime"]),
         .testTarget(name: "ExecutionTests", dependencies: ["Execution", "Config"]),
-        .testTarget(name: "AnalysisTests", dependencies: ["Analysis"]),
+        .testTarget(name: "AnalysisTests", dependencies: ["Analysis", "OLTP"]),
         .testTarget(name: "ChannelsTests", dependencies: ["Channels"]),
         // CoreEngine is here for the reason P8.3 exists: the Done-when is that
         // an MCP tool reaches a real session's tool list, and the gateway is

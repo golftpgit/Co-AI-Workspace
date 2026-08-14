@@ -1061,6 +1061,10 @@ private struct ResultTable: View {
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 ScrollView([.horizontal, .vertical]) {
+                    // Pinned left. A `Grid` inside a two-way `ScrollView` takes
+                    // its ideal width and centres, which put a three-column
+                    // result in the middle of a 1400pt pane with the row count
+                    // stranded on the far left — U23-4's shape again.
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 3) {
                         GridRow {
                             ForEach(result.columns, id: \.name) { column in
@@ -1089,6 +1093,11 @@ private struct ResultTable: View {
                     }
                     .padding(8)
                 }
+                // A two-way `ScrollView` parks its content in the middle when it
+                // is smaller than the viewport, which put a three-column result
+                // in the centre of a 1400pt pane with the row count stranded on
+                // the far left. Anchoring says which corner it starts in.
+                .defaultScrollAnchor(.topLeading)
                 .frame(maxHeight: 300)
                 .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
             }

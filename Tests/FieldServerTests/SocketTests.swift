@@ -137,7 +137,12 @@ struct SocketTests {
             return collected
         }
 
-        #expect(statuses.allSatisfy { $0 == 200 })
+        // The tally is in the message on purpose. This failed once during a full
+        // `check.sh` run and passed everywhere else, and a bare "not all 200" is
+        // an hour of guessing — the first thing worth knowing is whether the
+        // refusals came from the server deciding or from the socket dropping.
+        let tally = Dictionary(grouping: statuses, by: { $0 }).mapValues(\.count)
+        #expect(statuses.allSatisfy { $0 == 200 }, "statuses: \(tally)")
         #expect(try await store.submissionCount(instrument: published.instrument.id,
                                                 version: 1) == 20)
         // Two answers each, none half-written.
