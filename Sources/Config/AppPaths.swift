@@ -106,6 +106,11 @@ public struct ProjectPaths: Sendable {
     /// (§19.17). Separate from `analysisDatabase` on purpose: DuckDB is where
     /// answers are *read* from, through `ATTACH`, and never where they land.
     public var responsesDatabase: URL { fieldDirectory.appending(path: "responses.sqlite") }
+    /// Who answered — deliberately **a different file** from the answers
+    /// (§20.7). A copy of `responsesDatabase` carries no identities at all, and
+    /// that is a property of where the rows are rather than of who remembers not
+    /// to join them.
+    public var linkageDatabase: URL { fieldDirectory.appending(path: "linkage.sqlite") }
 
     public var managedDirectories: [URL] {
         [root, analysisDirectory, notebooksDirectory, documentsDirectory, filesDirectory,
