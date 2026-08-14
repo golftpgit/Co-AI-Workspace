@@ -72,6 +72,24 @@ public struct Submission: Sendable, Equatable {
     }
 }
 
+/// A round of collection as it stands on disk (§20.7).
+public struct WaveRecord: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let openedAt: Date
+    public let closedAt: Date?
+    public let submissions: Int
+
+    public var isOpen: Bool { closedAt == nil }
+}
+
+/// One respondent's submission, without its answers — enough to head a row.
+public struct SubmissionRecord: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let waveID: String
+    public let receivedAt: Date
+    public let consentDigest: String
+}
+
 /// A change to an answer already given, kept beside it rather than over it.
 public struct Correction: Sendable, Equatable {
     public let submissionID: String
@@ -173,7 +191,77 @@ public actor ResponseStore {
             received_at REAL NOT NULL
         )
         """,
+        // A round of collection, kept rather than remembered. Closing a round
+        // used to live only in the running server: quit the app and the round it
+        // had closed came back open, which turns "we stopped collecting on the
+        // 14th" into something nobody can show.
+        """
+        CREATE TABLE IF NOT EXISTS wave (
+            id TEXT PRIMARY KEY,
+            instrument_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            opened_at REAL NOT NULL,
+            closed_at REAL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS wave_instrument ON wave (instrument_id, version)",
     ]
+
+    // MARK: - rounds (§20.7)
+
+    /// Writes down that a round opened.
+    public func openWave(id: String, instrument: String, version: Int,
+                         at date: Date = Date()) async throws {
+        try await database.execute("""
+            INSERT INTO wave (id, instrument_id, version, opened_at, closed_at)
+            VALUES (?, ?, ?, ?, NULL)
+            """,
+            [.text(id), .text(instrument), .integer(Int64(version)),
+             .double(date.timeIntervalSince1970)])
+    }
+
+    /// Closes a round, once. `closed_at IS NULL` in the WHERE clause is the whole
+    /// rule: a round has one closing date, and re-closing must not move it —
+    /// "when did collection stop" has to keep the same answer.
+    public func closeWave(id: String, at date: Date = Date()) async throws {
+        try await database.execute("""
+            UPDATE wave SET closed_at = ? WHERE id = ? AND closed_at IS NULL
+            """, [.double(date.timeIntervalSince1970), .text(id)])
+    }
+
+    /// Every round for a version, newest first, with how many answers each got.
+    public func waves(instrument: String, version: Int) async throws -> [WaveRecord] {
+        try await database.query("""
+            SELECT w.id AS id, w.opened_at AS opened, w.closed_at AS closed,
+                   (SELECT COUNT(*) FROM submission s WHERE s.wave_id = w.id) AS answers
+            FROM wave w
+            WHERE w.instrument_id = ? AND w.version = ?
+            ORDER BY w.opened_at DESC
+            """, [.text(instrument), .integer(Int64(version))])
+            .compactMap { row in
+                guard let id = row.string("id"),
+                      case .double(let opened)? = row["opened"] else { return nil }
+                var closed: Date?
+                if case .double(let seconds)? = row["closed"] {
+                    closed = Date(timeIntervalSince1970: seconds)
+                }
+                return WaveRecord(id: id,
+                                  openedAt: Date(timeIntervalSince1970: opened),
+                                  closedAt: closed,
+                                  submissions: Int(row.integer("answers") ?? 0))
+            }
+    }
+
+    /// Whether this round is still taking answers. Read from the row rather than
+    /// from whatever the server happens to remember, so a restart cannot reopen
+    /// what somebody closed.
+    public func waveIsOpen(id: String) async throws -> Bool {
+        let rows = try await database.query(
+            "SELECT closed_at FROM wave WHERE id = ?", [.text(id)])
+        guard let row = rows.first else { return false }
+        if case .null = row["closed_at"] ?? .null { return true }
+        return false
+    }
 
     // MARK: - writing
 
@@ -244,6 +332,22 @@ public actor ResponseStore {
             ORDER BY received_at
             """, [.text(instrument), .integer(Int64(version))])
             .compactMap { $0.string("id") }
+    }
+
+    /// The submissions themselves, in the order they arrived.
+    public func submissions(instrument: String, version: Int) async throws -> [SubmissionRecord] {
+        try await database.query("""
+            SELECT id, wave_id, received_at, consent_digest FROM submission
+            WHERE instrument_id = ? AND version = ?
+            ORDER BY received_at
+            """, [.text(instrument), .integer(Int64(version))])
+            .compactMap { row in
+                guard let id = row.string("id"), let wave = row.string("wave_id"),
+                      case .double(let received)? = row["received_at"] else { return nil }
+                return SubmissionRecord(id: id, waveID: wave,
+                                        receivedAt: Date(timeIntervalSince1970: received),
+                                        consentDigest: row.string("consent_digest") ?? "")
+            }
     }
 
     /// Every answer as it should be read today: the value that arrived, plus the

@@ -228,6 +228,12 @@ struct InstrumentsView: View {
         validityBox(instrument)
         gateBox()
         if model.isApproved { fieldBox() }
+        // Shown whenever there is anything to show, including after the server
+        // has been stopped: the moment somebody most wants to look at what came
+        // in is after they have closed the round.
+        if !model.responseRows.isEmpty || !model.rounds.isEmpty {
+            ResponsesBox(model: model, instrument: instrument)
+        }
     }
 
     /// M16, and only once the gate has been passed (§20.7). There is no control

@@ -141,40 +141,62 @@ public actor FieldServerHost {
         self.listener = listener
         self.port = port
         self.published = instrument
-        self.wave = Wave(instrumentID: instrument.instrument.id,
-                         version: instrument.instrument.version)
+
+        // Resume the round that is already open for this version rather than
+        // starting a new one. Turning the server off for the night and on again
+        // in the morning is not two rounds of data collection, and treating it as
+        // two would split one population across two rows in the write-up.
+        let existing = try? await store.waves(instrument: instrument.instrument.id,
+                                              version: instrument.instrument.version)
+        if let open = existing?.first(where: \.isOpen) {
+            wave = Wave(id: open.id, instrumentID: instrument.instrument.id,
+                        version: instrument.instrument.version, openedAt: open.openedAt)
+            log.info("field server resumed wave \(open.id, privacy: .public)")
+        } else {
+            let fresh = Wave(instrumentID: instrument.instrument.id,
+                             version: instrument.instrument.version)
+            // Written down before the first answer can arrive: a round nobody can
+            // point at afterwards is a round that did not happen, as far as a
+            // methods section is concerned.
+            try await store.openWave(id: fresh.id, instrument: fresh.instrumentID,
+                                     version: fresh.version, at: fresh.openedAt)
+            wave = fresh
+            await spans?.record(Span(name: "field.wave.open", status: .succeeded,
+                                     endedAt: Date(),
+                                     detail: "instrument \(instrument.instrument.id) "
+                                         + "v\(instrument.instrument.version) · wave \(fresh.id)"))
+        }
 
         log.info("field server open on \(port, privacy: .public) for instrument \(instrument.id, privacy: .public)")
-        await spans?.record(Span(name: "field.wave.open", status: .succeeded,
-                                 endedAt: Date(),
-                                 detail: "instrument \(instrument.instrument.id) "
-                                     + "v\(instrument.instrument.version) · wave \(wave?.id ?? "")"))
         return ServingAddress(port: port, hosts: Self.lanAddresses())
     }
 
-    /// Closes the wave and stops listening. Closing first, on purpose: for the
-    /// moment between the two, the endpoint is up and refusing, which is the
-    /// behaviour §20.7 invariant 5 asks for.
+    /// Stops listening. **Does not close the round**, because those are two
+    /// different decisions: shutting the laptop is not "we have finished
+    /// collecting", and a round that closes itself when the app quits is a round
+    /// nobody can resume tomorrow morning.
     public func stop() async {
-        wave?.close()
         listener?.cancel()
         listener = nil
         if let wave {
-            log.info("field server closed wave \(wave.id, privacy: .public)")
-            await spans?.record(Span(name: "field.wave.close", status: .succeeded,
-                                     endedAt: Date(), detail: "wave \(wave.id)"))
+            log.info("field server stopped, wave \(wave.id, privacy: .public) still open")
         }
     }
 
-    /// Closes the round without giving up the port — so a late POST gets an
-    /// explicit "this round is closed" rather than a connection refused, which
-    /// somebody would read as a network problem and retry.
+    /// Closes the round, durably, without giving up the port — so a late POST
+    /// gets an explicit "this round is closed" rather than a connection refused,
+    /// which somebody would read as a network problem and retry.
+    ///
+    /// One way only. Reopening is starting a *new* round, because answers given
+    /// after a stated closing date are a different population from the ones given
+    /// before it.
     public func closeWave() async {
-        wave?.close()
-        if let wave {
-            await spans?.record(Span(name: "field.wave.close", status: .succeeded,
-                                     endedAt: Date(), detail: "wave \(wave.id)"))
-        }
+        guard var current = wave else { return }
+        current.close()
+        wave = current
+        try? await store.closeWave(id: current.id, at: current.closedAt ?? Date())
+        await spans?.record(Span(name: "field.wave.close", status: .succeeded,
+                                 endedAt: Date(), detail: "wave \(current.id)"))
     }
 
     public func responseCount() async -> Int {
