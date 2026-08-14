@@ -233,7 +233,8 @@ private struct RootView: View {
                             let stores = await engine.stores(for: projects.scope)
                             await analysis.attach(store: stores.analysis,
                                                   kernel: engine.notebookKernel,
-                                                  library: stores.notebooks)
+                                                  library: stores.notebooks,
+                                                  cellRuns: CellRunStore(client: engine.client))
                             analysis.attach(connectors: stores.connectors)
                             await analysis.attach(plans: engine.plans,
                                                   detector: engine.gapDetector,

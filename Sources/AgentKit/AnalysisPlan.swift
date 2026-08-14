@@ -283,3 +283,39 @@ public struct AnalysisPlan: Sendable, Codable, Equatable, Identifiable {
         revisions.append(reason)
     }
 }
+
+
+// ─────────────────────────────────────────────────────────────
+// What a notebook cell answered (ARCHITECTURE §12.4 · §20.8, P11.9).
+//
+// Here rather than in M8 or M10 because it is the record those two share: the
+// analysis store produces one when a cell runs, and the manuscript resolves its
+// numbers out of one. Putting it in either would make the other depend on a
+// DuckDB engine or on a document renderer to hold a table of strings.
+// ─────────────────────────────────────────────────────────────
+
+/// What a cell answered, recorded when it ran.
+///
+/// Carries `source` because "which query produced this number" is the question
+/// a committee asks, and because a run whose source no longer matches the cell
+/// is a run about a different question.
+public struct CellRun: Sendable, Codable, Equatable, Identifiable {
+    public let notebookID: String
+    public let cellID: String
+    public let source: String
+    public let columns: [String]
+    public let rows: [[String?]]
+    public let ranAt: Date
+
+    public var id: String { "\(notebookID)|\(cellID)" }
+
+    public init(notebookID: String, cellID: String, source: String,
+                columns: [String], rows: [[String?]], ranAt: Date = Date()) {
+        self.notebookID = notebookID
+        self.cellID = cellID
+        self.source = source
+        self.columns = columns
+        self.rows = rows
+        self.ranAt = ranAt
+    }
+}

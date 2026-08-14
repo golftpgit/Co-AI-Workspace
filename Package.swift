@@ -304,7 +304,7 @@ let package = Package(
         .testTarget(name: "FieldServerTests", dependencies: ["FieldServer", "Instruments", "OLTP"]),
         .testTarget(name: "EmbeddingRuntimeTests", dependencies: ["EmbeddingRuntime"]),
         .testTarget(name: "ExecutionTests", dependencies: ["Execution", "Config"]),
-        .testTarget(name: "AnalysisTests", dependencies: ["Analysis", "OLTP"]),
+        .testTarget(name: "AnalysisTests", dependencies: ["Analysis", "OLTP", "DocGen"]),
         .testTarget(name: "ChannelsTests", dependencies: ["Channels"]),
         // CoreEngine is here for the reason P8.3 exists: the Done-when is that
         // an MCP tool reaches a real session's tool list, and the gateway is

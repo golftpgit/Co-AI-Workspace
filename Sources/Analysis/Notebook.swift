@@ -93,6 +93,22 @@ public enum NotebookError: Error, CustomStringConvertible, Equatable {
     }
 }
 
+extension CellOutcome {
+    /// The record a manuscript can bind a number to (§20.8, P11.9).
+    ///
+    /// `nil` for a Python cell: a manuscript number points at a column and a
+    /// row, and a Python cell's answer is a stream of text. That is a real gap
+    /// and it is left visible rather than papered over by parsing stdout —
+    /// P11.9's promise is that a reported figure is traceable, and a number
+    /// scraped out of print() is traceable to nothing.
+    public func run(notebookID: String, cell: NotebookCell) -> CellRun? {
+        guard case .sql(let results) = self, let first = results.first else { return nil }
+        return CellRun(notebookID: notebookID, cellID: cell.id, source: cell.source,
+                       columns: first.result.columns.map(\.name),
+                       rows: first.result.rows)
+    }
+}
+
 /// Runs cells. Holds the two engines and the guard between them.
 public struct NotebookRunner: Sendable {
     public let store: AnalysisStore

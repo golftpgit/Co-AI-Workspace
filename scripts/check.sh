@@ -86,7 +86,13 @@ DUP_SCOPE=$(grep -rlE "enum Scope[[:space:]]*[:{]" Sources --include=*.swift | w
 # Anchored on a word boundary since P11.1's gate work: `InstrumentFootprint(`
 # ends in the same six letters, and so would any `Blueprint(` or `Sprint(`. A
 # structural rule that fails on a name is a rule people learn to route around.
+#
+# Comment lines are skipped for the same reason, found the same way: P11.9's
+# note explaining why a figure must not be scraped out of a `print()` tripped
+# the rule about calling one. A rule that fires on prose teaches people not to
+# write the prose.
 if grep -rnE "(^|[^A-Za-z0-9_.])print\(" Sources --include=*.swift \
+   | grep -vE ":[0-9]+:[[:space:]]*(///?|\*)" \
    | grep -v "^Sources/CoAIWorkspaceApp" | grep -v "^Sources/EmbeddingCheck" \
    | grep -v "^Sources/MLXCheck" | grep -q .; then
   fail "print() outside the app target — use AppLog/os.Logger"
@@ -125,7 +131,7 @@ for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer
                   TemplateStore TemplateParser TemplateFiller PluginRegistry WriteSkillTool \
                   TelegramChannel DiscordChannel LINEChannel ChannelRouter LimitationsBuilder ManifestParser \
                   ScaleReport ScoredResponses InstrumentDisposal ProjectTypeGateReader \
-                  CodebookStore CodingAnalysis; do
+                  CodebookStore CodingAnalysis CellRunStore ManuscriptBuilder; do
   grep -rqE "$capability[(.]" Sources/CoAIWorkspaceApp --include=*.swift || UNWIRED="$UNWIRED $capability"
 done
 if [ -n "$UNWIRED" ]; then
