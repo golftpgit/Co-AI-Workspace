@@ -44,6 +44,21 @@ struct ResponsesBox: View {
                         .font(.callout).foregroundStyle(.secondary)
                 } else {
                     table
+                    HStack {
+                        Button("ส่งเข้าฐานข้อมูลวิเคราะห์") { Task { await model.materialize() } }
+                        if let done = model.materialized {
+                            Text("ตาราง \(done.table) · \(done.rows) แถว"
+                                 + (done.corrections > 0 ? " · \(done.corrections) ค่าที่ถูกแก้" : ""))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .controlSize(.small)
+                    Text("คำตอบดิบอยู่ใน SQLite ของโปรเจกต์ · กดปุ่มนี้เพื่อคัดลอกเข้า DuckDB "
+                         + "แล้วเปิดในสมุดงานได้ — แอปเป็นฝ่ายดึง เซิร์ฟเวอร์แตะ DuckDB ไม่ได้เลย (§19.17) "
+                         + "· ค่าที่ถูกแก้จะไปในรูปค่าที่แก้แล้ว พร้อมคอลัมน์ `was_corrected` บอกว่าแก้")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text("ตารางนี้ทำงานเหมือน Sheet แต่ไม่ใช่ Sheet — แก้ค่าหนึ่งช่องจะถูกเก็บเป็น "
                          + "“บันทึกการแก้ไข” (ค่าเดิม · ค่าใหม่ · เหตุผล · ใครแก้ · เมื่อไร) "
                          + "ไม่ใช่การเขียนทับ (§19.17)")

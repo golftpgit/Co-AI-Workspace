@@ -7,6 +7,7 @@ import Persistence
 import Observability
 import FieldServer
 import OLTP
+import Analysis
 
 // ─────────────────────────────────────────────────────────────
 // The data-collection tab's state (ARCHITECTURE §20.3, P11.2/P11.4).
@@ -66,6 +67,8 @@ public final class InstrumentsViewModel {
     public private(set) var responseRows: [ResponseRow] = []
     /// Every round for the selected version, newest first.
     public private(set) var rounds: [WaveRecord] = []
+    /// What the last pull into the analytical store produced (§19.17).
+    public private(set) var materialized: MaterializedResponses?
 
     /// A respondent's answers, ready to be drawn as a row: the values that are
     /// current, each still carrying whatever it was before somebody corrected it.
@@ -83,6 +86,7 @@ public final class InstrumentsViewModel {
     private var paths: AppPaths?
     private var spans: (any SpanSink)?
     private var host: FieldServerHost?
+    private var analysis: AnalysisStore?
     private let log = AppLog.logger("instruments-ui")
 
     public init() {}
@@ -98,7 +102,9 @@ public final class InstrumentsViewModel {
     public var isApproved: Bool { approval != nil }
 
     public func attach(store: InstrumentStore, scope: Scope,
-                       paths: AppPaths, spans: (any SpanSink)? = nil) async {
+                       paths: AppPaths, analysis: AnalysisStore? = nil,
+                       spans: (any SpanSink)? = nil) async {
+        self.analysis = analysis
         self.store = store
         self.scope = scope
         self.paths = paths
@@ -452,6 +458,37 @@ public final class InstrumentsViewModel {
             : ContentValidity.assess(ratings: ratings, itemIDs: reviewed)
         gate = InstrumentGate.evaluate(instrument, validity: validity)
         await loadResponses()
+    }
+
+    /// Pulls this version's answers into the project's analytical store, so the
+    /// notebook can reach them (§19.17).
+    ///
+    /// The app pulls; M16 never pushes. That direction is what keeps a web
+    /// request unable to touch DuckDB, and it is why this button lives here
+    /// rather than anywhere near the server.
+    public func materialize() async {
+        guard let instrument = selected, let analysis,
+              let responses = await answerStore() else {
+            status = Status(message: "ยังเปิดฐานข้อมูลวิเคราะห์ของโปรเจกต์นี้ไม่ได้", isError: true)
+            return
+        }
+        do {
+            let prompts = Dictionary(instrument.items.map { ($0.id, $0.prompt.thai) },
+                                     uniquingKeysWith: { first, _ in first })
+            let result = try await ResponseMaterializer(reading: responses, into: analysis,
+                                                        spans: spans)
+                .materialize(instrument: instrument.id, version: instrument.version,
+                             prompts: prompts)
+            materialized = result
+            status = Status(message: "ส่งเข้าตาราง \(result.table) แล้ว — \(result.rows) แถว "
+                            + "จาก \(result.submissions) ชุด"
+                            + (result.corrections > 0
+                               ? " · มี \(result.corrections) ค่าที่ถูกแก้หลังเก็บ (คอลัมน์ was_corrected)"
+                               : ""),
+                            isError: false)
+        } catch {
+            status = Status(message: "ส่งเข้าฐานข้อมูลวิเคราะห์ไม่สำเร็จ: \(error)", isError: true)
+        }
     }
 
     public func clearStatus() { status = nil }

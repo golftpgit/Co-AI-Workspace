@@ -454,9 +454,15 @@ private struct RootView: View {
             InstrumentsView(model: instruments)
                 .id(projects.scope.storageKey)
                 .task {
+                    // The project's own analytical store, so answers can be
+                    // pulled across into it (§19.17). Passed in rather than
+                    // opened here: one project, one `.duckdb`, and the place
+                    // that knows which is `WorkspaceStores`.
+                    let stores = await engine.stores(for: projects.scope)
                     await instruments.attach(store: InstrumentStore(client: engine.client),
                                              scope: projects.scope,
                                              paths: engine.paths,
+                                             analysis: stores.analysis,
                                              spans: engine.spans)
                 }
         case .internalDB:

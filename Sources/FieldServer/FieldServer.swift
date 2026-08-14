@@ -340,9 +340,44 @@ public actor FieldServerHost {
 
     // MARK: - sockets
 
+    /// Sends the reply and closes the stream **gracefully**.
+    ///
+    /// The obvious version of this — send, then `cancel()` in the completion
+    /// handler — is wrong in a way that only shows up under load, and it showed
+    /// up: `.contentProcessed` fires when the bytes reach the transport, not when
+    /// the other end has them, and `cancel()` resets the connection. With twenty
+    /// phones submitting at once, some of them got a failed request for an answer
+    /// that had already been stored, which is the worst failure this server has:
+    /// the respondent sees an error and submits again.
+    ///
+    /// `.finalMessage` sends a FIN instead, so the client reads the whole
+    /// response and closes; the connection is then cancelled once the peer is
+    /// done, with a bound so a client that never closes cannot hold a socket.
     private func send(_ response: HTTPResponse, on connection: NWConnection) {
-        connection.send(content: response.wire,
-                        completion: .contentProcessed { _ in connection.cancel() })
+        connection.send(content: response.wire, contentContext: .finalMessage,
+                        isComplete: true, completion: .contentProcessed { _ in
+            Task {
+                await Self.waitForPeerClose(connection)
+                connection.cancel()
+            }
+        })
+    }
+
+    /// Waits for the client to close its side, or gives up after a few seconds.
+    private static func waitForPeerClose(_ connection: NWConnection,
+                                         timeout: Duration = .seconds(5)) async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                await withCheckedContinuation { continuation in
+                    connection.receive(minimumIncompleteLength: 1, maximumLength: 1) {
+                        _, _, _, _ in continuation.resume()
+                    }
+                }
+            }
+            group.addTask { try? await Task.sleep(for: timeout) }
+            await group.next()
+            group.cancelAll()
+        }
     }
 
     private static func receive(_ connection: NWConnection) async -> Data? {
