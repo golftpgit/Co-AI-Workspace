@@ -72,8 +72,11 @@ struct TypeGateTests {
     func namedGapIsVacuous() throws {
         var project = readyToClose().0
         project.typeName = "research.qualitative"
+        // `saturation_reached` is the standing example: P11.8 computes the curve,
+        // but declaring saturation is the researcher's conclusion, so no build
+        // will ever answer it.
         let saturation = ProjectTypeGate(id: "G-saturation", after: "coding.round",
-                                         requires: ["intercoder_agreement", "saturation_reached"])
+                                         requires: ["saturation_reached"])
         let evaluation = try #require(ProjectLifecycle.evaluate(
             project, wbs: WorkBreakdown(), typeGates: [saturation]))
 
@@ -82,11 +85,26 @@ struct TypeGateTests {
         #expect(evaluation.passed)
         // And it is marked as unchecked, so nothing reads as confirmed.
         let theirs = evaluation.conditions.filter { $0.text.contains("G-saturation") }
-        #expect(theirs.count == 2)
-        #expect(theirs.count { $0.vacuous } == 2)
-        #expect(theirs.count { $0.text.contains("ระบบยังตรวจข้อนี้เองไม่ได้") } == 2)
-        // Each names the phase that will answer it rather than saying "later".
-        #expect(theirs.contains { $0.text.contains("P11.8") })
+        #expect(theirs.count == 1)
+        #expect(theirs.count { $0.vacuous } == 1)
+        #expect(theirs[0].text.contains("ระบบยังตรวจข้อนี้เองไม่ได้"))
+        // It names the phase rather than saying "later".
+        #expect(theirs[0].text.contains("P11.8"))
+    }
+
+    @Test("a condition the build can check but nobody ran blocks, and says which of the two it is")
+    func answerableButUnaskedBlocks() throws {
+        let (project, wbs) = readyToClose()
+        let coding = ProjectTypeGate(id: "G-coding", after: "coding.round",
+                                     requires: ["intercoder_agreement"])
+        // No facts supplied — the reader is not wired, or could not reach its
+        // store. That is not the same as an unrecognised word, and it must not
+        // read as one: the two send somebody to different places.
+        let evaluation = try #require(ProjectLifecycle.evaluate(
+            project, wbs: wbs, typeGates: [coding]))
+        #expect(!evaluation.passed)
+        #expect(evaluation.unmet[0].contains("ระบบตรวจข้อนี้ได้ แต่ยังไม่ได้ตรวจ"))
+        #expect(!evaluation.unmet[0].contains("ไม่รู้จักเงื่อนไข"))
     }
 
     @Test("a condition nobody has heard of blocks, and says it does not know the word")

@@ -124,7 +124,8 @@ for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer
                   MCPRegistry MCPServerStore Notifier AppIntentsChannel \
                   TemplateStore TemplateParser TemplateFiller PluginRegistry WriteSkillTool \
                   TelegramChannel DiscordChannel LINEChannel ChannelRouter LimitationsBuilder ManifestParser \
-                  ScaleReport ScoredResponses InstrumentDisposal ProjectTypeGateReader; do
+                  ScaleReport ScoredResponses InstrumentDisposal ProjectTypeGateReader \
+                  CodebookStore CodingAnalysis; do
   grep -rqE "$capability[(.]" Sources/CoAIWorkspaceApp --include=*.swift || UNWIRED="$UNWIRED $capability"
 done
 if [ -n "$UNWIRED" ]; then

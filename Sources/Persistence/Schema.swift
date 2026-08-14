@@ -16,6 +16,10 @@ public enum Schema {
     /// an interrupted run — run-until-done resumes the second and never the
     /// first. The criteria and deliverable type it needs to rebuild an
     /// assignment ride along on the schemaless part of the row.
+    /// 13: `codebook`, `coding_unit` and `code_assignment` exist (§20.3, P11.8)
+    /// — the qualitative half. A coding is keyed by unit *and* coder so a coder
+    /// revising a passage replaces their own decision and never anybody else's,
+    /// which is what keeps one person out of a κ twice.
     /// 12: `instrument_approval` exists (§20.5, P11.4) — passing the instrument
     /// gate is an event with somebody's name on it, and an approval that lives in
     /// one screen's memory cannot be read back the day the committee asks.
@@ -43,7 +47,7 @@ public enum Schema {
     /// `project_id`; there was simply nothing on the other end of it, so two
     /// projects were indistinguishable and the app wrote the literal id
     /// "default" into all of them.
-    public static let version = 12
+    public static let version = 13
 
     /// Split into statements that are executed one at a time: a single
     /// failing statement should name itself, not abort a 40-line blob.
@@ -274,6 +278,34 @@ public enum Schema {
         "DEFINE INDEX IF NOT EXISTS instrument_approval_instrument ON instrument_approval FIELDS instrument_id",
         "DEFINE FIELD IF NOT EXISTS version ON instrument_approval TYPE int",
         "DEFINE FIELD IF NOT EXISTS approved_at ON instrument_approval TYPE datetime",
+
+        // ── the qualitative half (§20.3, P11.8) ──
+        "DEFINE TABLE IF NOT EXISTS codebook SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON codebook TYPE string",
+        "DEFINE INDEX IF NOT EXISTS codebook_uid ON codebook FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS project_id ON codebook TYPE string",
+        "DEFINE INDEX IF NOT EXISTS codebook_project ON codebook FIELDS project_id",
+        "DEFINE FIELD IF NOT EXISTS updated_at ON codebook TYPE datetime",
+
+        // The passages, fixed before coding starts — two coders who each choose
+        // where a passage begins are not agreeing about anything comparable.
+        "DEFINE TABLE IF NOT EXISTS coding_unit SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON coding_unit TYPE string",
+        "DEFINE INDEX IF NOT EXISTS coding_unit_uid ON coding_unit FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS codebook_id ON coding_unit TYPE string",
+        "DEFINE FIELD IF NOT EXISTS document_id ON coding_unit TYPE string",
+        "DEFINE INDEX IF NOT EXISTS coding_unit_codebook ON coding_unit FIELDS codebook_id",
+
+        // One row per (unit, coder). The uniqueness is the invariant: a second
+        // write from the same coder is that coder changing their mind, and
+        // keeping both would put one person into the agreement twice.
+        "DEFINE TABLE IF NOT EXISTS code_assignment SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON code_assignment TYPE string",
+        "DEFINE INDEX IF NOT EXISTS code_assignment_uid ON code_assignment FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS codebook_id ON code_assignment TYPE string",
+        "DEFINE FIELD IF NOT EXISTS coder ON code_assignment TYPE string",
+        "DEFINE INDEX IF NOT EXISTS code_assignment_codebook ON code_assignment FIELDS codebook_id",
+        "DEFINE FIELD IF NOT EXISTS updated_at ON code_assignment TYPE datetime",
 
         "DEFINE TABLE IF NOT EXISTS schema_meta SCHEMALESS",
     ]

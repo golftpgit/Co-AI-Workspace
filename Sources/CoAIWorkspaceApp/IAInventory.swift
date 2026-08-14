@@ -94,11 +94,18 @@ enum IAInventory {
         IAEntry(screen: "Plan", area: "แผนงาน",
                 subTab: "ภาพรวม · แผนงาน+ลำดับ · กระดานงาน · ทีม & RACI · ประโยชน์ & ปิดงาน",
                 state: .done),
+        // Kept current deliberately: the three things this row said were missing
+        // were built in P11.5, P11.6b and P11.7b, and an inventory that lags the
+        // app is the R13 failure it exists to prevent, one level up.
         IAEntry(screen: "เก็บข้อมูล", area: "โต๊ะทำงาน", subTab: "เก็บข้อมูล",
                 state: .partial("ออกแบบเครื่องมือ · ประตูก่อนเก็บข้อมูล · เปิดฟอร์มในวงแลน · "
-                                + "รอบเก็บข้อมูลที่ปิดแล้วปิดจริง · ตารางคำตอบพร้อมบันทึกการแก้ไข — "
-                                + "ยังไม่มี: กรอกต่อทีหลัง (resume token) · รหัสนิรนามสำหรับงานหลายรอบ · "
-                                + "materialize เข้า DuckDB (P11.7/P11.7b)")),
+                                + "กรอกต่อทีหลัง · รหัสนิรนามและ attrition · รอบเก็บข้อมูลที่ปิดแล้วปิดจริง · "
+                                + "ตารางคำตอบพร้อมบันทึกการแก้ไข · materialize เข้า DuckDB · "
+                                + "α/ω/EFA จากคำตอบจริง — ยังไม่มี: ชนิดข้อ matrix/ranking/อัปโหลดไฟล์ในฟอร์มที่เสิร์ฟ")),
+        IAEntry(screen: "ลงรหัส", area: "โต๊ะทำงาน", subTab: "ลงรหัส",
+                state: .partial("สมุดรหัสพร้อมนิยามและรหัสแม่ · ช่วงข้อความที่กำหนดครั้งเดียวแล้วทุกคนลงชุดเดียวกัน · "
+                                + "κ ระหว่างผู้ลงรหัส (Cohen/Fleiss) รายรวมและรายรหัส · เส้นโค้งความอิ่มตัว — "
+                                + "ยังไม่มี: ถอดเทปเข้าคลังความรู้พร้อม provenance และการอ้างกลับถึงช่วงข้อความจริง (P11.8 ครึ่งหลัง)")),
         IAEntry(screen: "แหล่งและ tier", area: "คลังความรู้", subTab: "แหล่งและ tier",
                 state: .partial("ดูทะเบียนแหล่งและ tier ได้ · เปิด/ปิดรายแหล่งยังไม่บันทึกถาวร (P13)")),
     ]
