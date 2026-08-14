@@ -27,4 +27,9 @@ public enum OpaqueID {
     public static let benefit = "bn"
     public static let tailoring = "tr"
     public static let report = "rp"
+    // M15 Instruments (§20.3, P11.2)
+    public static let instrument = "in"
+    public static let item = "it"
+    public static let construct = "cn"
+    public static let researchQuestion = "rq"
 }

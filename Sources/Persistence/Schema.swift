@@ -16,6 +16,12 @@ public enum Schema {
     /// an interrupted run — run-until-done resumes the second and never the
     /// first. The criteria and deliverable type it needs to rebuild an
     /// assignment ride along on the schemaless part of the row.
+    /// 12: `instrument_approval` exists (§20.5, P11.4) — passing the instrument
+    /// gate is an event with somebody's name on it, and an approval that lives in
+    /// one screen's memory cannot be read back the day the committee asks.
+    /// 11: `instrument` and `expert_rating` exist (§20.3–§20.4, P11.2/P11.3) —
+    /// an instrument is versioned like a baseline, and expert ratings arrive one
+    /// at a time so they are rows rather than a field inside the instrument.
     /// 10: `report` exists (§19.13, P10.11) — a status report is a claim made on
     /// a date, so it is kept rather than re-rendered, and "how often did anybody
     /// report" becomes a question the database can answer.
@@ -37,7 +43,7 @@ public enum Schema {
     /// `project_id`; there was simply nothing on the other end of it, so two
     /// projects were indistinguishable and the app wrote the literal id
     /// "default" into all of them.
-    public static let version = 10
+    public static let version = 12
 
     /// Split into statements that are executed one at a time: a single
     /// failing statement should name itself, not abort a 40-line blob.
@@ -236,6 +242,38 @@ public enum Schema {
         "DEFINE FIELD IF NOT EXISTS kind ON report TYPE string",
         "DEFINE INDEX IF NOT EXISTS report_project ON report FIELDS project_id, kind",
         "DEFINE FIELD IF NOT EXISTS generated_at ON report TYPE datetime",
+
+        // ── instruments and expert ratings (§20.3, §20.4, P11.2/P11.3) ──
+        "DEFINE TABLE IF NOT EXISTS instrument SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON instrument TYPE string",
+        "DEFINE INDEX IF NOT EXISTS instrument_uid ON instrument FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS project_id ON instrument TYPE string",
+        // §20.6 invariant 1 is about versions, so "which versions exist" must be
+        // answerable without decoding every row.
+        "DEFINE FIELD IF NOT EXISTS version ON instrument TYPE int",
+        "DEFINE INDEX IF NOT EXISTS instrument_project ON instrument FIELDS project_id, version",
+        "DEFINE FIELD IF NOT EXISTS updated_at ON instrument TYPE datetime",
+
+        "DEFINE TABLE IF NOT EXISTS expert_rating SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON expert_rating TYPE string",
+        // One rating per expert per item: a second submission is the same expert
+        // changing their mind, not a second opinion.
+        "DEFINE INDEX IF NOT EXISTS expert_rating_uid ON expert_rating FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS instrument_id ON expert_rating TYPE string",
+        "DEFINE FIELD IF NOT EXISTS item_id ON expert_rating TYPE string",
+        "DEFINE INDEX IF NOT EXISTS expert_rating_instrument ON expert_rating FIELDS instrument_id",
+        "DEFINE FIELD IF NOT EXISTS updated_at ON expert_rating TYPE datetime",
+
+        // One approval per instrument version (§20.5). Unique on the version so
+        // "was this form approved, and by whom" is a lookup rather than a scan of
+        // whatever the screen happened to remember.
+        "DEFINE TABLE IF NOT EXISTS instrument_approval SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON instrument_approval TYPE string",
+        "DEFINE INDEX IF NOT EXISTS instrument_approval_uid ON instrument_approval FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS instrument_id ON instrument_approval TYPE string",
+        "DEFINE INDEX IF NOT EXISTS instrument_approval_instrument ON instrument_approval FIELDS instrument_id",
+        "DEFINE FIELD IF NOT EXISTS version ON instrument_approval TYPE int",
+        "DEFINE FIELD IF NOT EXISTS approved_at ON instrument_approval TYPE datetime",
 
         "DEFINE TABLE IF NOT EXISTS schema_meta SCHEMALESS",
     ]
