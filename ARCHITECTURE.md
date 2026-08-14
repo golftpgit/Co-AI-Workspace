@@ -133,15 +133,20 @@
 | **T2** — Peer-reviewed | ผ่านการตรวจสอบโดยผู้เชี่ยวชาญ | **ทุกสาขา**: OpenAlex, Crossref, Semantic Scholar, DOAJ · **การแพทย์**: PubMed · **ฟิสิกส์/คณิต/CS**: arXiv (ที่ตีพิมพ์แล้ว) · **สังคมศาสตร์**: SSRN, ERIC | API ทางการ (ฟรีถาวรทุกตัว) |
 | **T3** — Preprint / กึ่งทางการ | ยังไม่ผ่าน peer review แต่มีตัวตนตรวจสอบได้ | medRxiv/bioRxiv, arXiv (preprint), รายงานของสถาบัน, thesis repository, เอกสารประกอบ conference | API ของแต่ละแหล่ง |
 | **T4** — Curated community | ชุมชนที่มีกลไกตรวจสอบกันเอง | Wikipedia (+ อ้างอิงท้ายบทความ), Stack Overflow, GitHub repo ที่มีคนใช้จริง, documentation ของ OSS | API ทางการ / meta-search |
-| **T5** — General web | ไม่มีกลไกตรวจสอบ | บล็อก, ข่าว, ฟอรัม, เนื้อหาทั่วไป | **SearXNG self-hosted sidecar** (meta-search ครอบ Google/Bing/DDG/70+ engine, ไม่มี key, ไม่มี rate limit) |
+| **T5** — General web | ไม่มีกลไกตรวจสอบ | บล็อก, ข่าว, ฟอรัม, เนื้อหาทั่วไป | **`WKWebView` แบบไม่มีหน้าต่างในแอปเอง** ([§1.2.1](#121-สะพานค้นเว็บด้วย-wkwebview-แบบไม่มีหน้าต่าง-p131)) — ไม่มี key, ไม่ต้องแพ็ก runtime อะไรเพิ่ม, รัน JavaScript ได้ |
 
 **การเลือก tier ไม่ผูกกับสาขาแบบตายตัว** — `WebSearch` ถือ **source registry** ที่แต่ละรายการประกาศ `{domain pattern, tier, สาขาที่ครอบคลุม}` แล้ว agent เลือกจาก**หัวข้อของ task** ไม่ใช่จาก hardcode ต่อ role: task การแพทย์ default ไป T1–T2 สายการแพทย์, task เขียนโค้ดไป T1 (เอกสารทางการของ framework) + T4 (Stack Overflow/GitHub), task นโยบายไป T1 (สถิติราชการ) — เพิ่มแหล่งใหม่ = เพิ่มแถวใน registry ไม่ต้องแก้โค้ด agent
 
 🆕 **ค้นแล้วต้องอ่านจริง ไม่ใช่ตัดสินจาก snippet**: `web_search` คืนแค่รายการผลลัพธ์ — เมื่อจะอ้างอิงเนื้อหาใดต้องเรียก **`fetch_page`** ดึงหน้านั้นมาสกัดเป็นข้อความจริง (readability extraction ตัด nav/ads/footer ออก, รองรับ PDF ที่ลิงก์ตรง) แล้วค่อยสรุป — เหตุผล: snippet ของ search engine สั้นและตัดบริบท ทำให้ agent สรุปผิดได้ง่าย และเราต้องการ **provenance ระดับย่อหน้า** ไม่ใช่แค่ URL ([§11.3](#113-provenance--credibility-บังคับตั้งแต่-ingestion))
 
-**เหตุผลที่เลือก SearXNG แทนการ scrape DuckDuckGo แบบ v1** *(ตัดสินใจแล้ว 2026-08-10)*: v1 ใช้วิธี scrape HTML ของ DDG (`html.duckduckgo.com/html/`) เพราะ DDG ไม่มี public API จริงสำหรับ organic result — วิธีนี้พังทุกครั้งที่ markup เปลี่ยน SearXNG แก้ปัญหานี้ให้ในตัว (มีคนดูแล parser ให้) และเป็น pattern เดียวกับที่เราต้อง run sidecar ของ SurrealDB อยู่แล้ว → เพิ่ม process ที่สองไม่ได้เพิ่มความซับซ้อนเชิงสถาปัตยกรรม เก็บ **DDG scraper เป็น fallback** เผื่อ SearXNG ล่ม
+**ประวัติการตัดสินใจของช่อง T5 — เปลี่ยนแล้วหนึ่งครั้ง เพราะเกณฑ์ตัดสินเปลี่ยนจาก "รันได้ไหม" เป็น "รันได้ในแอปที่ sandbox ไหม"**:
 
-**ราคาที่ยอมจ่าย**: SearXNG เป็น Python — ต้อง bundle Python runtime หรือใช้ prebuilt binary (มี standalone CLI ที่ build ไว้ให้ macOS แล้ว) `SidecarManager` ตัวเดียวกับที่ดูแล `surreal` ดูแลตัวนี้ด้วย ([§11.5](#115-surrealdb-sidecar--client-ของเราเอง))
+| เมื่อ | เลือก | เหตุผล |
+|---|---|---|
+| 2026-08-10 | **SearXNG self-hosted sidecar** | v1 scrape HTML ของ DDG (`html.duckduckgo.com/html/`) ซึ่งพังทุกครั้งที่ markup เปลี่ยน · SearXNG มีคนดูแล parser ให้ และเราต้อง run sidecar ของ SurrealDB อยู่แล้ว จึงดูเหมือนไม่เพิ่มความซับซ้อน |
+| 2026-08-14 | 🔄 **เปลี่ยนเป็น `WKWebView` ไม่มีหน้าต่าง** ([§1.2.1](#121-สะพานค้นเว็บด้วย-wkwebview-แบบไม่มีหน้าต่าง-p131)) | **SearXNG เป็น Python และ venv ของมันย้ายที่ไม่ได้** (สคริปต์ข้างในฝัง absolute path) จึงก๊อปเข้า `.app` ไม่ได้ — ติดตั้งและค้นได้จริงบนเครื่องนักพัฒนา แล้วไปตายตรงที่ผู้ใช้ต้องใช้จริง ซึ่งเป็นบทเรียน P8.4/P9.6 ซ้ำอีกครั้ง · `WKWebView` เป็นเฟรมเวิร์กของระบบ ไม่ต้องแพ็กอะไร และรัน JavaScript ได้ด้วย |
+
+**สิ่งที่ยังอยู่จากรอบแรก**: `SearXNGSource` ยังเป็น provider ตัวหนึ่งใน `WebSearch` และใช้ได้ถ้ามีคนรัน SearXNG เองไว้ — สิ่งที่เปลี่ยนคือมันไม่ใช่ *ทางหลัก* และไม่ใช่ sidecar ที่แอปแพ็กมาให้อีกต่อไป (`SidecarManager` จึงดูแลแค่ `surreal` ตัวเดียว — [§11.5](#115-surrealdb-sidecar--client-ของเราเอง))
 
 **ทางเลือกที่เปิดไว้**: `WebSearch` module ออกแบบเป็น provider protocol อยู่แล้ว — ถ้าวันหนึ่งอยากจ่ายเงินใช้ Tavily/Exa (ซึ่งคืนผลแบบ LLM-ready ดีกว่า) แค่เพิ่ม provider ใหม่ ไม่ต้องแก้ agent
 
@@ -271,7 +276,7 @@ v2 = **Core อยู่ตรงกลาง, ที่เหลือเป็
 
 ```mermaid
 graph TB
-    subgraph Ch["M9 Channels — สมมาตรกันทุกตัว"]
+    subgraph Ch["M4 Channels — สมมาตรกันทุกตัว"]
         GUI["SwiftUI App"] ~~~ TG["Telegram"] ~~~ DC["Discord"] ~~~ LN["LINE"] ~~~ SIRI["App Intents/Shortcuts"]
     end
 
@@ -285,7 +290,7 @@ graph TB
         Ledger["Task Ledger"]
     end
 
-    subgraph Cap["M5 ToolBelt — uniform AgentTool protocol"]
+    subgraph Cap["M6 ToolBelt — uniform AgentTool protocol"]
         T1["Shell/Exec"] ~~~ T2["KB Search"] ~~~ T3["Web Search"] ~~~ T4["Analysis"] ~~~ T5["DocGen"] ~~~ T6["MCP Tools"] ~~~ T7["Skill/Plugin"]
     end
 
@@ -309,7 +314,9 @@ graph TB
 
 ## 4. Module Catalog — ภาพรวมทั้งระบบ
 
-ตารางนี้คือ **แผนที่หลักของระบบ** — ตอบโจทย์ "อันไหนควรเป็น Module อันไหนเป็น sub-module อันไหน Feature อันไหน Function" ครบทั้งระบบ รายละเอียดของแต่ละ Module อยู่ใน §5–§16
+ตารางนี้คือ **แผนที่หลักของระบบ** — ตอบโจทย์ "อันไหนควรเป็น Module อันไหนเป็น sub-module อันไหน Feature อันไหน Function" ครบทั้งระบบ
+
+**รายละเอียดของแต่ละ Module**: M1–M12 อยู่ใน [§5](#5-m1-coreengine)–[§16](#16-m12-observability--eval) · M13 WorkspaceUI อยู่ใน [§14.2](#142-workspaceui--หน้าจอทั้งหมด) (และโครงหน้าจอที่ใช้จริงอยู่ใน [§19.2](#192-information-architecture--พื้นที่-และ-sub-tab-ของแต่ละพื้นที่)) · **M14 ProjectKit อยู่ใน [§19](#19-project-environment--project-management-m14-projectkit)** · **M15 Instruments กับ M16 FieldServer อยู่ใน [§20](#20-research-program--งานวิจัยที่เดินบนโครง-pm-m15-instruments)**
 
 | # | Module (Swift target) | Sub-modules | Features (user เห็น) | Key Functions |
 |---|---|---|---|---|
@@ -419,7 +426,7 @@ hook ที่วิ่ง**รอบทุก tool call** ไม่ใช่แ
 - **Structured handoff** `{goal, completed_steps[], remaining_steps[], key_decisions[], open_issues[], file_pointers[]}` — `file_pointers` เก็บ path ไม่ใช่เนื้อหาดิบ
 - ทิ้ง raw tool-output เก่าก่อนเป็นอันดับแรก
 - **Durable rules** ที่ต้องรอดหลัง compact เก็บแยกจาก transcript (คำสั่งตอนต้น session ไม่หาย)
-- ⚠️ **หนี้ที่ยกมาจาก v1**: การสกัด `key_decisions`/`open_issues`/`file_pointers` ให้ไม่ว่างเปล่า ยังไม่มีวิธีที่พิสูจน์แล้ว — ต้อง design (heuristic จาก diff/failed tool call หรือเรียก LLM summarize เพิ่มตอน compact) ดู [ภาคผนวก D](docs/DECISIONS.md#d-open-questions--ปิดครบแล้ว)
+- ✅ **หนี้จาก v1 ปิดแล้ว (D-5 · P4.9)** — สามฟิลด์ที่ v1 ทำให้ไม่ว่างเปล่าไม่ได้ (`key_decisions`/`open_issues`/`file_pointers`) **สกัดจาก transcript ด้วย heuristic ไม่ใช่ด้วยการถามโมเดล**: การอนุมัติที่เกิดขึ้นจริง คำสั่งที่ exit ไม่ใช่ 0 และ path ที่ถูกเปิด เป็นข้อเท็จจริงที่นอนอยู่ในข้อความอยู่แล้ว ส่วนโมเดลที่ถูกถามว่า "ตัดสินอะไรไปบ้าง" จะแต่งคำตอบที่ฟังดูดี · โมเดล (Tier 0) ใช้เฉพาะสองฟิลด์เชิงเล่าเรื่อง ถ้าเรียกไม่ได้ ครึ่งที่เป็นหลักฐานยังมาครบ ([D-5](docs/DECISIONS.md#d-open-questions--ปิดครบแล้ว))
 
 ### 5.7 Task Ledger (sub-module)
 
@@ -1072,8 +1079,8 @@ graph LR
 
 `web_search` + `fetch_page` + `ingest_url` เดิน hook chain เส้นเดิม ไม่มีทางลัด — สิ่งที่ต่างคือปลายทางของสิ่งที่ค้นเจอ: General ingest เข้า `central`, Project ingest เข้า `project(id)`
 
-> **สถานะวันนี้**: ชั้นค้นเว็บทั่วไป (T5 · SearXNG) ยังแพ็กเข้าแอปที่ sandbox ไม่ได้ ([README §6](README.md)) — Chat จึงค้นได้จริงเฉพาะแหล่งวิชาการที่ต่อตรง (T1–T3)
-> **ถือเป็นงานที่รอได้** — โครงทั้งหมดรองรับไว้แล้ว (source registry, tier, `web_search`/`fetch_page` เดินประตูเดียวกัน) การเปิด T5 จึงเป็นการ*เติมแหล่ง* ไม่ใช่การ*แก้สถาปัตยกรรม* ทำเมื่อภาพรวมนิ่งแล้วได้ผลเท่ากัน (แผน P13)
+> **สถานะวันนี้ (P13 ครบแล้ว · 2026-08-14)**: ชั้นค้นเว็บทั่วไป (T5) **ทำงานจริงในแอปที่ sandbox แล้ว** ผ่านสะพาน `WKWebView` ([§1.2.1](#121-สะพานค้นเว็บด้วย-wkwebview-แบบไม่มีหน้าต่าง-p131)) — ค้นได้ผลจริงและ "อ่านหน้านี้" ได้บทความเข้าท่อ `Readability` เส้นเดิม
+> **สิ่งที่การเปิด T5 *ไม่* ทำ**: กติกา corroboration ของ [§14.1](#141-docgen) ไม่ผ่อนเพราะค้นง่ายขึ้น — T5 สองแหล่งยังถือว่าอ่อน และตั้งแต่ P13.2 กฎนี้เป็น *ประตูจริง* ที่ QA ของ Researcher เรียกใช้ ไม่ใช่ย่อหน้าในรายงาน
 
 #### 19.2.3 แถบสถานะเป็นแดชบอร์ดที่กดได้ ไม่ใช่ป้ายบอกสถานะ
 
