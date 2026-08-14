@@ -24,8 +24,13 @@ import Instruments
 public enum FormRuntime {
 
     /// The whole form as one page: consent, then the questions, then submit.
+    /// `code` is the anonymous participant code the link was opened with
+    /// (§20.7). It rides along as a hidden field so the answers can be joined to
+    /// the same person's earlier wave — and it is only ever a code: this module
+    /// has no way to turn one into a person, and no reason to.
     public static func page(for published: PublishedInstrument,
                             wave: String,
+                            code: String? = nil,
                             notice: String? = nil) -> String {
         let instrument = published.instrument
         let items = instrument.ordered
@@ -51,6 +56,7 @@ public enum FormRuntime {
         return document(title: instrument.title.thai,
                         version: instrument.version,
                         wave: wave,
+                        code: code,
                         instrumentID: instrument.id,
                         body: body)
     }
@@ -61,7 +67,7 @@ public enum FormRuntime {
     public static func thanks(for published: PublishedInstrument) -> String {
         document(title: published.instrument.title.thai,
                  version: published.instrument.version,
-                 wave: "",
+                 wave: "", code: nil,
                  instrumentID: published.instrument.id,
                  body: """
                  <p class="thanks">บันทึกคำตอบเรียบร้อยแล้ว ขอบคุณที่สละเวลา</p>
@@ -71,7 +77,7 @@ public enum FormRuntime {
     }
 
     public static func message(title: String, text: String) -> String {
-        document(title: title, version: 0, wave: "", instrumentID: "",
+        document(title: title, version: 0, wave: "", code: nil, instrumentID: "",
                  body: "<p class=\"notice\">\(htmlEscaped(text))</p>", showsForm: false)
     }
 
@@ -180,6 +186,7 @@ public enum FormRuntime {
     }
 
     private static func document(title: String, version: Int, wave: String,
+                                 code: String? = nil,
                                  instrumentID: String, body: String,
                                  showsForm: Bool = true) -> String {
         let form = showsForm
@@ -188,6 +195,7 @@ public enum FormRuntime {
                 <input type="hidden" name="__instrument" value="\(htmlEscaped(instrumentID))">
                 <input type="hidden" name="__version" value="\(version)">
                 <input type="hidden" name="__wave" value="\(htmlEscaped(wave))">
+                <input type="hidden" name="__code" value="\(htmlEscaped(code ?? ""))">
               \(body)
               </form>
               """

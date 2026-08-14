@@ -7,6 +7,7 @@ import Persistence
 import Observability
 import FieldServer
 import OLTP
+import Linkage
 import Analysis
 
 // ─────────────────────────────────────────────────────────────
@@ -70,6 +71,14 @@ public final class InstrumentsViewModel {
     /// What the last pull into the analytical store produced (§19.17).
     public private(set) var materialized: MaterializedResponses?
 
+    // ── who answered (§20.7, P11.7b) ──
+    public private(set) var participants: [Participant] = []
+    public private(set) var attrition: [Attrition] = []
+    /// The identity behind a code, only while somebody is looking at it. Never
+    /// stored on this object beyond the moment: a screen that keeps a resolved
+    /// name around is a screen that shows it to whoever walks past next.
+    public private(set) var revealed: (code: String, identity: String)?
+
     /// A respondent's answers, ready to be drawn as a row: the values that are
     /// current, each still carrying whatever it was before somebody corrected it.
     public struct ResponseRow: Identifiable, Equatable {
@@ -87,6 +96,7 @@ public final class InstrumentsViewModel {
     private var spans: (any SpanSink)?
     private var host: FieldServerHost?
     private var analysis: AnalysisStore?
+    private var linkage: LinkageStore?
     private let log = AppLog.logger("instruments-ui")
 
     public init() {}
@@ -109,10 +119,13 @@ public final class InstrumentsViewModel {
         self.scope = scope
         self.paths = paths
         self.spans = spans
-        // A different project is a different answer database. Dropping the handle
-        // here is what stops one project's responses being drawn under another's
-        // instrument.
+        // A different project is a different answer database — and a different
+        // linkage file, with a different key. Dropping both handles here is what
+        // stops one project's responses being drawn under another's instrument,
+        // and one study's codes being resolved with another study's key.
         self.responseStore = nil
+        self.linkage = nil
+        self.revealed = nil
         await reload()
     }
 
@@ -381,6 +394,8 @@ public final class InstrumentsViewModel {
             let answers = try await store.answers(instrument: instrument.id,
                                                   version: instrument.version)
             let bySubmission = Dictionary(grouping: answers, by: \.submissionID)
+            await recordResponses(submissions)
+            await loadParticipants()
             responseRows = submissions.map { submission in
                 let keyed = Dictionary(
                     (bySubmission[submission.id] ?? []).map { ($0.itemID, $0) },
@@ -488,6 +503,106 @@ public final class InstrumentsViewModel {
                             isError: false)
         } catch {
             status = Status(message: "ส่งเข้าฐานข้อมูลวิเคราะห์ไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    // MARK: - participants (§20.7)
+
+    /// Opens the project's linkage file on demand — a different file from the
+    /// answers, with a key of its own (§20.7).
+    private func linkageStore() async -> LinkageStore? {
+        if let linkage { return linkage }
+        guard let paths, case .project(let project) = scope else { return nil }
+        let projectPaths = paths.project(project)
+        try? projectPaths.createDirectories()
+        linkage = try? await LinkageStore(path: projectPaths.linkageDatabase,
+                                          project: project.rawValue,
+                                          keys: KeychainLinkageKeys(),
+                                          spans: spans)
+        return linkage
+    }
+
+    public func loadParticipants() async {
+        guard let store = await linkageStore() else {
+            participants = []
+            attrition = []
+            return
+        }
+        participants = (try? await store.participants()) ?? []
+        attrition = (try? await store.attrition()) ?? []
+    }
+
+    /// Registers a person and gives back the code that stands for them.
+    public func enrol(identity: String) async {
+        guard let store = await linkageStore() else {
+            status = Status(message: "เปิดไฟล์ตัวตนของโปรเจกต์นี้ไม่ได้ — "
+                            + "อาจเข้าถึง Keychain ไม่ได้ ซึ่งถูกต้องกว่าการเก็บโดยไม่เข้ารหัส",
+                            isError: true)
+            return
+        }
+        do {
+            let participant = try await store.enrol(identity: identity)
+            await loadParticipants()
+            status = Status(message: "ลงทะเบียนแล้ว — รหัสของผู้เข้าร่วมคนนี้คือ \(participant.code) "
+                            + "· ส่งลิงก์ที่ลงท้ายด้วย ?code=\(participant.code) ให้เขา",
+                            isError: false)
+        } catch {
+            status = Status(message: "\(error)", isError: true)
+        }
+    }
+
+    /// Invites everybody enrolled to the round that is open now.
+    public func inviteAllToCurrentWave() async {
+        guard let store = await linkageStore(), let host,
+              let wave = await host.currentWave, wave.isOpen else {
+            status = Status(message: "ต้องเปิดรอบเก็บข้อมูลก่อนจึงจะเชิญผู้เข้าร่วมเข้ารอบได้",
+                            isError: true)
+            return
+        }
+        do {
+            try await store.invite(participants.map(\.code), to: wave.id)
+            await loadParticipants()
+            status = Status(message: "เชิญผู้เข้าร่วม \(participants.count) คนเข้ารอบนี้แล้ว — "
+                            + "ตัวเลขที่ตอบกลับจะขึ้นเองเมื่อคำตอบเข้ามา", isError: false)
+        } catch {
+            status = Status(message: "\(error)", isError: true)
+        }
+    }
+
+    /// Turns a code back into a person, behind a reason and a name — both of
+    /// which go into the audit span the store writes (§20.7 invariant 3).
+    public func reveal(code: String, reason: String, by person: String) async {
+        guard !reason.trimmingCharacters(in: .whitespaces).isEmpty,
+              !person.trimmingCharacters(in: .whitespaces).isEmpty else {
+            status = Status(message: "ต้องบอกเหตุผลและชื่อคนที่เปิดดู — การเปิดดูตัวตนถูกบันทึกทุกครั้ง",
+                            isError: true)
+            return
+        }
+        guard let store = await linkageStore() else { return }
+        do {
+            if let identity = try await store.resolve(code: code, reason: reason, by: person) {
+                revealed = (code, identity)
+            } else {
+                status = Status(message: "ไม่พบรหัส \(code) ในโปรเจกต์นี้", isError: true)
+            }
+        } catch {
+            status = Status(message: "\(error)", isError: true)
+        }
+    }
+
+    public func hideRevealed() { revealed = nil }
+
+    /// Marks the codes that answered as having answered, so attrition is the
+    /// difference between who was asked and who replied rather than a guess.
+    ///
+    /// Done here, in the app, and never by the server: M16 stores a code because
+    /// a code is not an identity, and has no way to reach the file where one
+    /// becomes a person.
+    private func recordResponses(_ rows: [SubmissionRecord]) async {
+        guard let store = await linkageStore() else { return }
+        for row in rows {
+            guard let code = row.participantCode else { continue }
+            try? await store.recordResponse(code: code, wave: row.waveID, at: row.receivedAt)
         }
     }
 

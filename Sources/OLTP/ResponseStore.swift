@@ -52,6 +52,10 @@ public struct Submission: Sendable, Equatable {
     /// version they saw rather than the current one: consent given to an earlier
     /// wording is not consent to a later one.
     public let consentDigest: String
+    /// The anonymous code this respondent was given, when the study uses them
+    /// (§20.7). A code, never an identity — turning one into a person happens in
+    /// a different file that this module knows nothing about.
+    public let participantCode: String?
     public let answers: [StoredAnswer]
     /// Field names that arrived and are not in the instrument. Written down, not
     /// stored as data (§20.7 invariant 2).
@@ -59,13 +63,15 @@ public struct Submission: Sendable, Equatable {
     public let receivedAt: Date
 
     public init(id: String, instrumentID: String, version: Int, waveID: String,
-                consentDigest: String, answers: [StoredAnswer],
+                consentDigest: String, participantCode: String? = nil,
+                answers: [StoredAnswer],
                 droppedFields: [String] = [], receivedAt: Date = Date()) {
         self.id = id
         self.instrumentID = instrumentID
         self.version = version
         self.waveID = waveID
         self.consentDigest = consentDigest
+        self.participantCode = participantCode
         self.answers = answers
         self.droppedFields = droppedFields
         self.receivedAt = receivedAt
@@ -88,6 +94,7 @@ public struct SubmissionRecord: Sendable, Equatable, Identifiable {
     public let waveID: String
     public let receivedAt: Date
     public let consentDigest: String
+    public let participantCode: String?
 }
 
 /// A change to an answer already given, kept beside it rather than over it.
@@ -147,6 +154,7 @@ public actor ResponseStore {
         for statement in schema {
             try await database.execute(statement)
         }
+        try await addMissingColumns(database)
     }
 
     static let schema = [
@@ -206,6 +214,21 @@ public actor ResponseStore {
         """,
         "CREATE INDEX IF NOT EXISTS wave_instrument ON wave (instrument_id, version)",
     ]
+
+    /// Columns added after the first version shipped. `CREATE TABLE IF NOT
+    /// EXISTS` does nothing to a table that already exists, so a database made
+    /// before this column existed would silently lack it — and the failure would
+    /// be a wave that cannot be linked, months later.
+    static let addedColumns = [("submission", "participant_code", "TEXT")]
+
+    private static func addMissingColumns(_ database: SQLiteDatabase) async throws {
+        for (table, column, type) in addedColumns {
+            let existing = try await database.query("PRAGMA table_info(\(table))")
+                .compactMap { $0.string("name") }
+            guard !existing.contains(column) else { continue }
+            try await database.execute("ALTER TABLE \(table) ADD COLUMN \(column) \(type)")
+        }
+    }
 
     // MARK: - rounds (§20.7)
 
@@ -271,12 +294,14 @@ public actor ResponseStore {
         var statements: [(sql: String, bindings: [SQLiteValue])] = [(
             """
             INSERT INTO submission (id, instrument_id, version, wave_id,
-                                    consent_digest, received_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+                                    consent_digest, participant_code, received_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             [.text(submission.id), .text(submission.instrumentID),
              .integer(Int64(submission.version)), .text(submission.waveID),
-             .text(submission.consentDigest), .double(stamp)])]
+             .text(submission.consentDigest),
+             submission.participantCode.map { SQLiteValue.text($0) } ?? .null,
+             .double(stamp)])]
 
         for answer in submission.answers {
             statements.append((
@@ -337,7 +362,7 @@ public actor ResponseStore {
     /// The submissions themselves, in the order they arrived.
     public func submissions(instrument: String, version: Int) async throws -> [SubmissionRecord] {
         try await database.query("""
-            SELECT id, wave_id, received_at, consent_digest FROM submission
+            SELECT id, wave_id, received_at, consent_digest, participant_code FROM submission
             WHERE instrument_id = ? AND version = ?
             ORDER BY received_at
             """, [.text(instrument), .integer(Int64(version))])
@@ -346,7 +371,8 @@ public actor ResponseStore {
                       case .double(let received)? = row["received_at"] else { return nil }
                 return SubmissionRecord(id: id, waveID: wave,
                                         receivedAt: Date(timeIntervalSince1970: received),
-                                        consentDigest: row.string("consent_digest") ?? "")
+                                        consentDigest: row.string("consent_digest") ?? "",
+                                        participantCode: row.string("participant_code"))
             }
     }
 

@@ -52,7 +52,8 @@ public enum SubmissionProblem: Error, CustomStringConvertible, Equatable {
 public enum SubmissionValidator {
     /// Field names the runtime itself owns. Everything else that is not an item
     /// id is a foreign field.
-    static let reservedNames: Set<String> = ["__consent", "__instrument", "__version", "__wave"]
+    static let reservedNames: Set<String> = ["__consent", "__instrument", "__version",
+                                            "__wave", "__code"]
 
     public static func validate(_ fields: [String: [String]],
                                 against published: PublishedInstrument) throws -> ValidatedSubmission {
