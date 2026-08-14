@@ -16,6 +16,10 @@ public enum Schema {
     /// an interrupted run — run-until-done resumes the second and never the
     /// first. The criteria and deliverable type it needs to rebuild an
     /// assignment ride along on the schemaless part of the row.
+    /// 14: `transcript` exists (§20.3, P11.8) — the text a coding unit's offsets
+    /// point into. The index holds what is searchable; a quotation needs the
+    /// source it was sliced from, and re-assembling one out of overlapping
+    /// chunks works until `Chunker.version` changes.
     /// 13: `codebook`, `coding_unit` and `code_assignment` exist (§20.3, P11.8)
     /// — the qualitative half. A coding is keyed by unit *and* coder so a coder
     /// revising a passage replaces their own decision and never anybody else's,
@@ -47,7 +51,7 @@ public enum Schema {
     /// `project_id`; there was simply nothing on the other end of it, so two
     /// projects were indistinguishable and the app wrote the literal id
     /// "default" into all of them.
-    public static let version = 13
+    public static let version = 14
 
     /// Split into statements that are executed one at a time: a single
     /// failing statement should name itself, not abort a 40-line blob.
@@ -306,6 +310,13 @@ public enum Schema {
         "DEFINE FIELD IF NOT EXISTS coder ON code_assignment TYPE string",
         "DEFINE INDEX IF NOT EXISTS code_assignment_codebook ON code_assignment FIELDS codebook_id",
         "DEFINE FIELD IF NOT EXISTS updated_at ON code_assignment TYPE datetime",
+
+        "DEFINE TABLE IF NOT EXISTS transcript SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON transcript TYPE string",
+        "DEFINE INDEX IF NOT EXISTS transcript_uid ON transcript FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS project_id ON transcript TYPE string",
+        "DEFINE INDEX IF NOT EXISTS transcript_project ON transcript FIELDS project_id",
+        "DEFINE FIELD IF NOT EXISTS updated_at ON transcript TYPE datetime",
 
         "DEFINE TABLE IF NOT EXISTS schema_meta SCHEMALESS",
     ]

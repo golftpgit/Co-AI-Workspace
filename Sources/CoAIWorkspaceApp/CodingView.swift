@@ -25,8 +25,10 @@ struct CodingView: View {
     @State private var newCode = ""
     @State private var newCodeDefinition = ""
     @State private var newCodeParent: String?
-    @State private var newUnitDocument = ""
-    @State private var newUnitText = ""
+    @State private var newTranscriptTitle = ""
+    @State private var newTranscriptCode = ""
+    @State private var newTranscriptBy = ""
+    @State private var newTranscriptText = ""
 
     var body: some View {
         HSplitView {
@@ -228,9 +230,25 @@ struct CodingView: View {
                 ForEach(model.units) { unit in
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
-                            Text(unit.documentID).font(.caption2).foregroundStyle(.secondary)
-                            Text(unit.text).font(.caption).lineLimit(2)
+                            Text(model.transcript(unit.documentID)?.title ?? unit.documentID)
+                                .font(.caption2).foregroundStyle(.secondary)
+                            // Taken from the transcript, not read off the unit's
+                            // own copy: the two can drift, and only one of them
+                            // is what the participant said.
+                            Text(model.quotation(for: unit)?.text ?? unit.text)
+                                .font(.caption).lineLimit(2)
                             Spacer()
+                            if let quotation = model.quotation(for: unit) {
+                                Text("ช่วง \(quotation.span.start)–\(quotation.span.end)")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                                    .accessibilityLabel("ตำแหน่งในบทถอดเทป "
+                                        + "\(quotation.span.start) ถึง \(quotation.span.end)")
+                            } else {
+                                Text("อ้างกลับไม่ได้")
+                                    .font(.caption2).foregroundStyle(.orange)
+                                    .help("ตำแหน่งนี้ไม่ตรงกับบทถอดเทปแล้ว — "
+                                          + "อาจถูกแก้หลังลงรหัส · ยกมาอ้างไม่ได้จนกว่าจะแบ่งช่วงใหม่")
+                            }
                         }
                         HStack(spacing: 4) {
                             ForEach(book.codes) { code in
@@ -247,26 +265,50 @@ struct CodingView: View {
                     Text("ยังไม่มีช่วงข้อความ").font(.callout).foregroundStyle(.secondary)
                 }
 
-                HStack {
-                    TextField("รหัสบทถอดเทป (เช่น INT-01)", text: $newUnitDocument)
-                        .textFieldStyle(.roundedBorder).frame(maxWidth: 170)
-                    TextField("ข้อความในช่วงนี้", text: $newUnitText)
-                        .textFieldStyle(.roundedBorder)
-                    Button("เพิ่มช่วง") {
-                        let document = newUnitDocument
-                        let text = newUnitText
-                        newUnitText = ""
-                        Task {
-                            await model.addUnit(documentID: document, text: text,
-                                                start: model.units
-                                                    .filter { $0.documentID == document }
-                                                    .map(\.range.upperBound).max() ?? 0)
-                        }
+                // A transcript goes in whole and is split into passages here,
+                // rather than passages being typed in one at a time. The offsets
+                // are the reason: a passage typed by hand has a range somebody
+                // invented, and P11.8's promise is that a citation points back
+                // into the real text.
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        TextField("ชื่อบทถอดเทป (เช่น INT-01)", text: $newTranscriptTitle)
+                            .textFieldStyle(.roundedBorder).frame(maxWidth: 170)
+                        TextField("รหัสผู้เข้าร่วม (ไม่ใช่ชื่อ)", text: $newTranscriptCode)
+                            .textFieldStyle(.roundedBorder).frame(maxWidth: 150)
+                        TextField("ผู้ถอดเทป", text: $newTranscriptBy)
+                            .textFieldStyle(.roundedBorder).frame(maxWidth: 150)
+                        Spacer()
                     }
-                    .disabled(newUnitDocument.trimmingCharacters(in: .whitespaces).isEmpty
-                              || newUnitText.trimmingCharacters(in: .whitespaces).isEmpty)
+                    TextEditor(text: $newTranscriptText)
+                        .font(.callout)
+                        .frame(height: 90)
+                        .overlay(RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.secondary.opacity(0.3)))
+                        .accessibilityLabel("ข้อความบทถอดเทป")
+                    HStack {
+                        Button("เพิ่มบทถอดเทปและแบ่งเป็นช่วงตามย่อหน้า") {
+                            let title = newTranscriptTitle
+                            let code = newTranscriptCode
+                            let by = newTranscriptBy
+                            let text = newTranscriptText
+                            newTranscriptText = ""
+                            newTranscriptTitle = ""
+                            Task {
+                                await model.addTranscript(title: title, participantCode: code,
+                                                          transcribedBy: by, text: text)
+                            }
+                        }
+                        .disabled(newTranscriptTitle.trimmingCharacters(in: .whitespaces).isEmpty
+                                  || newTranscriptText.trimmingCharacters(in: .whitespaces).isEmpty)
+                        Spacer()
+                    }
+                    .controlSize(.small)
+                    Text("เก็บรหัสผู้เข้าร่วม ไม่เก็บชื่อ — บทถอดเทปคือสิ่งที่ถูกแบ่ง จัดทำดัชนี ค้น ส่งออก และยกมาอ้าง "
+                         + "ตัวตนที่เข้ามาตรงนี้จะโผล่ออกไปทั้งห้าทาง (§20.7)")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .controlSize(.small)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

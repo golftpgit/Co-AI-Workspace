@@ -152,6 +152,12 @@ public struct Bibliography: Sendable {
         var parts: [String] = []
         if let section = work.section, !section.isEmpty { parts.append("§\(section).") }
         if let page = work.page { parts.append("น. \(page).") }
+        // The locator for a document with no pages (§20.3, P11.8). Character
+        // offsets rather than a paraphrase of where it was, because the promise
+        // is that a reader can go back to *this* passage in the transcript.
+        if let passage = work.passage {
+            parts.append("ช่วง \(passage.start)–\(passage.end).")
+        }
         switch work.origin {
         case .web(let url):
             let formatter = DateFormatter()
@@ -164,6 +170,12 @@ public struct Bibliography: Sendable {
             parts.append("[ฐานข้อมูล: \(name)].")
         case .userAuthored:
             parts.append("[ระบบสร้างเอง].")
+        case .fieldwork(let participantCode):
+            // A code, never a name — the identity is in another file behind
+            // another key (§20.7), and a bibliography is the last place it
+            // should be able to surface.
+            parts.append(participantCode.map { "[ข้อมูลภาคสนาม: \($0)]." }
+                         ?? "[ข้อมูลภาคสนาม].")
         }
         if let tier = work.tier { parts.append("(\(tier.rawValue.uppercased()))") }
         return parts

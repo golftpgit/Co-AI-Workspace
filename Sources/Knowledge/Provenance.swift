@@ -50,6 +50,53 @@ public enum Origin: Sendable, Codable, Equatable {
     /// Produced by the system itself — an analysis run, a written summary.
     /// Carries no external tier, which is why `Provenance.tier` is optional.
     case userAuthored(runID: String)
+    /// Primary data this study collected: an interview transcript, a field note
+    /// (§20.3, P11.8). Carries a participant *code* and never a name — §20.7
+    /// keeps identities in a different file behind a different key, and a
+    /// transcript that named somebody would carry that identity into every
+    /// index, export and quotation downstream.
+    case fieldwork(participantCode: String?)
+}
+
+/// Where in a document something is, when the document has no pages.
+///
+/// A transcript has no page 7. What it has is a passage, and "the citation
+/// points back to the real passage" (P11.8's Done-when) needs somewhere to put
+/// the offsets — which is here rather than squeezed into `section`, because a
+/// string a reader has to parse back into two numbers is a string that will be
+/// formatted differently by the second caller.
+///
+/// **The offsets count `Character`s — grapheme clusters — and that choice is
+/// load-bearing for Thai.** Driving the screen with a Thai transcript made it
+/// visible: a line that shows 43 marks is 32 characters, because vowels and
+/// tone marks combine onto the consonant they sit on. UTF-16 offsets would give
+/// a third number again. What matters is not which unit is chosen but that one
+/// unit is used to *produce* a span and to *resolve* it, which is why both
+/// happen here rather than wherever a caller found convenient.
+public struct TextSpan: Sendable, Equatable, Codable {
+    public let start: Int
+    public let end: Int
+
+    public init(start: Int, end: Int) {
+        self.start = min(start, end)
+        self.end = max(start, end)
+    }
+
+    public init(_ range: Range<Int>) {
+        self.init(start: range.lowerBound, end: range.upperBound)
+    }
+
+    public var range: Range<Int> { start..<end }
+    public var length: Int { end - start }
+
+    /// The characters this span names, or `nil` when it does not fit the text —
+    /// which is the answer that matters: a citation whose span has drifted past
+    /// the end of its source must not quietly return a shorter quotation.
+    public func slice(of text: String) -> String? {
+        let characters = Array(text)
+        guard start >= 0, end <= characters.count, start < end else { return nil }
+        return String(characters[start..<end])
+    }
 }
 
 public struct Provenance: Sendable, Equatable, Codable {
@@ -63,6 +110,11 @@ public struct Provenance: Sendable, Equatable, Codable {
     public let year: Int?
     public let page: Int?
     public let section: String?
+    /// Where in the document, for documents that have no pages (§20.3). Optional
+    /// on purpose and optional in the decoder: rows written before P11.8 have no
+    /// such key, and a stored index that stopped loading would be a migration
+    /// nobody asked for.
+    public let passage: TextSpan?
     /// Matters for the web, where the same URL says something else next month.
     public let accessedAt: Date
     /// The earlier revision of the same document, if this replaces one.
@@ -74,7 +126,7 @@ public struct Provenance: Sendable, Equatable, Codable {
     /// `self.init` would resolve straight back to itself.
     private init(documentID: String, title: String, origin: Origin, optionalTier: SourceTier?,
                  authors: [String], year: Int?, page: Int?, section: String?,
-                 accessedAt: Date, supersedes: String?) {
+                 passage: TextSpan?, accessedAt: Date, supersedes: String?) {
         self.documentID = documentID
         self.title = title
         self.origin = origin
@@ -83,6 +135,7 @@ public struct Provenance: Sendable, Equatable, Codable {
         self.year = year
         self.page = page
         self.section = section
+        self.passage = passage
         self.accessedAt = accessedAt
         self.supersedes = supersedes
     }
@@ -92,11 +145,11 @@ public struct Provenance: Sendable, Equatable, Codable {
     /// change it, but nothing gets to skip the question.
     public init(documentID: String, title: String, origin: Origin, tier: SourceTier,
                 authors: [String] = [], year: Int? = nil, page: Int? = nil,
-                section: String? = nil, accessedAt: Date = Date(),
-                supersedes: String? = nil) {
+                section: String? = nil, passage: TextSpan? = nil,
+                accessedAt: Date = Date(), supersedes: String? = nil) {
         self.init(documentID: documentID, title: title, origin: origin, optionalTier: tier,
                   authors: authors, year: year, page: page, section: section,
-                  accessedAt: accessedAt, supersedes: supersedes)
+                  passage: passage, accessedAt: accessedAt, supersedes: supersedes)
     }
 
     /// Written by the system: an analysis result, a generated summary. Has no
@@ -108,7 +161,36 @@ public struct Provenance: Sendable, Equatable, Codable {
         Provenance(documentID: documentID, title: title,
                    origin: .userAuthored(runID: runID), optionalTier: nil,
                    authors: [], year: nil, page: page, section: section,
-                   accessedAt: accessedAt, supersedes: supersedes)
+                   passage: nil, accessedAt: accessedAt, supersedes: supersedes)
+    }
+
+    /// Primary data this study collected (§20.3, P11.8).
+    ///
+    /// No tier, and that is a claim rather than an omission. The five tiers rank
+    /// *published* sources by how much weight somebody else's review earned them;
+    /// an interview you conducted has no such review to point at, and its
+    /// trustworthiness comes from the study's design — the ethics record, the
+    /// sampling, the instrument that passed its gate. Giving it a tier would put
+    /// primary data on a scale built for secondary, and the corroboration rule
+    /// (§14.1) would then read a transcript as though it were a journal.
+    public static func fieldwork(documentID: String, title: String,
+                                 participantCode: String? = nil,
+                                 collectedAt: Date,
+                                 passage: TextSpan? = nil,
+                                 section: String? = nil) -> Provenance {
+        Provenance(documentID: documentID, title: title,
+                   origin: .fieldwork(participantCode: participantCode),
+                   optionalTier: nil, authors: [], year: nil, page: nil,
+                   section: section, passage: passage,
+                   accessedAt: collectedAt, supersedes: nil)
+    }
+
+    /// The same provenance pointing at one passage of the same document.
+    public func citing(_ passage: TextSpan) -> Provenance {
+        Provenance(documentID: documentID, title: title, origin: origin,
+                   optionalTier: tier, authors: authors, year: year, page: page,
+                   section: section, passage: passage, accessedAt: accessedAt,
+                   supersedes: supersedes)
     }
 
     /// True when this row can be cited with a credibility claim attached.
