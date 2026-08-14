@@ -31,6 +31,8 @@ public enum FormRuntime {
     public static func page(for published: PublishedInstrument,
                             wave: String,
                             code: String? = nil,
+                            resume: String? = nil,
+                            answered: [String: [String]] = [:],
                             notice: String? = nil) -> String {
         let instrument = published.instrument
         let items = instrument.ordered
@@ -40,16 +42,23 @@ public enum FormRuntime {
             body += "<p class=\"notice\" role=\"status\">\(htmlEscaped(notice))</p>\n"
         }
 
-        body += consentSection(instrument)
+        body += consentSection(instrument, agreed: answered["__consent"]?.first == "yes")
         body += "<ol class=\"items\">\n"
         for item in items {
-            body += itemSection(item, in: instrument)
+            body += itemSection(item, in: instrument, answered: answered[item.id] ?? [])
         }
         body += "</ol>\n"
 
+        // Saving is a second submit button on the same form rather than script:
+        // whatever has been typed is already in the form, and a page that needs
+        // JavaScript to keep somebody's half-finished answers is a page that
+        // loses them when it fails to load.
         body += """
         <div class="actions">
           <button type="submit" class="submit">ส่งคำตอบ</button>
+          <button type="submit" class="save" formaction="/save" formnovalidate>
+            บันทึกไว้ก่อน แล้วกลับมากรอกต่อ
+          </button>
         </div>
         """
 
@@ -57,6 +66,7 @@ public enum FormRuntime {
                         version: instrument.version,
                         wave: wave,
                         code: code,
+                        resume: resume,
                         instrumentID: instrument.id,
                         body: body)
     }
@@ -81,9 +91,30 @@ public enum FormRuntime {
                  body: "<p class=\"notice\">\(htmlEscaped(text))</p>", showsForm: false)
     }
 
+    /// The page somebody gets after saving a half-finished form: the one link
+    /// that will bring them back to it.
+    ///
+    /// The link is the whole mechanism — there is no account and no cookie, so
+    /// losing it is losing the draft, and the page says so rather than letting
+    /// somebody find out later.
+    public static func saved(for published: PublishedInstrument, link: String) -> String {
+        document(title: published.instrument.title.thai,
+                 version: published.instrument.version,
+                 wave: "", code: nil, instrumentID: "",
+                 body: """
+                 <p class="thanks">บันทึกคำตอบที่กรอกไว้แล้ว — ยังไม่ได้ส่ง</p>
+                 <p>กลับมากรอกต่อได้ที่ลิงก์นี้ เก็บไว้ให้ดี:</p>
+                 <p class="notice"><code>\(htmlEscaped(link))</code></p>
+                 <p class="muted">ลิงก์นี้คือสิ่งเดียวที่พากลับมาที่คำตอบชุดนี้ได้ —
+                 ไม่มีบัญชีผู้ใช้และไม่มี cookie ถ้าลิงก์หาย คำตอบที่กรอกไว้จะกลับมาไม่ได้</p>
+                 """,
+                 showsForm: false)
+    }
+
     // MARK: - pieces
 
-    private static func consentSection(_ instrument: Instrument) -> String {
+    private static func consentSection(_ instrument: Instrument,
+                                       agreed: Bool = false) -> String {
         guard let consent = instrument.consent else { return "" }
         return """
         <section class="consent" aria-labelledby="consent-heading">
@@ -96,7 +127,7 @@ public enum FormRuntime {
           </dl>
           <p class="agree">
             <label>
-              <input type="checkbox" name="__consent" value="yes" required>
+              <input type="checkbox" name="__consent" value="yes" required\(agreed ? " checked" : "")>
               ข้าพเจ้าอ่านข้อความข้างต้นแล้วและยินยอมเข้าร่วม
             </label>
           </p>
@@ -105,7 +136,8 @@ public enum FormRuntime {
         """
     }
 
-    private static func itemSection(_ item: Item, in instrument: Instrument) -> String {
+    private static func itemSection(_ item: Item, in instrument: Instrument,
+                                    answered: [String] = []) -> String {
         let name = htmlEscaped(item.id)
         let prompt = htmlEscaped(item.prompt.thai)
         let required = item.required ? " required" : ""
@@ -119,27 +151,35 @@ public enum FormRuntime {
             attributes += " data-skip-value=\"\(htmlEscaped(skip.value))\""
         }
 
+        // A resumed form arrives with what was typed last time already in it.
+        let previous = answered.first ?? ""
+        let value = previous.isEmpty ? "" : " value=\"\(htmlEscaped(previous))\""
+
         var control = ""
         switch item.kind {
         case .likert(let levels):
             control = choices(name: name, options: levels, multiple: false,
-                              required: item.required, valuesAreOrdinals: true)
+                              required: item.required, valuesAreOrdinals: true,
+                              chosen: answered)
         case .single(let options):
             control = choices(name: name, options: options, multiple: false,
-                              required: item.required, valuesAreOrdinals: false)
+                              required: item.required, valuesAreOrdinals: false,
+                              chosen: answered)
         case .multiple(let options, _):
             control = choices(name: name, options: options, multiple: true,
-                              required: false, valuesAreOrdinals: false)
+                              required: false, valuesAreOrdinals: false,
+                              chosen: answered)
         case .openText(let maximum):
             let limit = maximum.map { " maxlength=\"\($0)\"" } ?? ""
-            control = "<textarea name=\"\(name)\" rows=\"3\"\(limit)\(required)></textarea>"
+            control = "<textarea name=\"\(name)\" rows=\"3\"\(limit)\(required)>"
+                + htmlEscaped(previous) + "</textarea>"
         case .number(let minimum, let maximum):
             var bounds = ""
             if let minimum { bounds += " min=\"\(minimum)\"" }
             if let maximum { bounds += " max=\"\(maximum)\"" }
-            control = "<input type=\"number\" inputmode=\"numeric\" name=\"\(name)\"\(bounds)\(required)>"
+            control = "<input type=\"number\" inputmode=\"numeric\" name=\"\(name)\"\(bounds)\(value)\(required)>"
         case .date:
-            control = "<input type=\"date\" name=\"\(name)\"\(required)>"
+            control = "<input type=\"date\" name=\"\(name)\"\(value)\(required)>"
         case .matrix, .ranking, .fileUpload:
             // Types the model has and this runtime has not learned to draw.
             // Rendered as an honest gap rather than as something that looks like
@@ -167,7 +207,8 @@ public enum FormRuntime {
     }
 
     private static func choices(name: String, options: [Bilingual], multiple: Bool,
-                                required: Bool, valuesAreOrdinals: Bool) -> String {
+                                required: Bool, valuesAreOrdinals: Bool,
+                                chosen: [String] = []) -> String {
         var html = "<div class=\"choices\">"
         for (index, option) in options.enumerated() {
             let value = valuesAreOrdinals ? "\(index + 1)" : option.thai
@@ -175,9 +216,10 @@ public enum FormRuntime {
             // `required` on the first radio of a group is what makes the browser
             // enforce the group; on checkboxes it would demand every box.
             let requiredAttribute = (required && !multiple && index == 0) ? " required" : ""
+            let checked = chosen.contains(value) ? " checked" : ""
             html += """
             <label class="choice">
-              <input type="\(type)" name="\(name)" value="\(htmlEscaped(value))"\(requiredAttribute)>
+              <input type="\(type)" name="\(name)" value="\(htmlEscaped(value))"\(requiredAttribute)\(checked)>
               <span>\(htmlEscaped(option.thai))</span>
             </label>
             """
@@ -186,7 +228,7 @@ public enum FormRuntime {
     }
 
     private static func document(title: String, version: Int, wave: String,
-                                 code: String? = nil,
+                                 code: String? = nil, resume: String? = nil,
                                  instrumentID: String, body: String,
                                  showsForm: Bool = true) -> String {
         let form = showsForm
@@ -196,6 +238,7 @@ public enum FormRuntime {
                 <input type="hidden" name="__version" value="\(version)">
                 <input type="hidden" name="__wave" value="\(htmlEscaped(wave))">
                 <input type="hidden" name="__code" value="\(htmlEscaped(code ?? ""))">
+                <input type="hidden" name="__resume" value="\(htmlEscaped(resume ?? ""))">
               \(body)
               </form>
               """
@@ -257,6 +300,9 @@ public enum FormRuntime {
     .actions { margin-top: 1.5rem; }
     .submit { font: inherit; padding: .75rem 1.5rem; border: 0; border-radius: .5rem;
               background: var(--accent); color: #fff; cursor: pointer; width: 100%; }
+    .save { font: inherit; margin-top: .5rem; padding: .75rem 1.5rem; border: 1px solid var(--line);
+            border-radius: .5rem; background: transparent; color: inherit; cursor: pointer;
+            width: 100%; min-height: 44px; }
     .notice { border: 1px solid var(--line); border-left: 4px solid var(--accent);
               padding: .75rem 1rem; border-radius: .35rem; }
     .unsupported { color: #c0392b; }
