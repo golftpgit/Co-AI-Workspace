@@ -154,7 +154,7 @@ xcodebuild -downloadComponent MetalToolchain   # ครั้งเดียว�
 **เครื่องใหม่**: ต้องรัน `fetch-helpers.sh` ก่อน ไม่งั้นเทสฝั่ง Persistence จะข้าม และแอปจะเริ่มฐานข้อมูลไม่ได้ ·
 ต้องมี Metal Toolchain + รัน `build-metallib.sh` ไม่งั้นโมเดล embedding โหลดไม่ขึ้น (`Failed to load the default metallib`) —
 SwiftPM คอมไพล์ Metal shader ไม่ได้ จึงต้องมีขั้น `xcodebuild` แยกไว้ทำอย่างเดียว
-([ARCH E.13](ARCHITECTURE.md#e13-bge-m3-ในโปรเซสเราเอง--รันได้จริง--เจอกับดักสำคัญ-2026-08-11))
+([ARCH E.13](docs/VERIFICATION_LOG.md#e13-bge-m3-ในโปรเซสเราเอง--รันได้จริง--เจอกับดักสำคัญ-2026-08-11))
 
 endpoint ของ Tier 1 ตั้งใน `bootstrap.plist` ที่
 `~/Library/Containers/com.coaiworkspace.app/Data/Library/Application Support/CoAIWorkspace/`
@@ -180,10 +180,23 @@ xcrun stapler staple "build/Co-AI Workspace.app"
 
 ## 8. เอกสาร
 
-| ไฟล์ | เนื้อหา |
+**สองไฟล์หลัก** — อ่านสองอันนี้ก็เข้าใจโปรเจกต์ทั้งหมด
+
+| ไฟล์ | ตอบคำถามว่า | เนื้อหา |
+|---|---|---|
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | **ระบบคืออะไร และทำไม** | สเปกเต็ม — AI Team model · module catalog M1–M16 · project management (§19) · research program (§20) · agent competence (§21) |
+| [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | **สร้างถึงไหนแล้ว** | ตารางสถานะ P0–P14 · **Done-when ที่ตรวจได้จริง** ต่อ task · รายการค้าง · risk register |
+
+**เอกสารอ้างอิง** ([`docs/`](docs/)) — แยกออกมาเพื่อให้สองไฟล์บนอ่านจบได้ เปิดเมื่อต้องการรายละเอียด
+
+| ไฟล์ | อ่านเมื่อ |
 |---|---|
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | สเปกเต็ม — AI Team model, module catalog (M1–M13), ผลการศึกษา ecosystem, **verification log ที่รันจริงบนเครื่อง**, decisions log |
-| [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | แผน P0–P9 พร้อม **Done-when ที่ตรวจได้จริง** ต่อ task, รายการค้างทุกข้อ, risk register |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | กำลังจะเสนอทางใหม่ — เช็คก่อนว่าเรื่องนั้นถูกตัดสินไปแล้วหรือยัง |
+| [`docs/VERIFICATION_LOG.md`](docs/VERIFICATION_LOG.md) | อยากรู้ว่า API/โมเดล/ไลบรารีตัวไหน **วัดจริงแล้วได้อะไร** บนเครื่องนี้ |
+| [`docs/ENGINEERING_NOTES.md`](docs/ENGINEERING_NOTES.md) | เจออาการแปลกกับ SurrealDB / การ bind ค่า / decoding JSON |
+| [`docs/DRIVING_LOG.md`](docs/DRIVING_LOG.md) | อยากรู้ว่าการกดหน้าจอจริงเจอบั๊กแบบไหนที่เทสมองไม่เห็น |
+| [`docs/LEGACY_V1.md`](docs/LEGACY_V1.md) | อยากรู้ว่าระบบเดิม (Rust+Tauri) มีอะไร · เช็คว่า feature ไหนหล่นระหว่างย้าย |
+| [`docs/ECOSYSTEM_REVIEW.md`](docs/ECOSYSTEM_REVIEW.md) | อยากรู้ที่มาของการเลือก Swift native / provider abstraction |
 | [`spikes/`](spikes/) | โค้ดที่พิสูจน์แล้วก่อนล็อกสถาปัตยกรรม — `SurrealClient`, `LLMExecutor`, `EmbeddingEval` |
 
 ---
