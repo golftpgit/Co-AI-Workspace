@@ -227,7 +227,12 @@ struct InstrumentsView: View {
         ethicsBox(instrument).disabled(model.isApproved)
         validityBox(instrument)
         gateBox()
-        if model.isApproved { fieldBox() }
+        if model.isApproved {
+            fieldBox()
+            // Beside the server rather than in a screen of its own: enrolling a
+            // participant and sending them their link is one job (§20.7).
+            ParticipantsBox(model: model)
+        }
         // Shown whenever there is anything to show, including after the server
         // has been stopped: the moment somebody most wants to look at what came
         // in is after they have closed the round.

@@ -252,8 +252,13 @@ public actor FieldServerHost {
         switch (request.method, request.path) {
         case ("GET", "/"), ("HEAD", "/"):
             guard wave?.isOpen == true else { return closedPage() }
+            // `?code=P-…` is how a participant's link differs from anybody
+            // else's. Passed straight through: to this module it is an opaque
+            // string, and the file that could turn it into a person is not in
+            // its module graph.
             return HTTPResponse.html(200, FormRuntime.page(for: published,
-                                                           wave: wave?.id ?? ""))
+                                                           wave: wave?.id ?? "",
+                                                           code: request.query["code"]))
 
         case ("POST", "/submit"):
             return await submit(request, published: published)
@@ -288,11 +293,13 @@ public actor FieldServerHost {
 
         do {
             let validated = try SubmissionValidator.validate(fields, against: published)
+            let code = fields["__code"]?.first.flatMap { $0.isEmpty ? nil : $0 }
             let submission = Submission(id: OpaqueID.make("sb"),
                                         instrumentID: published.instrument.id,
                                         version: published.instrument.version,
                                         waveID: wave.id,
                                         consentDigest: validated.consentDigest,
+                                        participantCode: code,
                                         answers: validated.answers,
                                         droppedFields: validated.droppedFields)
             try await store.append(submission)
@@ -312,6 +319,7 @@ public actor FieldServerHost {
             // person on the other end is a participant, not a client.
             return HTTPResponse.html(400, FormRuntime.page(for: published,
                                                            wave: wave.id,
+                                                           code: fields["__code"]?.first,
                                                            notice: problem.description))
         } catch {
             log.error("could not store a submission: \(error)")

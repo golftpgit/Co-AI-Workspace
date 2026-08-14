@@ -248,7 +248,7 @@ let package = Package(
                            // because WebKit is main-actor bound and one browser
                            // per app is the whole point.
                            "Channels", "DocGen", "Roster", "MCPBridge", "ProjectKit",
-                           "WebSearch", "Instruments", "FieldServer", "OLTP"],
+                           "WebSearch", "Instruments", "FieldServer", "OLTP", "Linkage"],
             // §14.3 — what makes an App Intent findable rather than merely
             // written. Shortcuts and Siri read `Metadata.appintents` from the
             // bundle, and that bundle is produced by `appintentsmetadataprocessor`
