@@ -32,4 +32,9 @@ public enum OpaqueID {
     public static let item = "it"
     public static let construct = "cn"
     public static let researchQuestion = "rq"
+
+    // M15 Instruments, the qualitative half (§20.3, P11.8)
+    public static let codebook = "cb"
+    public static let code = "cd"
+    public static let codingUnit = "cu"
 }

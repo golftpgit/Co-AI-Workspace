@@ -52,6 +52,7 @@ private struct RootView: View {
     @State private var endpoints = EndpointsViewModel()
     @State private var analysis = AnalysisViewModel()
     @State private var instruments = InstrumentsViewModel()
+    @State private var coding = CodingViewModel()
     /// Which workspace everything else is looking at (§19.1). Held at the root
     /// because it is not one screen's state: chat, knowledge and the ledger all
     /// read the same selection, which is what replaced the hardcoded
@@ -95,7 +96,7 @@ private struct RootView: View {
     /// hold "which tab" without four parallel pieces of state that can disagree.
     enum SubTab: String, CaseIterable, Identifiable {
         // Workbench, in the order data travels (§19.2).
-        case collect, internalDB, externalDB, console, results
+        case collect, coding, internalDB, externalDB, console, results
         // Knowledge.
         case documents, conflicts, sources
         // System.
@@ -106,6 +107,7 @@ private struct RootView: View {
         var label: String {
             switch self {
             case .collect: "เก็บข้อมูล"
+            case .coding: "ลงรหัส"
             case .internalDB: "ฐานข้อมูลภายใน"
             case .externalDB: "ฐานข้อมูลภายนอก"
             case .console: "สคริปต์ + คอนโซล"
@@ -465,6 +467,18 @@ private struct RootView: View {
                                              analysis: stores.analysis,
                                              spans: engine.spans)
                 }
+        case .coding:
+            // The qualitative half of M15 (§20.3, P11.8). Its own tab rather
+            // than a box inside "เก็บข้อมูล" because it is the other order of
+            // work: there the instrument is designed before anybody answers,
+            // here the text exists and the categories are built out of it.
+            CodingView(model: coding)
+                .id(projects.scope.storageKey)
+                .task {
+                    await coding.attach(store: CodebookStore(client: engine.client),
+                                        scope: projects.scope,
+                                        spans: engine.spans)
+                }
         case .internalDB:
             screenView(.analysis, engine: engine,
                        analysisPane: .explorer, explorerFocus: .internalStore)
@@ -519,7 +533,7 @@ private struct RootView: View {
     private var workbenchTabs: [SubTab] {
         projects.selected == nil
             ? [.externalDB, .console, .results]
-            : [.collect, .internalDB, .externalDB, .console, .results]
+            : [.collect, .coding, .internalDB, .externalDB, .console, .results]
     }
 
     /// The Workbench tab actually shown.

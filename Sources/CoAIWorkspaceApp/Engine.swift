@@ -469,7 +469,8 @@ struct Engine: Sendable {
         await projects.attach(typeGates: ProjectTypeGateReader(
             gatesByType: Dictionary(projectTypes.map { ($0.type, $0.gates) },
                                     uniquingKeysWith: { first, _ in first }),
-            instruments: InstrumentStore(client: client)))
+            instruments: InstrumentStore(client: client),
+            codebooks: CodebookStore(client: client)))
 
         var summary: [String] = []
         for executor in executors {

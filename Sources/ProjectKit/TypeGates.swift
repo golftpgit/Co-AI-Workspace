@@ -101,6 +101,7 @@ public enum TypeGateConditions {
     /// only safe when it is missing *visibly*.
     public static let answerable: Set<String> = [
         "content_validity_passed", "consent_approved", "ethics_recorded",
+        "intercoder_agreement",
     ]
 
     /// Named in a shipped type file, and nothing can answer it yet. Each one
@@ -108,8 +109,11 @@ public enum TypeGateConditions {
     /// a person instead of in a backlog.
     public static let notAnswerableYet: [String: String] = [
         "guide_reviewed": "P11.8 — แนวสัมภาษณ์ยังไม่มีที่เก็บและยังไม่มีขั้นตอนตรวจ",
-        "intercoder_agreement": "P11.8 — κ ระหว่างผู้ลงรหัสคำนวณได้แล้ว แต่ยังไม่มีที่เก็บผลการลงรหัส",
-        "saturation_reached": "P11.8 — ยังไม่มีเกณฑ์ saturation ที่ระบบตรวจเองได้",
+        // `intercoder_agreement` moved to `answerable` with P11.8: the codings
+        // have a store, so "did this study do the check" is a question the
+        // database answers. Whether κ was *good* stays out of the gate — see
+        // `ProjectTypeGateReader.hasIntercoderAgreement`.
+        "saturation_reached": "P11.8 — เส้นโค้งความอิ่มตัวคำนวณและแสดงแล้ว แต่การ*ประกาศ*ว่าอิ่มตัวเป็นข้อสรุปของผู้วิจัย ไม่ใช่ของซอฟต์แวร์",
         "assumptions_checked": "P6.6 — StatGate ตรวจ assumption แล้ว แต่ยังไม่ได้ผูกผลกลับมาที่ประตูของโปรเจกต์",
         "source_recorded": "P6 — ยังไม่ได้ผูกที่มาของชุดข้อมูลกลับมาที่ประตู",
         "quantitative_done": "P11 — งานผสมวิธียังไม่มีตัวชี้ว่าฝั่งปริมาณจบแล้ว",
@@ -140,6 +144,16 @@ public enum TypeGateConditions {
         if let known = facts.known[requirement] {
             return GateCondition(text: known ? prefix : "\(prefix) — ยังไม่ผ่าน",
                                  satisfied: known)
+        }
+        if answerable.contains(requirement) {
+            // The check exists and nothing ran it — the reader is not wired, or
+            // it could not reach the store it needed. §19.12's rule again:
+            // ไม่มีทางถาม ไม่เท่ากับอนุญาต. It blocks, and it says which of the
+            // two situations this is, because "we cannot check" and "we do not
+            // know that word" send somebody to different places.
+            return GateCondition(text: "\(prefix) — ระบบตรวจข้อนี้ได้ แต่ยังไม่ได้ตรวจ "
+                                 + "(ยังไม่ได้ต่อกับที่เก็บข้อมูลที่ต้องใช้)",
+                                 satisfied: false)
         }
         if let gap = notAnswerableYet[requirement] {
             // Vacuous, not passed. It does not block — see the note at the top of
