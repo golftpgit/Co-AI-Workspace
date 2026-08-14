@@ -91,30 +91,30 @@
 
 เช็คว่าไม่มีอะไรจาก v1 หล่น — อ้างอิง [A.1](#a1-feature-audit-เดิม-21-ข้อ-จาก-user-feedback-2026-08-08--ที่อยู่ใน-v2)
 
-| v1 (Phase A–J + audit 21 ข้อ) | v2 Task |
-|---|---|
-| Session persistence | P1.3 |
-| Long-horizon / run-until-done | P4.8, P4.9 |
-| Declarative agent setup | P8.1, P8.2 |
-| Config migration + schema | P0.3, P9.2 |
-| Skill self-authoring | P8.5 |
-| Process manager | P1.9, P8.6 |
-| Workflow builder + palette | P8.6 |
-| File viewer/editor | P8.6 |
-| Scope ต่อ entity | P1.1 (`Scope` ตัวเดียว) |
-| Connection status badge | P5.5 |
-| Completion notification | P7.5 |
-| Project purpose tag | P8.6 |
-| Approval ใน workflow card | P1.8 + P8.6 |
-| DB Explorer | P6.5, P6.8 |
-| MCP resources/prompts | P8.3 |
-| Skill CRUD + import/export | P8.5, P8.6 |
-| Bridge trait + 3 platform + multi-account | P7.1–P7.3 |
-| Notebook (SQL+Python) | P6.4, P6.8 |
-| Plugin system | P8.4 |
-| `install_package` | P8.4 |
-| KB: PDF/DOCX/PPTX, graph, export/import | P2.3, P2.7 |
-| **K1 Telegram remote approval** (ค้างใน v1) | P7.1 — ได้ฟรีจาก Approval Broker |
-| **K2 OCR** (ค้างใน v1) | P2.3 — ได้ฟรีจาก Vision |
-| **K3 compaction extraction** (ค้างใน v1) | P4.9 — ต้อง design จริง ไม่มีทางลัด |
+| v1 (Phase A–J + audit 21 ข้อ) | v2 Task | สถานะจริงใน v2 |
+|---|---|---|
+| Session persistence | P1.3 | ✅ ใช้ได้จริง |
+| Long-horizon / run-until-done | P4.8, P4.9 | 🔶 สวิตช์ทำงาน · **ยังไม่มีเพดาน token ต่อการรัน** |
+| Declarative agent setup | P8.1, P8.2 | ✅ ใช้ได้จริง |
+| Config migration + schema | P0.3, P9.2 | ✅ ใช้ได้จริง |
+| Skill self-authoring | P8.5 | ✅ ใช้ได้จริง |
+| Process manager | P1.9, P8.6 | 🔶 หยุด/พัก/ดู process ได้ · หน้าจอ Processes ยังไม่ครบ |
+| Workflow builder + palette | P8.6 | 🔴 **ยังไม่ได้ทำ** — v1 มี v2 ยังไม่มี |
+| File viewer/editor | P8.6 | 🔴 **ยังไม่ได้ทำ** — v1 มี v2 ยังไม่มี |
+| Scope ต่อ entity | P1.1 (`Scope` ตัวเดียว) | ✅ ใช้ได้จริง |
+| Connection status badge | P5.5 | ✅ ใช้ได้จริง |
+| Completion notification | P7.5 | 🔶 ตรรกะครบ · ยังไม่ได้ยิงกับของจริง |
+| Project purpose tag | P8.6 | 🔶 แทนที่ด้วย **ชนิดโปรเจกต์** (P11.1) ซึ่งทำได้มากกว่าป้ายกำกับ |
+| Approval ใน workflow card | P1.8 + P8.6 | 🔶 อนุมัติครบทุกช่องทาง · การ์ดใน workflow ยังไม่มีเพราะยังไม่มี workflow builder |
+| DB Explorer | P6.5, P6.8 | 🔶 ใช้ได้จริง · PG/MySQL ยังไม่ยืนยันกับ server จริง |
+| MCP resources/prompts | P8.3 | ✅ ใช้ได้จริง |
+| Skill CRUD + import/export | P8.5, P8.6 | 🔶 เขียน/โหลดได้ · หน้าจัดการเต็มยังไม่มี |
+| Bridge trait + 3 platform + multi-account | P7.1–P7.3 | 🔶 โค้ดครบทั้ง 3 · **ยังไม่ได้ยิงกับแพลตฟอร์มจริง** (ต้องมีโทเคนของผู้ใช้) |
+| Notebook (SQL+Python) | P6.4, P6.8 | 🔶 ใช้ได้จริง · Python ในแอปที่ sandbox ไม่มี pandas/numpy |
+| Plugin system | P8.4 | ✅ ใช้ได้จริง — ติดตั้งแล้วทูลขึ้น tool list ทันที (ยืนยันในแอป sandbox) |
+| `install_package` | P8.4 | 🔴 **ยังไม่ได้ทำ** — `check.sh` ขึ้นว่า "ต้องมีนโยบายเน็ตก่อน" |
+| KB: PDF/DOCX/PPTX, graph, export/import | P2.3, P2.7 | 🔶 ทุกอย่างใช้ได้ · **ยกเว้น graph view** ซึ่งยังเป็นรายการ ไม่ใช่ภาพกราฟ |
+| **K1 Telegram remote approval** (ค้างใน v1) | P7.1 — ได้ฟรีจาก Approval Broker | 🔶 ตรรกะครบ · ยังไม่ได้ยิงกับบอทจริง |
+| **K2 OCR** (ค้างใน v1) | P2.3 — ได้ฟรีจาก Vision | ✅ ปิดแล้ว — ทดสอบกับ PDF สแกนที่ไม่มี text layer เลย |
+| **K3 compaction extraction** (ค้างใน v1) | P4.9 | ✅ **ปิดแล้ว** — สกัดจาก transcript ด้วย heuristic ไม่ใช่ถามโมเดล (D-5) |
 
