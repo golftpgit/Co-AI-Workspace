@@ -302,6 +302,32 @@ else
   ok "M15 designs instruments and cannot serve one"
 fi
 
+# ARCHITECTURE §19.17 invariant 1 / P11.6b: M16 writes to SQLite and nowhere
+# else. DuckDB is an OLAP engine built around a single writer; pointing a web
+# server's INSERTs at it does not fail on this machine, it fails on the day
+# twenty people are answering — which is the one day fieldwork cannot be redone.
+# The dependency list is what makes that a fact rather than an intention.
+FIELD_DUCK=$(grep -rlE "^import (Analysis|DuckDB)" Sources/FieldServer 2>/dev/null || true)
+FIELD_DEPS=$(/usr/bin/python3 - <<'DEPS'
+import re
+manifest = open('Package.swift').read()
+block = manifest[manifest.index('.target(name: "FieldServer"'):]
+block = block[:block.index('])') + 1]
+allowed = {"AgentKit", "Observability", "Instruments", "OLTP"}
+found = set(re.findall('"([A-Za-z]+)"', block)) - {"FieldServer"}
+print(' '.join(sorted(found - allowed)))
+DEPS
+)
+# Invariant 2: no UPDATE or DELETE on a raw answer, anywhere. Changing a value is
+# a correction record — research data that can be quietly overwritten is research
+# data nobody can prove was not overwritten.
+ANSWER_MUTATION=$(grep -rniE "(UPDATE|DELETE) +(FROM +)?(answer|submission)\b" Sources/OLTP Sources/FieldServer 2>/dev/null || true)
+if [ -n "$FIELD_DUCK" ] || [ -n "$FIELD_DEPS" ] || [ -n "$ANSWER_MUTATION" ]; then
+  fail "M16 reached past SQLite:$FIELD_DUCK $FIELD_DEPS $ANSWER_MUTATION"
+else
+  ok "M16 writes answers to SQLite only, and never over one already given"
+fi
+
 # ARCHITECTURE §19.2 / P10.12, risk R13: collapsing fourteen screens into four
 # areas is the same mistake as `Scope.project` if two of them quietly end up with
 # no home — a reorganisation reads as finished because the new structure is tidy.

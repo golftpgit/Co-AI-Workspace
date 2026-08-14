@@ -446,14 +446,17 @@ private struct RootView: View {
     private func workbenchArea(_ engine: Engine) -> some View {
         switch workbenchTab {
         case .collect:
-            // M15 (P11.2/P11.4). Serving the form is still M16's job and still
-            // not built — this is the design half: draft the instrument, tie
-            // every question to what it measures, and get past the gate.
+            // Both halves of the data path's first step: M15 designs the
+            // instrument and gets it past its gate (P11.2/P11.4), and M16 opens
+            // it to the local network once it has (P11.5). Two modules, one tab,
+            // because to the person doing it that is one piece of work.
             InstrumentsView(model: instruments)
                 .id(projects.scope.storageKey)
                 .task {
                     await instruments.attach(store: InstrumentStore(client: engine.client),
-                                             scope: projects.scope)
+                                             scope: projects.scope,
+                                             paths: engine.paths,
+                                             spans: engine.spans)
                 }
         case .internalDB:
             screenView(.analysis, engine: engine,

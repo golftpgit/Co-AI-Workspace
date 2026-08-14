@@ -1,9 +1,12 @@
 import Foundation
 import Observation
 import AgentKit
+import Config
 import Instruments
 import Persistence
 import Observability
+import FieldServer
+import OLTP
 
 // ─────────────────────────────────────────────────────────────
 // The data-collection tab's state (ARCHITECTURE §20.3, P11.2/P11.4).
@@ -11,10 +14,13 @@ import Observability
 // The Workbench's first sub-tab said "ยังไม่ได้ทำ — P11" until now, which was
 // honest and useless. This is what makes it a place to work: draft an instrument,
 // tie each question to what it measures, collect the expert ratings content
-// validity needs, and try to publish — where the gate refuses and says why.
+// validity needs, publish — where the gate refuses and says why — and then open
+// the form to the people who are going to answer it.
 //
 // Publishing produces a `PublishedInstrument`, which is the only thing M16 will
 // ever accept (§20.6). Nothing here can construct one; it can only ask the gate.
+// That is why the "open the form" controls are absent rather than disabled until
+// a version has passed: there is no value to hand the server.
 // ─────────────────────────────────────────────────────────────
 
 @MainActor
@@ -31,8 +37,8 @@ public final class InstrumentsViewModel {
     public private(set) var problems: [BlueprintProblem] = []
     public private(set) var gate: InstrumentEvaluation?
     public private(set) var validity: ContentValidity?
-    /// Set once the gate has been passed in this session. Serving the form is
-    /// M16's job, and this module has no network.
+    /// Set once the gate has been passed in this session. The only value M16
+    /// will accept, and the only one the gate produces.
     public private(set) var published: PublishedInstrument?
     /// The approval on record for the selected version, read back from the
     /// database rather than remembered. This is what makes an approved version
@@ -43,8 +49,23 @@ public final class InstrumentsViewModel {
     /// — the header is a long scroll away from the bottom of this screen.
     public private(set) var refusal: String?
 
+    // ── M16, the other half of the tab (§20.7) ──
+    /// Where the form is reachable, once it is being served. `nil` means the
+    /// server is not running — which is the default, and the only state in which
+    /// nothing outside this machine can reach the app.
+    public private(set) var serving: ServingAddress?
+    public private(set) var waveIsOpen = false
+    public private(set) var responses = 0
+    /// The version being served. Held separately from `selected` because the
+    /// server keeps serving what it started with even if the list selection
+    /// moves — the respondent's form must not change under them.
+    public private(set) var servingVersion: Int?
+
     private var store: InstrumentStore?
     private var scope: Scope = .central
+    private var paths: AppPaths?
+    private var spans: (any SpanSink)?
+    private var host: FieldServerHost?
     private let log = AppLog.logger("instruments-ui")
 
     public init() {}
@@ -59,9 +80,12 @@ public final class InstrumentsViewModel {
     /// way forward is "สร้างเวอร์ชันใหม่".
     public var isApproved: Bool { approval != nil }
 
-    public func attach(store: InstrumentStore, scope: Scope) async {
+    public func attach(store: InstrumentStore, scope: Scope,
+                       paths: AppPaths, spans: (any SpanSink)? = nil) async {
         self.store = store
         self.scope = scope
+        self.paths = paths
+        self.spans = spans
         await reload()
     }
 
@@ -218,7 +242,7 @@ public final class InstrumentsViewModel {
             published = approved
             refusal = nil
             log.info("instrument \(instrument.id) v\(instrument.version) approved by \(person)")
-            status = Status(message: "ผ่านประตูเครื่องมือแล้ว — เผยแพร่ได้ (การเสิร์ฟฟอร์มเป็นงานของ M16 ซึ่งยังไม่ได้ทำ)",
+            status = Status(message: "ผ่านประตูเครื่องมือแล้ว — เปิดฟอร์มให้คนอื่นกรอกได้แล้วจากกล่องด้านล่าง",
                             isError: false)
             await refresh()
         } catch {
@@ -226,6 +250,78 @@ public final class InstrumentsViewModel {
             refusal = "\(error)"
             status = Status(message: "\(error)", isError: true)
         }
+    }
+
+    // MARK: - M16: opening the form to other people (§20.7)
+
+    /// Starts serving the version that passed the gate.
+    ///
+    /// Takes `published` from this session or rebuilds nothing: the argument is a
+    /// `PublishedInstrument`, so an instrument that has not been approved cannot
+    /// be passed here — not because this method checks, but because there is no
+    /// such value to pass (§20.6 invariant 2).
+    public func startServing(port: UInt16 = 8_760) async {
+        guard let paths, case .project(let project) = scope else { return }
+        var approvedNow = published
+        if approvedNow == nil { approvedNow = await reapprove() }
+        guard let approved = approvedNow else {
+            status = Status(message: "ต้องผ่านประตูก่อนจึงจะเปิดฟอร์มให้คนอื่นกรอกได้ — "
+                            + "กรอกชื่อผู้อนุมัติแล้วกด “เผยแพร่เครื่องมือ”", isError: true)
+            return
+        }
+        do {
+            let projectPaths = paths.project(project)
+            try projectPaths.createDirectories()
+            let responses = try await ResponseStore(path: projectPaths.responsesDatabase)
+            let host = FieldServerHost(store: responses, spans: spans)
+            serving = try await host.start(serving: approved, port: port)
+            self.host = host
+            waveIsOpen = true
+            servingVersion = approved.instrument.version
+            await refreshResponses()
+            status = Status(message: "เปิดฟอร์มแล้วในวงแลนนี้เท่านั้น — "
+                            + "คนอื่นในเครือข่ายเดียวกันเปิดลิงก์แล้วกรอกได้ · ไม่มีทางเข้าจากอินเทอร์เน็ต",
+                            isError: false)
+        } catch {
+            status = Status(message: "เปิดเซิร์ฟเวอร์ไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    /// Closes the round but leaves the listener up for a moment, so a page
+    /// somebody left open gets "this round is closed" rather than a connection
+    /// error they would read as a network problem and retry.
+    public func closeWave() async {
+        guard let host else { return }
+        await host.closeWave()
+        waveIsOpen = false
+        await refreshResponses()
+        status = Status(message: "ปิดรอบเก็บข้อมูลแล้ว — คำตอบที่ส่งเข้ามาหลังจากนี้ถูกปฏิเสธที่ endpoint "
+                        + "ไม่ใช่แค่ซ่อนปุ่มบนหน้าเว็บ", isError: false)
+    }
+
+    public func stopServing() async {
+        guard let host else { return }
+        await host.stop()
+        self.host = nil
+        serving = nil
+        waveIsOpen = false
+        servingVersion = nil
+        status = Status(message: "ปิดเซิร์ฟเวอร์แล้ว", isError: false)
+    }
+
+    public func refreshResponses() async {
+        guard let host else { return }
+        responses = await host.responseCount()
+    }
+
+    /// Re-derives the approval for a version that passed the gate in an earlier
+    /// session. The record says it passed; the servable value has to come from
+    /// the gate again, because the gate is the only producer there is.
+    private func reapprove() async -> PublishedInstrument? {
+        guard let instrument = selected, let approval, approval.version == instrument.version
+        else { return nil }
+        return try? InstrumentGate.approve(instrument, validity: validity,
+                                           by: approval.approvedBy, at: approval.approvedAt)
     }
 
     private func save(_ instrument: Instrument, note: String? = nil) async {

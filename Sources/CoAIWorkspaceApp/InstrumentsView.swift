@@ -227,6 +227,85 @@ struct InstrumentsView: View {
         ethicsBox(instrument).disabled(model.isApproved)
         validityBox(instrument)
         gateBox()
+        if model.isApproved { fieldBox() }
+    }
+
+    /// M16, and only once the gate has been passed (§20.7). There is no control
+    /// here that could serve an unapproved instrument, because there is no value
+    /// to serve — the button is absent rather than disabled, which is the same
+    /// reason the server has no admin endpoints.
+    @ViewBuilder
+    private func fieldBox() -> some View {
+        GroupBox("เปิดฟอร์มให้คนอื่นกรอก (เฉพาะในวงแลนนี้)") {
+            VStack(alignment: .leading, spacing: 8) {
+                if let serving = model.serving {
+                    HStack {
+                        Label(model.waveIsOpen ? "กำลังเปิดรับคำตอบ" : "ปิดรับคำตอบแล้ว",
+                              systemImage: model.waveIsOpen ? "dot.radiowaves.left.and.right" : "hand.raised.fill")
+                            .foregroundStyle(model.waveIsOpen ? Color.green : Color.orange)
+                        Text("ได้รับแล้ว \(model.responses) ชุด")
+                            .font(.callout).foregroundStyle(.secondary)
+                            // Counted again every few seconds while the round is
+                            // open. Driving this with a refresh button found the
+                            // obvious thing: the one moment somebody watches this
+                            // screen is while answers are arriving, and a number
+                            // that only moves when you press something reads as a
+                            // number that is not moving.
+                            .task(id: model.waveIsOpen) {
+                                while model.waveIsOpen, !Task.isCancelled {
+                                    await model.refreshResponses()
+                                    try? await Task.sleep(for: .seconds(3))
+                                }
+                            }
+                        Spacer()
+                        if model.waveIsOpen {
+                            Button("ปิดรอบเก็บข้อมูล") { Task { await model.closeWave() } }
+                        }
+                        Button("หยุดเซิร์ฟเวอร์") { Task { await model.stopServing() } }
+                    }
+                    .controlSize(.small)
+
+                    if serving.urls.isEmpty {
+                        Text("เครื่องนี้ยังไม่ได้ต่อเครือข่ายที่คนอื่นเข้าถึงได้ — "
+                             + "ต่อ wifi วงเดียวกับผู้ตอบก่อน")
+                            .font(.callout).foregroundStyle(.orange)
+                    } else {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("ให้ผู้ตอบเปิดลิงก์นี้ในเบราว์เซอร์:")
+                                .font(.caption).foregroundStyle(.secondary)
+                            // Several, because a laptop on wifi and ethernet has
+                            // more than one address and only the person in the
+                            // room knows which network the respondents are on.
+                            ForEach(serving.urls, id: \.self) { url in
+                                Button {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(url, forType: .string)
+                                } label: {
+                                    Label(url, systemImage: "doc.on.doc")
+                                        .font(.system(.callout, design: .monospaced))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("คัดลอกลิงก์ \(url)")
+                                .accessibilityHint("คัดลอกไปยังคลิปบอร์ด")
+                            }
+                        }
+                    }
+                } else {
+                    HStack {
+                        Button("เปิดฟอร์มในวงแลน") { Task { await model.startServing() } }
+                        Spacer()
+                    }
+                    .controlSize(.small)
+                }
+
+                Text("ค่าเริ่มต้นคือ LAN-only และไม่มี tunnel ในตัว — เปิดออกอินเทอร์เน็ตต้องเป็นการตั้งค่า "
+                     + "router ของคุณเอง · เซิร์ฟเวอร์นี้ไม่มีหน้าจัดการใด ๆ ให้เข้าถึงจากเว็บ และอ่านคำตอบ "
+                     + "กลับออกไปทางเว็บไม่ได้ · งานที่เดิมพันสูงยังควรใช้บริการที่ผ่านการตรวจความปลอดภัยแล้ว (R11)")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     /// Research question → construct. The chain §20.3 asks for, built from the top
@@ -591,7 +670,7 @@ struct InstrumentsView: View {
                         .font(.callout).foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Text("เครื่องมือที่ยังไม่ผ่านประตูนี้ **ไม่มีรูปแบบที่เซิร์ฟเวอร์รับได้เลย** — ไม่ใช่กฎที่ต้องจำ แต่เป็นสิ่งที่คอมไพล์ไม่ผ่าน (§20.6) · การเสิร์ฟฟอร์มจริงคือ M16 ซึ่งยังไม่ได้ทำ")
+                Text("เครื่องมือที่ยังไม่ผ่านประตูนี้ **ไม่มีรูปแบบที่เซิร์ฟเวอร์รับได้เลย** — ไม่ใช่กฎที่ต้องจำ แต่เป็นสิ่งที่คอมไพล์ไม่ผ่าน (§20.6)")
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

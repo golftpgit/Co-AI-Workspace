@@ -11,7 +11,10 @@
 	     endpoints (GX10/LM Studio) and to tiered web/API sources. -->
 	<key>com.apple.security.network.client</key>
 	<true/>
-	<!-- LINE bridge runs a local webhook listener (ARCHITECTURE §8.1). -->
+	<!-- LINE bridge runs a local webhook listener (ARCHITECTURE §8.1), and M16
+	     FieldServer opens the questionnaire to the local network (§20.7). The
+	     second is the only surface in the app that takes input from somebody who
+	     is not the owner of this machine, and it is LAN-only with no tunnel. -->
 	<key>com.apple.security.network.server</key>
 	<true/>
 
