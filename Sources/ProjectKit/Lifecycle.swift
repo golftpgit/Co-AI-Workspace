@@ -138,12 +138,18 @@ public enum ProjectLifecycle {
     }
 
     /// The gate between `project.stage` and the stage after it.
+    /// `typeGates` are the extra gates this project's *type* declared (§20.2),
+    /// and `typeFacts` is what the system can say about the conditions they name.
+    /// They are checked on the way out of execution — see `TypeGates.swift` for
+    /// why there and not at a milestone of their own.
     public static func evaluate(_ project: Project,
                                 wbs: WorkBreakdown = WorkBreakdown(),
                                 hasLessons: Bool = true,
                                 drift: BaselineDiff? = nil,
                                 undecidedChanges: Int = 0,
-                                closing: ClosingFacts = ClosingFacts()) -> GateEvaluation? {
+                                closing: ClosingFacts = ClosingFacts(),
+                                typeGates: [ProjectTypeGate] = [],
+                                typeFacts: TypeGateFacts = TypeGateFacts()) -> GateEvaluation? {
         guard let to = next(after: project.stage), let gate = project.stage.exitGate else {
             return nil
         }
@@ -207,6 +213,9 @@ public enum ProjectLifecycle {
                               satisfied: uncovered.isEmpty),
             ]
         case .execution:
+            // The type's own gates are checked here, last, so the standard three
+            // read first and the extra ones read as what they are: what *this
+            // kind* of project promised on top (§20.2).
             conditions = [
                 GateCondition(text: "ไม่มีใบงานที่ยังไม่เสร็จ",
                               satisfied: openWorkPackages == 0),
@@ -218,7 +227,7 @@ public enum ProjectLifecycle {
                               satisfied: undecidedChanges == 0),
                 GateCondition(text: "แผนตรงกับ baseline ล่าสุด",
                               satisfied: drift?.isEmpty ?? true),
-            ]
+            ] + TypeGateConditions.conditions(for: typeGates, facts: typeFacts)
         case .closing:
             // §19.12's eight, in the standard's order. This is the project's own
             // rule turned on itself — README §5's "ห้าม mark งานเป็นเสร็จถ้ายัง

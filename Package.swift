@@ -33,6 +33,22 @@ let package = Package(
         // M2 — shared types/protocols only, no logic. Everything may import this.
         .target(name: "AgentKit"),
 
+        // The one call this project makes into LAPACK, behind a C header that
+        // keeps Accelerate out of Swift (ARCHITECTURE §20.4). It exists as a C
+        // target for one reason: `ACCELERATE_NEW_LAPACK` is a preprocessor macro,
+        // and Swift's `-D` cannot reach the Clang module — without it the only
+        // reachable interface is the one deprecated in macOS 13.3.
+        .target(name: "CLapack",
+                cSettings: [.define("ACCELERATE_NEW_LAPACK", to: "1")],
+                linkerSettings: [.linkedFramework("Accelerate")]),
+
+        // Arithmetic with no dependencies and no I/O: distribution tails and the
+        // symmetric eigen-decomposition. Split out of `Statistics` in P11.3, when
+        // M15 needed a chi-square tail and is not allowed to import M8 (§20.6).
+        // One implementation of a continued fraction, not two that agree until
+        // they do not.
+        .target(name: "StatKit", dependencies: ["CLapack"]),
+
         // M11 — bootstrap config, paths, (settings + Keychain arrive in P9/P5).
         .target(name: "Config", dependencies: ["AgentKit"]),
 
@@ -87,7 +103,7 @@ let package = Package(
         // DuckDB from here (§19.17). The edge only goes this way — `OLTP` does
         // not know DuckDB exists, which is what keeps M16 unable to reach it.
         .target(name: "Analysis",
-                dependencies: ["AgentKit", "Observability", "Execution", "OLTP",
+                dependencies: ["AgentKit", "Observability", "Execution", "OLTP", "StatKit",
                                .product(name: "DuckDB", package: "duckdb-swift")]),
 
         // M3 — the roster: agents, skills and plugins loaded from files
@@ -186,8 +202,11 @@ let package = Package(
         // §20.3). **The dependency list is the invariant**: no networking target
         // here, because serving a form is M16's job and an instrument that could
         // open a socket would be an instrument that could collect data before it
-        // passed its gate.
-        .target(name: "Instruments", dependencies: ["AgentKit", "Knowledge", "Observability"]),
+        // passed its gate. `StatKit` is arithmetic with no dependencies of its
+        // own — EFA needs an eigen-decomposition and Bartlett's test needs a
+        // chi-square tail, and neither of those is a way to reach a socket.
+        .target(name: "Instruments",
+                dependencies: ["AgentKit", "Knowledge", "Observability", "StatKit"]),
 
         // M5/M7 — the embedding model, in-process. Depends on Knowledge (which
         // owns the `Embedder` protocol) and never the other way round, so the
@@ -269,7 +288,7 @@ let package = Package(
         .testTarget(name: "ObservabilityTests", dependencies: ["Observability"]),
         .testTarget(name: "SidecarTests", dependencies: ["Sidecar"]),
         .testTarget(name: "PersistenceTests",
-                    dependencies: ["Persistence", "Sidecar", "Config", "Knowledge"]),
+                    dependencies: ["Persistence", "Sidecar", "Config", "Knowledge", "Instruments"]),
         .testTarget(name: "LLMProvidersTests",
                     dependencies: ["LLMProviders", "ExecutorContract"]),
         // Everything about Tier 0.5 that does not need the weights. The rest
@@ -278,7 +297,8 @@ let package = Package(
         .testTarget(name: "CoreEngineTests", dependencies: ["CoreEngine", "Knowledge"]),
         .testTarget(name: "KnowledgeTests", dependencies: ["Knowledge"]),
         .testTarget(name: "WebSearchTests", dependencies: ["WebSearch", "Knowledge"]),
-        .testTarget(name: "InstrumentsTests", dependencies: ["Instruments"]),
+        .testTarget(name: "InstrumentsTests", dependencies: ["Instruments", "StatKit"]),
+        .testTarget(name: "StatKitTests", dependencies: ["StatKit"]),
         .testTarget(name: "OLTPTests", dependencies: ["OLTP"]),
         .testTarget(name: "LinkageTests", dependencies: ["Linkage"]),
         .testTarget(name: "FieldServerTests", dependencies: ["FieldServer", "Instruments", "OLTP"]),

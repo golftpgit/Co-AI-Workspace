@@ -103,8 +103,13 @@ struct ResponsesBox: View {
 
     // MARK: - the grid
 
+    /// Both axes, and driving the screen with forty answers in it is what showed
+    /// why. A horizontal-only `ScrollView` under a `maxHeight` does not clip what
+    /// overflows downwards: the rows carried on past the box and were drawn over
+    /// the captions beneath it. With one test submission — which is what every
+    /// round before this had — the content fit, so nothing ever looked wrong.
     private var table: some View {
-        ScrollView(.horizontal) {
+        ScrollView([.horizontal, .vertical]) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 0) {
                     header("เมื่อไร", width: 130)

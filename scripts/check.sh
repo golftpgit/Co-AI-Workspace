@@ -82,7 +82,11 @@ DUP_SCOPE=$(grep -rlE "enum Scope[[:space:]]*[:{]" Sources --include=*.swift | w
 # The rule is about *library* targets: a library that prints has no way to be
 # quiet. Executables are where output is the product — the app writes through
 # AppLog, and EmbeddingCheck's whole job is to print what it found.
-if grep -rn "print(" Sources --include=*.swift \
+#
+# Anchored on a word boundary since P11.1's gate work: `InstrumentFootprint(`
+# ends in the same six letters, and so would any `Blueprint(` or `Sprint(`. A
+# structural rule that fails on a name is a rule people learn to route around.
+if grep -rnE "(^|[^A-Za-z0-9_.])print\(" Sources --include=*.swift \
    | grep -v "^Sources/CoAIWorkspaceApp" | grep -v "^Sources/EmbeddingCheck" \
    | grep -v "^Sources/MLXCheck" | grep -q .; then
   fail "print() outside the app target — use AppLog/os.Logger"
@@ -106,6 +110,11 @@ fi
 # tests while nothing in the app ever constructed it, leaving the Conflict
 # screen permanently empty. Each capability below must be reachable from the
 # wiring, not just from its own tests.
+#
+# P11.3's arithmetic (EFA, ConstructFit, ω) is reached *through* `ScaleReport`,
+# which is on the list and whose own tests assert that a real factor solution and
+# a real construct-fit comparison come back from it. Naming the inner types here
+# too would only check that the screen mentions them.
 UNWIRED=""
 for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer Researcher ContextManager LocalTier ModelInstaller BudgetGovernor EndpointProbe AnalysisStore NotebookKernel NotebookRunner NotebookStore \
                   ProjectService ProjectStore StageGate BriefDrafter WorkspaceStoreCache \
@@ -114,7 +123,8 @@ for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer
                   StatTestTool GapDetector AnalysisPlanStore ConnectorStore OfficeWriter \
                   MCPRegistry MCPServerStore Notifier AppIntentsChannel \
                   TemplateStore TemplateParser TemplateFiller PluginRegistry WriteSkillTool \
-                  TelegramChannel DiscordChannel LINEChannel ChannelRouter LimitationsBuilder ManifestParser; do
+                  TelegramChannel DiscordChannel LINEChannel ChannelRouter LimitationsBuilder ManifestParser \
+                  ScaleReport ScoredResponses InstrumentDisposal ProjectTypeGateReader; do
   grep -rqE "$capability[(.]" Sources/CoAIWorkspaceApp --include=*.swift || UNWIRED="$UNWIRED $capability"
 done
 if [ -n "$UNWIRED" ]; then
@@ -291,7 +301,10 @@ import re
 manifest = open('Package.swift').read()
 block = manifest[manifest.index('.target(name: "Instruments"'):]
 block = block[:block.index('),') + 1]
-allowed = {"AgentKit", "Knowledge", "Observability"}
+# `StatKit` joined the list in P11.3. It is arithmetic with no dependencies of
+# its own — distribution tails and an eigen-decomposition — so it is not a way
+# to reach a socket, which is the thing this rule is about.
+allowed = {"AgentKit", "Knowledge", "Observability", "StatKit"}
 found = set(re.findall('"([A-Za-z]+)"', block)) - {"Instruments"}
 print(' '.join(sorted(found - allowed)))
 DEPS
@@ -362,6 +375,30 @@ else
   ok "M16 writes answers to SQLite only, and never over one already given"
 fi
 
+# ARCHITECTURE §12.3 / §20.4, P11.3: the distribution tails and the eigen call
+# exist once. They used to live inside `Statistics`, which was fine while M8 was
+# the only caller; M15 needing a chi-square tail is what would have produced a
+# second copy — and two continued fractions agree for years and then disagree at
+# the fourth decimal in the one table somebody publishes. Same shape as the SQL
+# guard rule above, and the same reason.
+MATH_COPIES=$(grep -rln "betaContinuedFraction\|regularizedIncompleteGamma" Sources --include=*.swift \
+  | grep -v "Sources/StatKit/Distributions.swift" | grep -v "Sources/Analysis/Statistics.swift" || true)
+# `Statistics` may name them because it forwards, so the names alone say
+# nothing there. What a reimplementation needs is the innards — a log-gamma, an
+# erfc, or Lentz's underflow guard — and none of those has any other business in
+# that file.
+if grep -qE "lgamma\(|erfc\(|1e-300" Sources/Analysis/Statistics.swift; then
+  MATH_COPIES="$MATH_COPIES Sources/Analysis/Statistics.swift(reimplemented)"
+fi
+# And LAPACK is reached through the one C shim, not from Swift directly — the
+# other interface is the one deprecated in macOS 13.3.
+LAPACK_CALLERS=$(grep -rln "dsyev\|__CLPK_" Sources --include=*.swift || true)
+if [ -n "$MATH_COPIES" ] || [ -n "$LAPACK_CALLERS" ]; then
+  fail "a second copy of the statistics arithmetic:$MATH_COPIES $LAPACK_CALLERS"
+else
+  ok "one incomplete gamma, one incomplete beta, one call into LAPACK"
+fi
+
 # ARCHITECTURE §14.2: SwiftUI parses markdown in `Text` only when the argument is
 # a string *literal*. Split a long one with `+` and the argument becomes a
 # `String`, so `**bold**` stops being emphasis and starts being asterisks on
@@ -409,6 +446,29 @@ if [ -n "$LINKAGE_IN_SERVER" ] || [ -n "$SAME_FILE" ]; then
   fail "identities are reachable from the server, or share the answers' file: $LINKAGE_IN_SERVER $SAME_FILE"
 else
   ok "who answered lives in its own file, and M16 cannot reach it"
+fi
+
+# The other half of that separation, and the half `swift test` cannot see because
+# it lives in the app target. Driving the screen found it: the Keychain refused
+# the linkage key, the identity step never returned, and the answers table said
+# "ยังไม่มีคำตอบ" beside a round header that said forty — with forty rows in the
+# database. Answers must reach the screen before anything asks who anybody is.
+ANSWER_ORDER=$(/usr/bin/python3 - <<'ORDER'
+import re
+src = open('Sources/CoAIWorkspaceApp/InstrumentsViewModel.swift').read()
+body = src[src.index('public func loadResponses()'):]
+body = body[:body.index('\n    /// Records a change')]
+rows = body.find('responseRows = submissions.map')
+identities = min([p for p in (body.find('await recordResponses'),
+                              body.find('await loadParticipants')) if p >= 0] or [-1])
+print('' if rows >= 0 and (identities < 0 or rows < identities)
+      else 'the answers wait for the identity file')
+ORDER
+)
+if [ -n "$ANSWER_ORDER" ]; then
+  fail "$ANSWER_ORDER — §20.7 says the two are independent, so the table must not need the Keychain"
+else
+  ok "the answers reach the screen without asking who anybody is"
 fi
 
 # ARCHITECTURE §19.2 / P10.12, risk R13: collapsing fourteen screens into four

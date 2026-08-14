@@ -23,6 +23,9 @@ struct InstrumentsView: View {
     @State private var newQuestion = ""
     @State private var newConstruct = ""
     @State private var newConstructDefinition = ""
+    /// Deleting a draft is small and irreversible, which is exactly the shape
+    /// that wants one confirmation rather than an undo nobody built.
+    @State private var confirmingDiscard = false
     @State private var constructQuestionID: String?
     @State private var newItem = ""
     @State private var newItemKind = ItemKindChoice.likert5
@@ -193,6 +196,7 @@ struct InstrumentsView: View {
         HStack(spacing: 8) {
             Text(instrument.title.thai).font(.title3).bold()
             Text("เวอร์ชัน \(instrument.version)").font(.caption).foregroundStyle(.secondary)
+            discardControl(instrument)
             Spacer()
             if let status = model.status {
                 Button { model.clearStatus() } label: {
@@ -238,6 +242,53 @@ struct InstrumentsView: View {
         // in is after they have closed the round.
         if !model.responseRows.isEmpty || !model.rounds.isEmpty {
             ResponsesBox(model: model, instrument: instrument)
+        }
+        // After the answers rather than beside the expert ratings: content
+        // validity is asked before fieldwork and this is asked after it, and
+        // putting them in one box is how the two get confused for each other in
+        // a write-up (§20.4).
+        if !model.responseRows.isEmpty {
+            ScaleValidityBox(model: model, instrument: instrument)
+        }
+    }
+
+    /// Throwing away a draft — and saying, rather than hiding, why most
+    /// instruments cannot be.
+    ///
+    /// The button stays visible and disabled with the reasons beside it, which is
+    /// the opposite of the "เปิดฟอร์ม" controls below: those are *absent* until
+    /// the gate has passed because there is nothing to serve. Here there is
+    /// something to delete and a rule that says not to, and a rule nobody can see
+    /// reads as a screen that is broken.
+    @ViewBuilder
+    private func discardControl(_ instrument: Instrument) -> some View {
+        let refusals = model.disposalRefusals
+        Button(role: .destructive) {
+            confirmingDiscard = true
+        } label: {
+            Label("ลบร่างนี้", systemImage: "trash")
+        }
+        .controlSize(.small)
+        .disabled(!refusals.isEmpty)
+        .accessibilityLabel("ลบร่างเครื่องมือ \(instrument.title.thai)")
+        .accessibilityHint(refusals.first.map(\.description) ?? "ลบได้ เพราะยังไม่มีอะไรผูกกับร่างนี้")
+        .help(refusals.first.map(\.description) ?? "ลบร่างที่ยังไม่มีอะไรผูกอยู่")
+        .confirmationDialog("ลบร่าง “\(instrument.title.thai)”?",
+                            isPresented: $confirmingDiscard, titleVisibility: .visible) {
+            Button("ลบร่างนี้", role: .destructive) {
+                Task { await model.discardSelected() }
+            }
+            Button("ไม่ลบ", role: .cancel) {}
+        } message: {
+            Text("ร่างนี้ยังไม่ผ่านประตู ยังไม่เคยเปิดรอบเก็บข้อมูล และยังไม่มีคำตอบผูกอยู่ "
+                 + "· คะแนนจากผู้เชี่ยวชาญที่ให้ไว้กับร่างนี้จะถูกลบไปด้วย เพราะเป็นคะแนนของข้อที่กำลังจะไม่มีอยู่")
+        }
+
+        if let first = refusals.first {
+            Text(first.description)
+                .font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 360, alignment: .leading)
         }
     }
 

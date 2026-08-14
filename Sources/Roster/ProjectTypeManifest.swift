@@ -26,17 +26,10 @@ import ProjectKit
 // reason anybody trusts the record.
 // ─────────────────────────────────────────────────────────────
 
-/// A gate a project of this type has on top of the standard stage gates (§19.4).
-public struct ProjectTypeGate: Sendable, Equatable, Identifiable {
-    public let id: String
-    /// The milestone it stands after — a name from the type's own vocabulary,
-    /// e.g. `instrument.draft`.
-    public let after: String
-    /// What has to be true, by name. Strings rather than an enum: a type file can
-    /// name a condition this build has never heard of, and refusing to load the
-    /// whole file for that would make adding a type a code change.
-    public let requires: [String]
-}
+// `ProjectTypeGate` is declared in ProjectKit rather than here. The file is read
+// in this module and enforced in that one (`TypeGateConditions`), and putting the
+// type where the stage machine lives is what lets the gate be *checked* without
+// the stage machine depending on the thing that reads files.
 
 /// A practice the type's author thinks will not apply, with the reason already
 /// written. **Not a decision** — see the note at the top of this file.
