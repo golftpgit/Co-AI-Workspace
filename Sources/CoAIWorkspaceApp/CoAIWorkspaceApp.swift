@@ -43,6 +43,10 @@ private struct RootView: View {
     /// question, and a monitor beside a question is noise.
     @State private var showingRail = false
     @State private var screen = Screen.chat
+    /// Which half of "สคริปต์ + คอนโซล" is showing. The notebook runs the
+    /// commands and the file list is where their output lands (§14.2, P8.6),
+    /// so they belong in one tab with a switch rather than two tabs apart.
+    @State private var consolePane = ConsolePane.notebook
     /// Owned here rather than built inside the view: a model recreated on each
     /// body pass loses whatever the user just did to it (P1.10's bug).
     @State private var knowledge = KnowledgeViewModel()
@@ -442,6 +446,28 @@ private struct RootView: View {
         screenView(.projects, engine: engine)
     }
 
+    /// The two halves of the console tab (§14.2, P8.6).
+    enum ConsolePane: String, CaseIterable, Identifiable {
+        case notebook, files
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .notebook: "สมุดงาน"
+            case .files: "ไฟล์"
+            }
+        }
+    }
+
+    /// Which folder the file viewer shows. A project sees its own folder; in
+    /// General there is no project folder, so it sees the app-wide documents
+    /// directory — the place DocGen writes when nothing is selected.
+    private func filesRoot(_ engine: Engine) -> URL {
+        if case .project(let id) = projects.scope {
+            return engine.paths.project(id).root
+        }
+        return engine.paths.documentsDirectory
+    }
+
     /// The data path, in order: collected → stored (inside, outside) → worked on
     /// → presented. General is missing the first two on purpose (§19.2): there is
     /// no ethics and no scope to collect under, and no project database to be the
@@ -487,7 +513,32 @@ private struct RootView: View {
             screenView(.analysis, engine: engine,
                        analysisPane: .explorer, explorerFocus: .external)
         case .console:
-            screenView(.analysis, engine: engine, analysisPane: .notebook)
+            VStack(spacing: 0) {
+                Picker("มุมมอง", selection: $consolePane) {
+                    ForEach(ConsolePane.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 240)
+                .padding(.vertical, 8)
+
+                Divider()
+
+                switch consolePane {
+                case .notebook:
+                    screenView(.analysis, engine: engine, analysisPane: .notebook)
+                case .files:
+                    // The workspace's own folder, inside the container, so a
+                    // sandboxed app reaches it without anybody granting
+                    // anything. In a project that is the whole project folder —
+                    // `files/` is where `run_shell` writes and `documents/` is
+                    // where DocGen does, and both are things people come here
+                    // looking for.
+                    FilesView(root: filesRoot(engine))
+                        .id(projects.scope.storageKey)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .results:
             screenView(.analysis, engine: engine, analysisPane: .plan)
         default:
