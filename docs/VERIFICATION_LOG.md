@@ -241,7 +241,11 @@ Tier 0.5 คือ inference ในแอปนี้เอง แอปจึ�
 
 - 🔴 **Apple ไม่มี web search API สำหรับนักพัฒนา** — "World Knowledge Answers" เป็นฟีเจอร์ของ Siri (macOS 27) ไม่ใช่ public API; iTunes/App Store Search API ค้นได้แค่ content ใน store
 - 🔴 **Brave Search API ปิด free tier สำหรับผู้ใช้ใหม่แล้ว** (ต้นปี 2026) เหลือ $5 credit/เดือน ≈ 1,000 query; แผนเดิม 100 query/วัน จะปิดถาวร **1 ม.ค. 2027**
-- ✅ **ฟรีถาวรจริง**: SearXNG self-hosted (ติดตั้ง native บน macOS ได้ ไม่ต้อง Docker) + API ทางการของ PubMed E-utilities / medRxiv / OpenAlex / Crossref สำหรับ tier 1–3
+- ✅ **ฟรีถาวรจริง**: SearXNG self-hosted (ติดตั้ง native บน macOS ได้ ไม่ต้อง Docker) + API ทางการของ PubMed E-utilities
+
+> 🔄 **ถูกแทนที่ทีหลัง (P13.1 · 2026-08-14)** — ข้อสรุปข้างบนยังจริงในฐานะ *การวัดของวันที่ 10 ส.ค.* แต่ทางที่ระบบใช้จริงไม่ใช่ SearXNG แล้ว
+> SearXNG ติดตั้งและค้นได้จริง **แต่แพ็กเข้า `.app` ไม่ได้** (venv ฝัง absolute path) — เกณฑ์ที่ตอนนั้นยังไม่ได้ตั้ง คือ "รันได้ในแอปที่ sandbox ไหม"
+> T5 เดินผ่าน `WKWebView` แบบไม่มีหน้าต่างแทน ([ARCH §1.2.1](../ARCHITECTURE.md#121-สะพานค้นเว็บด้วย-wkwebview-แบบไม่มีหน้าต่าง-p131) · [DECISIONS D-6](DECISIONS.md#d-open-questions--ปิดครบแล้ว)) / medRxiv / OpenAlex / Crossref สำหรับ tier 1–3
 
 ## E.6 D-7 Spike — guided generation ใน app target จริง
 

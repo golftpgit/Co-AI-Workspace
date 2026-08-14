@@ -60,7 +60,7 @@
 - **`RELATE type::record(...)->edge->type::record(...)` parse ไม่ผ่าน** — grammar ต้องการ graph-expression operand ตรงตำแหน่งนั้น ต้อง bind แต่ละฝั่งเข้า `LET` param ก่อน แล้ว `RELATE $src->edge->$tgt`
 - **full-text index clause คือ `FULLTEXT ANALYZER <name> BM25(k1,b) HIGHLIGHTS`** ไม่ใช่ `SEARCH ANALYZER ...` แบบที่ docs เก่ากว่าเขียน
 - **`ORDER BY search::score(1)` parse ไม่ผ่าน** — `ORDER BY` รับแค่ plain field ต้อง project ก่อน: `SELECT *, search::score(1) AS relevance ... ORDER BY relevance DESC`
-- ระวังการ bind ค่าที่มี array ตัวเลข (เช่น `embedding: [Float]`) — ใน Rust ต้องห่อ `SerdeWrapper` ไม่งั้น insert ผ่านแต่อ่านกลับไม่ได้ **ฝั่ง Swift ต้องเทสจุดนี้ซ้ำตั้งแต่ chunk แรก** อย่า assume ว่า SDK จัดการให้
+- ระวังการ bind ค่าที่มี array ตัวเลข (เช่น `embedding: [Float]`) — ใน Rust ต้องห่อ `SerdeWrapper` ไม่งั้น insert ผ่านแต่อ่านกลับไม่ได้ · **ฝั่ง Swift: เทสแล้ว ไม่มีปัญหานี้** — `SurrealValue` เป็น enum `Sendable` ที่ปักชนิดตั้งแต่ต้น vector 1024 มิติ round-trip ได้จริงกับ engine (`KnowledgeStoreTests` กับ DB จริง) และรูปร่างของค่าที่ bind ถูกคุมด้วย `BindingShapeTests` 12 แบบ
 
 ## C.2 บทเรียนเชิงกระบวนการจาก v1
 
