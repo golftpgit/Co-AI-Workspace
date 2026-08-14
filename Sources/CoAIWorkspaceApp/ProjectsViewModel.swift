@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import AgentKit
+import Roster
 import ProjectKit
 import CoreEngine
 import Config
@@ -193,7 +194,14 @@ public final class ProjectsViewModel {
         await refreshGate()
     }
 
-    public func create(name: String, kind: ProjectKind) async {
+    /// Creates a project from a type manifest (§20.2, P11.1).
+    ///
+    /// The manifest decides what the project starts with: which coarse kind it
+    /// is, and the plan laid down from its template. What it deliberately does
+    /// *not* decide is which practices apply — that is a governance decision
+    /// with a person's name on it (§19.15), so the type's suggestions are
+    /// carried to the screen rather than acted on.
+    public func create(name: String, type: ProjectTypeManifest) async {
         guard let service else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -201,10 +209,18 @@ public final class ProjectsViewModel {
             return
         }
         do {
-            let project = try await service.create(name: trimmed, kind: kind)
+            let template = type.wbsTemplate
+            let project = try await service.create(
+                name: trimmed, kind: type.kind, typeName: type.type,
+                startingPlan: { WBSTemplate.packages(template, project: $0) })
             await reload()
             await select(.project(project.id))
-            status = Status(message: "สร้าง '\(trimmed)' แล้ว — อยู่ขั้นเริ่มต้น", isError: false)
+            let planted = WBSTemplate.packages(template, project: project.id).count
+            status = Status(message: planted > 0
+                            ? "สร้าง '\(trimmed)' แบบ\(type.label) แล้ว — อยู่ขั้นเริ่มต้น "
+                                + "พร้อมแผนตั้งต้น \(planted) รายการที่ยังต้องผูกขอบเขตและระบุผู้รับผิดชอบเอง"
+                            : "สร้าง '\(trimmed)' แล้ว — อยู่ขั้นเริ่มต้น",
+                            isError: false)
         } catch {
             status = Status(message: "สร้างโปรเจกต์ไม่สำเร็จ: \(error)", isError: true)
         }

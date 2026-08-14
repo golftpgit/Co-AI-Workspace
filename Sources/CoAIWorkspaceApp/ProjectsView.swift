@@ -1,5 +1,6 @@
 import SwiftUI
 import AgentKit
+import Roster
 import ProjectKit
 
 // ─────────────────────────────────────────────────────────────
@@ -15,8 +16,12 @@ import ProjectKit
 
 struct ProjectsView: View {
     @Bindable var model: ProjectsViewModel
+    /// The types read from files at boot (§20.2). Passed in rather than looked
+    /// up here, because "which types exist" is an answer the engine has already
+    /// worked out and a screen that recomputed it could disagree with it.
+    let types: [ProjectTypeManifest]
     @State private var newName = ""
-    @State private var newKind = ProjectKind.blank
+    @State private var newType: String?
     @State private var newPackageTitle = ""
     @State private var selectedParent: String?
     @State private var decision = ""
@@ -161,22 +166,39 @@ struct ProjectsView: View {
                 TextField("ชื่อโปรเจกต์ใหม่", text: $newName)
                     .textFieldStyle(.roundedBorder)
                 HStack {
-                    Picker("ชนิด", selection: $newKind) {
-                        ForEach(ProjectKind.allCases, id: \.self) { kind in
-                            Text(kind.label).tag(kind)
+                    Picker("ชนิด", selection: $newType) {
+                        ForEach(types) { type in
+                            Text(type.label).tag(String?.some(type.type))
                         }
                     }
                     .labelsHidden()
+                    .accessibilityLabel("ชนิดของโปรเจกต์ใหม่")
                     Button("สร้าง") {
-                        Task {
-                            await model.create(name: newName, kind: newKind)
-                            newName = ""
-                        }
+                        guard let chosen = types.first(where: { $0.type == newType })
+                            ?? types.first else { return }
+                        let name = newName
+                        newName = ""
+                        Task { await model.create(name: name, type: chosen) }
                     }
-                    .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty
+                              || types.isEmpty)
+                }
+                if let chosen = types.first(where: { $0.type == newType }) {
+                    // What choosing this type will actually do, before it is
+                    // chosen. A picker whose options only differ in a word is a
+                    // picker people pick the first item of.
+                    Text(chosen.description).font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if types.isEmpty {
+                    Text("ยังโหลดชนิดโปรเจกต์ไม่ได้ — ดูข้อความที่ ระบบ → สถานะระบบ")
+                        .font(.caption2).foregroundStyle(.orange)
                 }
             }
             .padding(12)
+            .task(id: types.count) {
+                if newType == nil { newType = types.first?.type }
+            }
         }
     }
 

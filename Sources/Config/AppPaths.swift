@@ -13,6 +13,12 @@ public struct AppPaths: Sendable {
     public var modelsDirectory: URL { root.appending(path: "models") }
     public var agentsDirectory: URL { root.appending(path: "agents") }
     public var skillsDirectory: URL { root.appending(path: "skills") }
+    /// Project types, as files (§20.2). Beside agents and skills because it is
+    /// the same kind of thing: a capability the system reads rather than one it
+    /// was compiled with. The six the app ships are in its bundle; anything here
+    /// is added on top, which is what makes adding a type a file rather than a
+    /// release.
+    public var projectTypesDirectory: URL { root.appending(path: "project-types") }
     public var pluginsDirectory: URL { root.appending(path: "plugins") }
     public var documentsDirectory: URL { root.appending(path: "documents") }
     /// The analysis store's own directory (§12.1). A directory rather than a
@@ -39,7 +45,7 @@ public struct AppPaths: Sendable {
     public var managedDirectories: [URL] {
         [root, databaseDirectory, modelsDirectory, agentsDirectory,
          skillsDirectory, pluginsDirectory, documentsDirectory, analysisDirectory,
-         logsDirectory, projectsDirectory]
+         logsDirectory, projectsDirectory, projectTypesDirectory]
     }
 
     public init(root: URL) { self.root = root }

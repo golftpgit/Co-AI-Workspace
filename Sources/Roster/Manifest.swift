@@ -325,11 +325,15 @@ public struct ManifestParser: Sendable {
         return (frontmatter, body)
     }
 
-    /// `key: value` per line. Flat on purpose (§7.2) — nested YAML would mean
-    /// carrying a YAML parser for a format that has never needed one, and every
-    /// field below is a string or a list of strings.
-    static func fields(in frontmatter: String) -> [String: String] {
-        var fields: [String: String] = [:]
+    /// `key: value` per line, keeping **every** value for a repeated key.
+    ///
+    /// Flat on purpose (§7.2) — nested YAML would mean carrying a YAML parser
+    /// for a format that has never needed one. Repeating a key is how this
+    /// format says "a list of things that each have parts", which is what
+    /// project types need for their gates (§20.2) and what a second parser would
+    /// otherwise have been written for.
+    static func allFields(in frontmatter: String) -> [String: [String]] {
+        var fields: [String: [String]] = [:]
         for line in frontmatter.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
@@ -342,9 +346,15 @@ public struct ManifestParser: Sendable {
             if value.count >= 2, value.hasPrefix("\""), value.hasSuffix("\"") {
                 value = String(value.dropFirst().dropLast())
             }
-            fields[key] = value
+            fields[key, default: []].append(value)
         }
         return fields
+    }
+
+    /// The last value for each key — what agent and skill manifests have always
+    /// read, expressed as a view over the same reader rather than a second one.
+    static func fields(in frontmatter: String) -> [String: String] {
+        allFields(in: frontmatter).compactMapValues(\.last)
     }
 
     static func list(_ value: String?) -> [String] {

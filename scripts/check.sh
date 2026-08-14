@@ -302,6 +302,34 @@ else
   ok "M15 designs instruments and cannot serve one"
 fi
 
+# ARCHITECTURE §20.2 / P11.1: a project type is a file read by the parser that
+# already reads agents and skills. Two readers would drift, and the first thing to
+# drift would be the field that decides what a project starts with. The rule is
+# mechanical: only `Manifest.swift` may take frontmatter apart, so anything else
+# that goes looking for the `---` fence is a second parser being born.
+FENCE_READERS=$(grep -rln '"---"' Sources/ --include=*.swift 2>/dev/null | grep -v "Sources/Roster/Manifest.swift" || true)
+# And every type the app ships must name a WBS template that exists, or a project
+# starts with an empty plan and no complaint.
+TEMPLATE_GAP=$(/usr/bin/python3 - <<'TPL'
+import re, glob, os
+known = set(re.findall(r'"([a-z0-9-]+)"',
+    re.search(r'names = \[(.*?)\]',
+              open('Sources/Roster/WBSTemplate.swift').read(), re.S).group(1)))
+missing = []
+for path in sorted(glob.glob('Resources/project-types/*.md')):
+    text = open(path, encoding='utf-8').read()
+    found = re.search(r'^wbs_template:\s*(\S+)', text, re.M)
+    if found and found.group(1) not in known:
+        missing.append(os.path.basename(path) + ' -> ' + found.group(1))
+print(' '.join(missing))
+TPL
+)
+if [ -n "$FENCE_READERS" ] || [ -n "$TEMPLATE_GAP" ]; then
+  fail "a second manifest parser or a missing WBS template:$FENCE_READERS $TEMPLATE_GAP"
+else
+  ok "project types are files, read by the one manifest parser"
+fi
+
 # ARCHITECTURE §19.17 invariant 1 / P11.6b: M16 writes to SQLite and nowhere
 # else. DuckDB is an OLAP engine built around a single writer; pointing a web
 # server's INSERTs at it does not fail on this machine, it fails on the day

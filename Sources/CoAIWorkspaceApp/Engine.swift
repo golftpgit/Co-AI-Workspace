@@ -132,6 +132,10 @@ struct Engine: Sendable {
     /// model that stopped following instructions.
     let roster: [RosterEntry]
     let rosterProblems: [String]
+    /// The project types available to create with (§20.2, P11.1). The six the
+    /// app ships, plus anything the person has put in their own folder — which
+    /// is what makes adding a type a file rather than a release.
+    let projectTypes: [ProjectTypeManifest]
     /// §6.2 — other people's tools. Held here for the reason this whole task
     /// exists: v1's MCP client was complete, tested and reachable from
     /// nothing (D6). A registry on the engine, whose tools are registered in
@@ -442,7 +446,21 @@ struct Engine: Sendable {
         let agents = manifests.load(directory: paths.agentsDirectory, kind: ManifestKind.agent)
         let skills = manifests.load(directory: paths.skillsDirectory, kind: ManifestKind.skill)
         let roster = (agents.manifests + skills.manifests).map(manifests.entry(for:))
-        let rosterProblems = (agents.errors + skills.errors).map { "\($0)" }
+
+        // §20.2 — project types, read with the same parser. Bundled first so a
+        // fresh install can create a research project on day one; the person's
+        // own folder is laid on top, so a type they wrote wins over one that
+        // shipped with the same name.
+        var typesByName: [String: ProjectTypeManifest] = [:]
+        var typeProblems: [String] = []
+        for directory in [Bundle.main.resourceURL?.appending(path: "project-types"),
+                          paths.projectTypesDirectory].compactMap({ $0 }) {
+            let loaded = manifests.loadProjectTypes(directory: directory)
+            for type in loaded.types { typesByName[type.type] = type }
+            typeProblems.append(contentsOf: loaded.errors.map { "\($0)" })
+        }
+        let projectTypes = typesByName.values.sorted { $0.type < $1.type }
+        let rosterProblems = (agents.errors + skills.errors).map { "\($0)" } + typeProblems
 
         var summary: [String] = []
         for executor in executors {
@@ -476,6 +494,7 @@ struct Engine: Sendable {
                       channelAccounts: channelAccounts, channelRouter: channelRouter,
                       appIntents: appIntents,
                       roster: roster, rosterProblems: rosterProblems,
+                      projectTypes: projectTypes,
                       mcpServers: mcpServers, plugins: plugins, mcp: mcp,
                       mcpConnected: mcpOutcome.connected, mcpProblems: mcpProblems)
     }

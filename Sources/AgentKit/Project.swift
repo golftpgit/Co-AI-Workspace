@@ -177,6 +177,12 @@ public struct Project: Sendable, Codable, Equatable, Identifiable {
     public let id: ProjectID
     public var name: String
     public var kind: ProjectKind
+    /// The full type name from the manifest it was created from —
+    /// `research.quantitative`, not just `research` (§20.2). `kind` is the coarse
+    /// shape everything else switches on; this is what says *which* research
+    /// project it is, and without it the gates a type declares could not be
+    /// applied after the day it was created.
+    public var typeName: String?
     public var stage: ProjectStage
     public var brief: String
     public var statement: ScopeStatement
@@ -199,6 +205,7 @@ public struct Project: Sendable, Codable, Equatable, Identifiable {
     public init(id: ProjectID = ProjectID(OpaqueID.make(OpaqueID.project)),
                 name: String,
                 kind: ProjectKind = .blank,
+                typeName: String? = nil,
                 stage: ProjectStage = .initiation,
                 brief: String = "",
                 statement: ScopeStatement = ScopeStatement(),
@@ -212,6 +219,7 @@ public struct Project: Sendable, Codable, Equatable, Identifiable {
         self.id = id
         self.name = name
         self.kind = kind
+        self.typeName = typeName
         self.stage = stage
         self.brief = brief
         self.statement = statement
