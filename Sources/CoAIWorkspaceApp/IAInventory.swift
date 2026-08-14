@@ -78,7 +78,9 @@ enum IAInventory {
         IAEntry(screen: "Models", area: "ระบบ", subTab: "โมเดล",
                 state: .done),
         IAEntry(screen: "Workflow Builder", area: "โต๊ะทำงาน", subTab: "สคริปต์ + คอนโซล",
-                state: .notBuilt("P8.6 — ยังไม่มี node editor · วันนี้เขียนเป็นสคริปต์/สมุดงานแทน")),
+                state: .partial("บันทึกลำดับขั้นแล้วรันซ้ำได้ · ทุกขั้นเดินผ่าน `ToolGateway` "
+                                + "· palette อ่านจากทูลที่ต่ออยู่จริง · **ไม่มี node canvas แบบ n8n โดยตั้งใจ** "
+                                + "— ขั้นเรียงเป็นลำดับ ส่วนการแตกงานเป็นการตัดสินใจของหัวหน้าทีม (§2.2) ไม่ใช่เส้นที่คนลาก")),
         IAEntry(screen: "Templates", area: "โต๊ะทำงาน", subTab: "ผลลัพธ์ + เอกสาร",
                 state: .partial("เรียนแม่แบบจากไฟล์ .docx ที่อัปโหลดได้แล้ว · "
                                 + "ยังไม่มีหน้าจัดการแม่แบบเป็นของตัวเอง")),

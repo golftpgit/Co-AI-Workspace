@@ -5,6 +5,8 @@ import Sidecar
 import Knowledge
 import Instruments
 import Persistence
+import AgentKit
+import CoreEngine
 
 @main
 struct CoAIWorkspaceApp: App {
@@ -47,6 +49,7 @@ private struct RootView: View {
     /// commands and the file list is where their output lands (§14.2, P8.6),
     /// so they belong in one tab with a switch rather than two tabs apart.
     @State private var consolePane = ConsolePane.notebook
+    @State private var workflows = WorkflowViewModel()
     /// Owned here rather than built inside the view: a model recreated on each
     /// body pass loses whatever the user just did to it (P1.10's bug).
     @State private var knowledge = KnowledgeViewModel()
@@ -448,12 +451,13 @@ private struct RootView: View {
 
     /// The two halves of the console tab (§14.2, P8.6).
     enum ConsolePane: String, CaseIterable, Identifiable {
-        case notebook, files
+        case notebook, files, workflows
         var id: String { rawValue }
         var label: String {
             switch self {
             case .notebook: "สมุดงาน"
             case .files: "ไฟล์"
+            case .workflows: "ลำดับงาน"
             }
         }
     }
@@ -461,6 +465,14 @@ private struct RootView: View {
     /// Which folder the file viewer shows. A project sees its own folder; in
     /// General there is no project folder, so it sees the app-wide documents
     /// directory — the place DocGen writes when nothing is selected.
+    /// Saved procedures live beside the workspace's other list files.
+    private func workflowFile(_ engine: Engine) -> URL {
+        if case .project(let id) = projects.scope {
+            return engine.paths.project(id).root.appending(path: "workflows.json")
+        }
+        return engine.paths.root.appending(path: "workflows.json")
+    }
+
     private func filesRoot(_ engine: Engine) -> URL {
         if case .project(let id) = projects.scope {
             return engine.paths.project(id).root
@@ -519,7 +531,7 @@ private struct RootView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 240)
+                .frame(width: 330)
                 .padding(.vertical, 8)
 
                 Divider()
@@ -527,6 +539,18 @@ private struct RootView: View {
                 switch consolePane {
                 case .notebook:
                     screenView(.analysis, engine: engine, analysisPane: .notebook)
+                case .workflows:
+                    // The palette is whatever the gateway can reach, so this
+                    // screen needs the live gateway rather than a tool list
+                    // captured at boot (§10, P8.5).
+                    WorkflowView(model: workflows)
+                        .id(projects.scope.storageKey)
+                        .task {
+                            await workflows.attach(
+                                store: WorkflowStore(file: workflowFile(engine)),
+                                gateway: engine.gateway,
+                                context: ToolContext(scope: projects.scope))
+                        }
                 case .files:
                     // The workspace's own folder, inside the container, so a
                     // sandboxed app reaches it without anybody granting
