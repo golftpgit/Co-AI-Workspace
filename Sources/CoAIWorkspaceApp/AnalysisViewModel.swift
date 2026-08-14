@@ -126,6 +126,9 @@ public final class AnalysisViewModel {
     private var knowledge: KnowledgeStore?
     private var planStore: AnalysisPlanStore?
     private var templateStore: TemplateStore?
+    /// Where a cell's answer is kept so a manuscript can bind a number to it
+    /// months later (§20.8, P11.9).
+    private var cellRuns: CellRunStore?
     private var detector: GapDetector?
     private var scope: Scope = .central
     private let log = AppLog.logger("analysis-ui")
@@ -221,10 +224,12 @@ public final class AnalysisViewModel {
         connectors = store.load(scope: scope)
     }
 
-    public func attach(store: AnalysisStore?, kernel: NotebookKernel?, library: NotebookStore) async {
+    public func attach(store: AnalysisStore?, kernel: NotebookKernel?,
+                       library: NotebookStore, cellRuns: CellRunStore? = nil) async {
         self.store = store
         self.kernel = kernel
         self.library = library
+        self.cellRuns = cellRuns
         self.storeIsOpen = store != nil
         if let store {
             runner = NotebookRunner(store: store, kernel: kernel)
@@ -356,6 +361,13 @@ public final class AnalysisViewModel {
         do {
             let outcome = try await runner.run(cell, confirmed: confirmed)
             cellStates[id] = .done(outcome, seconds: Date().timeIntervalSince(startedAt))
+            // §20.8 — recorded here, at the one place a cell actually runs, so a
+            // manuscript written months later can resolve a number back to it.
+            // Recording it anywhere else would be recording that a run happened
+            // rather than what it answered.
+            if let notebook, let run = outcome.run(notebookID: notebook.id, cell: cell) {
+                try? await cellRuns?.save(run, scope: scope)
+            }
             if case .sql(let results) = outcome,
                results.contains(where: { $0.statement.effect > .read }) {
                 await refresh()
@@ -665,6 +677,50 @@ public final class AnalysisViewModel {
                             isError: false)
         } catch {
             status = Status(message: "สร้างเอกสารไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    // MARK: - the five-chapter manuscript (§20.8, P11.9)
+
+    /// Writes the manuscript, with every reported number resolved out of a run
+    /// that actually happened.
+    ///
+    /// Refuses rather than rendering a gap. That refusal is the reason the
+    /// feature exists: a draft with a hole where a mean should be gets sent
+    /// anyway, and a draft with a *stale* mean looks perfect.
+    public func exportManuscript(_ manuscript: Manuscript, to url: URL) async {
+        guard let cellRuns else {
+            status = Status(message: "ยังไม่ได้ต่อกับที่เก็บผลการรัน — "
+                            + "ตัวเลขในเล่มต้องมาจากเซลล์ที่รันจริง", isError: true)
+            return
+        }
+        let runs = (try? await cellRuns.runs(scope: scope)) ?? []
+        // What each cell holds *now*, so a number produced before an edit is
+        // refused instead of quietly reported against the new question.
+        var currentSources: [String: String] = [:]
+        for book in notebooks {
+            for cell in book.cells { currentSources[cell.id] = cell.source }
+        }
+
+        do {
+            var draft = try ManuscriptBuilder.draft(manuscript, runs: runs,
+                                                    currentSources: currentSources)
+            // §12.4's habit, applied to the manuscript: the query behind every
+            // figure travels with the document, so a reader can check a number
+            // without being given the notebook.
+            let table = ManuscriptBuilder.provenanceTable(manuscript, runs: runs,
+                                                          currentSources: currentSources)
+            if !table.isEmpty {
+                draft.sections.append(Section(heading: "ภาคผนวก: ที่มาของตัวเลขในบทที่ 4",
+                                              paragraphs: [.bullets(table)]))
+            }
+            let rendered = try DocumentBuilder.render(draft)
+            try OfficeWriter.docx(rendered).write(to: url)
+            status = Status(message: "บันทึกต้นฉบับ 5 บทที่ \(url.lastPathComponent) แล้ว — "
+                            + "ตัวเลขทุกตัวในบทที่ 4 ผูกกับเซลล์ที่รันจริง และมีภาคผนวกบอกว่ามาจากคำสั่งไหน",
+                            isError: false)
+        } catch {
+            status = Status(message: "\(error)", isError: true)
         }
     }
 
