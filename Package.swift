@@ -167,6 +167,12 @@ let package = Package(
         // the server performs.
         .target(name: "OLTP", dependencies: ["AgentKit", "Observability"]),
 
+        // §20.7 Linkage — who answered, kept in a different file from what they
+        // answered, sealed with a key from the Keychain. **Not a dependency of
+        // FieldServer**, and that is the design: the server can never reach an
+        // identity, because the type is not in its module graph.
+        .target(name: "Linkage", dependencies: ["AgentKit", "Observability", "OLTP"]),
+
         // M16 FieldServer — the only surface in the system that takes input from
         // somebody who is not the owner of this machine (§20.7). Its dependency
         // list is an invariant too, in the other direction from M15's: it may
@@ -274,6 +280,7 @@ let package = Package(
         .testTarget(name: "WebSearchTests", dependencies: ["WebSearch", "Knowledge"]),
         .testTarget(name: "InstrumentsTests", dependencies: ["Instruments"]),
         .testTarget(name: "OLTPTests", dependencies: ["OLTP"]),
+        .testTarget(name: "LinkageTests", dependencies: ["Linkage"]),
         .testTarget(name: "FieldServerTests", dependencies: ["FieldServer", "Instruments", "OLTP"]),
         .testTarget(name: "EmbeddingRuntimeTests", dependencies: ["EmbeddingRuntime"]),
         .testTarget(name: "ExecutionTests", dependencies: ["Execution", "Config"]),

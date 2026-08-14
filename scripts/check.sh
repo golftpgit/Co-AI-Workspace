@@ -362,6 +362,29 @@ else
   ok "M16 writes answers to SQLite only, and never over one already given"
 fi
 
+# ARCHITECTURE §20.7 / P11.7b: who answered is kept in a different file from what
+# they answered, and the server cannot reach the first one at all. Two rules,
+# because they defend against different things — the separate file means a copy
+# of the response data carries no identities, and the absent dependency means the
+# one surface that takes input from strangers has no way to ask who anybody is.
+LINKAGE_IN_SERVER=$(grep -rlE "^import Linkage" Sources/FieldServer 2>/dev/null || true)
+SAME_FILE=$(/usr/bin/python3 - <<'PATHS'
+import re
+paths = open('Sources/Config/AppPaths.swift').read()
+def file_of(name):
+    found = re.search(name + r': URL \{ [a-zA-Z]+\.appending\(path: "([^"]+)"\)', paths)
+    return found.group(1) if found else None
+answers, identities = file_of('responsesDatabase'), file_of('linkageDatabase')
+print('' if answers and identities and answers != identities
+      else 'responses=%s linkage=%s' % (answers, identities))
+PATHS
+)
+if [ -n "$LINKAGE_IN_SERVER" ] || [ -n "$SAME_FILE" ]; then
+  fail "identities are reachable from the server, or share the answers' file: $LINKAGE_IN_SERVER $SAME_FILE"
+else
+  ok "who answered lives in its own file, and M16 cannot reach it"
+fi
+
 # ARCHITECTURE §19.2 / P10.12, risk R13: collapsing fourteen screens into four
 # areas is the same mistake as `Scope.project` if two of them quietly end up with
 # no home — a reorganisation reads as finished because the new structure is tidy.
