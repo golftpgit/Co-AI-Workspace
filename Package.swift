@@ -45,7 +45,8 @@ let package = Package(
         // SurrealDB access + everything durable: conversations, spans and
         // (from P2) the knowledge base. Client written in-house — see
         // ARCHITECTURE §11.5 for why not surrealdb.swift.
-        .target(name: "Persistence", dependencies: ["AgentKit", "Observability", "Knowledge", "ProjectKit"]),
+        .target(name: "Persistence", dependencies: ["AgentKit", "Observability", "Knowledge", "ProjectKit",
+                                                    "Instruments"]),
 
         // M5 — every model behind one interface, plus the router that decides
         // which tier serves a request (ARCHITECTURE §9).
@@ -152,6 +153,13 @@ let package = Package(
         // are not evidence; anything worth citing is fetched and read.
         .target(name: "WebSearch", dependencies: ["AgentKit", "Observability", "Knowledge"]),
 
+        // M15 Instruments — designing what data is collected with (ARCHITECTURE
+        // §20.3). **The dependency list is the invariant**: no networking target
+        // here, because serving a form is M16's job and an instrument that could
+        // open a socket would be an instrument that could collect data before it
+        // passed its gate.
+        .target(name: "Instruments", dependencies: ["AgentKit", "Knowledge", "Observability"]),
+
         // M5/M7 — the embedding model, in-process. Depends on Knowledge (which
         // owns the `Embedder` protocol) and never the other way round, so the
         // knowledge logic and its tests stay free of a heavy ML dependency.
@@ -211,7 +219,7 @@ let package = Package(
                            // because WebKit is main-actor bound and one browser
                            // per app is the whole point.
                            "Channels", "DocGen", "Roster", "MCPBridge", "ProjectKit",
-                           "WebSearch"],
+                           "WebSearch", "Instruments"],
             // §14.3 — what makes an App Intent findable rather than merely
             // written. Shortcuts and Siri read `Metadata.appintents` from the
             // bundle, and that bundle is produced by `appintentsmetadataprocessor`
@@ -241,6 +249,7 @@ let package = Package(
         .testTarget(name: "CoreEngineTests", dependencies: ["CoreEngine", "Knowledge"]),
         .testTarget(name: "KnowledgeTests", dependencies: ["Knowledge"]),
         .testTarget(name: "WebSearchTests", dependencies: ["WebSearch", "Knowledge"]),
+        .testTarget(name: "InstrumentsTests", dependencies: ["Instruments"]),
         .testTarget(name: "EmbeddingRuntimeTests", dependencies: ["EmbeddingRuntime"]),
         .testTarget(name: "ExecutionTests", dependencies: ["Execution", "Config"]),
         .testTarget(name: "AnalysisTests", dependencies: ["Analysis"]),

@@ -281,6 +281,27 @@ else
   ok "every tool is classified for both risk and stage effect"
 fi
 
+# ARCHITECTURE §20.6 / P11: M15 designs instruments and must not be able to serve
+# one. The dependency list *is* the invariant — an instrument that could open a
+# socket could collect data before passing its gate, and the gate is the strongest
+# one in a research project because fieldwork cannot be redone.
+INSTRUMENT_NETWORK=$(grep -rlE "^import (Network|WebKit|NIO|Vapor)|URLSession|NWListener" Sources/Instruments 2>/dev/null || true)
+INSTRUMENT_DEPS=$(/usr/bin/python3 - <<'DEPS'
+import re
+manifest = open('Package.swift').read()
+block = manifest[manifest.index('.target(name: "Instruments"'):]
+block = block[:block.index('),') + 1]
+allowed = {"AgentKit", "Knowledge", "Observability"}
+found = set(re.findall('"([A-Za-z]+)"', block)) - {"Instruments"}
+print(' '.join(sorted(found - allowed)))
+DEPS
+)
+if [ -n "$INSTRUMENT_NETWORK" ] || [ -n "$INSTRUMENT_DEPS" ]; then
+  fail "M15 Instruments reached for the network:$INSTRUMENT_NETWORK $INSTRUMENT_DEPS"
+else
+  ok "M15 designs instruments and cannot serve one"
+fi
+
 # ARCHITECTURE §19.2 / P10.12, risk R13: collapsing fourteen screens into four
 # areas is the same mistake as `Scope.project` if two of them quietly end up with
 # no home — a reorganisation reads as finished because the new structure is tidy.

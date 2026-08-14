@@ -3,6 +3,8 @@ import AppKit
 import Config
 import Sidecar
 import Knowledge
+import Instruments
+import Persistence
 
 @main
 struct CoAIWorkspaceApp: App {
@@ -31,7 +33,10 @@ private struct RootView: View {
     /// still what draws each surface — see `screenView` — but nobody navigates by
     /// it any more.
     @State private var area = Area.chat
-    @State private var workbenchTab = SubTab.console
+    /// What the Workbench's tab bar last selected. Read through `workbenchTab`,
+    /// never directly: which tabs exist depends on the scope, and this can name
+    /// one the current scope does not have.
+    @State private var workbenchTabSelection = SubTab.console
     @State private var knowledgeTab = SubTab.documents
     @State private var systemTab = SubTab.status
     /// The team rail beside Chat (§19.2.6). Off by default: most turns are a
@@ -46,6 +51,7 @@ private struct RootView: View {
     @State private var models = ModelsViewModel()
     @State private var endpoints = EndpointsViewModel()
     @State private var analysis = AnalysisViewModel()
+    @State private var instruments = InstrumentsViewModel()
     /// Which workspace everything else is looking at (§19.1). Held at the root
     /// because it is not one screen's state: chat, knowledge and the ledger all
     /// read the same selection, which is what replaced the hardcoded
@@ -262,6 +268,15 @@ private struct RootView: View {
         Group {
             if let engine = environment.engine {
                 areaContent(engine)
+                    // Which projects exist is the shell's own question, not the
+                    // Plan screen's: the switcher in the header, the Workbench's
+                    // tab list and the status strip all read it. Attaching only
+                    // inside Plan meant the header menu offered nothing but
+                    // General until you had opened Plan once — which is exactly
+                    // the detour moving that switch to the header was for (§19.1).
+                    .task {
+                        await projects.attach(service: engine.projects)
+                    }
             } else {
                 BootStatusView(environment: environment)
             }
@@ -431,12 +446,15 @@ private struct RootView: View {
     private func workbenchArea(_ engine: Engine) -> some View {
         switch workbenchTab {
         case .collect:
-            ContentUnavailableView(
-                "เครื่องมือเก็บข้อมูลยังไม่ได้ทำ",
-                systemImage: "square.and.pencil",
-                description: Text("แบบสอบถาม/ฟอร์มและการเก็บข้อมูลจากคนอื่นคือ M15 Instruments "
-                                  + "ในแผน P11 — ยังไม่มีในแอปวันนี้ และแท็บนี้อยู่ที่นี่เพราะ "
-                                  + "มันเป็นต้นทางของเส้นทางข้อมูลเดียวกัน ไม่ใช่เพราะมันพร้อม"))
+            // M15 (P11.2/P11.4). Serving the form is still M16's job and still
+            // not built — this is the design half: draft the instrument, tie
+            // every question to what it measures, and get past the gate.
+            InstrumentsView(model: instruments)
+                .id(projects.scope.storageKey)
+                .task {
+                    await instruments.attach(store: InstrumentStore(client: engine.client),
+                                             scope: projects.scope)
+                }
         case .internalDB:
             screenView(.analysis, engine: engine,
                        analysisPane: .explorer, explorerFocus: .internalStore)
@@ -481,18 +499,38 @@ private struct RootView: View {
     private var subTabs: [SubTab]? {
         switch area {
         case .chat, .plan: nil
-        case .workbench: projects.selected == nil
-            ? [.externalDB, .console, .results]
-            : [.collect, .internalDB, .externalDB, .console, .results]
+        case .workbench: workbenchTabs
         case .knowledge: [.documents, .conflicts, .sources]
         case .system: [.models, .budget, .status, .inventory]
         }
     }
 
+    /// General has no "เก็บข้อมูล" and no project database (§19.2).
+    private var workbenchTabs: [SubTab] {
+        projects.selected == nil
+            ? [.externalDB, .console, .results]
+            : [.collect, .internalDB, .externalDB, .console, .results]
+    }
+
+    /// The Workbench tab actually shown.
+    ///
+    /// Leaving a project for General while standing on "เก็บข้อมูล" used to keep
+    /// the project's questionnaire on screen — consent text, ethics number and
+    /// expert ratings and all — under a header that said General, with no tab in
+    /// the bar selected to say where you were. A selection that outlives the thing
+    /// it selects is the same defect as a `Scope.project` pointing at nothing
+    /// (§19.1), so it is resolved on read rather than trusted.
+    private var workbenchTab: SubTab {
+        let available = workbenchTabs
+        return available.contains(workbenchTabSelection)
+            ? workbenchTabSelection
+            : (available.first ?? .console)
+    }
+
     private var subTabSelection: Binding<SubTab> {
         switch area {
         case .workbench:
-            Binding(get: { workbenchTab }, set: { workbenchTab = $0 })
+            Binding(get: { workbenchTab }, set: { workbenchTabSelection = $0 })
         case .knowledge:
             Binding(get: { knowledgeTab }, set: { knowledgeTab = $0 })
         default:
