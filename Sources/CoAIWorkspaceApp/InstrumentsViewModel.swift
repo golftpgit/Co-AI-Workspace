@@ -61,7 +61,24 @@ public final class InstrumentsViewModel {
     /// moves — the respondent's form must not change under them.
     public private(set) var servingVersion: Int?
 
+    // ── the answers themselves (§19.17, P11.6c/P11.7) ──
+    /// One respondent per row, in the order the answers arrived.
+    public private(set) var responseRows: [ResponseRow] = []
+    /// Every round for the selected version, newest first.
+    public private(set) var rounds: [WaveRecord] = []
+
+    /// A respondent's answers, ready to be drawn as a row: the values that are
+    /// current, each still carrying whatever it was before somebody corrected it.
+    public struct ResponseRow: Identifiable, Equatable {
+        public let submission: SubmissionRecord
+        /// Keyed by item id, so a row can be drawn against the instrument's own
+        /// question order rather than whatever order the answers came back in.
+        public let answers: [String: ResolvedAnswer]
+        public var id: String { submission.id }
+    }
+
     private var store: InstrumentStore?
+    private var responseStore: ResponseStore?
     private var scope: Scope = .central
     private var paths: AppPaths?
     private var spans: (any SpanSink)?
@@ -86,6 +103,10 @@ public final class InstrumentsViewModel {
         self.scope = scope
         self.paths = paths
         self.spans = spans
+        // A different project is a different answer database. Dropping the handle
+        // here is what stops one project's responses being drawn under another's
+        // instrument.
+        self.responseStore = nil
         await reload()
     }
 
@@ -276,7 +297,10 @@ public final class InstrumentsViewModel {
             let host = FieldServerHost(store: responses, spans: spans)
             serving = try await host.start(serving: approved, port: port)
             self.host = host
-            waveIsOpen = true
+            // Read back rather than assumed: starting may have *resumed* a round
+            // that was already open, and it will refuse to reopen one that was
+            // closed. Either way the screen shows what the database says.
+            waveIsOpen = await host.currentWave?.isOpen ?? false
             servingVersion = approved.instrument.version
             await refreshResponses()
             status = Status(message: "เปิดฟอร์มแล้วในวงแลนนี้เท่านั้น — "
@@ -299,19 +323,86 @@ public final class InstrumentsViewModel {
                         + "ไม่ใช่แค่ซ่อนปุ่มบนหน้าเว็บ", isError: false)
     }
 
+    /// Stops listening. The round stays open unless somebody closed it — shutting
+    /// the laptop is not "we have finished collecting", and saying otherwise on
+    /// this screen would be the app claiming a closing date nobody chose.
     public func stopServing() async {
         guard let host else { return }
+        let stillOpen = await host.currentWave?.isOpen ?? false
         await host.stop()
         self.host = nil
         serving = nil
         waveIsOpen = false
         servingVersion = nil
-        status = Status(message: "ปิดเซิร์ฟเวอร์แล้ว", isError: false)
+        await loadResponses()
+        status = Status(message: stillOpen
+                        ? "ปิดเซิร์ฟเวอร์แล้ว — รอบเก็บข้อมูลยังเปิดอยู่ เปิดเซิร์ฟเวอร์ใหม่แล้วเก็บต่อรอบเดิมได้"
+                        : "ปิดเซิร์ฟเวอร์แล้ว", isError: false)
     }
 
     public func refreshResponses() async {
-        guard let host else { return }
-        responses = await host.responseCount()
+        if let host { responses = await host.responseCount() }
+        await loadResponses()
+    }
+
+    // MARK: - reading the answers (§19.17's "responses" page)
+
+    /// Opens the project's answer database on demand. Reading answers must not
+    /// require the server to be running: the moment somebody most wants to look
+    /// at what came in is after they have closed the round and stopped serving.
+    private func answerStore() async -> ResponseStore? {
+        if let responseStore { return responseStore }
+        guard let paths, case .project(let project) = scope else { return nil }
+        let projectPaths = paths.project(project)
+        try? projectPaths.createDirectories()
+        responseStore = try? await ResponseStore(path: projectPaths.responsesDatabase)
+        return responseStore
+    }
+
+    public func loadResponses() async {
+        guard let instrument = selected, let store = await answerStore() else {
+            responseRows = []
+            rounds = []
+            return
+        }
+        do {
+            rounds = try await store.waves(instrument: instrument.id,
+                                           version: instrument.version)
+            responses = try await store.submissionCount(instrument: instrument.id,
+                                                        version: instrument.version)
+            let submissions = try await store.submissions(instrument: instrument.id,
+                                                          version: instrument.version)
+            let answers = try await store.answers(instrument: instrument.id,
+                                                  version: instrument.version)
+            let bySubmission = Dictionary(grouping: answers, by: \.submissionID)
+            responseRows = submissions.map { submission in
+                let keyed = Dictionary(
+                    (bySubmission[submission.id] ?? []).map { ($0.itemID, $0) },
+                    uniquingKeysWith: { first, _ in first })
+                return ResponseRow(submission: submission, answers: keyed)
+            }
+        } catch {
+            log.error("loading responses: \(error)")
+            responseRows = []
+        }
+    }
+
+    /// Records a change to an answer. The row that arrived is never touched
+    /// (§19.17 invariant 2) — this writes a correction beside it, and the screen
+    /// then shows the corrected value with a mark and the original underneath.
+    public func correct(submission: String, item: String, previous: String,
+                        to newText: String, reason: String, by person: String) async {
+        guard let store = await answerStore() else { return }
+        do {
+            try await store.correct(Correction(submissionID: submission, itemID: item,
+                                               previousText: previous, newText: newText,
+                                               reason: reason, correctedBy: person))
+            await loadResponses()
+            status = Status(message: "บันทึกการแก้ค่าแล้ว — ค่าเดิมยังอยู่ และดูได้จากช่องนั้น",
+                            isError: false)
+        } catch {
+            status = Status(message: "\(error)", isError: true)
+        }
     }
 
     /// Re-derives the approval for a version that passed the gate in an earlier
@@ -344,6 +435,8 @@ public final class InstrumentsViewModel {
             validity = nil
             ratings = []
             approval = nil
+            responseRows = []
+            rounds = []
             return
         }
         ratings = (try? await store.ratings(instrument: instrument.id)) ?? []
@@ -358,6 +451,7 @@ public final class InstrumentsViewModel {
             ? nil
             : ContentValidity.assess(ratings: ratings, itemIDs: reviewed)
         gate = InstrumentGate.evaluate(instrument, validity: validity)
+        await loadResponses()
     }
 
     public func clearStatus() { status = nil }
