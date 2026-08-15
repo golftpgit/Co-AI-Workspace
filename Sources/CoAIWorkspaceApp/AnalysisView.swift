@@ -230,6 +230,7 @@ private struct NotebookPane: View {
         switch scope {
         case .central: "ส่วนกลาง"
         case .policy: "นโยบาย"
+        case .board(let runID): "กระดานงานรัน \(runID)"
         case .project(let id): "โปรเจกต์ \(id.rawValue)"
         }
     }

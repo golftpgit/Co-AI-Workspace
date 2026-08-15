@@ -122,7 +122,13 @@ let package = Package(
         // depend on CoreEngine: the gate reads a stage through
         // `ProjectStageReading` in AgentKit, so the module that owns the
         // decision never has to import the module that owns the data.
-        .target(name: "ProjectKit", dependencies: ["AgentKit"]),
+        // Knowledge is here because `Retention` reads `PolicyRule` — the
+        // retention rules a closing project is checked against are policy
+        // documents, not a second vocabulary. The dependency was missing and
+        // the package still built, because SwiftPM finds a module in the shared
+        // build directory whether or not the target asked for it; a clean build
+        // is where that shows up, and this one did not survive one.
+        .target(name: "ProjectKit", dependencies: ["AgentKit", "Knowledge"]),
 
         // M4 — the channels (ARCHITECTURE §8). **This list is the invariant**
         // (P7.4): no ToolBelt, no CoreEngine, so a channel cannot reach a tool

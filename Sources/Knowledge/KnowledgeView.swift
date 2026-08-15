@@ -61,6 +61,11 @@ public struct KnowledgeView: Sendable, Equatable {
 
     public enum ScopeKind: String, Sendable, Codable, CaseIterable {
         case project, central, policy
+        /// The run's Situation Board (§22.5, P16.4). A scope a role has to be
+        /// *given* rather than one it has by default: an agent that reads every
+        /// board of every run has the context problem the board exists to
+        /// avoid.
+        case board
     }
 
     public init(scopes: Set<ScopeKind> = [.project, .central],
@@ -156,6 +161,7 @@ public struct KnowledgeView: Sendable, Equatable {
         case .project: .project
         case .central: .central
         case .policy: .policy
+        case .board: .board
         }
     }
 }
