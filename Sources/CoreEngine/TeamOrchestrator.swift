@@ -176,6 +176,15 @@ public actor TeamOrchestrator {
 
     public var currentScope: Scope { scope }
 
+    /// Whether this lead has work in flight.
+    ///
+    /// Read off the open spans rather than a flag of its own: a span is opened
+    /// when an assignment starts and closed by whatever ends it — a pass, an
+    /// escalation, or a person cancelling — so the two cannot drift. `use` has
+    /// asked the same question since P10.15; P21.2 needs it from outside, to
+    /// know that letting go of a workspace would be letting go of running work.
+    public var isBusy: Bool { !openSpans.isEmpty }
+
     /// Written on every state change, not once at the end: a run that is
     /// interrupted is exactly when someone wants to read the ledger.
     private func persist(_ id: String) async {

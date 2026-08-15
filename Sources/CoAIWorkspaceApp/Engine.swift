@@ -66,7 +66,13 @@ struct Engine: Sendable {
     /// for the same reason as everything else on this struct: four specialists
     /// and an orchestrator with twenty passing tests were reachable from
     /// nothing but those tests, which is the fourth time that has happened.
-    let team: TeamOrchestrator
+    ///
+    /// **One lead per workspace since P21.2** (§19.1.1). It was a single
+    /// orchestrator re-pointed with `use(scope:)` whenever the screen changed
+    /// workspace, which cannot be right for a thing that can be in the middle of
+    /// a run: mid-run the switch is refused, so the tab you switched *to* then
+    /// filed its rows under the project you left.
+    let teams: WorkspaceTeams
     let taskLedger: TaskLedgerStore
     /// §19.1 — projects, and the stage the hook chain reads (§19.4). One
     /// service, held here, so the stage the gate checks and the stage the
@@ -379,33 +385,44 @@ struct Engine: Sendable {
         // is enforced inside the specialist, not here.
         let specialistEnvironment = SpecialistEnvironment(router: router, gateway: gateway)
         let taskLedger = TaskLedgerStore(client: client)
-        let team = TeamOrchestrator(
-            router: router,
-            specialists: [
-                .researcher: Researcher(environment: specialistEnvironment),
-                .analyst: Analyst(environment: specialistEnvironment),
-                .engineer: Engineer(environment: specialistEnvironment),
-                .writer: Writer(environment: specialistEnvironment),
-            ],
-            // Spelled out rather than left to the default argument: review is
-            // the step that decides whether work is done (§2.5), and a default
-            // makes it look optional on the diagram that says what this app is
-            // made of.
-            reviewer: QAReviewer(),
-            ledgerStore: taskLedger,
-            // The same sink every tool call and turn already writes to (§16).
-            // Until this the team was the one part of the system that produced
-            // no spans at all, so the schedule had no durations to draw and the
-            // forecast band had to be built out of chat turns.
-            spans: spans,
-            // §21.2 / P12.7 — the lessons a closed project left behind, in
-            // front of the role that should already know them. Read at
-            // assignment time so a project closed this morning teaches this
-            // afternoon's work.
-            roleMemory: { [knowledgeStore] role in
-                let lessons = (try? await knowledgeStore.load(scope: .central)) ?? []
-                return RoleMemory.brief(for: role, in: lessons)
-            })
+        // One lead per workspace, built the first time that workspace is worked
+        // in (§19.1.1, P21.2). A factory rather than an instance: the wiring
+        // below is the app's, and `WorkspaceTeams` only guarantees there is
+        // exactly one lead per workspace and that a running one is not thrown
+        // away when its tab closes.
+        let teams = WorkspaceTeams { scope in
+            TeamOrchestrator(
+                router: router,
+                specialists: [
+                    .researcher: Researcher(environment: specialistEnvironment),
+                    .analyst: Analyst(environment: specialistEnvironment),
+                    .engineer: Engineer(environment: specialistEnvironment),
+                    .writer: Writer(environment: specialistEnvironment),
+                ],
+                // Spelled out rather than left to the default argument: review is
+                // the step that decides whether work is done (§2.5), and a default
+                // makes it look optional on the diagram that says what this app is
+                // made of.
+                reviewer: QAReviewer(),
+                ledgerStore: taskLedger,
+                // The same sink every tool call and turn already writes to (§16).
+                // Until this the team was the one part of the system that produced
+                // no spans at all, so the schedule had no durations to draw and the
+                // forecast band had to be built out of chat turns.
+                spans: spans,
+                // §21.2 / P12.7 — the lessons a closed project left behind, in
+                // front of the role that should already know them. Read at
+                // assignment time so a project closed this morning teaches this
+                // afternoon's work.
+                roleMemory: { role in
+                    let lessons = (try? await knowledgeStore.load(scope: .central)) ?? []
+                    return RoleMemory.brief(for: role, in: lessons)
+                },
+                // Pointed at its workspace from birth, so nothing ever has to
+                // re-point it — which is the move that could not be made safely
+                // mid-run.
+                scope: scope)
+        }
 
         // Nil rather than a failed boot: analysis is one screen among several,
         // and a corrupt `.duckdb` must not be the reason chat will not open.
@@ -551,7 +568,7 @@ struct Engine: Sendable {
                       knowledge: knowledgeStore, policySource: policySource,
                       router: router, processes: processes, gateway: gateway,
                       broker: broker, runner: runner,
-                      team: team, taskLedger: taskLedger, projects: projects,
+                      teams: teams, taskLedger: taskLedger, projects: projects,
                       executorSummary: summary, localTier: localTier,
                       modelCatalog: modelCatalog, modelInstaller: modelInstaller,
                       endpoints: endpoints, endpointChecks: endpointChecks,
@@ -607,6 +624,13 @@ extension Engine {
     /// gets its own folder, opened the first time it is asked for.
     func stores(for scope: Scope) async -> WorkspaceStores {
         await workspaceStores.stores(for: scope)
+    }
+
+    /// The lead for a workspace, made the first time that workspace is worked
+    /// in (§19.1.1, P21.2). Same rule as `stores(for:)` and for the same
+    /// reason: one per workspace, kept, never re-pointed.
+    func team(for scope: Scope) async -> TeamOrchestrator {
+        await teams.team(for: scope)
     }
 }
 

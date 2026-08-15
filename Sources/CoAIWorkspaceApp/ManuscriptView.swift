@@ -435,7 +435,10 @@ struct ResultsPane<AnalysisContent: View>: View {
     let analysis: AnalysisViewModel
     @Bindable var manuscripts: ManuscriptViewModel
     let engine: Engine
-    let scope: Scope
+    /// The workspace these two belong to (§19.1.1, P21.2) — it is what says
+    /// which project's drafts these are, and whether they have been wired up
+    /// already.
+    let workspace: Workspace
     @ViewBuilder let analysisView: () -> AnalysisContent
 
     @State private var showing = Half.plan
@@ -465,13 +468,14 @@ struct ResultsPane<AnalysisContent: View>: View {
             case .plan: analysisView()
             case .manuscript:
                 ManuscriptPane(model: manuscripts)
-                    // Same identity rule as Chat and Analysis: switching
-                    // workspace has to rebuild the screen, or it keeps showing
-                    // the drafts of the project you just left (§19.1).
-                    .id(scope.storageKey)
+                    // Same identity rule as Chat and Analysis: the view's own
+                    // state is this tab's, so it is rebuilt on a switch. The
+                    // model is the workspace's and outlives that (§19.1.1).
+                    .id(workspace.scope.storageKey)
                     .task {
+                        guard workspace.needsWiring("manuscripts") else { return }
                         manuscripts.attach(store: ManuscriptStore(client: engine.client),
-                                           analysis: analysis, scope: scope)
+                                           analysis: analysis, scope: workspace.scope)
                         await manuscripts.load()
                     }
             }
