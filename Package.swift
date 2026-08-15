@@ -261,6 +261,11 @@ let package = Package(
         // CoreEngine and Knowledge are here for P18.1: the conflict criteria
         // are only worth anything if the model this app runs on actually
         // applies them, and that cannot be checked with a scripted answer.
+        // M18 — the screen driver (§23, P17). Its own target because it links
+        // ApplicationServices and CoreGraphics, and nothing that merely runs a
+        // tool should have to.
+        .target(name: "ScreenDriver", dependencies: ["AgentKit", "Observability"]),
+
         .executableTarget(name: "TierOneCheck",
                           dependencies: ["LLMProviders", "AgentKit", "CoreEngine", "Knowledge"]),
 
@@ -313,6 +318,7 @@ let package = Package(
         .testTarget(name: "WebSearchTests", dependencies: ["WebSearch", "Knowledge"]),
         .testTarget(name: "InstrumentsTests", dependencies: ["Instruments", "StatKit"]),
         .testTarget(name: "StatKitTests", dependencies: ["StatKit"]),
+        .testTarget(name: "ScreenDriverTests", dependencies: ["ScreenDriver", "AgentKit"]),
         .testTarget(name: "OLTPTests", dependencies: ["OLTP"]),
         .testTarget(name: "LinkageTests", dependencies: ["Linkage"]),
         .testTarget(name: "FieldServerTests", dependencies: ["FieldServer", "Instruments", "OLTP"]),

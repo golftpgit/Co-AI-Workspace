@@ -975,6 +975,23 @@ else
   ok "every project write goes past the archive guard, or is a documented exception"
 fi
 
+# P17.5 — what the driver reads off the screen never becomes an instruction.
+#
+# §23.2 rule 4. The protection is structural rather than textual: a tool result
+# is data by the protocol the model reads, and a system message is instructions.
+# Screen text on the second side is prompt injection with a mouse and a
+# keyboard, and no amount of careful wording in the envelope fixes it.
+#
+# So: nothing may build a system or user message out of a screen snapshot.
+if grep -rnE "LLMMessage\(\.(system|user).*(snapshot|spokenLines|ScreenText)" Sources \
+   | grep -q .; then
+  grep -rnE "LLMMessage\(\.(system|user).*(snapshot|spokenLines|ScreenText)" Sources \
+    | sed 's/^/   /' | head -3
+  fail "screen text was put on the instruction side of the conversation (§23.2, P17.5)"
+else
+  ok "screen text reaches the model as tool output, never as an instruction"
+fi
+
 # P21.4 — participants' words do not follow a project into the shared library.
 #
 # The rule is ethical and the code is the only place it is enforced: a
