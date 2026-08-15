@@ -859,6 +859,22 @@ else
   fail "the team screen's work-package picker is not passed to the run (P10.4/P10.15)"
 fi
 
+# Every script in scripts/ at least parses.
+#
+# `gx10-serve.sh` runs on another machine and nothing here ever executes it, so
+# a syntax error in it would sit undiscovered until the one moment somebody
+# needs the endpoint back up. Parsing is not correctness, but it is the half
+# that can be checked from here.
+BROKEN_SCRIPTS=""
+for script in scripts/*.sh; do
+  bash -n "$script" 2>/dev/null || BROKEN_SCRIPTS="$BROKEN_SCRIPTS $script"
+done
+if [ -n "$BROKEN_SCRIPTS" ]; then
+  fail "a shell script does not parse:$BROKEN_SCRIPTS"
+else
+  ok "every script in scripts/ parses, including the ones that run elsewhere"
+fi
+
 # P21.1 — a project is a tab, not a mode.
 #
 # The app held one `selection` and rebuilt every screen on change, so opening
