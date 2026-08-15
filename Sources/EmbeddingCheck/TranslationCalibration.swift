@@ -81,6 +81,61 @@ struct TranslationCalibration {
         }
     }
 
+    /// P18.3's question, which is *not* P18.2's: entity **names** have no
+    /// proposition to disagree with, so the two groups may separate here even
+    /// though sentences did not. Measured rather than assumed — the same
+    /// mistake twice would be the expensive one.
+    func alignment(check: (String, () async throws -> String) async -> Void) async {
+        await check("ระยะ embedding แยก 'ชื่อเดียวกันคนละภาษา' ออกจาก 'คนละความหมาย' ได้") {
+            var sameConcept: [Double] = []
+            var different: [Double] = []
+            for (thai, english) in Self.sameConcept {
+                sameConcept.append(try await similarity(thai, english))
+            }
+            for (thai, english) in Self.differentConcept {
+                different.append(try await similarity(thai, english))
+            }
+            let lowest = sameConcept.min() ?? 0
+            let highest = different.max() ?? 1
+            print("     ชื่อเดียวกัน: " + sameConcept.sorted()
+                    .map { String(format: "%.3f", $0) }.joined(separator: ", "))
+            print("     คนละความหมาย: " + different.sorted()
+                    .map { String(format: "%.3f", $0) }.joined(separator: ", "))
+
+            // Green while they overlap, which is today's state and the reason
+            // no merge is applied without a person. Red the day they separate:
+            // that is when §11.8's automatic alignment becomes possible and the
+            // plan should be re-read, rather than the decision resting on a
+            // measurement nobody re-took.
+            guard lowest <= highest else {
+                throw CheckFailure(String(
+                    format: "สองกลุ่มแยกกันแล้ว (ชื่อเดียวกันต่ำสุด %.3f > คนละความหมายสูงสุด %.3f) "
+                        + "— กลับไปอ่าน §11.8/P18.3 ใหม่ การรวมโหนดอัตโนมัติอาจทำได้แล้ว",
+                    lowest, highest))
+            }
+            return String(format: "ทับกันที่ %.3f–%.3f — จึงไม่มีการรวมโหนดใดเกิดขึ้นเองโดยไม่มีคนยืนยัน",
+                          lowest, highest)
+        }
+    }
+
+    /// Names for one concept in two languages — the merges §11.8 wants.
+    private static let sameConcept: [(String, String)] = [
+        ("ภาวะหมดไฟ", "burnout"),
+        ("ภาวะซึมเศร้า", "depression"),
+        ("เบาหวานชนิดที่ 2", "type 2 diabetes"),
+        ("ความดันโลหิตสูง", "hypertension"),
+    ]
+
+    /// Pairs that must **not** merge: related, or the same word for two things.
+    /// "ความดัน" is blood pressure and "pressure" is physical force — the
+    /// example §11.8 names, and the one a threshold has to survive.
+    private static let differentConcept: [(String, String)] = [
+        ("ความดัน", "pressure"),
+        ("การนอนหลับ", "anaesthesia"),
+        ("ไต", "kidney stone"),
+        ("วัคซีน", "antibiotic"),
+    ]
+
     private func similarity(_ a: String, _ b: String) async throws -> Double {
         let vectors = try await embedder.embed([a, b])
         guard vectors.count == 2 else { throw CheckFailure("embedder คืนเวกเตอร์ไม่ครบ") }

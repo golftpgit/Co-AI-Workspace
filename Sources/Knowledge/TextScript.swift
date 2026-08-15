@@ -35,7 +35,7 @@ import Foundation
 /// that is what can be decided from the characters with no model and no guess:
 /// Thai and English are the pair this system actually mixes (§11.8), and a
 /// distinction that cannot be made reliably is worse than one that is coarse.
-public enum TextScript: String, Sendable, Equatable {
+public enum TextScript: String, Sendable, Equatable, Hashable, Codable {
     case thai
     case latin
     /// Substantially both — a Thai abstract with English terms in it, which is
@@ -55,7 +55,12 @@ public enum TextScriptReader {
     /// perfectly ordinary Thai clinical sentence. A drug name, an assay and a
     /// p-value are Latin letters inside Thai prose; calling that `mixed` would
     /// take this rule off exactly the documents it is for.
-    public static func script(of text: String) -> TextScript {
+    /// - Parameter minimumLetters: how much writing is enough to decide. The
+    ///   default is sized for a passage; an entity *name* is short by nature —
+    ///   "burnout" is seven letters — so the aligner (§11.8) passes a smaller
+    ///   floor. The floor exists at all because "ok" and "42" have no language,
+    ///   and answering confidently about them is answering wrongly.
+    public static func script(of text: String, minimumLetters: Int = 12) -> TextScript {
         var thai = 0
         var latin = 0
         for scalar in text.unicodeScalars {
@@ -68,7 +73,7 @@ public enum TextScriptReader {
         let total = thai + latin
         // Below this there is not enough writing to be sure of anything, and a
         // confident answer about "ok" or a bare number is a wrong answer.
-        guard total >= 12 else { return .undetermined }
+        guard total >= minimumLetters else { return .undetermined }
         let thaiShare = Double(thai) / Double(total)
         if thaiShare >= 0.60 { return .thai }
         if thaiShare <= 0.40 { return .latin }
@@ -79,8 +84,10 @@ public enum TextScriptReader {
     /// be decided without a model. `mixed` and `undetermined` are never
     /// "different from" anything: nothing may be skipped or discounted on a
     /// guess about which language something is in.
-    public static func differentLanguages(_ a: String, _ b: String) -> Bool {
-        let first = script(of: a), second = script(of: b)
+    public static func differentLanguages(_ a: String, _ b: String,
+                                          minimumLetters: Int = 12) -> Bool {
+        let first = script(of: a, minimumLetters: minimumLetters)
+        let second = script(of: b, minimumLetters: minimumLetters)
         guard first == .thai || first == .latin, second == .thai || second == .latin else {
             return false
         }
