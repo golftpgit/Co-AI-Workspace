@@ -155,12 +155,23 @@ struct StatusBarView: View {
         Text("รวมจาก span ที่ผูกกับใบงานของโครงการนี้: \(elapsedText)")
             .font(.callout)
         if let forecast = model.forecast {
-            Text("งานชนิดเดียวกันเคยใช้: p50 \(minutes(forecast.p50)) · p90 \(minutes(forecast.p90))")
+            // Says what the band is made of. It used to read "งานชนิดเดียวกัน"
+            // — work of the same kind — which was not true: nothing records an
+            // assignment's deliverable type against a duration, so this is
+            // completed *turns* by the roles this project assigns to. A band
+            // labelled as one population and built from another is the kind of
+            // number that gets quoted in a report (P10.15's outstanding half).
+            Text("เทิร์นที่เสร็จแล้วของบทบาทที่โปรเจกต์นี้ใช้: p50 \(minutes(forecast.p50)) "
+                 + "· p90 \(minutes(forecast.p90)) (จาก \(forecast.sampleCount) เทิร์น)")
                 .font(.callout)
-            Text("แถบนี้มาจากงานที่เสร็จแล้วข้ามโปรเจกต์ — p90 ที่คิดจากโปรเจกต์ตัวเองไม่ได้บอกอะไร")
+            // One literal: SwiftUI parses markdown only in a string literal,
+            // and `"a" + "b"` prints its own asterisks (check.sh's rule, which
+            // has now caught me twice).
+            Text("ข้ามโปรเจกต์ — p90 ที่คิดจากโปรเจกต์ตัวเองไม่ได้บอกอะไร · **ยังไม่ใช่ประวัติของงานชนิดเดียวกัน** เพราะยังไม่มีอะไรบันทึกระยะเวลาต่อชนิดส่งมอบ")
                 .font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         } else {
-            Text("ยังไม่มีประวัติงานชนิดเดียวกันให้เทียบ — จึงยังไม่มีแถบ p50–p90")
+            Text("ยังไม่มีเทิร์นที่เสร็จแล้วพอจะเทียบ — จึงยังไม่มีแถบ p50–p90")
                 .font(.callout).foregroundStyle(.secondary)
         }
         widenControl(.time)
