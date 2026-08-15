@@ -14,9 +14,11 @@ import Observability
 //
 // Two decisions this file exists to enforce:
 //
-//  • **The secret is never stored.** A connector keeps the *name of an
-//    environment variable*, the same shape §9.3's endpoint registry settled on
-//    (P5.5). What is written to disk cannot log anybody in.
+//  • **The secret is never stored.** A connector keeps the *name* the password
+//    is filed under, the same shape §9.3's endpoint registry settled on (P5.5).
+//    What is written to disk cannot log anybody in. Since P9.3 the value behind
+//    that name lives in the Keychain rather than in the environment, which is
+//    what §15 always said and what the code never did.
 //  • **The secret never reaches an error message.** `AnalysisError.queryFailed`
 //    carries its SQL by design — which for `ATTACH '…password=…'` would put a
 //    live credential in a log, a span and a screen. Every attach that
@@ -31,8 +33,8 @@ public struct DBConnector: Sendable, Codable, Equatable, Identifiable {
     /// A file path for SQLite; a connection string with no password for the
     /// server kinds.
     public var target: String
-    /// The environment variable the password is read from at connect time.
-    /// Nil for SQLite and for servers that do not want one.
+    /// The name the password is filed under, read at connect time. Nil for
+    /// SQLite and for servers that do not want one.
     public var secretVariable: String?
     /// §12.2: a connector belongs to a project or to the whole workspace.
     public var scope: Scope
@@ -56,9 +58,11 @@ public struct DBConnector: Sendable, Codable, Equatable, Identifiable {
         self.readOnly = readOnly
     }
 
-    /// Whether the password this connector needs is actually in the
-    /// environment. Answered before connecting, so "check your environment" is
-    /// not something the user learns from a driver error.
+    /// Whether the password this connector needs can actually be had.
+    /// Answered before connecting, so that is not something the user learns
+    /// from a driver error. Note that a Keychain which will not open answers
+    /// `false` here — `attach` is where the two are told apart, because that
+    /// is where there is somewhere to put the explanation (P9.3).
     public var secretIsAvailable: Bool {
         guard let secretVariable else { return true }
         return SecretStore.has(secretVariable)
@@ -96,12 +100,18 @@ public enum UnsupportedConnector: String, Sendable, CaseIterable, Identifiable {
 
 public enum ConnectorError: Error, CustomStringConvertible, Equatable {
     case secretMissing(variable: String)
+    /// The Keychain would not answer. Separate from `secretMissing` for the
+    /// reason `SecretStore` gives: "we could not look" and "it is not there"
+    /// send a person to two different places (P9.3).
+    case secretUnreadable(variable: String, detail: String)
     case connectFailed(alias: String, message: String)
 
     public var description: String {
         switch self {
         case .secretMissing(let variable):
-            "ยังไม่ได้ตั้งตัวแปรสภาพแวดล้อม \(variable) ที่เก็บรหัสผ่านของแหล่งนี้"
+            "ยังไม่ได้ตั้งรหัสผ่านของแหล่งนี้ (“\(variable)”)"
+        case .secretUnreadable(let variable, let detail):
+            "อ่านรหัสผ่าน “\(variable)” จาก Keychain ไม่ได้ (\(detail)) — ยังไม่ได้แปลว่ายังไม่ได้ตั้ง"
         case .connectFailed(let alias, let message):
             "ต่อ '\(alias)' ไม่สำเร็จ: \(message)"
         }
@@ -121,10 +131,12 @@ extension AnalysisStore {
     public func attach(_ connector: DBConnector) async throws -> AttachedDatabase {
         var secret: String?
         if let variable = connector.secretVariable {
-            guard let value = SecretStore.value(variable) else {
-                throw ConnectorError.secretMissing(variable: variable)
+            switch SecretStore.status(variable) {
+            case .present: secret = SecretStore.value(variable)
+            case .absent: throw ConnectorError.secretMissing(variable: variable)
+            case .unreadable(let detail):
+                throw ConnectorError.secretUnreadable(variable: variable, detail: detail)
             }
-            secret = value
         }
         let target = Self.connectionString(for: connector, secret: secret)
         // `query` scrubs this out of anything it logs or throws while it is
@@ -216,14 +228,10 @@ public struct ConnectorStore: Sendable {
 }
 
 /// A list file that will not decode. The copy is taken here, before anything
-/// can save over it — see `FileStoreSafety`.
+/// can save over it, and the report is kept where a screen can show it — a
+/// corrupt file that only ever reached the unified log is a list that went
+/// empty one morning with no explanation (P9.4).
 private func reportUnreadable(_ file: URL, kind: String, log: Logger) {
-    let backup = FileStoreSafety.preserveUnreadable(file)
-    if let backup {
-        log.error("""
-            \(kind, privacy: .public) file unreadable — kept a copy at \(backup.lastPathComponent, privacy: .public)             and starting from an empty list
-            """)
-    } else {
-        log.error("\(kind, privacy: .public) file unreadable — starting from an empty list")
-    }
+    let failure = FileStoreSafety.reportUnreadable(file, describedAs: kind)
+    log.error("\(failure.summary, privacy: .public)")
 }

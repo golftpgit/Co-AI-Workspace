@@ -1,4 +1,5 @@
 import SwiftUI
+import AgentKit
 import Config
 import Sidecar
 
@@ -100,10 +101,11 @@ struct BootStatusView: View {
                     HStack(spacing: 8) {
                         statusDot(color(for: status))
                         Text(id).fontWeight(.medium)
-                        Text(describe(status)).foregroundStyle(.secondary)
+                        Text(describe(status, id: id)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("sidecar \(id): \(describe(status))")
+                    .accessibilityLabel("sidecar \(id): \(describe(status, id: id))")
                 }
             }
         }
@@ -140,6 +142,21 @@ struct BootStatusView: View {
                         .font(.caption).foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
+                }
+                // P9.4: a list file that would not decode. The data was kept
+                // and the app carried on — which is right, and was also the
+                // whole of the previous behaviour: the only trace was a line
+                // in the unified log, so what the person experienced was their
+                // bot list being empty one morning with no reason given.
+                let unreadable = FileStoreIncidents.shared.all
+                if !unreadable.isEmpty {
+                    labeled("ไฟล์ที่อ่านไม่ออก", "\(unreadable.count) ไฟล์ · ของเดิมถูกสำรองไว้แล้ว")
+                    ForEach(Array(unreadable.enumerated()), id: \.offset) { _, failure in
+                        Text("• \(failure.summary)")
+                            .font(.caption).foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    }
                 }
             } else {
                 HStack(spacing: 8) {
@@ -214,14 +231,11 @@ struct BootStatusView: View {
         }
     }
 
-    private func describe(_ status: SidecarStatus) -> String {
-        switch status {
-        case .stopped: "หยุดอยู่"
-        case .starting: "กำลังเริ่ม…"
-        case .running(let pid): "ทำงานอยู่ (pid \(pid))"
-        case .restarting(let n): "กำลังเริ่มใหม่ (ครั้งที่ \(n))"
-        case .failed(let reason): "ล้มเหลว — \(reason)"
-        }
+    /// P9.4: what the status means for the person, not the exit code on its
+    /// own. "ล้มเหลว — exited 1" left the user to work out for themselves that
+    /// nothing durable in the app was going to work.
+    private func describe(_ status: SidecarStatus, id: String) -> String {
+        status.explanation(id: id)
     }
 
     private func describe(_ outcome: BootstrapStore.LoadOutcome) -> String {

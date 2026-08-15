@@ -152,6 +152,12 @@ struct Engine: Sendable {
     let mcpProblems: [String]
 
     static func build(config: BootstrapConfig, paths: AppPaths) async throws -> Engine {
+        // Before anything reads a secret. A `.app` launched from Finder
+        // inherits none of the user's shell — measured with `launchctl getenv`,
+        // see `SecretStore` — so without this line every paid endpoint, bot and
+        // connector in the app has no way to be given its key (P9.3).
+        SecretStore.install(KeychainVault())
+
         let client = SurrealClient(url: URL(string: "ws://127.0.0.1:\(config.surrealPort)/rpc")!)
         try await client.connect()
         try await client.bootstrap(user: "root", password: "root")

@@ -143,12 +143,13 @@ struct EndpointsView: View {
 
             if model.draft.kind == .paid {
                 // The key is never written to bootstrap.plist — only the name
-                // of the variable it lives in (Keychain proper is P9.2).
-                LabeledContent("ตัวแปร env ของ API key") {
-                    TextField("OPENAI_API_KEY", text: Binding(
-                        get: { model.draft.apiKeyEnvironmentVariable ?? "" },
-                        set: { model.draft.apiKeyEnvironmentVariable = $0.isEmpty ? nil : $0 }))
-                }
+                // it is filed under. The value goes to the Keychain (P9.3);
+                // before that there was nowhere in the app to put it at all.
+                SecretField(name: Binding(
+                    get: { model.draft.apiKeyEnvironmentVariable ?? "" },
+                    set: { model.draft.apiKeyEnvironmentVariable = $0.isEmpty ? nil : $0 }),
+                            title: "ชื่อคีย์ API",
+                            placeholder: "OPENAI_API_KEY")
                 LabeledContent("ราคา / ล้านโทเคน (เข้า)") {
                     TextField("3.00", value: $model.draft.inputPricePerMillion,
                               format: .number)

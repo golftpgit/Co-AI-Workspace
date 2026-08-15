@@ -60,16 +60,16 @@ public struct ChannelAccount: Sendable, Codable, Equatable, Identifiable {
     public var platform: ChannelPlatform
     /// What a person calls it — "บอทกลุ่มวิจัย", not a token prefix.
     public var name: String
-    /// The environment variable the bot token is read from. The token itself is
-    /// never written down, the same shape §9.3's endpoints and §12.2's
-    /// connectors settled on.
+    /// The name the bot token is filed under. The token itself is never
+    /// written down, the same shape §9.3's endpoints and §12.2's connectors
+    /// settled on; since P9.3 the value lives in the Keychain.
     public var tokenVariable: String
     /// Chat ids allowed to talk to this bot. **Empty means nobody**, not
     /// everybody: a bot's id is guessable and its token is the only secret, so
     /// an empty list defaulting to open is one leaked token away from a stranger
     /// running commands on this machine.
     public var allowedChats: [String]
-    /// LINE only: the variable holding the *channel secret*, which is what its
+    /// LINE only: the name of the *channel secret*, which is what its
     /// webhook signature is computed under. A second name rather than a second
     /// meaning for the first: the access token sends messages, the channel
     /// secret proves an inbound one is real, and mixing them up fails in a way
@@ -119,14 +119,32 @@ public struct ChannelAccount: Sendable, Codable, Equatable, Identifiable {
         var reasons: [String] = []
         if !isEnabled { reasons.append("ปิดอยู่") }
         if platform.isLocal { return reasons }
-        if token == nil { reasons.append("ยังไม่ได้ตั้งตัวแปร \(tokenVariable) ที่เก็บโทเคน") }
+        reasons.append(contentsOf: Self.blocker(for: tokenVariable, called: "โทเคนของบอท"))
         if allowedChats.isEmpty {
             reasons.append("ยังไม่มี chat id ที่อนุญาต — รายการว่างแปลว่าไม่รับจากใครเลย")
         }
-        if platform == .line, signingSecretVariable.map({ !SecretStore.has($0) }) ?? true {
-            reasons.append("LINE ต้องมีตัวแปรที่เก็บ channel secret สำหรับตรวจลายเซ็น webhook")
+        if platform == .line {
+            guard let signingSecretVariable else {
+                reasons.append("LINE ต้องมี channel secret สำหรับตรวจลายเซ็น webhook "
+                               + "แต่ยังไม่ได้ตั้งชื่อที่จะเก็บไว้")
+                return reasons
+            }
+            reasons.append(contentsOf: Self.blocker(for: signingSecretVariable,
+                                                    called: "channel secret ของ LINE"))
         }
         return reasons
+    }
+
+    /// The three-way answer, in the words the screen shows. A Keychain that
+    /// will not open must not be reported as a secret nobody entered — see
+    /// `SecretStore`'s decision 2.
+    private static func blocker(for name: String, called label: String) -> [String] {
+        switch SecretStore.status(name) {
+        case .present: []
+        case .absent: ["ยังไม่ได้ตั้ง\(label) (“\(name)”)"]
+        case .unreadable(let detail):
+            ["อ่าน\(label) (“\(name)”) ไม่ได้: \(detail) — ยังไม่ได้แปลว่าไม่มี"]
+        }
     }
 
     /// The allow-list, applied. §8.2's rule, and the only thing standing
@@ -234,14 +252,10 @@ public struct ChannelAccountStore: Sendable {
 }
 
 /// A list file that will not decode. The copy is taken here, before anything
-/// can save over it — see `FileStoreSafety`.
+/// can save over it, and the report is kept where a screen can show it — a
+/// corrupt file that only ever reached the unified log is a list that went
+/// empty one morning with no explanation (P9.4).
 private func reportUnreadable(_ file: URL, kind: String, log: Logger) {
-    let backup = FileStoreSafety.preserveUnreadable(file)
-    if let backup {
-        log.error("""
-            \(kind, privacy: .public) file unreadable — kept a copy at \(backup.lastPathComponent, privacy: .public)             and starting from an empty list
-            """)
-    } else {
-        log.error("\(kind, privacy: .public) file unreadable — starting from an empty list")
-    }
+    let failure = FileStoreSafety.reportUnreadable(file, describedAs: kind)
+    log.error("\(failure.summary, privacy: .public)")
 }

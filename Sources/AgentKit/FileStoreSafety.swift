@@ -49,4 +49,53 @@ public enum FileStoreSafety {
             return nil
         }
     }
+
+    /// Takes the copy *and* leaves a record a person can be shown (P9.4).
+    ///
+    /// P9.2 made a corrupt list safe: the data is preserved and the app keeps
+    /// running. What it did not do is tell anybody. The only trace was a line
+    /// in the unified log, so what the user actually experienced was their bot
+    /// list being empty one morning for no stated reason — no crash, and no
+    /// readable error either, which is only half of P9.4's Done-when.
+    @discardableResult
+    public static func reportUnreadable(_ file: URL, describedAs kind: String,
+                                        fileManager: FileManager = .default) -> ReadableFailure {
+        let backup = preserveUnreadable(file, fileManager: fileManager)
+        let failure = ReadableFailure.unreadableFile(
+            doing: kind,
+            backup: backup?.lastPathComponent,
+            detail: file.lastPathComponent)
+        FileStoreIncidents.shared.record(failure)
+        return failure
+    }
+}
+
+/// The unreadable-file reports from this run, so a screen can show them.
+///
+/// Process-wide because the four stores that can hit this are constructed in
+/// four different places, load themselves lazily, and have no error channel
+/// back to the caller — `load()` returns `[ChannelAccount]`, not a result. The
+/// alternative was threading a reporter through four initialisers to carry
+/// something that happens approximately never; this keeps the change at the
+/// two ends that matter.
+public final class FileStoreIncidents: @unchecked Sendable {
+    public static let shared = FileStoreIncidents()
+
+    private let lock = NSLock()
+    private var incidents: [ReadableFailure] = []
+
+    public init() {}
+
+    public func record(_ failure: ReadableFailure) {
+        lock.withLock {
+            // One per file. A store that is read on every screen change would
+            // otherwise fill the list with the same sentence.
+            guard !incidents.contains(where: { $0.detail == failure.detail }) else { return }
+            incidents.append(failure)
+        }
+    }
+
+    public var all: [ReadableFailure] { lock.withLock { incidents } }
+
+    public func clear() { lock.withLock { incidents.removeAll() } }
 }

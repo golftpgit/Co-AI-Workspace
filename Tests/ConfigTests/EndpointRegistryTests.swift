@@ -1,4 +1,5 @@
 import Testing
+import AgentKit
 import Foundation
 @testable import Config
 
@@ -105,7 +106,11 @@ struct EndpointRegistryTests {
     }
 }
 
-@Suite("Reading what an endpoint serves")
+// `.serialized` because `unreadableKeyIsNotMissingKey` installs a failing vault
+// into the process-wide `SecretStore`, and `missingKeyIsCaughtFirst` in this
+// same suite would then see `.unreadable` instead of `.absent`. This is the
+// hazard `SecretStore`'s header describes, met in practice.
+@Suite("Reading what an endpoint serves", .serialized)
 struct EndpointProbeTests {
 
     /// The case that makes this check necessary: an OpenAI-compatible server
@@ -139,5 +144,44 @@ struct EndpointProbeTests {
             InferenceEndpoint(name: "hosted", baseURL: "https://api.example/v1", model: "big",
                               kind: .paid, apiKeyEnvironmentVariable: "COAI_TEST_KEY_ABSENT"))
         #expect(check.verdict == .missingKey("COAI_TEST_KEY_ABSENT"))
+    }
+
+    // P9.3: the Keychain refusing to open is not the same as no key, and the
+    // probe must not send the person to type in a key they already have.
+    @Test("a key that could not be read is its own verdict, not 'no key'")
+    func unreadableKeyIsNotMissingKey() async {
+        let name = "COAI_TEST_KEY_LOCKED"
+        SecretStore.install(MemoryVault(failing: true))
+        defer { SecretStore.install(nil) }
+
+        let check = await EndpointProbe().check(
+            InferenceEndpoint(name: "hosted", baseURL: "https://api.example/v1", model: "big",
+                              kind: .paid, apiKeyEnvironmentVariable: name))
+        guard case .keyUnreadable = check.verdict else {
+            Issue.record("a locked Keychain was reported as \(check.verdict)")
+            return
+        }
+        #expect(check.message.contains("ไม่ได้แปลว่ายังไม่ได้ตั้ง"))
+    }
+
+    // P9.4: a server that answers and rejects the key is not an unreachable
+    // server, and saying so sends the person to check the wrong thing.
+    @Test("a rejected key is not reported as a connection problem")
+    func rejectedKeyIsItsOwnVerdict() {
+        let check = EndpointCheck(verdict: .keyRejected(status: 401))
+        #expect(check.isUsable == false)
+        #expect(check.message.contains("เครือข่ายไม่ได้มีปัญหา"))
+        #expect(check.message.contains("ต่อไม่ได้") == false)
+    }
+
+    // The message a person sees when nothing is listening used to be
+    // Foundation's English sentence in the middle of a Thai screen.
+    @Test("an unreachable endpoint explains itself in the app's language")
+    func unreachableIsReadable() async {
+        let check = await EndpointProbe().check(
+            InferenceEndpoint(name: "เครื่องในแล็บ", baseURL: "http://127.0.0.1:9/v1", model: "m"),
+            timeout: 2)
+        #expect(check.message.contains("เครื่องในแล็บ"))
+        #expect(check.message.contains("Could not connect") == false)
     }
 }
