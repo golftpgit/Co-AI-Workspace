@@ -177,6 +177,30 @@ public final class ProjectsViewModel {
 
     /// Read once when the screen attaches rather than on every redraw: it is a
     /// scan of up to two thousand spans, and it changes on the scale of days.
+    /// Completed turns for the roles this project has actually assigned work
+    /// to, for the forecast band (§19.10, P10.15).
+    ///
+    /// Two things were wrong before. The role was the constant `.analyst`,
+    /// whatever the project was doing — so a software project's band came from
+    /// analysts' work. And nothing filtered the span kind, so the population
+    /// was mostly individual tool calls: the band drawn on a schedule was a p90
+    /// of `kb_search` durations. `durations(forRole:)` now returns turns only,
+    /// and this asks about the right roles.
+    private func turnDurations(spans: SurrealSpanSink, project id: ProjectID) async -> [TimeInterval] {
+        var roles: Set<Role> = []
+        if let ledger, let rows = try? await ledger.rows(scope: .project(id)) {
+            roles = Set(rows.map(\.role))
+        }
+        // A project that has assigned nothing yet has no shape to forecast
+        // from; every role would be a band made of unrelated work.
+        guard !roles.isEmpty else { return [] }
+        var durations: [TimeInterval] = []
+        for role in roles.sorted(by: { $0.rawValue < $1.rawValue }) {
+            durations += (try? await spans.durations(forRole: role)) ?? []
+        }
+        return durations
+    }
+
     public func refreshProficiency() async {
         guard let spans else { return }
         proficiency = (try? await spans.toolProficiency()) ?? []
@@ -638,7 +662,7 @@ public final class ProjectsViewModel {
             // The frame is a multiple of how long this kind of work usually
             // takes, so an unfinished plan with no history has no ratio to
             // report — not a ratio of zero.
-            let history = (try? await spans.durations(forRole: .analyst)) ?? []
+            let history = await turnDurations(spans: spans, project: id)
             if let estimate = Schedule.estimate(from: history), estimate.p90 > 0 {
                 reading.timeRatio = spent / estimate.p90
                 known.insert(.time)
@@ -689,7 +713,11 @@ public final class ProjectsViewModel {
             // The band the time popover draws. Across projects on purpose: the
             // whole point of a p90 is that it comes from more than the project
             // asking for it.
-            forecast = Schedule.estimate(from: (try? await spans.durations(forRole: .analyst)) ?? [])
+            //
+            // From the roles this project actually uses, not from a hardcoded
+            // `.analyst` — which is what it was, so a project with no analyst
+            // in it was shown a band built from somebody else's work.
+            forecast = Schedule.estimate(from: await turnDurations(spans: spans, project: id))
         }
         if let ledger, let rows = try? await ledger.rows(scope: .project(id)) {
             // Only the rounds that were actually redone. A row with one attempt

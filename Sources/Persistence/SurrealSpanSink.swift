@@ -185,12 +185,25 @@ public actor SurrealSpanSink: SpanSink {
     }
 
     /// Durations of finished work of the same shape, for the forecast band.
-    /// Deliberately across projects: the whole point of a p90 is that it comes
+    ///
+    /// Across projects on purpose: the whole point of a p90 is that it comes
     /// from more than the project asking for it.
+    ///
+    /// **Turn spans only.** Without the name filter this returned every span
+    /// carrying the role — which is overwhelmingly `tool:kb_search` and the
+    /// like, so the "how long does this kind of work take" band was being
+    /// computed from the duration of individual tool calls and drawn on a
+    /// schedule. A p90 of search calls is not an estimate for a work package,
+    /// and it read as one.
+    ///
+    /// A turn is still not an assignment — nothing records an assignment as a
+    /// span yet — so this is the closest honest population, and the caller says
+    /// what the band is made of rather than implying it is a plan estimate.
     public func durations(forRole role: Role) async throws -> [TimeInterval] {
         let rows = try await client.query("""
             SELECT started_at, ended_at FROM span
-            WHERE role = type::string($role) AND status = 'succeeded' AND ended_at != NONE
+            WHERE role = type::string($role) AND name = 'turn'
+              AND status = 'succeeded' AND ended_at != NONE
             LIMIT 500
             """, vars: ["role": role.rawValue]).first?.rows ?? []
 
