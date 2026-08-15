@@ -258,3 +258,89 @@ public extension KnowledgeView {
         }
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// Asking for more (ARCHITECTURE §21.2, P12.6)
+// ─────────────────────────────────────────────────────────────
+
+public extension KnowledgeView {
+    /// A widened copy. **Additive only.**
+    ///
+    /// Nothing here can make a view narrower, and nothing can remove `policy` —
+    /// which is not a rule to remember, because `visibleScopes` unions it and
+    /// `declaredScopes` is private. An agent that could narrow its own view
+    /// could hide the rules from itself and then break them.
+    func widened(minTier newFloor: SourceTier? = nil,
+                 dropProvenanceRequirement: Bool = false,
+                 dropEvidenceOnly: Bool = false,
+                 hops newHops: Int? = nil,
+                 entityTypes extra: Set<String> = []) -> KnowledgeView {
+        KnowledgeView(
+            scopes: visibleScopes,
+            // Empty means "no restriction", so adding to a restricted list
+            // widens it, and a caller who wants everything clears it.
+            entityTypes: extra.isEmpty ? entityTypes : entityTypes.union(extra),
+            // The floor can only go down. `nil` removes it entirely, which is
+            // the widest thing this field can say.
+            minTier: newFloor.map { floor in minTier.map { max($0, floor) } ?? nil } ?? nil,
+            hops: max(hops, newHops ?? hops),
+            boost: boost,
+            preferAfter: preferAfter,
+            requiresCompleteProvenance: requiresCompleteProvenance && !dropProvenanceRequirement,
+            evidenceOnly: evidenceOnly && !dropEvidenceOnly)
+    }
+
+    /// The view in the words a person reviewing this work would need.
+    var describedForReview: String {
+        var parts = ["ขอบเขต " + visibleScopes.map(\.rawValue).sorted().joined(separator: "+")]
+        if let minTier { parts.append("แหล่งอย่างน้อย \(minTier.rawValue.uppercased())") }
+        if requiresCompleteProvenance { parts.append("เฉพาะที่อ้างอิงได้ครบ") }
+        if evidenceOnly { parts.append("เฉพาะหลักฐานที่ระบบสร้าง") }
+        if !entityTypes.isEmpty {
+            parts.append("ชนิด " + entityTypes.sorted().prefix(4).joined(separator: "/"))
+        }
+        parts.append("เดินกราฟ \(hops) ชั้น")
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// Widenings granted during a conversation (§21.2, P12.6).
+///
+/// **Per conversation, never written to the manifest.** A tool that edited the
+/// file would let an agent grant itself permanent access to material somebody
+/// deliberately kept out of its view; this expires when the conversation does.
+/// The reason is required and kept, because a widening nobody can explain later
+/// is one nobody can review.
+public actor ViewWidenings {
+    public struct Grant: Sendable, Equatable {
+        public let role: Role
+        public let reason: String
+        public let view: KnowledgeView
+        public let grantedAt: Date
+
+        public init(role: Role, reason: String, view: KnowledgeView, grantedAt: Date = Date()) {
+            self.role = role
+            self.reason = reason
+            self.view = view
+            self.grantedAt = grantedAt
+        }
+    }
+
+    private var grants: [String: [Role: Grant]] = [:]
+
+    public init() {}
+
+    public func grant(_ grant: Grant, conversation: String) {
+        grants[conversation, default: [:]][grant.role] = grant
+    }
+
+    public func view(for role: Role, conversation: String?) -> KnowledgeView? {
+        guard let conversation else { return nil }
+        return grants[conversation]?[role]?.view
+    }
+
+    /// Every widening in a conversation, for the record a reviewer reads.
+    public func all(in conversation: String) -> [Grant] {
+        (grants[conversation] ?? [:]).values.sorted { $0.grantedAt < $1.grantedAt }
+    }
+}

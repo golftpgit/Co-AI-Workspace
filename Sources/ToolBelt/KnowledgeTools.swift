@@ -47,13 +47,19 @@ public struct KBSearchTool: AgentTool {
     /// Per-role views declared in manifests (§21.2). Absent means every role
     /// uses the standard one for its kind.
     private let views: (@Sendable (Role) -> KnowledgeView?)?
+    /// Widenings granted in this conversation (§21.2, P12.6). Consulted before
+    /// the declared view, so `widen_view` takes effect on the next search
+    /// rather than on the next launch.
+    private let widenings: ViewWidenings?
 
     public init(index: @escaping @Sendable () async -> KnowledgeIndex,
                 embedder: (any Embedder)? = nil,
-                views: (@Sendable (Role) -> KnowledgeView?)? = nil) {
+                views: (@Sendable (Role) -> KnowledgeView?)? = nil,
+                widenings: ViewWidenings? = nil) {
         self.index = index
         self.embedder = embedder
         self.views = views
+        self.widenings = widenings
     }
 
     public func call(argumentsJSON: String, context: ToolContext) async throws -> ToolOutput {
@@ -76,8 +82,8 @@ public struct KBSearchTool: AgentTool {
             // searching the knowledge base gets the Writer's view without any
             // caller remembering to pass one — which is the only version of
             // this that stays true.
-            results = index.search(query, scope: context.scope, view: view(for: context),
-                                   limit: limit)
+            results = index.search(query, scope: context.scope,
+                                   view: await view(for: context), limit: limit)
         }
 
         guard !results.isEmpty else {
@@ -113,8 +119,13 @@ public struct KBSearchTool: AgentTool {
     /// The view this call searches through. A turn with no role attached is an
     /// ordinary question from the person at the keyboard, and they see
     /// everything their workspace holds.
-    private func view(for context: ToolContext) -> KnowledgeView {
-        context.role.map { views?($0) ?? .standard(for: $0) } ?? KnowledgeView()
+    private func view(for context: ToolContext) async -> KnowledgeView {
+        guard let role = context.role else { return KnowledgeView() }
+        if let granted = await widenings?.view(for: role,
+                                               conversation: context.conversationID) {
+            return granted
+        }
+        return views?(role) ?? .standard(for: role)
     }
 }
 
