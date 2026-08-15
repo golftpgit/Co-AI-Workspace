@@ -238,6 +238,7 @@ private struct DecisionSummary: View {
         switch decision.scope {
         case .central: "ใช้เป็นคำตัดสินกลาง ทุกโปรเจกต์"
         case .project(let id): "ใช้เฉพาะโปรเจกต์ \(id.rawValue)"
+        case .board(let runID): "ใช้เฉพาะการรันนี้ (\(runID))"
         case .policy: "ขอบเขตนโยบาย"
         }
     }

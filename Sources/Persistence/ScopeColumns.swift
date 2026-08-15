@@ -21,12 +21,20 @@ enum ScopeColumns {
         case .central: return "central"
         case .policy: return "policy"
         case .project: return "project"
+        case .board: return "board"
         }
     }
 
+    /// The second column. Named for the case that fills it most, and shared
+    /// with `board` deliberately: `scope_kind` already tells the two apart, and
+    /// a third column would have to be added to every table and every query to
+    /// hold one string that means "which one".
     static func projectID(_ scope: Scope) -> String? {
-        if case .project(let id) = scope { return id.rawValue }
-        return nil
+        switch scope {
+        case .project(let id): return id.rawValue
+        case .board(let runID): return runID
+        case .central, .policy: return nil
+        }
     }
 
     static func scope(kind: String?, projectID: String?) -> Scope? {
@@ -36,6 +44,9 @@ enum ScopeColumns {
         case "project":
             guard let projectID, !projectID.isEmpty else { return nil }
             return .project(ProjectID(projectID))
+        case "board":
+            guard let projectID, !projectID.isEmpty else { return nil }
+            return .board(projectID)
         default: return nil
         }
     }

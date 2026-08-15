@@ -386,6 +386,11 @@ enum ScopeChoice: String, CaseIterable, Identifiable {
         case .central: self = .central
         case .project: self = .project
         case .policy: self = .policy
+        // A run's Situation Board is not a library a person browses (§22.5):
+        // it exists for the length of one run and is read by the teams in it.
+        // Shown as the central library rather than adding a picker option
+        // nobody could usefully choose.
+        case .board: self = .central
         }
     }
 

@@ -79,8 +79,11 @@ struct ScreenPermissionTests {
     func worksWithoutMemory() {
         let reader = ScreenPermissionReader()
         #expect(reader.lastKnown().isEmpty)
-        // And reading the live state does not crash on a machine with nothing
-        // granted, which is every CI machine.
-        _ = reader.read()
+        // Deliberately *not* calling `read()` here. It asks the window server
+        // whether this process may capture the screen, and under `swift test`
+        // that is a question from a process with no GUI connection on whichever
+        // thread the suite happens to be running — which crashed the whole test
+        // binary, taking every other suite with it. The live read belongs to a
+        // real app run; what is testable here is everything around it.
     }
 }

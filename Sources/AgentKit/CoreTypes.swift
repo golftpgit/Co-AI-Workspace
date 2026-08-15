@@ -14,10 +14,17 @@ public struct ProjectID: Hashable, Sendable, Codable, CustomStringConvertible {
 
 /// Where a piece of state belongs. Used by KB, DB connectors, workflows,
 /// notebooks and agent manifests alike — one declaration for all of them.
-public enum Scope: Hashable, Sendable, Codable {
+public enum Scope: Hashable, Sendable {
     case central
     case project(ProjectID)
     case policy
+    /// One organisation-wide run's Situation Board (§22.5, P16.4).
+    ///
+    /// A scope rather than a new subsystem, so the board is searched by the
+    /// `kb_search` every agent already has and written by the one path that
+    /// may write it. Keyed by run so it disappears with the run: a board that
+    /// outlived its incident would be a second library nobody curates.
+    case board(String)
 
     public var isPolicy: Bool { self == .policy }
 
@@ -32,6 +39,7 @@ public enum Scope: Hashable, Sendable, Codable {
         case .central: return "central"
         case .policy: return "policy"
         case .project(let id): return "project/\(id.rawValue)"
+        case .board(let runID): return "board/\(runID)"
         }
     }
 
@@ -40,10 +48,77 @@ public enum Scope: Hashable, Sendable, Codable {
         case "central": self = .central
         case "policy": self = .policy
         default:
+            if storageKey.hasPrefix("board/") {
+                let runID = String(storageKey.dropFirst("board/".count))
+                guard !runID.isEmpty else { return nil }
+                self = .board(runID)
+                return
+            }
             guard storageKey.hasPrefix("project/") else { return nil }
             let id = String(storageKey.dropFirst("project/".count))
             guard !id.isEmpty else { return nil }
             self = .project(ProjectID(id))
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+
+extension Scope: Codable {
+    /// Encoded as its `storageKey`, not as a synthesized enum object.
+    ///
+    /// **Written by hand for two reasons, and the second one is a crash.**
+    ///
+    ///  1. `storageKey` is already the documented stable string form for this
+    ///     type — config files and columns use it — so a second, differently
+    ///     shaped JSON representation was one representation too many. A
+    ///     `connectors.json` a person opens now says `"project/diabetes"`
+    ///     rather than `{"project":{"_0":{"rawValue":"diabetes"}}}`.
+    ///  2. The synthesized conformance took `JSONEncoder` into
+    ///     `EXC_BAD_ACCESS` inside `serializeString` on this toolchain once the
+    ///     enum grew a fourth case — a use-after-free in Foundation's encoder,
+    ///     not in anything callable from here. A single-value string has no
+    ///     nested containers for it to lose track of.
+    ///
+    /// The decoder still reads the old object form, because files written by
+    /// earlier builds exist and a settings file that stops loading is a
+    /// migration nobody asked for.
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(storageKey)
+    }
+
+    private enum LegacyKey: String, CodingKey {
+        case central, project, policy, board
+    }
+
+    private enum PayloadKey: String, CodingKey {
+        case _0
+    }
+
+    public init(from decoder: any Decoder) throws {
+        if let container = try? decoder.singleValueContainer(),
+           let text = try? container.decode(String.self),
+           let scope = Scope(storageKey: text) {
+            self = scope
+            return
+        }
+        // The shape Swift synthesized before this extension existed.
+        let container = try decoder.container(keyedBy: LegacyKey.self)
+        guard let key = container.allKeys.first else {
+            throw DecodingError.dataCorrupted(.init(
+                codingPath: decoder.codingPath,
+                debugDescription: "ไม่รู้ว่าเป็น scope ไหน"))
+        }
+        switch key {
+        case .central: self = .central
+        case .policy: self = .policy
+        case .project:
+            let nested = try container.nestedContainer(keyedBy: PayloadKey.self, forKey: .project)
+            self = .project(try nested.decode(ProjectID.self, forKey: ._0))
+        case .board:
+            let nested = try container.nestedContainer(keyedBy: PayloadKey.self, forKey: .board)
+            self = .board(try nested.decode(String.self, forKey: ._0))
         }
     }
 }
