@@ -26,6 +26,7 @@ private final class StubEndpoint: @unchecked Sendable {
     private var _served: [String]
     private var _chatStatus = 200
     private var _dropsMidStream = false
+    private var _chunks: [String]?
     private var _bodies: [String] = []
     /// Filled in after the listener is up. A `var` so every stored property is
     /// initialised before `newConnectionHandler` — which reaches back into this
@@ -80,6 +81,10 @@ private final class StubEndpoint: @unchecked Sendable {
     /// the model was talking.
     func dropMidStream() { lock.withLock { _dropsMidStream = true } }
 
+    /// Says exactly these pieces, one SSE chunk each — including tags split
+    /// across a boundary, which is how they really arrive.
+    func says(_ chunks: [String]) { lock.withLock { _chunks = chunks } }
+
     /// The `model` field of every chat request received, in order.
     var modelsAskedFor: [String] {
         lock.withLock { _bodies }.compactMap { body in
@@ -132,13 +137,17 @@ private final class StubEndpoint: @unchecked Sendable {
                 .joined(separator: ",")
             payload = #"{"object":"list","data":[\#(entries)]}"#
         } else if status == 200 {
-            payload = """
-                data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}
-
-                data: [DONE]
-
-
-                """
+            let pieces = lock.withLock { _chunks } ?? ["ok"]
+            let events = pieces.map { piece in
+                let escaped = piece
+                    .replacingOccurrences(of: "\\", with: "\\\\")
+                    .replacingOccurrences(of: "\"", with: "\\\"")
+                    .replacingOccurrences(of: "\n", with: "\\n")
+                return #"data: {"choices":[{"delta":{"content":"\#(escaped)"}}]}"#
+            }
+            payload = (events
+                + [#"data: {"choices":[{"delta":{},"finish_reason":"stop"}]}"#, "data: [DONE]", "", ""])
+                .joined(separator: "\n\n")
         } else {
             payload = #"{"error":{"message":"model not found"}}"#
         }
@@ -236,6 +245,40 @@ struct ServedModelTests {
             #expect(message.contains("NSURLErrorDomain") == false,
                     "Foundation's error code reached the person: \(message)")
         }
+    }
+
+    // P15.2b — a server started without `--reasoning-parser` streams the tags
+    // inside `content`, exactly as the local tier does. Measured twice on this
+    // endpoint (E.21), and the symptom is the model's English deliberation
+    // printed above a Thai answer.
+    @Test("thinking that arrives inside the answer is still kept out of it",
+          .timeLimit(.minutes(1)))
+    func unparsedReasoningIsSplitHere() async throws {
+        let stub = try StubEndpoint(serving: ["m"])
+        // The tags land across chunk boundaries, because that is how a stream
+        // delivers them.
+        stub.says(["<thi", "nk>The user asks in Thai. I should",
+                   " answer in Thai.</think", ">\n\nสวัสดีครับ"])
+        let executor = VLLMExecutor(baseURL: stub.baseURL, model: "m")
+
+        let completion = try await executor.complete(request())
+        #expect(completion.text == "สวัสดีครับ",
+                "the model's thinking reached the answer: \(completion.text)")
+        #expect(completion.reasoning.contains("answer in Thai"),
+                "the thinking was dropped instead of kept apart")
+        #expect(completion.text.contains("<think>") == false)
+    }
+
+    @Test("a server that does its own splitting is left alone",
+          .timeLimit(.minutes(1)))
+    func aParsedServerIsUntouched() async throws {
+        let stub = try StubEndpoint(serving: ["m"])
+        stub.says(["คำตอบ", "ที่ไม่มีแท็ก"])
+        let executor = VLLMExecutor(baseURL: stub.baseURL, model: "m")
+
+        let completion = try await executor.complete(request())
+        #expect(completion.text == "คำตอบที่ไม่มีแท็ก")
+        #expect(completion.reasoning.isEmpty)
     }
 
     @Test("a configured name is still checked against the catalogue",
