@@ -90,6 +90,11 @@ public actor TeamOrchestrator {
     /// Optional: the team works without a database, it just cannot be asked
     /// afterwards what happened.
     private let ledgerStore: TaskLedgerStore?
+    /// §21.2 / P12.7 — what this role already learned, brought to the start of
+    /// an assignment. A closure rather than a store: the lessons live in the
+    /// knowledge base, and the orchestrator's job is to make sure they arrive,
+    /// not to know where they are kept.
+    private let roleMemory: (@Sendable (Role) async -> [String])?
     private let scope: Scope
     private var ledger: [String: LedgerEntry] = [:]
     private let log = AppLog.logger("team")
@@ -117,6 +122,7 @@ public actor TeamOrchestrator {
                 maxFanOut: Int = 4,
                 retryCap: Int = 3,
                 ledgerStore: TaskLedgerStore? = nil,
+                roleMemory: (@Sendable (Role) async -> [String])? = nil,
                 scope: Scope = .central) {
         self.router = router
         self.specialists = specialists
@@ -124,6 +130,7 @@ public actor TeamOrchestrator {
         self.maxFanOut = maxFanOut
         self.retryCap = retryCap
         self.ledgerStore = ledgerStore
+        self.roleMemory = roleMemory
         self.scope = scope
     }
 
@@ -297,11 +304,22 @@ public actor TeamOrchestrator {
                       emit: @Sendable (TeamEvent) -> Void) async -> [Deliverable] {
         var delivered: [Deliverable] = []
 
-        for assignment in assignments {
-            guard let specialist = specialists[assignment.role] else {
-                emit(.failed(TeamError.noSpecialist(assignment.role).description))
+        for original in assignments {
+            guard let specialist = specialists[original.role] else {
+                emit(.failed(TeamError.noSpecialist(original.role).description))
                 continue
             }
+            // P12.7 — the lessons this role already learned, in front of it
+            // before it starts rather than findable if it thinks to look. A
+            // lesson somebody has to search for reaches the people who already
+            // knew it.
+            let remembered = await roleMemory?(original.role) ?? []
+            let assignment = remembered.isEmpty ? original : Assignment(
+                id: original.id, role: original.role, goal: original.goal,
+                inputs: remembered + original.inputs,
+                acceptanceCriteria: original.acceptanceCriteria,
+                deliverableType: original.deliverableType)
+
             ledger[assignment.id] = LedgerEntry(assignment: assignment, attempts: 0,
                                                 passed: false, findings: [])
 

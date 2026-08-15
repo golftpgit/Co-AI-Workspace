@@ -392,7 +392,15 @@ struct Engine: Sendable {
             // makes it look optional on the diagram that says what this app is
             // made of.
             reviewer: QAReviewer(),
-            ledgerStore: taskLedger)
+            ledgerStore: taskLedger,
+            // §21.2 / P12.7 — the lessons a closed project left behind, in
+            // front of the role that should already know them. Read at
+            // assignment time so a project closed this morning teaches this
+            // afternoon's work.
+            roleMemory: { [knowledgeStore] role in
+                let lessons = (try? await knowledgeStore.load(scope: .central)) ?? []
+                return RoleMemory.brief(for: role, in: lessons)
+            })
 
         // Nil rather than a failed boot: analysis is one screen among several,
         // and a corrupt `.duckdb` must not be the reason chat will not open.
