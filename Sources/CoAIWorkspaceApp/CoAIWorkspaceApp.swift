@@ -62,6 +62,7 @@ private struct RootView: View {
     /// than more fields on `AnalysisViewModel`, which is already the largest
     /// on the project.
     @State private var manuscripts = ManuscriptViewModel()
+    @State private var channels = ChannelsViewModel()
     @State private var instruments = InstrumentsViewModel()
     @State private var coding = CodingViewModel()
     /// Which workspace everything else is looking at (§19.1). Held at the root
@@ -111,7 +112,7 @@ private struct RootView: View {
         // Knowledge.
         case documents, conflicts, sources
         // System.
-        case models, budget, status, inventory
+        case models, budget, channels, status, inventory
 
         var id: String { rawValue }
 
@@ -128,6 +129,7 @@ private struct RootView: View {
             case .sources: "แหล่งและ tier"
             case .models: "โมเดล"
             case .budget: "งบ + endpoint"
+            case .channels: "ช่องทาง"
             case .status: "สถานะระบบ"
             case .inventory: "ผังหน้าจอ"
             }
@@ -609,6 +611,12 @@ private struct RootView: View {
         switch systemTab {
         case .models: screenView(.models, engine: engine)
         case .budget: screenView(.endpoints, engine: engine)
+        // §8.2 / §15's "Channels" settings category. Its own sub-tab because
+        // until now the store existed and no screen read it, so a bot could
+        // only be configured by editing JSON beside the database.
+        case .channels:
+            ChannelsView(model: channels)
+                .task { channels.attach(store: engine.channelAccounts) }
         // R13's checklist, in the app: where each of §14.2's screens went, and
         // which of them are honestly not built yet.
         case .inventory: IAInventoryView()
@@ -623,7 +631,7 @@ private struct RootView: View {
         case .chat, .plan: nil
         case .workbench: workbenchTabs
         case .knowledge: [.documents, .conflicts, .sources]
-        case .system: [.models, .budget, .status, .inventory]
+        case .system: [.models, .budget, .channels, .status, .inventory]
         }
     }
 
