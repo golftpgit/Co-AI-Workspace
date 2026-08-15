@@ -200,7 +200,15 @@ public struct HookChain: Sendable {
         }
 
         // 6 — HITL.
-        guard modes.autonomy.requiresApproval(for: risk.level) else {
+        //
+        // A few tools ask a person whatever the slider says (§5.5, P14.4). Full
+        // autonomy is a considered decision to accept bad odds while nobody is
+        // watching, and that trade needs the damage to be visible afterwards.
+        // For `install_package` it is not: an sdist runs its own code during
+        // installation, and nothing it did appears in the tool's output or in
+        // anything the package is later used for. See `AlwaysAsk`.
+        let mustAsk = AlwaysAsk.requiresHuman(call.toolName)
+        guard mustAsk || modes.autonomy.requiresApproval(for: risk.level) else {
             return .allow(argumentsJSON: call.argumentsJSON, risk: risk, notes: notes)
         }
         guard let approver else {

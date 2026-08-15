@@ -193,3 +193,114 @@ private struct StubbedFetchPageTool: AgentTool {
         """)
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// P12.2 — the role's knowledge view, applied where an agent actually searches.
+//
+// A `KnowledgeView` that only its own tests consult is the shape this project
+// has now caught eight times. These go through `ToolGateway` for the same
+// reason as everything else in this file: the claim is that a Writer searching
+// the knowledge base gets the Writer's view, not that a filter function works.
+// ─────────────────────────────────────────────────────────────
+
+private func mixedIndex() -> KnowledgeIndex {
+    var index = KnowledgeIndex()
+    let citable = Provenance(documentID: "doc_cite", title: "บทความ",
+                             origin: .upload(filename: "a.pdf"), tier: .t2,
+                             authors: ["ผู้เขียน ก"], year: 2023)
+    let anonymous = Provenance(documentID: "doc_anon", title: "บันทึก",
+                               origin: .upload(filename: "b.pdf"), tier: .t2)
+    try? index.insert(contentsOf: [
+        IndexedChunk(id: "c_cite", text: "ภาวะหมดไฟในพยาบาลพบได้บ่อย", scope: .central,
+                     provenance: citable, embedding: nil, embeddingProfileID: nil,
+                     contentHash: "h_cite"),
+        IndexedChunk(id: "c_anon", text: "ภาวะหมดไฟในพยาบาลเป็นเรื่องที่พูดกันมาก", scope: .central,
+                     provenance: anonymous, embedding: nil, embeddingProfileID: nil,
+                     contentHash: "h_anon"),
+    ])
+    return index
+}
+
+@Suite("kb_search through a role's view — P12.2")
+struct KBSearchViewTests {
+
+    private func gateway(_ index: KnowledgeIndex) async -> ToolGateway {
+        let gateway = ToolGateway(chain: HookChain(), modes: OperatingModes(autonomy: .fullAutonomous))
+        await gateway.register(KBSearchTool(index: { index }))
+        return gateway
+    }
+
+    @Test("a Writer searching gets only what it could cite")
+    func writerSeesOnlyCitable() async throws {
+        let gateway = await gateway(mixedIndex())
+        let outcome = try await gateway.call(
+            "kb_search", argumentsJSON: #"{"query":"ภาวะหมดไฟ"}"#,
+            context: ToolContext(scope: .central, role: .writer))
+
+        guard case .executed(let output, _, _) = outcome else {
+            Issue.record("expected the search to run, got \(outcome)"); return
+        }
+        #expect(output.text.contains("บทความ"))
+        #expect(output.text.contains("บันทึก") == false,
+                "the Writer was shown a chunk with no author or year")
+    }
+
+    // The same question, no role: the person at the keyboard sees everything
+    // their workspace holds.
+    @Test("a turn with no role attached is not filtered")
+    func noRoleSeesEverything() async throws {
+        let gateway = await gateway(mixedIndex())
+        let outcome = try await gateway.call(
+            "kb_search", argumentsJSON: #"{"query":"ภาวะหมดไฟ"}"#,
+            context: ToolContext(scope: .central))
+
+        guard case .executed(let output, _, _) = outcome else {
+            Issue.record("expected the search to run, got \(outcome)"); return
+        }
+        #expect(output.text.contains("บทความ"))
+        #expect(output.text.contains("บันทึก"))
+    }
+
+    // P12.6's first half. "Nothing found" and "your role cannot see that" are
+    // different facts, and only one of them is a knowledge base with a gap.
+    @Test("a search emptied by the view says so, instead of reporting an empty library")
+    func emptyBecauseOfTheViewIsReportedAsSuch() async throws {
+        var index = KnowledgeIndex()
+        try index.insert(IndexedChunk(
+            id: "c_anon", text: "ภาวะหมดไฟในพยาบาล", scope: .central,
+            provenance: Provenance(documentID: "d", title: "บันทึก",
+                                   origin: .upload(filename: "b.pdf"), tier: .t2),
+            embedding: nil, embeddingProfileID: nil, contentHash: "h"))
+
+        let gateway = await gateway(index)
+        let outcome = try await gateway.call(
+            "kb_search", argumentsJSON: #"{"query":"ภาวะหมดไฟ"}"#,
+            context: ToolContext(scope: .central, role: .writer))
+
+        guard case .executed(let output, _, _) = outcome else {
+            Issue.record("expected the search to run, got \(outcome)"); return
+        }
+        #expect(output.text.contains("ถูกกรองออกด้วยมุมมองความรู้"))
+        #expect(output.text.contains("ไม่ใช่ว่าคลังไม่มีข้อมูล"))
+    }
+
+    // A manifest may declare its own view; the standard one is the fallback,
+    // not the law.
+    @Test("a declared view overrides the standard one for that role")
+    func declaredViewWins() async throws {
+        let gateway = ToolGateway(chain: HookChain(),
+                                  modes: OperatingModes(autonomy: .fullAutonomous))
+        let index = mixedIndex()
+        await gateway.register(KBSearchTool(index: { index },
+                                            views: { _ in KnowledgeView() }))
+
+        let outcome = try await gateway.call(
+            "kb_search", argumentsJSON: #"{"query":"ภาวะหมดไฟ"}"#,
+            context: ToolContext(scope: .central, role: .writer))
+
+        guard case .executed(let output, _, _) = outcome else {
+            Issue.record("expected the search to run, got \(outcome)"); return
+        }
+        #expect(output.text.contains("บันทึก"), "the declared view was ignored")
+    }
+}

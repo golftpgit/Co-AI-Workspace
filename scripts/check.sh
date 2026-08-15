@@ -625,6 +625,49 @@ else
   fail "accessibility rules (see above)"
 fi
 
+# §21.2 / P12.2 — the six knowledge views are a `switch` over `Role` with no
+# `default:`, for the same reason the seventeen practices are. A seventh role
+# must be a compiler error, not a role that silently inherits somebody else's
+# filter — and "silently inherits the Reviewer's view" means an agent that
+# cannot see the material it needs and nothing anywhere saying why.
+VIEW_GAPS=$(/usr/bin/python3 - <<'VIEWS'
+import re
+src = open('Sources/Knowledge/KnowledgeView.swift').read()
+roles = re.findall(r'^    case (\w+)$',
+                   open('Sources/AgentKit/CoreTypes.swift').read()
+                   [open('Sources/AgentKit/CoreTypes.swift').read().index('public enum Role'):][:400],
+                   re.M)
+block = src[src.index('static func standard(for role: Role)'):]
+problems = [f'unanswered:{r}' for r in roles if f'case .{r}:' not in block]
+if re.search(r'^\s*default\s*:', block, re.M):
+    problems.append('has-default-arm')
+print(' '.join(problems))
+VIEWS
+)
+if [ -n "$VIEW_GAPS" ]; then
+  fail "the knowledge-view switch is not exhaustive by construction:$VIEW_GAPS"
+else
+  ok "every role has a knowledge view of its own, with no default arm"
+fi
+
+# P14.4 — the tools that ask a person even under full autonomy.
+#
+# `install_package` runs code nobody here wrote, and an sdist runs it *during*
+# installation, so whatever it did appears in no output and in nothing the
+# package is later used for. Full autonomy is a decision to accept bad odds
+# while nobody is watching, and that trade needs the damage to be visible
+# afterwards. Taking this off the list would be silent.
+# The name appears twice in this file — once in the risk table, once in the
+# list — so the check has to look at the `toolNames` line itself. The first
+# version of this rule grepped the whole file and passed happily with the list
+# emptied.
+if grep -E 'toolNames: Set<String> *=' Sources/CoreEngine/RiskScorer.swift \
+   | grep -q '"install_package"'; then
+  ok "install_package still stops for a person whatever the autonomy setting"
+else
+  fail "install_package is no longer on the always-ask list — it would install unattended (P14.4)"
+fi
+
 # U33-1 — a sheet whose content force-unwraps the optional that presents it.
 #
 # `Binding($model.editing)` inside a sheet driven by `model.editing != nil`
