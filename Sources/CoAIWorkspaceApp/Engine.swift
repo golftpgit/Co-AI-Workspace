@@ -269,6 +269,10 @@ struct Engine: Sendable {
         // list — v1 shipped an MCP client that no session could reach (D6).
         let embedder = MLXEmbedder()
         let declaredViews = DeclaredKnowledgeViews()
+        // §21.2 / P12.6 — widenings granted during a conversation. One instance
+        // shared by the tool that grants them and the search that reads them,
+        // or `widen_view` would report success and change nothing.
+        let viewWidenings = ViewWidenings()
         await gateway.register([
             RunShellTool(registry: processes),
             // The only tool with the network open, and the only one that runs
@@ -303,7 +307,12 @@ struct Engine: Sendable {
                 // it needs the tool list this registration is building. Read
                 // at call time either way, which is the same rule the index
                 // closure above follows.
-                views: { [declaredViews] role in declaredViews.view(for: role) }),
+                views: { [declaredViews] role in declaredViews.view(for: role) },
+                widenings: viewWidenings),
+            WidenViewTool(widenings: viewWidenings,
+                          baseView: { [declaredViews] role in
+                              declaredViews.view(for: role) ?? .standard(for: role)
+                          }),
             // §1.4.1 / P13.1 — T5 through the app's own headless web view. The
             // tool contract does not change: the agent still calls `web_search`
             // and still has to `fetch_page` before citing anything. What changes

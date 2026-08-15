@@ -161,7 +161,8 @@ for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer
                   TemplateStore TemplateParser TemplateFiller PluginRegistry WriteSkillTool \
                   TelegramChannel DiscordChannel LINEChannel ChannelRouter LimitationsBuilder ManifestParser \
                   ScaleReport ScoredResponses InstrumentDisposal ProjectTypeGateReader \
-                  CodebookStore CodingAnalysis CellRunStore ManuscriptBuilder; do
+                  CodebookStore CodingAnalysis CellRunStore ManuscriptBuilder \
+                  KnowledgeView ViewWidenings WidenViewTool InstallPackageTool; do
   grep -rqE "$capability[(.]" Sources/CoAIWorkspaceApp --include=*.swift || UNWIRED="$UNWIRED $capability"
 done
 if [ -n "$UNWIRED" ]; then

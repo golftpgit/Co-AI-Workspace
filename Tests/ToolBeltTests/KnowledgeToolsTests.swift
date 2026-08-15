@@ -304,3 +304,139 @@ struct KBSearchViewTests {
         #expect(output.text.contains("บันทึก"), "the declared view was ignored")
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// P12.6 — asking to see more, through the hook chain like everything else.
+// ─────────────────────────────────────────────────────────────
+
+@Suite("widen_view — P12.6")
+struct WidenViewTests {
+
+    private func gateway(_ widenings: ViewWidenings, index: KnowledgeIndex) async -> ToolGateway {
+        let gateway = ToolGateway(chain: HookChain(),
+                                  modes: OperatingModes(autonomy: .fullAutonomous))
+        await gateway.register(KBSearchTool(index: { index }, widenings: widenings))
+        await gateway.register(WidenViewTool(widenings: widenings))
+        return gateway
+    }
+
+    // The whole point: search finds nothing, widen, search again, find it —
+    // and it takes effect on the next search rather than on the next launch.
+    @Test("after widening, the same search finds what the view had hidden")
+    func wideningTakesEffectImmediately() async throws {
+        let widenings = ViewWidenings()
+        let gateway = await gateway(widenings, index: mixedIndex())
+        let context = ToolContext(scope: .central, conversationID: "conv_1", role: .writer)
+
+        let before = try await gateway.call("kb_search",
+                                            argumentsJSON: #"{"query":"ภาวะหมดไฟ"}"#,
+                                            context: context)
+        guard case .executed(let first, _, _) = before else {
+            Issue.record("expected a search"); return
+        }
+        #expect(first.text.contains("บันทึก") == false)
+
+        _ = try await gateway.call(
+            "widen_view",
+            argumentsJSON: #"{"reason":"ต้องการภาพรวมก่อนเลือกแหล่งที่จะอ้าง","allow_incomplete_citations":true}"#,
+            context: context)
+
+        let after = try await gateway.call("kb_search",
+                                           argumentsJSON: #"{"query":"ภาวะหมดไฟ"}"#,
+                                           context: context)
+        guard case .executed(let second, _, _) = after else {
+            Issue.record("expected a search"); return
+        }
+        #expect(second.text.contains("บันทึก"), "the widening did not reach the next search")
+    }
+
+    // A widening nobody can explain later is one nobody can review.
+    @Test("a widening with no reason, or a token one, is refused")
+    func reasonIsRequired() async throws {
+        let widenings = ViewWidenings()
+        let gateway = await gateway(widenings, index: mixedIndex())
+        let context = ToolContext(scope: .central, conversationID: "c", role: .writer)
+
+        for arguments in ["{}", #"{"reason":"ก"}"#] {
+            let outcome = try await gateway.call("widen_view", argumentsJSON: arguments,
+                                                 context: context)
+            guard case .sentBack = outcome else {
+                Issue.record("a widening with no real reason was accepted: \(outcome)")
+                return
+            }
+        }
+    }
+
+    // It expires with the conversation because it lives with the conversation:
+    // nothing here writes to a manifest.
+    @Test("a widening does not leak into another conversation")
+    func scopedToOneConversation() async throws {
+        let widenings = ViewWidenings()
+        let gateway = await gateway(widenings, index: mixedIndex())
+
+        _ = try await gateway.call(
+            "widen_view",
+            argumentsJSON: #"{"reason":"ต้องการภาพรวมก่อนเลือกแหล่ง","allow_incomplete_citations":true}"#,
+            context: ToolContext(scope: .central, conversationID: "conv_a", role: .writer))
+
+        let elsewhere = try await gateway.call(
+            "kb_search", argumentsJSON: #"{"query":"ภาวะหมดไฟ"}"#,
+            context: ToolContext(scope: .central, conversationID: "conv_b", role: .writer))
+        guard case .executed(let output, _, _) = elsewhere else {
+            Issue.record("expected a search"); return
+        }
+        #expect(output.text.contains("บันทึก") == false,
+                "a widening granted in one conversation applied in another")
+    }
+
+    // Additive only: an agent must not be able to hide material from itself,
+    // and above all not the rules.
+    @Test("widening can only add — policy stays, and nothing gets narrower")
+    func wideningIsAdditive() {
+        let researcher = KnowledgeView.standard(for: .researcher)
+        let widened = researcher.widened(minTier: .t5, hops: 0)
+        #expect(widened.visibleScopes.contains(.policy))
+        // The floor went down, not up, and the hop count did not shrink.
+        #expect(widened.minTier == .t5)
+        #expect(widened.hops == researcher.hops)
+
+        // Asking for a *stricter* floor than the current one leaves the wider
+        // of the two in place.
+        let stricter = KnowledgeView(minTier: .t3).widened(minTier: .t1)
+        #expect(stricter.minTier == .t3)
+    }
+
+    // The Reviewer's narrow view is the point of having a reviewer.
+    @Test("the Reviewer cannot widen its way into the maker's sources")
+    func reviewerCannotSeeWorkingMaterial() async throws {
+        let widenings = ViewWidenings()
+        let gateway = await gateway(widenings, index: mixedIndex())
+        let context = ToolContext(scope: .central, conversationID: "c", role: .reviewer)
+
+        _ = try await gateway.call(
+            "widen_view",
+            argumentsJSON: #"{"reason":"อยากเห็นสิ่งที่ผู้ทำใช้ประกอบการตัดสินใจ","any_tier":true}"#,
+            context: context)
+
+        let after = try await gateway.call("kb_search",
+                                           argumentsJSON: #"{"query":"ภาวะหมดไฟ"}"#,
+                                           context: context)
+        guard case .executed(let output, _, _) = after else {
+            Issue.record("expected a search"); return
+        }
+        #expect(output.text.contains("บทความ") == false,
+                "the Reviewer widened its way into the material the maker worked from")
+    }
+
+    @Test("a turn with no role has nothing to widen, and says so")
+    func needsARole() async throws {
+        let widenings = ViewWidenings()
+        let gateway = await gateway(widenings, index: mixedIndex())
+        let outcome = try await gateway.call(
+            "widen_view", argumentsJSON: #"{"reason":"ขอดูให้กว้างขึ้นหน่อยครับ"}"#,
+            context: ToolContext(scope: .central, conversationID: "c"))
+        guard case .sentBack = outcome else {
+            Issue.record("expected it to be sent back, got \(outcome)"); return
+        }
+    }
+}
