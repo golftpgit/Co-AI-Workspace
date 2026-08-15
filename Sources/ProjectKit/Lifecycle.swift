@@ -96,17 +96,34 @@ public struct ClosingFacts: Sendable, Equatable {
     public var conformanceGaps: [Practice]?
     /// What happens to the data and files (§19.12 condition 8).
     public var dataDisposition: DataDisposition?
+    /// Whether this project ever collected answers from people (§20.5, P11.10).
+    /// `nil` when the store was not consulted, which blocks — the same rule the
+    /// other optional facts here follow.
+    public var heldHumanData: Bool?
+    /// Retention rules found in the project's `policy` scope.
+    public var retentionRules: [RetentionRule]
 
     public init(openRegisterEntries: Int = 0,
                 openConflicts: Int? = nil,
                 pendingAssumptions: Int? = nil,
                 conformanceGaps: [Practice]? = nil,
-                dataDisposition: DataDisposition? = nil) {
+                dataDisposition: DataDisposition? = nil,
+                heldHumanData: Bool? = nil,
+                retentionRules: [RetentionRule] = []) {
         self.openRegisterEntries = openRegisterEntries
         self.openConflicts = openConflicts
         self.pendingAssumptions = pendingAssumptions
         self.conformanceGaps = conformanceGaps
         self.dataDisposition = dataDisposition
+        self.heldHumanData = heldHumanData
+        self.retentionRules = retentionRules
+    }
+
+    /// Condition 8's answer (§20.5, P11.10).
+    public var retention: RetentionCheck.Result {
+        RetentionCheck.evaluate(disposition: dataDisposition,
+                                heldHumanData: heldHumanData,
+                                rules: retentionRules)
     }
 }
 
@@ -270,8 +287,34 @@ public enum ProjectLifecycle {
                 // gate checks the half that can be true now and says so.
                 GateCondition(text: "บันทึกบทเรียนอย่างน้อย 1 ข้อ (ไหลเข้าคลังส่วนกลางตอนปิด)",
                               satisfied: hasLessons),
-                GateCondition(text: "ตัดสินแล้วว่าข้อมูลและไฟล์ที่เหลือจะไปทางไหน",
-                              satisfied: closing.dataDisposition?.isDecided == true),
+                // Condition 8 keeps its original job — every project has to say
+                // where its files go — and P11.10 adds the half that was missing:
+                // when the project collected answers from people, the retention
+                // policy it names has to be one that really exists in the
+                // `policy` scope (§20.5). Free text used to satisfy this.
+                {
+                    guard closing.dataDisposition?.isDecided == true else {
+                        return GateCondition(text: "ตัดสินแล้วว่าข้อมูลและไฟล์ที่เหลือจะไปทางไหน",
+                                             satisfied: false)
+                    }
+                    switch closing.retention {
+                    case .notApplicable:
+                        return GateCondition(text: "ตัดสินแล้วว่าข้อมูลและไฟล์ที่เหลือจะไปทางไหน",
+                                             satisfied: true)
+                    case .unchecked(let note):
+                        // Not a block: one unwired reader must not stop every
+                        // project from closing (the ProjectTypeGate decision).
+                        // Not a tick either — U21-2.
+                        return GateCondition(text: "ตัดสินแล้วว่าข้อมูลและไฟล์ที่เหลือจะไปทางไหน · "
+                                                   + note,
+                                             satisfied: true, vacuous: true)
+                    case .satisfied(let obligation):
+                        return GateCondition(text: "ปลายทางของข้อมูล: " + obligation.summary,
+                                             satisfied: true)
+                    case .blocked(let why):
+                        return GateCondition(text: why, satisfied: false)
+                    }
+                }(),
             ]
         case .closed:
             conditions = []
