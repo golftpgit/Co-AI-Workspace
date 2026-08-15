@@ -75,16 +75,34 @@ done
 
 echo ""
 echo "   ── Keychain ──"
-# Names only. This script never prints a secret, for the same reason no screen
-# in the app does.
-NAMES=$(security find-generic-password -s com.coaiworkspace.app.secrets -g 2>&1 \
-  | grep '"acct"' | sed 's/.*"acct"<blob>="\(.*\)"/\1/' || true)
-if [ -n "$NAMES" ]; then
-  note "มีความลับเก็บไว้ในชื่อ: $NAMES"
-else
-  note "ยังไม่มีความลับใน Keychain ของแอป (service com.coaiworkspace.app.secrets)"
-fi
-note "สคริปต์นี้ไม่พิมพ์ค่าของความลับออกมาไม่ว่ากรณีใด — พิมพ์แต่ชื่อ"
+# **No `-g`.** The first version of this used `security find-generic-password -g`
+# to list what was stored, which was wrong twice over: `-g` asks for the
+# *password*, so it raises an authorisation prompt and the script hangs forever
+# in a terminal nobody is watching — and when granted it prints the secret to
+# stderr, which is the one thing this script promises never to do. Found by
+# running it after the first real key was stored (U33-2).
+#
+# So it asks a narrower question that needs no authorisation: for each name the
+# config files reference, is there an item under it? That is also the question
+# worth answering — "this endpoint names a key that was never entered".
+SERVICE="com.coaiworkspace.app.secrets"
+CHECKED=0
+for root in "${ROOTS[@]}"; do
+  [ -d "$root" ] || continue
+  # The four fields that hold a secret's *name* (§9.3, §8.2, §12.2, §6.2).
+  NAMES=$(grep -rhoE '"(apiKeyEnvironmentVariable|tokenVariable|signingSecretVariable|secretVariable)" *: *"[^"]+"' \
+    "$root" 2>/dev/null | sed 's/.*: *"\(.*\)"/\1/' | sort -u)
+  for name in $NAMES; do
+    CHECKED=$((CHECKED + 1))
+    if security find-generic-password -s "$SERVICE" -a "$name" >/dev/null 2>&1; then
+      note "“$name” มีค่าเก็บไว้ใน Keychain แล้ว"
+    else
+      hit "“$name” ถูกอ้างถึงในไฟล์ตั้งค่า แต่ยังไม่มีค่าใน Keychain — ฟีเจอร์ที่ใช้ชื่อนี้จะไม่ทำงาน"
+    fi
+  done
+done
+[ "$CHECKED" -eq 0 ] && note "ยังไม่มีไฟล์ตั้งค่าไหนอ้างถึงความลับ"
+note "สคริปต์นี้ไม่ถามค่าของความลับ และไม่พิมพ์ออกมาไม่ว่ากรณีใด — ถามแค่ว่ามีหรือไม่มี"
 
 echo ""
 if [ "$FOUND" -eq 0 ]; then

@@ -28,7 +28,11 @@ import Channels
 @Observable
 final class ChannelsViewModel {
     private(set) var accounts: [ChannelAccount] = []
-    var editing: ChannelAccountDraft?
+    /// The draft is a value and the sheet has its own flag — see
+    /// `MCPServersViewModel` for what the optional-plus-force-unwrap version
+    /// does when you press Save (it traps, and it did, on screen).
+    var draft = ChannelAccountDraft()
+    var isEditing = false
     /// The account being edited, or nil when the draft is a new one.
     private(set) var editingID: String?
     private(set) var problem: String?
@@ -46,19 +50,21 @@ final class ChannelsViewModel {
 
     func startNew() {
         editingID = nil
-        editing = ChannelAccountDraft()
+        draft = ChannelAccountDraft()
+        isEditing = true
     }
 
     func edit(_ account: ChannelAccount) {
         editingID = account.id
-        editing = ChannelAccountDraft(account)
+        draft = ChannelAccountDraft(account)
+        isEditing = true
     }
 
     func save() {
-        guard let store, let draft = editing, draft.canSave else { return }
+        guard let store, draft.canSave else { return }
         do {
             try store.add(draft.account(id: editingID))
-            editing = nil
+            isEditing = false
             editingID = nil
             problem = nil
             reload()
@@ -103,12 +109,7 @@ struct ChannelsView: View {
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .sheet(isPresented: Binding(get: { model.editing != nil },
-                                    set: { if !$0 { model.editing = nil } })) {
-            if model.editing != nil {
-                ChannelEditor(model: model)
-            }
-        }
+        .sheet(isPresented: $model.isEditing) { ChannelEditor(model: model) }
     }
 
     private var header: some View {
@@ -170,8 +171,9 @@ private struct ChannelEditor: View {
     @Bindable var model: ChannelsViewModel
 
     var body: some View {
-        if let draft = Binding($model.editing) {
-            VStack(alignment: .leading, spacing: 12) {
+        @Bindable var model = model
+        let draft = $model.draft
+        return VStack(alignment: .leading, spacing: 12) {
                 Text(draft.wrappedValue.name.isEmpty ? "เพิ่มบอท"
                                                      : "แก้ \(draft.wrappedValue.name)")
                     .font(.headline)
@@ -220,7 +222,7 @@ private struct ChannelEditor: View {
 
                 HStack {
                     Spacer()
-                    Button("ปิด") { model.editing = nil }
+                    Button("ปิด") { model.isEditing = false }
                     Button("บันทึก") { model.save() }
                         .buttonStyle(.borderedProminent)
                         .disabled(!draft.wrappedValue.canSave)
@@ -228,6 +230,5 @@ private struct ChannelEditor: View {
             }
             .padding(20)
             .frame(width: 540)
-        }
     }
 }

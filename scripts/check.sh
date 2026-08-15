@@ -609,6 +609,25 @@ else
   fail "accessibility rules (see above)"
 fi
 
+# U33-1 — a sheet whose content force-unwraps the optional that presents it.
+#
+# `Binding($model.editing)` inside a sheet driven by `model.editing != nil`
+# crashes the app on save: setting the optional to nil re-evaluates the sheet's
+# body once more before dismissal finishes, and the force-unwrap traps in
+# `BindingOperations.ForceUnwrapping.get`. It shipped on two screens and was
+# found by pressing the button, because a crash inside SwiftUI's update pass is
+# invisible to every test this project has.
+# Comment lines are skipped so the note explaining this bug does not trip it.
+# Single-quoted and escaped: "Binding(\$" in double quotes becomes `Binding($`,
+# where `$` is an end-of-line anchor, which matches every multi-line
+# `Binding(get:set:)` in the app and says nothing about force-unwrapping.
+if grep -rnE 'Binding\(\$' Sources/CoAIWorkspaceApp --include=*.swift \
+   | grep -vE ':[0-9]+: *//' | grep -q .; then
+  fail "a force-unwrapping Binding in a view — it traps when the optional is cleared (U33-1)"
+else
+  ok "no sheet force-unwraps the optional that presents it"
+fi
+
 # D6, one layer in: wired into the engine and reachable from no screen.
 #
 # The rule above catches a capability the app never constructs. It does not
@@ -619,7 +638,7 @@ fi
 #
 # So these engine properties must be read by something that is not Engine.swift.
 UNREACHABLE=""
-for property in channelAccounts templates plugins knowledge conflicts projects; do
+for property in channelAccounts mcpServers templates plugins knowledge conflicts projects; do
   grep -rlq "engine\.$property" --include=*.swift \
     $(ls Sources/CoAIWorkspaceApp/*.swift | grep -v "Engine.swift") \
     || UNREACHABLE="$UNREACHABLE $property"
