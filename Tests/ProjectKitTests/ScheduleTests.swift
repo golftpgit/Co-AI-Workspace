@@ -91,15 +91,36 @@ struct ScheduleTests {
 
     @Test("two measurements are not a distribution")
     func forecastRefusesThinEvidence() {
-        #expect(Schedule.estimate(from: [10, 20]) == nil)
+        #expect(Schedule.estimate(from: [10, 20], basis: .turns) == nil)
         // §19.7 — a project with no history shows "no data" rather than a
         // band drawn from nothing.
-        #expect(Schedule.estimate(from: []) == nil)
+        #expect(Schedule.estimate(from: [], basis: .turns) == nil)
 
-        let estimate = try! #require(Schedule.estimate(from: [10, 20, 30, 40, 100]))
+        let estimate = try! #require(
+            Schedule.estimate(from: [10, 20, 30, 40, 100], basis: .turns))
         #expect(estimate.sampleCount == 5)
         #expect(estimate.p50 == 30)
         #expect(estimate.p90 > estimate.p50)
+    }
+
+    // The band has been wrong twice, and neither time was the arithmetic wrong
+    // — it was that the population was decided at one call site and described at
+    // another. So the estimate carries what it is made of, and the sentence on
+    // screen is read off that rather than written beside it.
+    @Test("the band says which population it came from")
+    func estimateNamesItsPopulation() {
+        let assignments = try! #require(
+            Schedule.estimate(from: [600, 900, 1_200], basis: .assignments(kind: "รายงานสรุป")))
+        #expect(assignments.basis == .assignments(kind: "รายงานสรุป"))
+        #expect(assignments.unit == "งาน")
+        #expect(assignments.label.contains("3 งาน"))
+
+        let turns = try! #require(Schedule.estimate(from: [10, 20, 30], basis: .turns))
+        #expect(turns.unit == "เทิร์น")
+        #expect(turns.label.contains("3 เทิร์น"))
+        // A band of turns and a band of assignments are different claims even
+        // when the numbers coincide.
+        #expect(Schedule.estimate(from: [10, 20, 30], basis: .assignments(kind: "x")) != turns)
     }
 
     @Test("independent leaves have no critical path to crown")

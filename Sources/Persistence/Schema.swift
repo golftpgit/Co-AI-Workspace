@@ -16,6 +16,11 @@ public enum Schema {
     /// an interrupted run — run-until-done resumes the second and never the
     /// first. The criteria and deliverable type it needs to rebuild an
     /// assignment ride along on the schemaless part of the row.
+    /// 16: `span` carries `deliverable_kind` (§19.7, P10.15) — with assignment
+    /// spans now written, "how long does this kind of work take" is finally a
+    /// question about a kind of work rather than about whoever did it. The
+    /// forecast band was made of turns because an assignment had never been
+    /// recorded as anything.
     /// 15: `cell_run` exists (§12.4, §20.8, P11.9) — what a notebook cell
     /// answered, so a manuscript written in June can resolve a number produced
     /// in March. One row per (notebook, cell): a figure in a draft points at
@@ -55,7 +60,7 @@ public enum Schema {
     /// `project_id`; there was simply nothing on the other end of it, so two
     /// projects were indistinguishable and the app wrote the literal id
     /// "default" into all of them.
-    public static let version = 15
+    public static let version = 16
 
     /// Split into statements that are executed one at a time: a single
     /// failing statement should name itself, not abort a 40-line blob.
@@ -92,6 +97,8 @@ public enum Schema {
         "DEFINE FIELD IF NOT EXISTS project_id ON span TYPE option<string>",
         "DEFINE FIELD IF NOT EXISTS work_package ON span TYPE option<string>",
         "DEFINE INDEX IF NOT EXISTS span_work_package ON span FIELDS work_package",
+        "DEFINE FIELD IF NOT EXISTS deliverable_kind ON span TYPE option<string>",
+        "DEFINE INDEX IF NOT EXISTS span_deliverable_kind ON span FIELDS deliverable_kind",
 
         // ── schema metadata ──
         // Knowledge base (P2.7). Text and provenance are the source of truth;

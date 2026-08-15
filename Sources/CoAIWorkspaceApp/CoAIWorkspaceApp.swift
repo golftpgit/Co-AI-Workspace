@@ -232,9 +232,17 @@ private struct RootView: View {
                         .task { await conflicts.attach(store: engine.conflicts) }
                 case .team:
                     TeamView(model: team)
+                        // Rebuilt on a workspace switch, like Chat and Analysis:
+                        // the ledger, the open leaves and the lead's own scope
+                        // all belong to one project, and a screen that kept the
+                        // last one's rows would be offering to rework somebody
+                        // else's work.
+                        .id(projects.scope.storageKey)
                         .task { await team.attach(team: engine.team,
                                                   ledger: engine.taskLedger,
-                                                  gateway: engine.gateway) }
+                                                  gateway: engine.gateway,
+                                                  projects: engine.projects,
+                                                  scope: projects.scope) }
                 case .analysis:
                     AnalysisView(model: analysis, chosen: analysisPane,
                                  explorerFocus: explorerFocus)

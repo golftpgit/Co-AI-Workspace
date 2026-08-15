@@ -155,23 +155,30 @@ struct StatusBarView: View {
         Text("รวมจาก span ที่ผูกกับใบงานของโครงการนี้: \(elapsedText)")
             .font(.callout)
         if let forecast = model.forecast {
-            // Says what the band is made of. It used to read "งานชนิดเดียวกัน"
-            // — work of the same kind — which was not true: nothing records an
-            // assignment's deliverable type against a duration, so this is
-            // completed *turns* by the roles this project assigns to. A band
-            // labelled as one population and built from another is the kind of
-            // number that gets quoted in a report (P10.15's outstanding half).
-            Text("เทิร์นที่เสร็จแล้วของบทบาทที่โปรเจกต์นี้ใช้: p50 \(minutes(forecast.p50)) "
-                 + "· p90 \(minutes(forecast.p90)) (จาก \(forecast.sampleCount) เทิร์น)")
+            // The band names its own population, and the label is read off
+            // `basis` rather than written here. It has been wrong twice —
+            // "งานชนิดเดียวกัน" over a band of tool calls, then over a band of
+            // chat turns — both times because the sentence lived at the screen
+            // and the data lived three modules away.
+            Text("\(basisHeadline(forecast.basis)): p50 \(minutes(forecast.p50)) "
+                 + "· p90 \(minutes(forecast.p90)) "
+                 + "(จาก \(forecast.sampleCount) \(forecast.unit))")
                 .font(.callout)
-            // One literal: SwiftUI parses markdown only in a string literal,
-            // and `"a" + "b"` prints its own asterisks (check.sh's rule, which
-            // has now caught me twice).
-            Text("ข้ามโปรเจกต์ — p90 ที่คิดจากโปรเจกต์ตัวเองไม่ได้บอกอะไร · **ยังไม่ใช่ประวัติของงานชนิดเดียวกัน** เพราะยังไม่มีอะไรบันทึกระยะเวลาต่อชนิดส่งมอบ")
-                .font(.caption2).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            switch forecast.basis {
+            case .assignments:
+                Text("ข้ามโปรเจกต์ — p90 ที่คิดจากโปรเจกต์ตัวเองไม่ได้บอกอะไร · นับทั้งงาน ตั้งแต่มอบหมายจนผ่านการตรวจ **รวมรอบที่ต้องแก้** เพราะแผนที่คิดเฉพาะรอบที่ผ่านตั้งแต่แรกคือแผนที่ไม่มีใครทำทัน")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            case .turns:
+                // One literal: SwiftUI parses markdown only in a string literal,
+                // and `"a" + "b"` prints its own asterisks (check.sh's rule,
+                // which has now caught me twice).
+                Text("ข้ามโปรเจกต์ — p90 ที่คิดจากโปรเจกต์ตัวเองไม่ได้บอกอะไร · **ยังไม่ใช่ประวัติของงานชนิดเดียวกัน** เพราะงานที่เสร็จแล้วของชนิดส่งมอบนี้ยังไม่ถึงสามชิ้น เทิร์นเป็นหน่วยที่เล็กกว่างาน แถบนี้จึงต่ำกว่าความจริง")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         } else {
-            Text("ยังไม่มีเทิร์นที่เสร็จแล้วพอจะเทียบ — จึงยังไม่มีแถบ p50–p90")
+            Text("ยังไม่มีงานที่เสร็จแล้วพอจะเทียบ — จึงยังไม่มีแถบ p50–p90")
                 .font(.callout).foregroundStyle(.secondary)
         }
         widenControl(.time)
@@ -364,6 +371,16 @@ struct StatusBarView: View {
     private var elapsedText: String {
         let total = model.elapsed.values.reduce(0, +)
         return total > 0 ? minutes(total) : "ยังไม่ได้วัด"
+    }
+
+    /// Names the population in the reader's words. Exhaustive with no
+    /// `default:` — a basis added later must be given a sentence rather than
+    /// quietly inheriting somebody else's.
+    private func basisHeadline(_ basis: ScheduleEstimate.Basis) -> String {
+        switch basis {
+        case .assignments(let kind): "งานที่เสร็จแล้วชนิด “\(kind)”"
+        case .turns: "เทิร์นที่เสร็จแล้วของบทบาทที่โปรเจกต์นี้ใช้"
+        }
     }
 
     private func minutes(_ seconds: TimeInterval) -> String {

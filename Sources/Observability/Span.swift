@@ -41,6 +41,17 @@ public struct Span: Sendable, Codable, Identifiable {
     /// spans have always known how long something took, and until now nothing
     /// could say what it took that long *for*.
     public var workPackage: String?
+    /// What kind of thing this span was producing — `Assignment.deliverableKind`
+    /// (§19.7, P10.15).
+    ///
+    /// Set on assignment spans and nothing else, and it is the whole reason
+    /// they exist. "How long does this take" is a question about a *kind of
+    /// work*, and the only thing that had ever been recorded was who did it: a
+    /// band built from a role is a band built from a literature review and a
+    /// bug fix averaged together. Kept as its own field rather than folded into
+    /// `name` so the name stays a small vocabulary the Live Monitor can group
+    /// by, and so a query can ask for a kind without string surgery.
+    public var deliverableKind: String?
 
     public var duration: TimeInterval? {
         endedAt.map { $0.timeIntervalSince(startedAt) }
@@ -57,7 +68,8 @@ public struct Span: Sendable, Codable, Identifiable {
                 promptTokens: Int? = nil,
                 completionTokens: Int? = nil,
                 detail: String? = nil,
-                workPackage: String? = nil) {
+                workPackage: String? = nil,
+                deliverableKind: String? = nil) {
         self.id = id
         self.parent = parent
         self.name = name
@@ -65,12 +77,29 @@ public struct Span: Sendable, Codable, Identifiable {
         self.scope = scope
         self.status = status
         self.workPackage = workPackage
+        self.deliverableKind = deliverableKind
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.promptTokens = promptTokens
         self.completionTokens = completionTokens
         self.detail = detail
     }
+}
+
+extension Span {
+    /// The names the readers filter on.
+    ///
+    /// Constants rather than literals at both ends: `durations(forRole:)` spent
+    /// a release matching a name nothing else agreed on, and the band it fed
+    /// was made of tool calls. A reader that greps for a string the writer no
+    /// longer emits does not fail — it quietly returns nothing, or worse, the
+    /// wrong population.
+    public static let turnName = "turn"
+    /// One assignment, start to finish, including every attempt it took.
+    public static let assignmentName = "assignment"
+    /// One round of work inside an assignment. A child of the assignment span,
+    /// so a rework loop is visible as what it is rather than as one long wait.
+    public static let attemptName = "attempt"
 }
 
 /// Where spans go. P1.6 adds a SurrealDB-backed sink; tests use an in-memory one.

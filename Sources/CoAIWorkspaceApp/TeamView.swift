@@ -103,6 +103,8 @@ struct TeamView: View {
                 }
             }
 
+            workPackagePicker
+
             if let status = model.status {
                 Label(status.message, systemImage: status.isError
                       ? "exclamationmark.triangle" : "checkmark.circle")
@@ -112,6 +114,36 @@ struct TeamView: View {
             }
         }
         .padding(12)
+    }
+
+    /// Which leaf of the plan this run is against (§19.6, P10.4).
+    ///
+    /// The same control the chat header has, for the same reason and now for a
+    /// second one: an assignment is where most of a project's hours actually
+    /// go, and until this the ledger's `work_package` column was written by
+    /// nobody — so "how much time has this promise cost" could only ever see
+    /// chat. Choosing nothing stays legitimate; not every run is against a plan.
+    @ViewBuilder
+    private var workPackagePicker: some View {
+        if !model.workPackages.isEmpty {
+            HStack(spacing: 8) {
+                Picker("ใบงาน", selection: $model.workPackage) {
+                    Text("ไม่ผูกกับใบงาน").tag(String?.none)
+                    ForEach(model.workPackages) { package in
+                        Text(package.title).tag(String?.some(package.id))
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: 260)
+                .labelsHidden()
+                .disabled(model.isRunning)
+                .accessibilityLabel("เลือกใบงานที่งานทีมชุดนี้ทำอยู่")
+                .help("เวลาที่ทีมใช้กับงานชุดนี้จะถูกนับเข้าใบงานที่เลือก")
+                Text("เวลาของทุกงานในแผนชุดนี้จะถูกนับเข้าใบงานที่เลือก")
+                    .font(.caption2).foregroundStyle(.secondary)
+                Spacer()
+            }
+        }
     }
 }
 
