@@ -253,6 +253,14 @@ let package = Package(
                           dependencies: ["MLXRuntime", "ExecutorContract", "LLMProviders",
                                          "CoreEngine", "Config"]),
 
+        // P15.5 — what Tier 1 can take with several streams open, measured
+        // through `ModelRouter` rather than through curl, because the number it
+        // produces is the span of control P16 builds an organisation on. An
+        // executable for the same reason as MLXCheck: it needs hardware
+        // `swift test` does not have, and it takes minutes.
+        .executableTarget(name: "TierOneCheck",
+                          dependencies: ["LLMProviders", "AgentKit"]),
+
         // M1 — hook chain, approval broker, tool gateway, agent loop. Every
         // decision the system makes lives here (ARCHITECTURE §5).
         .target(name: "CoreEngine",

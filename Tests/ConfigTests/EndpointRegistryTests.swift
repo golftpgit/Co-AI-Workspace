@@ -146,6 +146,65 @@ struct EndpointProbeTests {
         let served = EndpointProbe.served(in: Data(#"{"data":[{"id":"m"}]}"#.utf8))
         #expect(served.maxModelLength == nil)
     }
+
+
+    @Test("an unreachable endpoint is reported, not thrown")
+    func unreachableIsAVerdict() async {
+        let probe = EndpointProbe()
+        let check = await probe.check(InferenceEndpoint(name: "dead",
+                                                        baseURL: "http://127.0.0.1:9/v1",
+                                                        model: "m"), timeout: 2)
+        #expect(!check.isUsable)
+        #expect(check.message.contains("ต่อไม่ได้"))
+    }
+
+    @Test("a paid endpoint with no key says so before anything is sent")
+    func missingKeyIsCaughtFirst() async {
+        let probe = EndpointProbe()
+        let check = await probe.check(
+            InferenceEndpoint(name: "hosted", baseURL: "https://api.example/v1", model: "big",
+                              kind: .paid, apiKeyEnvironmentVariable: "COAI_TEST_KEY_ABSENT"))
+        #expect(check.verdict == .missingKey("COAI_TEST_KEY_ABSENT"))
+    }
+
+    // P9.3: the Keychain refusing to open is not the same as no key, and the
+    // probe must not send the person to type in a key they already have.
+    @Test("a key that could not be read is its own verdict, not 'no key'")
+    func unreadableKeyIsNotMissingKey() async {
+        let name = "COAI_TEST_KEY_LOCKED"
+        SecretStore.install(MemoryVault(failing: true))
+        defer { SecretStore.install(nil) }
+
+        let check = await EndpointProbe().check(
+            InferenceEndpoint(name: "hosted", baseURL: "https://api.example/v1", model: "big",
+                              kind: .paid, apiKeyEnvironmentVariable: name))
+        guard case .keyUnreadable = check.verdict else {
+            Issue.record("a locked Keychain was reported as \(check.verdict)")
+            return
+        }
+        #expect(check.message.contains("ไม่ได้แปลว่ายังไม่ได้ตั้ง"))
+    }
+
+    // P9.4: a server that answers and rejects the key is not an unreachable
+    // server, and saying so sends the person to check the wrong thing.
+    @Test("a rejected key is not reported as a connection problem")
+    func rejectedKeyIsItsOwnVerdict() {
+        let check = EndpointCheck(verdict: .keyRejected(status: 401))
+        #expect(check.isUsable == false)
+        #expect(check.message.contains("เครือข่ายไม่ได้มีปัญหา"))
+        #expect(check.message.contains("ต่อไม่ได้") == false)
+    }
+
+    // The message a person sees when nothing is listening used to be
+    // Foundation's English sentence in the middle of a Thai screen.
+    @Test("an unreachable endpoint explains itself in the app's language")
+    func unreachableIsReadable() async {
+        let check = await EndpointProbe().check(
+            InferenceEndpoint(name: "เครื่องในแล็บ", baseURL: "http://127.0.0.1:9/v1", model: "m"),
+            timeout: 2)
+        #expect(check.message.contains("เครื่องในแล็บ"))
+        #expect(check.message.contains("Could not connect") == false)
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -208,63 +267,5 @@ struct ModelResolutionTests {
         // The other message sends a person to fix a typo; this one sends them
         // to make a choice. Same dot, different next step.
         #expect(choose.message.contains("ไม่มีโมเดลชื่อนี้") == false)
-    }
-
-    @Test("an unreachable endpoint is reported, not thrown")
-    func unreachableIsAVerdict() async {
-        let probe = EndpointProbe()
-        let check = await probe.check(InferenceEndpoint(name: "dead",
-                                                        baseURL: "http://127.0.0.1:9/v1",
-                                                        model: "m"), timeout: 2)
-        #expect(!check.isUsable)
-        #expect(check.message.contains("ต่อไม่ได้"))
-    }
-
-    @Test("a paid endpoint with no key says so before anything is sent")
-    func missingKeyIsCaughtFirst() async {
-        let probe = EndpointProbe()
-        let check = await probe.check(
-            InferenceEndpoint(name: "hosted", baseURL: "https://api.example/v1", model: "big",
-                              kind: .paid, apiKeyEnvironmentVariable: "COAI_TEST_KEY_ABSENT"))
-        #expect(check.verdict == .missingKey("COAI_TEST_KEY_ABSENT"))
-    }
-
-    // P9.3: the Keychain refusing to open is not the same as no key, and the
-    // probe must not send the person to type in a key they already have.
-    @Test("a key that could not be read is its own verdict, not 'no key'")
-    func unreadableKeyIsNotMissingKey() async {
-        let name = "COAI_TEST_KEY_LOCKED"
-        SecretStore.install(MemoryVault(failing: true))
-        defer { SecretStore.install(nil) }
-
-        let check = await EndpointProbe().check(
-            InferenceEndpoint(name: "hosted", baseURL: "https://api.example/v1", model: "big",
-                              kind: .paid, apiKeyEnvironmentVariable: name))
-        guard case .keyUnreadable = check.verdict else {
-            Issue.record("a locked Keychain was reported as \(check.verdict)")
-            return
-        }
-        #expect(check.message.contains("ไม่ได้แปลว่ายังไม่ได้ตั้ง"))
-    }
-
-    // P9.4: a server that answers and rejects the key is not an unreachable
-    // server, and saying so sends the person to check the wrong thing.
-    @Test("a rejected key is not reported as a connection problem")
-    func rejectedKeyIsItsOwnVerdict() {
-        let check = EndpointCheck(verdict: .keyRejected(status: 401))
-        #expect(check.isUsable == false)
-        #expect(check.message.contains("เครือข่ายไม่ได้มีปัญหา"))
-        #expect(check.message.contains("ต่อไม่ได้") == false)
-    }
-
-    // The message a person sees when nothing is listening used to be
-    // Foundation's English sentence in the middle of a Thai screen.
-    @Test("an unreachable endpoint explains itself in the app's language")
-    func unreachableIsReadable() async {
-        let check = await EndpointProbe().check(
-            InferenceEndpoint(name: "เครื่องในแล็บ", baseURL: "http://127.0.0.1:9/v1", model: "m"),
-            timeout: 2)
-        #expect(check.message.contains("เครื่องในแล็บ"))
-        #expect(check.message.contains("Could not connect") == false)
     }
 }
