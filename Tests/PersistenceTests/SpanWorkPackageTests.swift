@@ -48,6 +48,41 @@ struct SpanWorkPackageTests {
         #expect(elapsed.count == 2)
     }
 
+    /// A tool call is a child of the turn that made it, and both carry the work
+    /// package — so every tool call was being added to the leaf twice, once
+    /// inside its turn's duration and once on its own. Found while drawing the
+    /// calendar axis (P10.9), because the chart puts the summed figure next to a
+    /// picture of the same time and the two did not agree.
+    @Test("time inside another span is not added to it again", .timeLimit(.minutes(2)))
+    func nestedSpansAreNotDoubleCounted() async throws {
+        guard let server = try await makeServer(port: 18_624) else { return }
+        defer { Task { await server.shutdown() } }
+        let sink = SurrealSpanSink(client: await server.client)
+        let project = ProjectID("pj_nested")
+
+        let started = Date().addingTimeInterval(-60)
+        var turn = Span(name: Span.turnName, role: .analyst, scope: .project(project),
+                        startedAt: started, workPackage: "wp_a")
+        turn.status = .succeeded
+        turn.endedAt = started.addingTimeInterval(60)
+        await sink.record(turn)
+
+        // Three fifteen-second calls made *during* that minute.
+        for index in 0..<3 {
+            let toolStart = started.addingTimeInterval(Double(index) * 15)
+            var call = Span(parent: turn.id, name: "tool:run_shell", role: .analyst,
+                            scope: .project(project), status: .succeeded,
+                            startedAt: toolStart,
+                            endedAt: toolStart.addingTimeInterval(15),
+                            workPackage: "wp_a")
+            call.status = .succeeded
+            await sink.record(call)
+        }
+
+        #expect(try await sink.elapsedByWorkPackage(project: project)["wp_a"] == 60,
+                "the tool calls were added to the turn that contains them")
+    }
+
     @Test("one project's time is not another's", .timeLimit(.minutes(2)))
     func projectsDoNotShareTime() async throws {
         guard let server = try await makeServer(port: 18_622) else { return }

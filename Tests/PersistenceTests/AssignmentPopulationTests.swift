@@ -114,8 +114,8 @@ struct AssignmentPopulationTests {
     }
 
     // The rows a schedule with a real time axis is drawn from (§19.7, P10.9).
-    @Test("a project's assignments come back with their times", .timeLimit(.minutes(2)))
-    func assignmentsForTheSchedule() async throws {
+    @Test("a project's work comes back as pieces on a calendar", .timeLimit(.minutes(2)))
+    func workForTheSchedule() async throws {
         guard let server = try await makeServer(port: 18_695) else { return }
         defer { Task { await server.shutdown() } }
         let sink = SurrealSpanSink(client: await server.client)
@@ -134,10 +134,57 @@ struct AssignmentPopulationTests {
         await sink.record(assignmentSpan(kind: "รายงานสรุป", seconds: 999,
                                          project: ProjectID("pj_other"), startedAt: start))
 
-        let rows = try await sink.assignments(project: project)
+        let (rows, total) = try await sink.topLevelWork(project: project)
         #expect(rows.count == 3, "another project's work is on this project's chart")
+        #expect(total == 3)
         #expect(rows.map(\.workPackage) == ["wp_a", "wp_b", nil], "not in start order")
         #expect(rows.allSatisfy { $0.endedAt != nil })
         #expect(rows.first?.deliverableKind == "รายงานสรุป")
+    }
+
+    // The chart is drawn from these rows and the total beside it is summed from
+    // the same rule, so a piece already inside another piece must not be here
+    // either — otherwise the picture and the number are two answers.
+    @Test("a piece inside another piece is not drawn again", .timeLimit(.minutes(2)))
+    func nestedWorkIsNotAPiece() async throws {
+        guard let server = try await makeServer(port: 18_696) else { return }
+        defer { Task { await server.shutdown() } }
+        let sink = SurrealSpanSink(client: await server.client)
+        let project = ProjectID("pj_nested_chart")
+
+        let parent = assignmentSpan(kind: "รายงานสรุป", seconds: 600, project: project,
+                                    workPackage: "wp_a")
+        await sink.record(parent)
+        var attempt = Span(parent: parent.id, name: Span.attemptName, role: .writer,
+                           scope: .project(project), status: .succeeded,
+                           workPackage: "wp_a")
+        attempt.endedAt = attempt.startedAt.addingTimeInterval(200)
+        await sink.record(attempt)
+        // Still running: nothing to draw a bar to yet.
+        await sink.record(Span(name: Span.turnName, role: .writer, scope: .project(project),
+                               workPackage: "wp_a"))
+
+        let (rows, total) = try await sink.topLevelWork(project: project)
+        #expect(rows.map(\.name) == [Span.assignmentName])
+        #expect(total == 1)
+    }
+
+    // A busy project must not silently show a third of its history as though it
+    // were all of it — the same rule the knowledge graph follows.
+    @Test("a truncated chart says how much it is not showing", .timeLimit(.minutes(2)))
+    func truncationIsReported() async throws {
+        guard let server = try await makeServer(port: 18_697) else { return }
+        defer { Task { await server.shutdown() } }
+        let sink = SurrealSpanSink(client: await server.client)
+        let project = ProjectID("pj_busy")
+
+        for index in 0..<7 {
+            await sink.record(assignmentSpan(kind: "รายงานสรุป", seconds: 60, project: project,
+                                             startedAt: Date().addingTimeInterval(Double(index) * 60)))
+        }
+
+        let (rows, total) = try await sink.topLevelWork(project: project, limit: 3)
+        #expect(rows.count == 3)
+        #expect(total == 7, "the caller cannot tell it is looking at part of the history")
     }
 }
