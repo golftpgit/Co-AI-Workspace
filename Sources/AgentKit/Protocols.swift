@@ -219,6 +219,25 @@ public struct Assignment: Sendable, Identifiable, Codable, Equatable {
         self.acceptanceCriteria = acceptanceCriteria
         self.deliverableType = deliverableType
     }
+
+    /// The kind of thing this produces, in the form two assignments are
+    /// compared by (§19.7, P10.15).
+    ///
+    /// `deliverableType` is free text a model or a person wrote, so "รายงานสรุป"
+    /// and " รายงานสรุป " are the same promise typed twice. Trimming and case
+    /// are all this does deliberately: merging "รายงานสรุป" with
+    /// "รายงานสรุปผลการวิเคราะห์" would build one forecast population out of two
+    /// different jobs, and a band is only worth reading if everything in it is
+    /// the same kind of work. Two small populations that each say "ยังน้อยเกินไป"
+    /// beat one large one that is wrong.
+    public var deliverableKind: String { Self.deliverableKind(deliverableType) }
+
+    public static func deliverableKind(_ raw: String) -> String {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+    }
 }
 
 public struct Evidence: Sendable, Equatable, Codable {

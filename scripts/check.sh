@@ -807,6 +807,58 @@ else
   fail "the SecretsAuditTests target is gone — nothing checks that secrets stay off disk (P9.3)"
 fi
 
+# P10.15 — the four ways assignment spans go back to being nothing.
+#
+# 1. The lead is handed the span sink. `spans:` is an optional argument with a
+#    default of nil, so dropping it at the one construction site compiles, runs,
+#    passes every test in CoreEngine (they pass their own sink) and silently
+#    turns the whole feature off: the schedule loses its durations and the
+#    forecast band quietly falls back to chat turns. D6 again, and this time the
+#    hole is a default argument rather than a missing screen.
+#    The range stops at the closing `})` of the call, not at the first `)`:
+#    the first version of this rule ran to end of file and passed happily with
+#    the argument deleted, because `spans:` appears again further down.
+if awk '/let team = TeamOrchestrator\(/,/^            \}\)/' Sources/CoAIWorkspaceApp/Engine.swift \
+   | grep -q "spans:"; then
+  ok "the team writes spans, so its work has a duration anybody can read"
+else
+  fail "TeamOrchestrator is built without a span sink — team work would record no time (P10.15)"
+fi
+
+# 2. No query names a span kind in a string literal. `durations(forRole:)` was
+#    written against `name = 'turn'` while nothing agreed that was the name, and
+#    before that against no name filter at all — so a schedule was drawn from a
+#    p90 of `kb_search` calls. A reader that greps for a string the writer no
+#    longer emits does not fail; it returns the wrong population.
+LITERAL_SPAN_NAME=$(grep -n "name = '" Sources/Persistence/SurrealSpanSink.swift || true)
+if [ -n "$LITERAL_SPAN_NAME" ]; then
+  echo "$LITERAL_SPAN_NAME" | sed 's/^/   /'
+  fail "a span query hardcodes a span name — use Span.assignmentName/turnName (P10.15)"
+else
+  ok "the forecast asks for the span names the writers actually emit"
+fi
+
+# 3. The time popover reads what the band is made of rather than asserting it.
+#    The sentence beside this band has been wrong twice — "งานชนิดเดียวกัน" over
+#    a band of tool calls, then over a band of chat turns — both times because
+#    the claim lived on the screen and the population lived three modules away.
+if grep -q "forecast.basis" Sources/CoAIWorkspaceApp/StatusBarView.swift; then
+  ok "the forecast band names its own population instead of the screen guessing"
+else
+  fail "the time popover describes the band without reading its basis (P10.15)"
+fi
+
+# 4. The work-package picker on the team screen reaches the run. `run` takes
+#    `workPackage:` with a default of nil, so a picker that is read by nothing
+#    looks like it works and files every hour under no promise — which is the
+#    state `LedgerRow.work_package` was already in for four plan items.
+if awk '/team.run\(/,/\) \{ event in/' Sources/CoAIWorkspaceApp/TeamViewModel.swift \
+   | grep -q "workPackage:"; then
+  ok "the leaf the team screen shows is the leaf the run is filed under"
+else
+  fail "the team screen's work-package picker is not passed to the run (P10.4/P10.15)"
+fi
+
 if grep -rn ": \[String: Any\]" Sources --include=*.swift | grep -q "Sendable"; then
   fail "[String: Any] on a Sendable type (see ARCHITECTURE App. C)"
 else

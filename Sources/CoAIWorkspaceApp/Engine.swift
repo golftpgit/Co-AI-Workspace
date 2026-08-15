@@ -393,6 +393,11 @@ struct Engine: Sendable {
             // made of.
             reviewer: QAReviewer(),
             ledgerStore: taskLedger,
+            // The same sink every tool call and turn already writes to (§16).
+            // Until this the team was the one part of the system that produced
+            // no spans at all, so the schedule had no durations to draw and the
+            // forecast band had to be built out of chat turns.
+            spans: spans,
             // §21.2 / P12.7 — the lessons a closed project left behind, in
             // front of the role that should already know them. Read at
             // assignment time so a project closed this morning teaches this

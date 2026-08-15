@@ -175,30 +175,54 @@ public final class ProjectsViewModel {
         await refreshProficiency()
     }
 
+    /// The forecast band, and what it is made of (§19.10, §19.7, P10.15).
+    ///
     /// Read once when the screen attaches rather than on every redraw: it is a
     /// scan of up to two thousand spans, and it changes on the scale of days.
-    /// Completed turns for the roles this project has actually assigned work
-    /// to, for the forecast band (§19.10, P10.15).
     ///
-    /// Two things were wrong before. The role was the constant `.analyst`,
-    /// whatever the project was doing — so a software project's band came from
-    /// analysts' work. And nothing filtered the span kind, so the population
-    /// was mostly individual tool calls: the band drawn on a schedule was a p90
-    /// of `kb_search` durations. `durations(forRole:)` now returns turns only,
-    /// and this asks about the right roles.
-    private func turnDurations(spans: SurrealSpanSink, project id: ProjectID) async -> [TimeInterval] {
-        var roles: Set<Role> = []
-        if let ledger, let rows = try? await ledger.rows(scope: .project(id)) {
-            roles = Set(rows.map(\.role))
-        }
+    /// The band has been wrong twice, both times in the population rather than
+    /// the arithmetic. First it was every span carrying a role — overwhelmingly
+    /// `tool:kb_search` — so a schedule was being drawn from a p90 of search
+    /// calls. Then it was completed turns, which is closer but is still a
+    /// message-and-tools round trip standing in for a reviewed promise. Now that
+    /// `TeamOrchestrator` records an assignment as a span, the first choice is
+    /// the real thing: **finished assignments that produced the same kind of
+    /// deliverable this project produces**.
+    ///
+    /// The fallback to turns stays, because a fresh install has no assignments
+    /// and a popover that says nothing is less useful than one that says what it
+    /// has. What it must not do is fall back silently — so the basis travels
+    /// with the estimate and the popover prints it.
+    private func forecastBand(spans: SurrealSpanSink,
+                              project id: ProjectID) async -> ScheduleEstimate? {
+        var rows: [LedgerRow] = []
+        if let ledger { rows = (try? await ledger.rows(scope: .project(id))) ?? [] }
         // A project that has assigned nothing yet has no shape to forecast
-        // from; every role would be a band made of unrelated work.
-        guard !roles.isEmpty else { return [] }
+        // from; every role and every kind would be a band made of unrelated work.
+        guard !rows.isEmpty else { return nil }
+
+        // Kinds this project actually produces, commonest first — a project
+        // that writes ten reports and one script should be told about reports.
+        var frequency: [String: Int] = [:]
+        for row in rows where !row.deliverableType.isEmpty {
+            frequency[Assignment.deliverableKind(row.deliverableType), default: 0] += 1
+        }
+        for kind in frequency.sorted(by: { ($0.value, $1.key) > ($1.value, $0.key) }).map(\.key) {
+            let durations = (try? await spans.durations(forDeliverableKind: kind)) ?? []
+            // The first kind with enough finished work behind it wins. Pooling
+            // the kinds together would put a literature review and a bug fix in
+            // one distribution, which is the average nobody's work resembles.
+            if let estimate = Schedule.estimate(from: durations,
+                                                basis: .assignments(kind: kind)) {
+                return estimate
+            }
+        }
+
         var durations: [TimeInterval] = []
-        for role in roles.sorted(by: { $0.rawValue < $1.rawValue }) {
+        for role in Set(rows.map(\.role)).sorted(by: { $0.rawValue < $1.rawValue }) {
             durations += (try? await spans.durations(forRole: role)) ?? []
         }
-        return durations
+        return Schedule.estimate(from: durations, basis: .turns)
     }
 
     public func refreshProficiency() async {
@@ -662,8 +686,7 @@ public final class ProjectsViewModel {
             // The frame is a multiple of how long this kind of work usually
             // takes, so an unfinished plan with no history has no ratio to
             // report — not a ratio of zero.
-            let history = await turnDurations(spans: spans, project: id)
-            if let estimate = Schedule.estimate(from: history), estimate.p90 > 0 {
+            if let estimate = await forecastBand(spans: spans, project: id), estimate.p90 > 0 {
                 reading.timeRatio = spent / estimate.p90
                 known.insert(.time)
             }
@@ -713,11 +736,7 @@ public final class ProjectsViewModel {
             // The band the time popover draws. Across projects on purpose: the
             // whole point of a p90 is that it comes from more than the project
             // asking for it.
-            //
-            // From the roles this project actually uses, not from a hardcoded
-            // `.analyst` — which is what it was, so a project with no analyst
-            // in it was shown a band built from somebody else's work.
-            forecast = Schedule.estimate(from: await turnDurations(spans: spans, project: id))
+            forecast = await forecastBand(spans: spans, project: id)
         }
         if let ledger, let rows = try? await ledger.rows(scope: .project(id)) {
             // Only the rounds that were actually redone. A row with one attempt

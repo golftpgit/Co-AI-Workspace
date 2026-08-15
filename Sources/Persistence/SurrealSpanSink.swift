@@ -40,6 +40,7 @@ public actor SurrealSpanSink: SpanSink {
         content.set("completion_tokens", span.completionTokens)
         content.setString("detail", span.detail)
         content.setString("work_package", span.workPackage)
+        content.setString("deliverable_kind", span.deliverableKind)
 
         do {
             try await client.exec(
@@ -97,7 +98,8 @@ public actor SurrealSpanSink: SpanSink {
                     promptTokens: row["prompt_tokens"]?.intValue,
                     completionTokens: row["completion_tokens"]?.intValue,
                     detail: row["detail"]?.stringValue,
-                    workPackage: row["work_package"]?.stringValue)
+                    workPackage: row["work_package"]?.stringValue,
+                    deliverableKind: row["deliverable_kind"]?.stringValue)
     }
 
     // MARK: - measurements (§19.7, §19.10, P10.15)
@@ -184,10 +186,51 @@ public actor SurrealSpanSink: SpanSink {
         return ToolProficiencyReader.aggregate(attempts)
     }
 
-    /// Durations of finished work of the same shape, for the forecast band.
+    /// How long finished assignments of this kind took, for the forecast band.
     ///
-    /// Across projects on purpose: the whole point of a p90 is that it comes
-    /// from more than the project asking for it.
+    /// This is the population the band was always supposed to be made of, and
+    /// until assignments were recorded as spans there was nothing to make it
+    /// from. Three properties matter and each is a `WHERE` clause:
+    ///
+    ///  • **the whole assignment, not one attempt.** The parent span spans every
+    ///    round including the reworked ones, because a plan estimate that only
+    ///    counted first-time-right work would promise a schedule nobody hits;
+    ///  • **succeeded only.** Cancelled work stopped for a reason that has
+    ///    nothing to do with how long it takes, and an escalation is how long it
+    ///    took to *give up*. Both would drag the band away from the question;
+    ///  • **across projects.** The whole point of a p90 is that it comes from
+    ///    more than the project asking for it.
+    public func durations(forDeliverableKind kind: String) async throws -> [TimeInterval] {
+        let normalised = Assignment.deliverableKind(kind)
+        guard !normalised.isEmpty else { return [] }
+        let rows = try await client.query("""
+            SELECT started_at, ended_at FROM span
+            WHERE name = type::string($name) AND deliverable_kind = type::string($kind)
+              AND status = 'succeeded' AND ended_at != NONE
+            LIMIT 500
+            """, vars: ["name": Span.assignmentName, "kind": normalised]).first?.rows ?? []
+        return Self.seconds(rows)
+    }
+
+    /// Finished assignments in one project, in the order they ran — the rows a
+    /// schedule with a real time axis is drawn from (§19.7, P10.9).
+    ///
+    /// A bar needs a start, an end and something to sit on. The first two have
+    /// existed on every span since P1.6; the third is `work_package`, and rows
+    /// without one come back all the same. Work outside the plan is real work,
+    /// and a chart that hid it would make the plan look like the whole story.
+    public func assignments(project: ProjectID) async throws -> [Span] {
+        let rows = try await client.query("""
+            SELECT * FROM span
+            WHERE project_id = type::string($pid) AND name = type::string($name)
+            ORDER BY started_at ASC
+            """, vars: ["pid": project.rawValue,
+                        "name": Span.assignmentName]).first?.rows ?? []
+        return rows.compactMap(Self.span(from:))
+    }
+
+    /// Durations of finished turns by the same role — the *fallback* population
+    /// for the forecast band.
     ///
     /// **Turn spans only.** Without the name filter this returned every span
     /// carrying the role — which is overwhelmingly `tool:kb_search` and the
@@ -196,20 +239,27 @@ public actor SurrealSpanSink: SpanSink {
     /// schedule. A p90 of search calls is not an estimate for a work package,
     /// and it read as one.
     ///
-    /// A turn is still not an assignment — nothing records an assignment as a
-    /// span yet — so this is the closest honest population, and the caller says
-    /// what the band is made of rather than implying it is a plan estimate.
+    /// A turn is still not an assignment: one is a message-and-tools round trip,
+    /// the other is a promise reviewed against criteria. Now that assignments
+    /// are recorded, this is what a young install falls back to before it has
+    /// three of anything — and the caller has to say so on screen, because a
+    /// band whose population is a different unit of work is exactly the kind of
+    /// number this project keeps having to go back and label.
     public func durations(forRole role: Role) async throws -> [TimeInterval] {
         let rows = try await client.query("""
             SELECT started_at, ended_at FROM span
-            WHERE role = type::string($role) AND name = 'turn'
+            WHERE role = type::string($role) AND name = type::string($name)
               AND status = 'succeeded' AND ended_at != NONE
             LIMIT 500
-            """, vars: ["role": role.rawValue]).first?.rows ?? []
+            """, vars: ["role": role.rawValue,
+                        "name": Span.turnName]).first?.rows ?? []
+        return Self.seconds(rows)
+    }
 
-        return rows.compactMap { row in
-            guard let started = Self.date(row["started_at"]),
-                  let ended = Self.date(row["ended_at"]) else { return nil }
+    private static func seconds(_ rows: [[String: SurrealValue]]) -> [TimeInterval] {
+        rows.compactMap { row in
+            guard let started = date(row["started_at"]),
+                  let ended = date(row["ended_at"]) else { return nil }
             return max(0, ended.timeIntervalSince(started))
         }
     }

@@ -5,9 +5,9 @@ import AgentKit
 // Order and the critical path (ARCHITECTURE §19.7, P10.9).
 //
 // §19.7 is blunt about what a Gantt for AI work can honestly show. There are no
-// person-days here, so the horizontal axis is not calendar time until the spans
-// carry a work package to measure — what *is* real today is the order the work
-// must happen in and which chain decides the end.
+// person-days here, so the horizontal axis is not calendar time — what *is* real
+// today is the order the work must happen in, which chain decides the end, and
+// (since assignments became spans) how long each leaf has actually cost.
 //
 // So this file computes two things and refuses to invent a third:
 //
@@ -22,15 +22,42 @@ import AgentKit
 // ─────────────────────────────────────────────────────────────
 
 public struct ScheduleEstimate: Sendable, Equatable {
+    /// What the band is made of.
+    ///
+    /// Carried on the estimate rather than remembered by the caller, because
+    /// the caller forgot: the time popover spent a release labelled "งานชนิด
+    /// เดียวกัน" over a band computed from chat turns, and before that from
+    /// individual tool calls. A band is a claim about a population, and a claim
+    /// whose population is only known at the call site travels without it.
+    public enum Basis: Sendable, Equatable {
+        /// Whole assignments that produced the same kind of thing, start to
+        /// finish, rework included. The population §19.7 asks for.
+        case assignments(kind: String)
+        /// Completed chat turns by the roles this project assigns to — the
+        /// fallback for an install with fewer than three finished assignments
+        /// of any one kind. A turn is a smaller unit of work than an
+        /// assignment, so this band reads low and must say so.
+        case turns
+    }
+
     public let p50: TimeInterval
     public let p90: TimeInterval
     public let sampleCount: Int
+    public let basis: Basis
+
+    /// What the sample is counted in, for a sentence that has to name it.
+    public var unit: String {
+        switch basis {
+        case .assignments: "งาน"
+        case .turns: "เทิร์น"
+        }
+    }
 
     public var label: String {
         func minutes(_ seconds: TimeInterval) -> String {
             seconds < 90 ? "\(Int(seconds)) วิ" : "\(Int(seconds / 60)) นาที"
         }
-        return "\(minutes(p50))–\(minutes(p90)) (จาก \(sampleCount) ครั้ง)"
+        return "\(minutes(p50))–\(minutes(p90)) (จาก \(sampleCount) \(unit))"
     }
 }
 
@@ -154,7 +181,13 @@ public enum Schedule {
     /// p50/p90 of past durations. `nil` for fewer than three samples: two
     /// measurements are not a distribution, and a band drawn from them is a
     /// guess wearing a statistic's clothes (§19.7).
-    public static func estimate(from durations: [TimeInterval]) -> ScheduleEstimate? {
+    ///
+    /// `basis` has no default on purpose. Every caller has to say what it
+    /// measured, because the two times this band was wrong it was not the
+    /// arithmetic that was wrong — it was that nobody could see, at the call
+    /// site, which population had been handed in.
+    public static func estimate(from durations: [TimeInterval],
+                                basis: ScheduleEstimate.Basis) -> ScheduleEstimate? {
         let sorted = durations.filter { $0 > 0 }.sorted()
         guard sorted.count >= 3 else { return nil }
         func quantile(_ q: Double) -> TimeInterval {
@@ -164,6 +197,7 @@ public enum Schedule {
             let fraction = position - Double(lower)
             return sorted[lower] + (sorted[upper] - sorted[lower]) * fraction
         }
-        return ScheduleEstimate(p50: quantile(0.5), p90: quantile(0.9), sampleCount: sorted.count)
+        return ScheduleEstimate(p50: quantile(0.5), p90: quantile(0.9),
+                                sampleCount: sorted.count, basis: basis)
     }
 }

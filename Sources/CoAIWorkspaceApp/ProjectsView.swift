@@ -682,9 +682,13 @@ struct ProjectsView: View {
     // MARK: - order, board and RACI (§19.7–§19.9)
 
     /// Not a Gantt, and it says so. §19.7: the horizontal axis of a real Gantt
-    /// is calendar time, and this system has no honest number to put there yet
-    /// — the spans do not carry a work package. What *is* true today is the
-    /// order and which chain decides the end, so that is what is drawn.
+    /// is calendar time. The spans now carry a work package *and* a duration —
+    /// `SurrealSpanSink.assignments(project:)` returns the rows a bar would be
+    /// drawn from — so what stands between this and a calendar axis is no longer
+    /// missing data. It is one unanswered question: a leaf touched on Monday and
+    /// again on Thursday did not take four days, and a bar spanning them says it
+    /// did (P10.9). What *is* true today is the order, which chain decides the
+    /// end, and how long each leaf has actually cost.
     @ViewBuilder
     private func scheduleBox() -> some View {
         let ordered = Schedule.order(model.wbs)
@@ -743,7 +747,15 @@ struct ProjectsView: View {
                         Text("มี \(paths.count) เส้นทางที่ยาวเท่ากัน — ช้าเส้นไหนก็ช้าทั้งโครงการ")
                             .font(.caption2).foregroundStyle(.secondary)
                     }
-                    Text("แกนนอนคือลำดับ ไม่ใช่เวลา — span ยังไม่ผูกกับใบงาน จึงยังไม่มีแถบเวลาจริงหรือช่วงประมาณการ (§19.7, P10.15)")
+                    // Was "span ยังไม่ผูกกับใบงาน" — no longer true, and a
+                    // caption that explains an absence by a cause that has
+                    // been fixed is worse than no caption. What is still
+                    // missing is narrower and worth naming exactly: the
+                    // durations exist per leaf (the figure beside each bar is
+                    // one), what is not decided is what a bar on a calendar
+                    // axis should mean when a leaf was touched on Monday and
+                    // again on Thursday with 40 minutes of work in between.
+                    Text("แกนนอนคือลำดับ ไม่ใช่เวลา — เวลาที่ใช้จริงต่อใบมีแล้ว (ตัวเลขข้างแถบ) แต่แถบบนแกนปฏิทินยังไม่วาด เพราะงานที่แตะวันจันทร์แล้วแตะอีกทีวันพฤหัส ไม่ได้ใช้เวลาสี่วัน (§19.7, P10.9)")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             }

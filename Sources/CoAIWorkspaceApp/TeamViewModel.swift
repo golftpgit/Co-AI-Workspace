@@ -4,6 +4,7 @@ import AgentKit
 import CoreEngine
 import Observability
 import Persistence
+import ProjectKit
 
 // ─────────────────────────────────────────────────────────────
 // The Team screen's state (ARCHITECTURE §2.2, P4.7).
@@ -96,7 +97,21 @@ public final class TeamViewModel {
     public private(set) var isPlanning = false
     public private(set) var status: Status?
     public var goal = ""
-    public var scope: Scope = .central
+    public private(set) var scope: Scope = .central
+
+    /// Which leaf of the plan this run is work against (§19.6, P10.4).
+    ///
+    /// Chosen rather than guessed, exactly as the chat header does it. A team
+    /// run that is not against any promise is a real thing — trying something
+    /// out, answering a question — and inventing an attribution would put hours
+    /// on a package nobody worked on.
+    ///
+    /// It also closes a gap that had been open since P10.4: `LedgerRow` has
+    /// carried `work_package` since then and **nothing ever wrote it**, so the
+    /// column existed, the index existed, and every query over it returned
+    /// nothing.
+    public var workPackage: String?
+    public private(set) var workPackages: [WorkPackage] = []
 
     /// Nothing runs while this is non-empty: the plan is the user's to change
     /// first, whether the lead wrote it or they did (§2.6).
@@ -107,6 +122,7 @@ public final class TeamViewModel {
     /// into an `Assignment` (P4.7's rework).
     private var stored: [LedgerRow] = []
     private var ledger: TaskLedgerStore?
+    private var projects: ProjectService?
     /// Read at start time, not stored: the switch lives on the chat header and
     /// the gateway is where all three modes are already kept, so asking it is
     /// how the team screen sees the same setting rather than a second copy.
@@ -117,11 +133,35 @@ public final class TeamViewModel {
     public init() {}
 
     public func attach(team: TeamOrchestrator, ledger: TaskLedgerStore,
-                       gateway: ToolGateway) async {
+                       gateway: ToolGateway, projects: ProjectService,
+                       scope: Scope) async {
         self.team = team
         self.ledger = ledger
         self.gateway = gateway
+        self.projects = projects
+        self.scope = scope
+        // The lead files its rows and spans under the same workspace the screen
+        // is reading. Until this it was pinned to `.central` at boot, so team
+        // work never appeared in any project's tolerance strip or schedule.
+        await team.use(scope: scope)
+        await loadWorkPackages()
         await reload()
+    }
+
+    /// Open leaves of the current project, for the picker. Empty in General,
+    /// which is correct — there is no plan there to be against.
+    private func loadWorkPackages() async {
+        guard let projects, case .project(let id) = scope else {
+            workPackages = []
+            workPackage = nil
+            return
+        }
+        workPackages = await projects.breakdown(of: id).openLeaves
+        // A package finished or deleted elsewhere must not stay selected: the
+        // next run would be filed against something closed.
+        if let current = workPackage, !workPackages.contains(where: { $0.id == current }) {
+            workPackage = nil
+        }
     }
 
     /// What the ledger has on disk. Live rows already on screen keep their
@@ -241,12 +281,14 @@ public final class TeamViewModel {
         status = nil
 
         let untilDone = await gateway?.currentModes.runUntilDone ?? false
+        let leaf = workPackage
 
         run = Task { [weak self] in
             // The orchestrator emits from its own actor; every event is hopped
             // back to the main actor before it touches view state.
             let deliverables = await team.run(goal: goal, plan: approved,
-                                              runUntilDone: untilDone) { event in
+                                              runUntilDone: untilDone,
+                                              workPackage: leaf) { event in
                 Task { @MainActor in self?.apply(event) }
             }
             await MainActor.run {

@@ -95,8 +95,27 @@ public actor TeamOrchestrator {
     /// knowledge base, and the orchestrator's job is to make sure they arrive,
     /// not to know where they are kept.
     private let roleMemory: (@Sendable (Role) async -> [String])?
-    private let scope: Scope
+    /// Which workspace the ledger rows and spans are filed under.
+    ///
+    /// A `var` since P10.15, and this was not a refactor for its own sake: it
+    /// was fixed at `.central` for the life of the process, so every piece of
+    /// team work in the app was filed under General no matter which project was
+    /// open. Everything downstream reads by project — the tolerance strip, the
+    /// forecast band, the schedule — so they were all asking about a table that
+    /// team work never wrote a row into.
+    private var scope: Scope
+    /// Where assignment spans go (§19.7, P10.15). Optional like the ledger: the
+    /// team works without observability, it just cannot be asked afterwards how
+    /// long anything took.
+    private let spans: (any SpanSink)?
     private var ledger: [String: LedgerEntry] = [:]
+    /// Assignment spans still open, by assignment id. Held so the span can be
+    /// closed by whatever ends the work — a pass, an escalation, or a person
+    /// cancelling it from the screen — rather than only by the happy path. A
+    /// span left running is not a neutral omission: the process view shows it
+    /// as live work forever, and having no `ended_at` it silently drops out of
+    /// every duration the forecast is built from.
+    private var openSpans: [String: Span] = [:]
     private let log = AppLog.logger("team")
 
     /// One row per assignment, so "who is doing what, and how did it go" is
@@ -114,6 +133,11 @@ public actor TeamOrchestrator {
         public var cancelled: Bool = false
         public var findings: [String]
         public var deliverable: Deliverable?
+        /// Which leaf of the plan this work is against (§19.6, P10.4). The
+        /// ledger row has carried this field since P10.4 and nothing ever wrote
+        /// it, so "how much of the plan has actually been worked on" had a
+        /// column and no data.
+        public var workPackage: String?
     }
 
     public init(router: ModelRouter,
@@ -122,6 +146,7 @@ public actor TeamOrchestrator {
                 maxFanOut: Int = 4,
                 retryCap: Int = 3,
                 ledgerStore: TaskLedgerStore? = nil,
+                spans: (any SpanSink)? = nil,
                 roleMemory: (@Sendable (Role) async -> [String])? = nil,
                 scope: Scope = .central) {
         self.router = router
@@ -130,9 +155,26 @@ public actor TeamOrchestrator {
         self.maxFanOut = maxFanOut
         self.retryCap = retryCap
         self.ledgerStore = ledgerStore
+        self.spans = spans
         self.roleMemory = roleMemory
         self.scope = scope
     }
+
+    /// Points the lead at another workspace.
+    ///
+    /// Refused mid-run: half a run's rows landing in one project and half in
+    /// another would be a ledger that cannot be read by either. The screen
+    /// disables the switch while work is in flight for the same reason.
+    public func use(scope newScope: Scope) {
+        guard openSpans.isEmpty else { return }
+        guard newScope != scope else { return }
+        scope = newScope
+        // The in-memory ledger belongs to the workspace it was read for; the
+        // durable rows are re-read by the screen.
+        ledger.removeAll()
+    }
+
+    public var currentScope: Scope { scope }
 
     /// Written on every state change, not once at the end: a run that is
     /// interrupted is exactly when someone wants to read the ledger.
@@ -150,7 +192,8 @@ public actor TeamOrchestrator {
                 findings: entry.findings,
                 summary: entry.deliverable?.summary,
                 acceptanceCriteria: entry.assignment.acceptanceCriteria,
-                deliverableType: entry.assignment.deliverableType), scope: scope)
+                deliverableType: entry.assignment.deliverableType,
+                workPackageID: entry.workPackage), scope: scope)
         } catch {
             // Was `try?`. A ledger that silently stops updating is
             // indistinguishable from one that is up to date, which is the worse
@@ -163,6 +206,60 @@ public actor TeamOrchestrator {
 
     public var entries: [LedgerEntry] {
         ledger.values.sorted { $0.assignment.id < $1.assignment.id }
+    }
+
+    // MARK: - how long the work took (§19.6, §19.7, P10.15)
+
+    /// Opens the span that covers one whole assignment.
+    ///
+    /// One span for the assignment, one child per attempt. The parent is what
+    /// the forecast band is built from, and it deliberately spans *every* round
+    /// including the reworked ones: an estimate that counted only work which
+    /// passed first time would promise a schedule that only holds when nothing
+    /// goes wrong. The children are what make a rework loop legible on the Live
+    /// Monitor, where until now three failed rounds and one slow one looked the
+    /// same.
+    ///
+    /// `deliverableKind` goes on the parent and on nothing else — it is the
+    /// field that says which population a duration belongs to, and putting it on
+    /// the attempts as well would let a query that forgot the name filter count
+    /// one assignment four times.
+    private func beginAssignmentSpan(_ assignment: Assignment,
+                                     workPackage: String?) async -> Span {
+        var span = Span(name: Span.assignmentName,
+                        role: assignment.role,
+                        scope: scope,
+                        workPackage: workPackage,
+                        deliverableKind: assignment.deliverableKind)
+        span.detail = assignment.goal
+        openSpans[assignment.id] = span
+        await spans?.record(span)
+        return span
+    }
+
+    /// Closes it, whatever ended it. Does nothing when there is no span open,
+    /// so cancelling something that was never started writes no phantom row.
+    private func closeAssignmentSpan(_ assignmentID: String,
+                                     _ status: SpanStatus,
+                                     detail: String? = nil) async {
+        guard var span = openSpans.removeValue(forKey: assignmentID) else { return }
+        span.status = status
+        span.endedAt = Date()
+        if let detail { span.detail = detail }
+        await spans?.record(span)
+    }
+
+    /// One round of work. A child of the assignment span, and never carries a
+    /// deliverable kind — see `beginAssignmentSpan`.
+    private func recordAttempt(_ assignment: Assignment, attempt: Int,
+                               parent: SpanID?, workPackage: String?,
+                               startedAt: Date, status: SpanStatus,
+                               detail: String?) async {
+        await spans?.record(Span(parent: parent, name: Span.attemptName,
+                                role: assignment.role, scope: scope,
+                                status: status, startedAt: startedAt, endedAt: Date(),
+                                detail: detail ?? "รอบที่ \(attempt)",
+                                workPackage: workPackage))
     }
 
     // MARK: - what a person can do to one piece of work (P4.7)
@@ -186,6 +283,7 @@ public actor TeamOrchestrator {
         let previous = ledger[assignment.id]
         let attempt = (previous?.attempts ?? 0) + 1
         let reasons = note.isEmpty ? ["ผู้ใช้สั่งให้แก้"] : [note]
+        let workPackage = previous?.workPackage
 
         ledger[assignment.id] = LedgerEntry(
             assignment: assignment, attempts: attempt, passed: false,
@@ -193,10 +291,17 @@ public actor TeamOrchestrator {
             // they have taken it back off the "waiting for a human" pile by
             // being the human.
             needsHuman: false, cancelled: false,
-            findings: reasons, deliverable: previous?.deliverable)
+            findings: reasons, deliverable: previous?.deliverable,
+            workPackage: workPackage)
         await persist(assignment.id)
         emit(.rework(assignmentID: assignment.id, attempt: attempt, reasons: reasons))
         emit(.assigned(assignment, attempt: attempt))
+        // An attempt span, not an assignment span — and so carrying no
+        // deliverable kind. A human send-back is one more round on a promise
+        // that was already made, and recording it as a whole assignment would
+        // put a single round into a population of whole assignments and pull
+        // the forecast band down every time somebody asks for a small fix.
+        let started = Date()
 
         do {
             let deliverable = try await specialist.execute(
@@ -210,12 +315,22 @@ public actor TeamOrchestrator {
             ledger[assignment.id]?.passed = verdict.passed
             ledger[assignment.id]?.findings = verdict.findings
             await persist(assignment.id)
+            await recordAttempt(assignment, attempt: attempt, parent: nil,
+                                workPackage: workPackage, startedAt: started,
+                                status: verdict.passed ? .succeeded : .failed,
+                                detail: "แก้ตามที่ผู้ใช้สั่ง (รอบที่ \(attempt)): "
+                                    + (verdict.passed ? "ผ่านการตรวจ"
+                                                      : verdict.findings.joined(separator: " · ")))
             emit(.reviewed(assignmentID: assignment.id, passed: verdict.passed,
                            findings: verdict.findings))
             return verdict.passed ? deliverable : nil
         } catch {
             ledger[assignment.id]?.findings = ["\(error)"]
             await persist(assignment.id)
+            await recordAttempt(assignment, attempt: attempt, parent: nil,
+                                workPackage: workPackage, startedAt: started,
+                                status: .failed,
+                                detail: "แก้ตามที่ผู้ใช้สั่ง (รอบที่ \(attempt)): \(error)")
             emit(.rework(assignmentID: assignment.id, attempt: attempt,
                          reasons: ["\(error)"]))
             return nil
@@ -247,6 +362,11 @@ public actor TeamOrchestrator {
             return
         }
         await persist(assignmentID)
+        // Cancelled, not succeeded and not failed. Work somebody stopped
+        // halfway says nothing about how long that kind of work takes, and the
+        // forecast reads succeeded spans only — so this closes the row for the
+        // process view without letting a half-finished duration into the band.
+        await closeAssignmentSpan(assignmentID, .cancelled, detail: reason)
         emit(.cancelled(assignmentID: assignmentID, reason: reason))
     }
 
@@ -258,9 +378,17 @@ public actor TeamOrchestrator {
     /// that it cannot continue forever.
     public static let continuationCap = 3
 
+    /// - Parameter workPackage: which leaf of the plan this run is work against
+    ///   (§19.6). One per run rather than one per assignment, because that is
+    ///   what the screen can honestly ask for: a person picks the promise they
+    ///   are working on and the lead breaks it down, so every assignment in the
+    ///   plan is against the same leaf. `nil` is a real state — not every run
+    ///   is against a plan — and the ledger and the spans both say so rather
+    ///   than inventing a leaf.
     public func run(goal: String,
                     plan providedPlan: TeamPlan? = nil,
                     runUntilDone: Bool = false,
+                    workPackage: String? = nil,
                     emit: @Sendable (TeamEvent) -> Void = { _ in }) async -> [Deliverable] {
         let plan: TeamPlan
         do {
@@ -276,7 +404,8 @@ public actor TeamOrchestrator {
         }
         emit(.planned(plan))
 
-        var delivered = await work(through: plan.assignments, emit: emit)
+        var delivered = await work(through: plan.assignments,
+                                   against: { _ in workPackage }, emit: emit)
 
         // §5.5's third switch. "Done" is read off the ledger rather than asked
         // of the model: what is left is a fact, and a model's opinion of
@@ -290,9 +419,13 @@ public actor TeamOrchestrator {
                 let pending = resumable.compactMap(\.assignment)
                     .filter { ledger[$0.id] == nil }
                 guard !pending.isEmpty else { break }
+                // The leaf each row was filed under, kept with it.
+                let leaves = Dictionary(resumable.map { ($0.assignmentID, $0.workPackageID) },
+                                        uniquingKeysWith: { first, _ in first })
 
                 emit(.continuing(remaining: pending.count))
-                delivered += await work(through: pending, emit: emit)
+                delivered += await work(through: pending,
+                                        against: { leaves[$0.id] ?? nil }, emit: emit)
             }
         }
 
@@ -300,7 +433,14 @@ public actor TeamOrchestrator {
         return delivered
     }
 
+    /// - Parameter against: the leaf each assignment is work against. A lookup
+    ///   rather than one value because the two callers know it differently: a
+    ///   fresh plan is all against the leaf the person picked, while work picked
+    ///   back up by run-until-done carries the leaf it was originally filed
+    ///   under, and re-labelling it with today's would move somebody else's time
+    ///   onto this promise.
     private func work(through assignments: [Assignment],
+                      against: (Assignment) -> String?,
                       emit: @Sendable (TeamEvent) -> Void) async -> [Deliverable] {
         var delivered: [Deliverable] = []
 
@@ -313,6 +453,7 @@ public actor TeamOrchestrator {
             // before it starts rather than findable if it thinks to look. A
             // lesson somebody has to search for reaches the people who already
             // knew it.
+            let workPackage = against(original)
             let remembered = await roleMemory?(original.role) ?? []
             let assignment = remembered.isEmpty ? original : Assignment(
                 id: original.id, role: original.role, goal: original.goal,
@@ -321,7 +462,10 @@ public actor TeamOrchestrator {
                 deliverableType: original.deliverableType)
 
             ledger[assignment.id] = LedgerEntry(assignment: assignment, attempts: 0,
-                                                passed: false, findings: [])
+                                                passed: false, findings: [],
+                                                workPackage: workPackage)
+            let assignmentSpan = await beginAssignmentSpan(assignment,
+                                                           workPackage: workPackage)
 
             var attempt = 0
             var lastFindings: [String] = []
@@ -331,6 +475,7 @@ public actor TeamOrchestrator {
                 ledger[assignment.id]?.attempts = attempt
                 await persist(assignment.id)
                 emit(.assigned(assignment, attempt: attempt))
+                let attemptStarted = Date()
 
                 let deliverable: Deliverable
                 do {
@@ -343,6 +488,10 @@ public actor TeamOrchestrator {
                     // change like any other, and skipping it left the stored
                     // row claiming the attempt was still in its first round.
                     await persist(assignment.id)
+                    await recordAttempt(assignment, attempt: attempt,
+                                        parent: assignmentSpan.id, workPackage: workPackage,
+                                        startedAt: attemptStarted, status: .failed,
+                                        detail: "รอบที่ \(attempt): \(error)")
                     emit(.rework(assignmentID: assignment.id, attempt: attempt,
                                  reasons: lastFindings))
                     continue
@@ -357,10 +506,18 @@ public actor TeamOrchestrator {
                                findings: verdict.findings))
 
                 await persist(assignment.id)
+                await recordAttempt(assignment, attempt: attempt,
+                                    parent: assignmentSpan.id, workPackage: workPackage,
+                                    startedAt: attemptStarted,
+                                    status: verdict.passed ? .succeeded : .failed,
+                                    detail: verdict.passed
+                                        ? "รอบที่ \(attempt): ผ่านการตรวจ"
+                                        : "รอบที่ \(attempt): \(verdict.findings.joined(separator: " · "))")
 
                 if verdict.passed {
                     ledger[assignment.id]?.passed = true
                     await persist(assignment.id)
+                    await closeAssignmentSpan(assignment.id, .succeeded)
                     delivered.append(deliverable)
                     break
                 }
@@ -378,6 +535,13 @@ public actor TeamOrchestrator {
                 // it was the one state never written down: the run ended here
                 // and storage still described the first attempt.
                 await persist(assignment.id)
+                // Closed as failed, not left open. An escalation is the longest
+                // and most expensive thing that happens here, so a span that
+                // stayed running would drop exactly the worst case out of every
+                // duration the forecast is built from — and leave the process
+                // view claiming the work is still going.
+                await closeAssignmentSpan(assignment.id, .failed,
+                                          detail: lastFindings.joined(separator: " · "))
                 emit(.escalated(assignmentID: assignment.id, attempts: attempt,
                                 reasons: lastFindings))
             }
