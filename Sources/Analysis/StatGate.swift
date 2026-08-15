@@ -133,11 +133,26 @@ public struct StatResult: Sendable {
 public enum StatError: Error, CustomStringConvertible, Equatable {
     case notEnoughData(String)
     case badShape(String)
+    /// The test is in §12.3's table and this module cannot run it (P19.0).
+    ///
+    /// **A refusal, not a result.** The alternative shipped for a while: a
+    /// `StatResult` with `NaN` for the statistic, the summary the caller passed
+    /// in, and an assumption marked unchecked. Everything about that is
+    /// defensible except the shape — it is the same shape a real answer has, so
+    /// it renders in the same box, gets pasted into the same manuscript, and
+    /// the one field that says "this was never computed" is an assumption row
+    /// most people skim past. A method §12.4 pre-registered and nothing ever
+    /// calculated must fail loudly at the point of use.
+    case notImplemented(test: StatisticalTest, plannedIn: String)
 
     public var description: String {
         switch self {
         case .notEnoughData(let message): "ข้อมูลไม่พอสำหรับการทดสอบนี้: \(message)"
         case .badShape(let message): "รูปร่างข้อมูลไม่ถูกต้อง: \(message)"
+        case .notImplemented(let test, let planned):
+            "ระบบยังคำนวณ \(test.rawValue) เองไม่ได้ (แผน \(planned)) — "
+                + "จึงไม่มีผลให้รายงาน · ถ้าจำเป็นต้องใช้ตอนนี้ ต้องคำนวณจากเครื่องมือภายนอก "
+                + "แล้วบันทึกที่มาไว้ อย่าอ้างว่าเป็นผลของระบบนี้"
         }
     }
 }
@@ -516,22 +531,22 @@ public enum StatGate {
             alternatives: [])
     }
 
-    /// Survival analysis is in §12.3's table and is **not** implemented here.
+    /// Survival analysis is in §12.3's table and is **not** implemented here
+    /// (P19.0, P19.3).
     ///
-    /// It is a function rather than an omission on purpose: an Analyst who
-    /// reaches for it gets a result that says, in the same shape as every other
-    /// result, that proportional hazards was not checked — instead of a silence
-    /// that reads like a clean bill of health.
-    public static func survivalUnchecked(summary: String) -> StatResult {
-        StatResult(
-            test: .survival, statistic: .nan, pValue: .nan, degreesOfFreedom: nil,
-            summary: summary,
-            assumptions: [AssumptionCheck(
-                name: "proportional hazards",
-                wasChecked: false, passed: false, statistic: nil, pValue: nil,
-                detail: "ต้องมีโมเดล Cox ที่ fit แล้วถึงจะตรวจได้ (Schoenfeld residuals) "
-                        + "— โมดูลนี้ยังไม่ทำ จึงถือว่ายังไม่ได้ตรวจ ไม่ใช่ผ่าน")],
-            alternatives: [])
+    /// **This throws where it used to answer.** The old version returned a
+    /// `StatResult` carrying `NaN`, whatever summary the caller passed in, and
+    /// an assumption row marked unchecked — honest in content and wrong in
+    /// shape. A result is a thing that gets rendered, quoted and pasted into a
+    /// manuscript; the one row saying "nothing was computed" is the row a
+    /// reader skims. §2.5's rule is evidence over claims, and a summary handed
+    /// in by the caller and handed straight back is a claim wearing a result's
+    /// clothes.
+    ///
+    /// Kaplan–Meier, log-rank and Cox belong here and are P19.3's work. Until
+    /// then this refuses, and the refusal says what to do instead.
+    public static func survival() throws -> StatResult {
+        throw StatError.notImplemented(test: .survival, plannedIn: "P19.3")
     }
 
     // MARK: - the checks themselves

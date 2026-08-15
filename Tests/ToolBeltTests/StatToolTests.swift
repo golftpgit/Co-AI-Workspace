@@ -31,6 +31,51 @@ private func run(_ arguments: String) async throws -> String {
 @Suite("The stat gate reaches the Analyst")
 struct StatToolTests {
 
+    // P19.1/P19.2 — the epidemiological measures, reached the same way. A
+    // capability only its own unit tests can call is the D6 mistake, and these
+    // are the measures a medical paper is actually written in.
+    @Test("the trial's risk ratio comes back through the tool, interval attached")
+    func riskRatioThroughTheTool() async throws {
+        // Physicians' Health Study: 104/11,037 on aspirin, 189/11,034 on placebo.
+        let text = try await run("""
+        {"test": "risk_ratio", "table": [[104, 10933], [189, 10845]]}
+        """)
+        #expect(text.contains("0.5501"))
+        #expect(text.contains("95% CI"), "a point estimate reached the caller with no interval")
+        #expect(text.contains("Katz"))
+    }
+
+    @Test("an NNT whose interval crosses zero is refused through the tool too")
+    func nntRefusedThroughTheTool() async {
+        // The refusal has to survive the trip: this is the number that gets
+        // quoted in an abstract.
+        await #expect(throws: (any Error).self) {
+            _ = try await run("""
+            {"test": "nnt", "table": [[50, 450], [55, 445]]}
+            """)
+        }
+    }
+
+    @Test("diagnostic accuracy will not answer without a prevalence")
+    func diagnosticNeedsPrevalence() async {
+        await #expect(throws: (any Error).self) {
+            _ = try await run("""
+            {"test": "diagnostic_accuracy", "table": [[45, 5], [95, 855]]}
+            """)
+        }
+    }
+
+    @Test("a predictive value arrives with the prevalence it depends on")
+    func predictiveValuesCarryPrevalence() async throws {
+        let text = try await run("""
+        {"test": "diagnostic_accuracy", "table": [[45, 5], [95, 855]], "prevalence": 0.01}
+        """)
+        // 8%, from a test that is "90% accurate" both ways.
+        #expect(text.contains("0.0833"))
+        #expect(text.contains("0.0100"), "the prevalence the numbers depend on was not reported")
+        #expect(text.contains("PPV/NPV เปลี่ยนตามความชุก"))
+    }
+
     /// P6.6's Done-when, through the path the agent actually uses.
     @Test("a t-test on non-normal data comes back with the warning attached")
     func nonNormalTTest() async throws {

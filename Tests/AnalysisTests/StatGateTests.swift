@@ -279,16 +279,21 @@ struct StatGateTests {
         #expect(result.statistic > 0.9)             // R²
     }
 
-    /// An assumption that could not be checked is not an assumption that
-    /// passed. This is the rule the whole gate rests on.
-    @Test("survival analysis reports proportional hazards as unchecked, not as passed")
-    func survivalIsHonest() {
-        let result = StatGate.survivalUnchecked(summary: "Kaplan–Meier จาก R")
-        #expect(!result.isClean)
-        let assumption = result.assumptions[0]
-        #expect(!assumption.wasChecked)
-        #expect(!assumption.passed)
-        #expect(result.report.contains("?"))
+    /// P19.0 — a test this module cannot run must refuse, not answer.
+    ///
+    /// It used to return a `StatResult` with `NaN` and an unchecked assumption:
+    /// honest in content, wrong in shape. Anything shaped like a result gets
+    /// rendered like one, and the row saying nothing was computed is the row a
+    /// reader skims. The refusal also has to say what to do instead, or it is
+    /// just a dead end.
+    @Test("a test that is not implemented refuses instead of returning a result")
+    func survivalRefuses() {
+        #expect(throws: StatError.notImplemented(test: .survival, plannedIn: "P19.3")) {
+            _ = try StatGate.survival()
+        }
+        let message = StatError.notImplemented(test: .survival, plannedIn: "P19.3").description
+        #expect(message.contains("ยังคำนวณ"))
+        #expect(message.contains("เครื่องมือภายนอก"), "the refusal does not say what to do instead")
     }
 
     @Test("logistic regression says out loud which assumption it cannot check")
