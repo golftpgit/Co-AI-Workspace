@@ -975,6 +975,30 @@ else
   ok "every project write goes past the archive guard, or is a documented exception"
 fi
 
+# P21.4 — participants' words do not follow a project into the shared library.
+#
+# The rule is ethical and the code is the only place it is enforced: a
+# transcript and a journal article are both text in one index, the same shape
+# and the same size, and only `Origin` says which of them may travel. Two ways
+# that protection disappears without anybody meaning it to:
+#
+# 1. `.fieldwork` stops being answered with `stays`.
+if grep -A 6 "case \.fieldwork:" Sources/Knowledge/ClosingHandover.swift \
+   | grep -q "return \.stays"; then
+  ok "fieldwork stays with the project the people who gave it agreed to"
+else
+  fail "participant data is no longer refused at the closing handover (§19.1.1, P21.4)"
+fi
+
+# 2. A `default:` arm appears, so the next `Origin` case — a new kind of source,
+#    a new import path — is decided by whatever the fallback happens to be
+#    rather than by somebody asking whether it may be published.
+if grep -q "default:" Sources/Knowledge/ClosingHandover.swift; then
+  fail "the handover rule grew a default arm — a new source kind would inherit somebody else's answer (P21.4)"
+else
+  ok "every kind of source is answered by name in the handover rule"
+fi
+
 # P18.1 — the conflict criteria are three conditions, not one opinion.
 #
 # §11.7 borrows NLI's definition: a contradiction needs the same question, a

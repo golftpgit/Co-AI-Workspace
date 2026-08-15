@@ -52,6 +52,9 @@ struct ProjectFlows {
             registers: RegisterStore(client: client),
             baselines: BaselineStore(client: client),
             lessons: LessonPublisher(knowledge: knowledge),
+            // §19.1.1's handover, wired the way the app wires it (P21.4).
+            handover: ClosingHandoverStore(knowledge: knowledge,
+                                           conflicts: ConflictStore(client: client)),
             benefits: BenefitStore(client: client),
             tailoring: TailoringStore(client: client),
             closingLedger: ClosingLedger(conflicts: ConflictStore(client: client),
@@ -461,6 +464,26 @@ struct ProjectFlows {
             return "8 ข้อผ่านทีละข้อ · ประโยชน์วัดได้ 75% ของเป้า"
         }
 
+        // Two chunks in the project's own library before it closes: a paper it
+        // read, and an interview it collected. What happens to each at closing
+        // is the whole of P21.4.
+        await check("[คลัง] ก่อนปิด: มีทั้งเอกสารอ้างอิงภายนอกและบทสัมภาษณ์ผู้เข้าร่วม") {
+            try await knowledge.save([
+                IndexedChunk(id: "ref-shift-work", text: "Shift work is associated with medication error",
+                             scope: .project(project.id),
+                             provenance: Provenance(documentID: "doc-shift", title: "Shift work review",
+                                                    origin: .web(url: URL(string: "https://example.org/shift")!),
+                                                    tier: .t2)),
+                IndexedChunk(id: "int-p07", text: "พยาบาลรายที่เจ็ดเล่าถึงเวรดึกสามคืนติดกัน",
+                             scope: .project(project.id),
+                             provenance: .fieldwork(documentID: "int-07", title: "บทสัมภาษณ์ 07",
+                                                    participantCode: "P07", collectedAt: Date())),
+            ])
+            let mine = try await knowledge.load(scope: .project(project.id))
+            guard mine.count >= 2 else { throw CheckFailure("บันทึกคลังของโปรเจกต์ไม่ครบ") }
+            return "\(mine.count) chunk ในคลังของโปรเจกต์"
+        }
+
         await check("[G4] ปิดโครงการแล้วบทเรียนไปโผล่ในคลังส่วนกลาง") {
             project = try await projects.advance(project.id)
             guard project.stage == .closed, project.closure == .completed else {
@@ -474,6 +497,30 @@ struct ProjectFlows {
                 throw CheckFailure("บทเรียนไม่ได้ไหลเข้าคลังส่วนกลาง (\(central.count) chunk)")
             }
             return "ปิดแล้ว · บทเรียนอยู่ใน central"
+        }
+
+        // The half that is an ethical promise rather than a convenience
+        // (§19.1.1, P21.4). Both chunks were in one index, the same shape, the
+        // same size; only their provenance says which may travel.
+        await check("[หลังปิด] เอกสารอ้างอิงขึ้นส่วนกลาง แต่บทสัมภาษณ์ผู้เข้าร่วมไม่ตามขึ้นไป") {
+            let central = try await knowledge.load(scope: .central)
+            guard let moved = central.first(where: { $0.id == "ref-shift-work" }) else {
+                throw CheckFailure("เอกสารอ้างอิงภายนอกไม่ได้ขึ้นส่วนกลาง")
+            }
+            guard moved.provenance.tier == .t2 else {
+                throw CheckFailure("เอกสารขึ้นไปโดยไม่มี tier เดิม — จะถูกจัดอันดับใหม่เหมือนไม่เคยมีใครประเมิน")
+            }
+            guard !central.contains(where: { $0.id == "int-p07" }) else {
+                throw CheckFailure("บทสัมภาษณ์ของผู้เข้าร่วมตามขึ้นไปที่คลังส่วนกลาง — "
+                                   + "คนที่ให้สัมภาษณ์ยินยอมกับงานนี้ งานเดียว")
+            }
+            // Still readable where it was collected: the promise is about
+            // publishing it onward, not about deleting it.
+            let archived = try await knowledge.load(scope: .project(project.id))
+            guard archived.contains(where: { $0.id == "int-p07" }) else {
+                throw CheckFailure("บทสัมภาษณ์หายไปจากโปรเจกต์ที่ปิดแล้วด้วย — archive ต้องอ่านได้")
+            }
+            return "อ้างอิงขึ้น (tier t2) · บทสัมภาษณ์อยู่ที่เดิม"
         }
 
         await check("[รายงานปิดโครงการ] ส่งมอบ · ประโยชน์ · บทเรียน · สิ่งที่ยกให้คนอื่น") {

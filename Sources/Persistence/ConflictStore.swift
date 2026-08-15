@@ -70,6 +70,20 @@ public actor ConflictStore {
             vars: ["uid": id, "decision": json])
     }
 
+    /// Moves a decided conflict into `central`, so the next project meets the
+    /// decision instead of re-litigating the same two sources (§19.1.1, P21.4).
+    ///
+    /// An update rather than a second row: a precedent that exists twice is a
+    /// precedent that can be answered two ways, and the card's identity is the
+    /// pair of passages it was raised over — which has not changed.
+    public func promoteToCentral(_ id: String) async throws {
+        try await client.exec("""
+            UPDATE conflict SET scope_kind = $kind, project_id = NONE
+            WHERE uid = type::string($uid) AND decided = true
+            """,
+            vars: ["uid": id, "kind": ScopeColumns.kind(.central)])
+    }
+
     /// Everything filed for a scope, decided and open alike. The decided ones
     /// are what stop the same question being asked twice; the open ones are
     /// the cards still waiting.
