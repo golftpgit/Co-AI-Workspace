@@ -166,3 +166,86 @@ struct TranscriptIngestTests {
         #expect(direct.map(\.text) == ingested.map { $0.0.text })
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// P11.8's remaining half: the transcript actually going in.
+//
+// `TranscriptIngest.chunks` and its three tests above were finished long
+// before anything called them, so the promise "a retrieved chunk cites the
+// passage" was true about a function and false about the app. These are about
+// the path from that function into a real index.
+// ─────────────────────────────────────────────────────────────
+
+@Suite("a transcript indexed like everything else")
+struct TranscriptIndexingTests {
+
+    private func ingest(_ source: Transcript, into index: inout KnowledgeIndex) async throws
+        -> IngestionReport {
+        let chunks = TranscriptIngest.chunks(of: source, chunker: Chunker(maxTokens: 24,
+                                                                          overlapTokens: 4))
+            .map { (chunk: $0.0, provenance: $0.1) }
+        return try await IngestionPipeline().ingest(chunks: chunks, into: &index,
+                                                    scope: .project(ProjectID("pj_q")),
+                                                    documentID: source.id)
+    }
+
+    // The claim P11.8 makes to a reader: a hit in the knowledge base can be
+    // followed back to the characters the participant said, not to the
+    // two-hour interview.
+    @Test("an indexed chunk can be cited back to its own passage in the transcript")
+    func indexedChunksStayCitable() async throws {
+        let source = transcript()
+        var index = KnowledgeIndex()
+        let report = try await ingest(source, into: &index)
+
+        #expect(report.chunksAdded > 1)
+        for chunk in index.allChunks {
+            let span = try #require(chunk.provenance.passage)
+            #expect(span.slice(of: source.text) == chunk.text,
+                    "a chunk in the index no longer resolves to the passage it came from")
+        }
+    }
+
+    // A transcript keeps its id when it is corrected, so a second ingest is the
+    // same interview said better. Keeping both would leave the library holding
+    // a retracted sentence and the corrected one with nothing to choose
+    // between them.
+    @Test("re-ingesting a corrected transcript replaces it rather than keeping both versions")
+    func correctionReplaces() async throws {
+        var source = transcript()
+        var index = KnowledgeIndex()
+        _ = try await ingest(source, into: &index)
+
+        source.text = source.text.replacingOccurrences(of: "สิบสองเตียง", with: "สิบสี่เตียง")
+        let second = try await ingest(source, into: &index)
+
+        #expect(second.chunksReplaced > 0, "the old version was left in the index")
+        let texts = index.allChunks.map(\.text).joined()
+        #expect(texts.contains("สิบสี่เตียง"))
+        #expect(texts.contains("สิบสองเตียง") == false,
+                "the retracted wording is still in the knowledge base")
+    }
+
+    // Every chunk of an interview is primary data. Reading it on the scale
+    // built for published sources would let the corroboration rule treat it
+    // like a journal article (§11.3's reason, unchanged here).
+    @Test("indexed transcript chunks carry no source tier")
+    func noTierOnPrimaryData() async throws {
+        var index = KnowledgeIndex()
+        _ = try await ingest(transcript(), into: &index)
+        #expect(index.allChunks.allSatisfy { $0.provenance.tier == nil })
+        #expect(index.allChunks.allSatisfy { $0.scope == .project(ProjectID("pj_q")) })
+    }
+
+    @Test("ingesting the identical transcript twice adds nothing the second time")
+    func idempotentWithoutChanges() async throws {
+        let source = transcript()
+        var index = KnowledgeIndex()
+        let first = try await ingest(source, into: &index)
+        let second = try await ingest(source, into: &index)
+
+        #expect(second.chunksAdded == first.chunksAdded,
+                "a re-ingest with no change should rebuild the same chunks")
+        #expect(index.allChunks.count == first.chunksAdded, "the index doubled")
+    }
+}

@@ -20,6 +20,12 @@ import Instruments
 
 struct CodingView: View {
     @Bindable var model: CodingViewModel
+    /// Sending a transcript to the knowledge base (§20.9, P11.8). A closure
+    /// rather than a second view model on this screen: the knowledge base is
+    /// owned by its own screen, and two models over one index would be two
+    /// answers to "what is in the library".
+    var ingest: ((Transcript) async -> Void)?
+    @State private var ingesting: String?
 
     @State private var newBook = ""
     @State private var newCode = ""
@@ -263,6 +269,46 @@ struct CodingView: View {
                 }
                 if model.units.isEmpty {
                     Text("ยังไม่มีช่วงข้อความ").font(.callout).foregroundStyle(.secondary)
+                }
+
+                // The transcripts themselves, and the one thing P11.8 could not
+                // do until now: put one in the knowledge base. `TranscriptIngest`
+                // and its tests have been ready since P11.8 and nothing called
+                // them, which made the chunks-with-spans a capability the app
+                // did not have.
+                if !model.transcripts.isEmpty {
+                    Divider()
+                    Text("บทถอดเทปในโครงการนี้").font(.callout).fontWeight(.medium)
+                    ForEach(model.transcripts) { transcript in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(transcript.title).font(.callout)
+                                Text("\(transcript.paragraphs.count) ย่อหน้า · "
+                                     + "รหัสผู้เข้าร่วม \(transcript.participantCode)")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if ingesting == transcript.id {
+                                ProgressView().controlSize(.small)
+                            } else if let ingest {
+                                Button("ส่งเข้าคลังความรู้") {
+                                    ingesting = transcript.id
+                                    Task {
+                                        await ingest(transcript)
+                                        ingesting = nil
+                                    }
+                                }
+                                .controlSize(.small)
+                                .accessibilityLabel("ส่ง \(transcript.title) เข้าคลังความรู้ของโครงการ")
+                            }
+                        }
+                    }
+                    Text("แต่ละส่วนที่เข้าคลังพกช่วงข้อความของตัวเองไป — ผลค้นจึงอ้างกลับไปที่ย่อหน้า "
+                         + "ไม่ใช่อ้างทั้งบทสัมภาษณ์สองชั่วโมง · ส่งซ้ำได้ ระบบจะแทนที่ของเดิม "
+                         + "ไม่ใช่เก็บไว้ทั้งสองรุ่น")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Divider()
                 }
 
                 // A transcript goes in whole and is split into passages here,
