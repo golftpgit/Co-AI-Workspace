@@ -92,6 +92,10 @@ public struct ProjectPaths: Sendable {
     /// Inside the app container, so a sandboxed app reaches it without the
     /// user having to grant anything.
     public var filesDirectory: URL { root.appending(path: "files") }
+    /// Where `install_package` puts third-party code (§10, P8.4). Inside the
+    /// project on purpose: a study whose library was installed machine-wide is
+    /// one whose environment moved under it the next time anything else was.
+    public var packagesDirectory: URL { root.appending(path: "packages") }
 
     /// Where M16 writes what people answered (§19.17). Its own directory beside
     /// the analysis one, and for the same reason: SQLite in WAL mode keeps a

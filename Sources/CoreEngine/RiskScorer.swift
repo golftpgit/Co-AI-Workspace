@@ -65,7 +65,7 @@ public struct DefaultRiskScorer: RiskScoring {
     static let notBuiltYet: [String: String] = [
         "read_file": "M6 FileTool — ยังไม่มี task ผูก",
         "write_file": "M6 FileTool — ยังไม่มี task ผูก",
-        "install_package": "P8.4 (Completeness Checklist ผูกไว้) — ต้องมีนโยบายเน็ตก่อน",
+
         "fetch_docs": "M6 — ต้องมีแหล่งเอกสารก่อน",
     ]
 
