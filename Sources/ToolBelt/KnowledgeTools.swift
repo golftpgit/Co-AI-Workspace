@@ -44,10 +44,16 @@ public struct KBSearchTool: AgentTool {
     private let index: @Sendable () async -> KnowledgeIndex
     private let embedder: (any Embedder)?
 
+    /// Per-role views declared in manifests (§21.2). Absent means every role
+    /// uses the standard one for its kind.
+    private let views: (@Sendable (Role) -> KnowledgeView?)?
+
     public init(index: @escaping @Sendable () async -> KnowledgeIndex,
-                embedder: (any Embedder)? = nil) {
+                embedder: (any Embedder)? = nil,
+                views: (@Sendable (Role) -> KnowledgeView?)? = nil) {
         self.index = index
         self.embedder = embedder
+        self.views = views
     }
 
     public func call(argumentsJSON: String, context: ToolContext) async throws -> ToolOutput {
@@ -64,10 +70,30 @@ public struct KBSearchTool: AgentTool {
         if results.isEmpty {
             // Lexical is a real answer, not a fallback that hides a failure —
             // and the caller is told which half answered.
-            results = index.search(query, scope: context.scope, limit: limit)
+            //
+            // The role's declared knowledge view is applied here (§21.2,
+            // P12.2). The context already carries the role, so a Writer
+            // searching the knowledge base gets the Writer's view without any
+            // caller remembering to pass one — which is the only version of
+            // this that stays true.
+            results = index.search(query, scope: context.scope, view: view(for: context),
+                                   limit: limit)
         }
 
         guard !results.isEmpty else {
+            // P12.6's first half: a search that returned nothing *because of
+            // the view* must say so. "ไม่พบข้อมูล" and "your role cannot see
+            // that kind of thing" send a reader to two different places, and
+            // only one of them is a knowledge base that is missing something.
+            let unfiltered = index.search(query, scope: context.scope, limit: limit)
+            if !unfiltered.isEmpty, let role = context.role {
+                return ToolOutput(text: """
+                    ไม่พบข้อมูลที่บทบาท **\(role.rawValue)** มองเห็นสำหรับ: \(query)
+                    มีอยู่ \(unfiltered.count) ส่วนในคลังที่ตรงคำค้น แต่ถูกกรองออกด้วยมุมมองความรู้ของบทบาทนี้ \
+                    (เช่น ระดับความน่าเชื่อถือขั้นต่ำ หรือเงื่อนไขว่าต้องอ้างอิงได้ครบ) — \
+                    ไม่ใช่ว่าคลังไม่มีข้อมูลเรื่องนี้
+                    """)
+            }
             return ToolOutput(text: "ไม่พบข้อมูลในคลังความรู้สำหรับ: \(query)")
         }
 
@@ -82,6 +108,13 @@ public struct KBSearchTool: AgentTool {
         }.joined(separator: "\n\n")
 
         return ToolOutput(text: rendered, artifacts: results.map(\.chunk.id))
+    }
+
+    /// The view this call searches through. A turn with no role attached is an
+    /// ordinary question from the person at the keyboard, and they see
+    /// everything their workspace holds.
+    private func view(for context: ToolContext) -> KnowledgeView {
+        context.role.map { views?($0) ?? .standard(for: $0) } ?? KnowledgeView()
     }
 }
 

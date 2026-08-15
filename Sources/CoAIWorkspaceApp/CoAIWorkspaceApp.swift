@@ -216,7 +216,7 @@ private struct RootView: View {
                                                   paths: engine.paths)
                         }
                 case .knowledge:
-                    KnowledgeView(model: knowledge)
+                    KnowledgeBaseView(model: knowledge)
                         .task {
                             await knowledge.attach(store: engine.knowledge)
                             knowledge.attach(policySource: engine.policySource)

@@ -12,7 +12,12 @@ import Knowledge
 // a result the user has to take on faith (§11.3).
 // ─────────────────────────────────────────────────────────────
 
-struct KnowledgeView: View {
+/// Renamed from `KnowledgeView` when §21.2's domain type arrived with the same
+/// name (P12.2). Inside the app target the local type shadows the imported one,
+/// so any future `KnowledgeView(...)` here would have silently built a SwiftUI
+/// screen where a retrieval filter was meant. The name belongs to the concept
+/// the architecture defines; this is the tab that shows the library.
+struct KnowledgeBaseView: View {
     @Bindable var model: KnowledgeViewModel
     @State private var selection: String?
     @State private var editingChunk: IndexedChunk?

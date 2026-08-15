@@ -10,6 +10,34 @@ import AgentKit
 // declares `run_shell` as "low" must not be able to walk past the gate.
 // ─────────────────────────────────────────────────────────────
 
+/// Tools that stop for a person no matter what the autonomy slider says
+/// (ARCHITECTURE §5.5, P14.4).
+///
+/// Not a property on the tool. `RunShellTool`'s header already gives the
+/// reason: a tool's own declaration is not what protects anything, because a
+/// manifest can declare whatever it likes. This list lives beside the scorer,
+/// where the chain reads it and the tool cannot.
+///
+/// **The principle, so the list can grow honestly.** A high risk level means
+/// "this could go badly", and `fullAutonomous` is a considered decision that
+/// the person will accept those odds while they are away. That trade needs the
+/// damage to be *visible afterwards* — a file overwritten, a command that
+/// failed, a row deleted — because seeing it is what makes accepting the odds
+/// reasonable. An entry belongs here when it is not: when the action runs code
+/// nobody in this system wrote, or changes the machine in a way the result
+/// never mentions. "The model was confident" is not an answer to either.
+public enum AlwaysAsk {
+    /// `install_package` downloads other people's code and runs it — an sdist
+    /// executes its own `setup.py` during installation. Whatever it did then
+    /// is not in the tool's output, not in the transcript, and not visible in
+    /// whatever the package is later used for.
+    public static let toolNames: Set<String> = ["install_package"]
+
+    public static func requiresHuman(_ toolName: String) -> Bool {
+        toolNames.contains(toolName)
+    }
+}
+
 public struct RiskAssessment: Sendable, Equatable {
     public let level: RiskLevel
     /// Why, in the user's words — this is what the approval sheet shows when

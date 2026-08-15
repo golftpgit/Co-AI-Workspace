@@ -236,6 +236,42 @@ public struct KnowledgeIndex: Sendable {
 
     /// Lexical only — for callers with no embedder available, and the path the
     /// system falls back to when the embedding endpoint is down.
+    /// Search as a role sees it (§21.2, P12.2).
+    ///
+    /// The view decides *what is searchable*, not what is filtered out of the
+    /// answer afterwards. Ranking a chunk and then removing it would make the
+    /// limit lie — ask for ten and get four, with nothing saying why — and it
+    /// would put the role's own working set into the ranking of everybody
+    /// else's.
+    ///
+    /// `scope` is the workspace the person is in; the view may widen it, and
+    /// always widens it to include `policy`.
+    public func search(_ query: String, scope: Scope, view: KnowledgeView,
+                       limit: Int = 10) -> [SearchResult] {
+        let visible = chunks.filter { chunk in
+            guard sameWorkspace(chunk.scope, as: scope) else { return false }
+            return view.admits(chunk)
+        }
+        return rankLexically(query, in: visible)
+            .map { entry in (entry.chunk, entry.score * view.weight(for: entry.chunk)) }
+            .sorted { $0.1 > $1.1 }
+            .prefix(limit).enumerated().map { index, entry in
+                SearchResult(chunk: entry.0, score: entry.1,
+                             lexicalRank: index + 1, semanticRank: nil)
+            }
+    }
+
+    /// A chunk belongs to this search when it is in the workspace being used,
+    /// or in `policy` — which every workspace is bound by.
+    private func sameWorkspace(_ chunkScope: Scope, as scope: Scope) -> Bool {
+        if chunkScope == scope { return true }
+        if case .policy = chunkScope { return true }
+        // A project also reads what is central; General does not read a
+        // project's material.
+        if case .project = scope, case .central = chunkScope { return true }
+        return false
+    }
+
     public func search(_ query: String, scope: Scope, limit: Int = 10) -> [SearchResult] {
         let visible = chunks.filter { $0.scope == scope }
         let lexical = rankLexically(query, in: visible)

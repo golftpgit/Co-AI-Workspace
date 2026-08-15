@@ -268,6 +268,7 @@ struct Engine: Sendable {
         // Everything P2 and P3 built is only a feature once it is on the tool
         // list — v1 shipped an MCP client that no session could reach (D6).
         let embedder = MLXEmbedder()
+        let declaredViews = DeclaredKnowledgeViews()
         await gateway.register([
             RunShellTool(registry: processes),
             // The only tool with the network open, and the only one that runs
@@ -292,7 +293,17 @@ struct Engine: Sendable {
                     }
                     return index
                 },
-                embedder: embedder),
+                embedder: embedder,
+                // §21.2 / P12.2 — the view a role searches through. A manifest
+                // may declare its own; otherwise the standard one for that
+                // role applies, so "why did the Writer not see that" is
+                // answered by a file rather than by reasoning about a prompt.
+                //
+                // Through a box because the roster is parsed further down —
+                // it needs the tool list this registration is building. Read
+                // at call time either way, which is the same rule the index
+                // closure above follows.
+                views: { [declaredViews] role in declaredViews.view(for: role) }),
             // §1.4.1 / P13.1 — T5 through the app's own headless web view. The
             // tool contract does not change: the agent still calls `web_search`
             // and still has to `fetch_page` before citing anything. What changes
@@ -473,6 +484,9 @@ struct Engine: Sendable {
         let agents = manifests.load(directory: paths.agentsDirectory, kind: ManifestKind.agent)
         let skills = manifests.load(directory: paths.skillsDirectory, kind: ManifestKind.skill)
         let roster = (agents.manifests + skills.manifests).map(manifests.entry(for:))
+        // Fill the box the knowledge-view lookup reads (§21.2). A manifest that
+        // declares nothing leaves the role on its standard view.
+        declaredViews.fill(from: roster)
 
         // §20.2 — project types, read with the same parser. Bundled first so a
         // fresh install can create a research project on day one; the person's
@@ -571,5 +585,37 @@ extension Engine {
     /// gets its own folder, opened the first time it is asked for.
     func stores(for scope: Scope) async -> WorkspaceStores {
         await workspaceStores.stores(for: scope)
+    }
+}
+
+/// The per-role knowledge views declared in manifests (§21.2, P12.2).
+///
+/// A box because of an ordering knot: `kb_search` is registered before the
+/// roster is parsed, and the roster cannot be parsed until the tool list
+/// exists — the parser refuses a manifest naming a tool the system does not
+/// have, which is a check worth keeping. Read at call time rather than
+/// captured, which is what `kb_search`'s index closure already does and for
+/// the same reason: the roster is reloaded while the app runs.
+final class DeclaredKnowledgeViews: @unchecked Sendable {
+    private let lock = NSLock()
+    private var byRole: [Role: KnowledgeView] = [:]
+
+    func fill(from roster: [RosterEntry]) {
+        var found: [Role: KnowledgeView] = [:]
+        for entry in roster {
+            guard let role = entry.manifest.base,
+                  let json = entry.manifest.knowledgeViewJSON,
+                  let data = json.data(using: .utf8),
+                  let view = try? JSONDecoder().decode(KnowledgeView.self, from: data)
+            else { continue }
+            found[role] = view
+        }
+        lock.withLock { byRole = found }
+    }
+
+    /// `nil` leaves the role on `KnowledgeView.standard(for:)` — the fallback
+    /// belongs to the tool, so there is one place that decides it.
+    func view(for role: Role) -> KnowledgeView? {
+        lock.withLock { byRole[role] }
     }
 }

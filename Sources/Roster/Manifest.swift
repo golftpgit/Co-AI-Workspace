@@ -40,6 +40,14 @@ public struct Manifest: Sendable, Equatable, Identifiable {
     public let base: Role?
     /// §7.2's v2 field, fed to the QA agent (§2.5).
     public let definitionOfDone: String?
+    /// §21.2's `knowledge_view:`, kept as the JSON it was written as.
+    ///
+    /// Text rather than a decoded `KnowledgeView`, for the reason P8.4 settled
+    /// about packages: this module *describes*, and the thing described is
+    /// turned into a capability where the capability lives. Roster depending on
+    /// `Knowledge` would put `KnowledgeIndex` inside its reach, and the module
+    /// graph is how this project enforces what a module cannot do (B2's fix).
+    public let knowledgeViewJSON: String?
     /// Which tier the author wants. A preference, not a guarantee — the router
     /// still decides (§9.2).
     public let modelTier: Int?
@@ -52,6 +60,7 @@ public struct Manifest: Sendable, Equatable, Identifiable {
 
     public init(kind: ManifestKind, name: String, description: String,
                 tools: [String] = [], base: Role? = nil, definitionOfDone: String? = nil,
+                knowledgeViewJSON: String? = nil,
                 modelTier: Int? = nil, body: String = "", source: URL? = nil) {
         self.kind = kind
         self.name = name
@@ -59,6 +68,7 @@ public struct Manifest: Sendable, Equatable, Identifiable {
         self.tools = tools
         self.base = base
         self.definitionOfDone = definitionOfDone
+        self.knowledgeViewJSON = knowledgeViewJSON
         self.modelTier = modelTier
         self.body = body
         self.source = source
@@ -216,6 +226,7 @@ public struct ManifestParser: Sendable {
                         tools: tools,
                         base: base,
                         definitionOfDone: fields["definition_of_done"],
+                        knowledgeViewJSON: fields["knowledge_view"],
                         modelTier: fields["model_tier"].flatMap(Int.init),
                         body: body,
                         source: source)
