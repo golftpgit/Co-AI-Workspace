@@ -28,7 +28,23 @@ if [ -d "vendor/metal/$BUNDLE" ]; then
 fi
 
 step "build"
-if swift build 2>&1 | tail -3; then ok "build"; else fail "build"; fi
+BUILD_OUT="$(swift build 2>&1)"
+echo "$BUILD_OUT" | tail -3
+echo "$BUILD_OUT" | grep -q "error:" && fail "build" || ok "build"
+
+# One warning class fails the build, because its symptom is a user seeing
+# `Optional("P-7QK2")` on screen. It has now happened twice — once in the
+# analysis status line, once on the transcript row, where it was driven and
+# seen. The compiler said so both times and the message was lost in a build log
+# nobody greps for anything but "error:".
+DEBUG_DESCRIPTION=$(echo "$BUILD_OUT" \
+  | grep "string interpolation produces a debug description" | sort -u)
+if [ -n "$DEBUG_DESCRIPTION" ]; then
+  echo "$DEBUG_DESCRIPTION" | sed 's/^/   /' | head -5
+  fail "an optional is interpolated into a string — it renders as Optional(…) to a person"
+else
+  ok "no optional is interpolated straight into text"
+fi
 
 step "tests"
 TEST_OUT="$(swift test 2>&1)"

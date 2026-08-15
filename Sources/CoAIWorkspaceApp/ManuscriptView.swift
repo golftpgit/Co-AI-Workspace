@@ -62,28 +62,41 @@ struct ManuscriptPane: View {
                 }
                 .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            List(model.manuscripts, selection: Binding(
-                get: { model.selected?.id },
-                set: { id in
-                    model.selected = model.manuscripts.first { $0.id == id }
-                    Task { await model.refreshPreview() }
-                })) { manuscript in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(manuscript.title).fontWeight(.medium)
-                    Text("ตัวเลขที่รายงาน \(manuscript.references.count) ค่า")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                .tag(manuscript.id)
-                .contextMenu {
-                    Button("ลบเล่มนี้", role: .destructive) {
+            // A `Button` per row, like every other list on this project, rather
+            // than `List(data, selection:)`. Driven: clicking a row in the
+            // selection version selected nothing — the draft opened only
+            // because `create` had already selected it, so returning to an
+            // existing manuscript the next day left the editor empty (U33-7).
+            // The button shape is also what gives the row an `AXPress`, which
+            // is the accessibility rule this project already enforces.
+            List {
+                ForEach(model.manuscripts) { manuscript in
+                    Button {
+                        model.selected = manuscript
+                        Task { await model.refreshPreview() }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(manuscript.title).fontWeight(.medium)
+                            Text("ตัวเลขที่รายงาน \(manuscript.references.count) ค่า")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .background(manuscript.id == model.selected?.id
+                                ? Color.accentColor.opacity(0.15) : Color.clear)
+                    .contextMenu {
+                        Button("ลบเล่มนี้", role: .destructive) {
+                            Task { await model.delete(manuscript) }
+                        }
+                    }
+                    .accessibilityAction(named: "ลบต้นฉบับเล่มนี้") {
                         Task { await model.delete(manuscript) }
                     }
+                    .accessibilityLabel("\(manuscript.title) · ตัวเลขที่รายงาน "
+                                        + "\(manuscript.references.count) ค่า")
                 }
-                .accessibilityAction(named: "ลบต้นฉบับเล่มนี้") {
-                    Task { await model.delete(manuscript) }
-                }
-                .accessibilityLabel("\(manuscript.title) · ตัวเลขที่รายงาน "
-                                    + "\(manuscript.references.count) ค่า")
             }
             if let status = model.status {
                 Text(status).font(.caption)

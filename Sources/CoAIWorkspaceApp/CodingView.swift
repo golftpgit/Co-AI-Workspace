@@ -283,8 +283,15 @@ struct CodingView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(transcript.title).font(.callout)
+                                // Not `\(transcript.participantCode)` — it is
+                                // optional, and interpolating it drew
+                                // `Optional("P-7QK2")` on screen. A transcript
+                                // with no code is also an ordinary thing (§20.7
+                                // asks for a code, not for every study to have
+                                // one), so it says that instead of nothing.
                                 Text("\(transcript.paragraphs.count) ย่อหน้า · "
-                                     + "รหัสผู้เข้าร่วม \(transcript.participantCode)")
+                                     + (transcript.participantCode.map { "รหัสผู้เข้าร่วม \($0)" }
+                                        ?? "ยังไม่ได้ใส่รหัสผู้เข้าร่วม"))
                                     .font(.caption2).foregroundStyle(.secondary)
                             }
                             Spacer()

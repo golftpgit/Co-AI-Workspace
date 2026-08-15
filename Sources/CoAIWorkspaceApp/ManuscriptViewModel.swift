@@ -78,8 +78,13 @@ final class ManuscriptViewModel {
         // section rather than making the first thing the author does be
         // administrative.
         fresh.sections[.results] = [ManuscriptSection(heading: "4.1 ผลการวิเคราะห์")]
-        await save(fresh)
+        // Selected *before* saving, not after. Driven: pressing "สร้าง" put
+        // the new manuscript in the list and left the editor showing
+        // "ยังไม่ได้เลือกต้นฉบับ" until you clicked the row you had just made
+        // — because `save` reloads, and the reload decided what was selected
+        // while this was still nil (U33-5).
         selected = fresh
+        await save(fresh)
     }
 
     func save(_ manuscript: Manuscript) async {

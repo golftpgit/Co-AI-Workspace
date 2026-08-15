@@ -170,3 +170,96 @@ struct KnowledgeStoreTests {
         #expect(throws: Never.self) { try index.insert(row) }
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// P11.8's promise, at the layer that was quietly breaking it (U33-3, U33-4).
+//
+// Driving a real interview into the knowledge base showed it listed as **T5**
+// — the least credible tier — and that is where these came from. The index
+// tests were right: `TranscriptIngest` produces chunks with no tier and with a
+// character span each. Nothing had ever asked what came *back* out of the
+// database, and the answer was: no span at all, and a tier the transcript
+// never had.
+//
+// The consequence is not cosmetic. §11.3's corroboration rule reads T5 as "a
+// web page nobody vouches for", so a participant's own words were being ranked
+// as the weakest evidence in the project — and the citation that was supposed
+// to point at a paragraph pointed at a two-hour interview, from the first
+// relaunch onwards.
+// ─────────────────────────────────────────────────────────────
+
+@Suite("Knowledge store — fieldwork survives the round trip", .serialized)
+struct FieldworkProvenanceRoundTripTests {
+
+    private func transcriptChunk() -> IndexedChunk {
+        let provenance = Provenance.fieldwork(
+            documentID: "ts_int01", title: "INT-01", participantCode: "P-7QK2",
+            collectedAt: Date(timeIntervalSince1970: 1_770_000_000),
+            passage: TextSpan(start: 44, end: 115))
+        return IndexedChunk(id: "ts_int01#c0",
+                            text: "ผู้ให้ข้อมูล: เวรหนึ่งดูคนไข้สิบสองเตียง ทำไม่ทันจริง ๆ ค่ะ",
+                            scope: .project(ProjectID("pj_q")),
+                            provenance: provenance, embedding: nil,
+                            embeddingProfileID: nil,
+                            contentHash: "hash_int01_c0")
+    }
+
+    @Test("an interview does not come back as the least credible source",
+          .timeLimit(.minutes(2)))
+    func fieldworkKeepsNoTier() async throws {
+        guard let server = try await makeServer(port: 18_671) else { return }
+        defer { Task { await server.shutdown() } }
+        let store = KnowledgeStore(client: await server.client)
+
+        try await store.save(transcriptChunk())
+        let loaded = try await store.load(scope: .project(ProjectID("pj_q")))
+        let restored = try #require(loaded.first)
+
+        #expect(restored.provenance.tier == nil,
+                "a transcript came back tiered — §11.3 would rank it as a weak web page")
+        #expect(restored.provenance.isExternallySourced == false)
+        // And the participant code, which is the only identity a transcript carries.
+        guard case .fieldwork(let code) = restored.provenance.origin else {
+            Issue.record("the origin changed on the way through the database")
+            return
+        }
+        #expect(code == "P-7QK2")
+    }
+
+    // The whole of P11.8's second clause: a citation points back at the passage.
+    @Test("the character span survives, so a chunk still cites its own paragraph",
+          .timeLimit(.minutes(2)))
+    func passageSurvives() async throws {
+        guard let server = try await makeServer(port: 18_672) else { return }
+        defer { Task { await server.shutdown() } }
+        let store = KnowledgeStore(client: await server.client)
+
+        try await store.save(transcriptChunk())
+        let restored = try #require(
+            try await store.load(scope: .project(ProjectID("pj_q"))).first)
+
+        let passage = try #require(restored.provenance.passage,
+                                   "the offsets were dropped — the chunk now cites the whole interview")
+        #expect(passage.start == 44)
+        #expect(passage.end == 115)
+    }
+
+    // Rows written before this existed have no span columns, and must still load.
+    @Test("a chunk with no passage still loads, with no passage", .timeLimit(.minutes(2)))
+    func absentPassageIsNotAnError() async throws {
+        guard let server = try await makeServer(port: 18_673) else { return }
+        defer { Task { await server.shutdown() } }
+        let store = KnowledgeStore(client: await server.client)
+
+        let paper = IndexedChunk(
+            id: "doc_1#c0", text: "ผลการทดลอง", scope: .central,
+            provenance: Provenance(documentID: "doc_1", title: "เอกสาร",
+                                   origin: .upload(filename: "a.pdf"), tier: .t3),
+            embedding: nil, embeddingProfileID: nil, contentHash: "h1")
+        try await store.save(paper)
+
+        let restored = try #require(try await store.load(scope: .central).first)
+        #expect(restored.provenance.passage == nil)
+        #expect(restored.provenance.tier == .t3)
+    }
+}

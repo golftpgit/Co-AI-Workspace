@@ -704,6 +704,15 @@ public final class AnalysisViewModel {
         for book in notebooks {
             for cell in book.cells { currentSources[cell.id] = cell.source }
         }
+        // The open notebook last, and it wins. `notebooks` is the list as it
+        // was loaded; `notebook` is the one being edited, and `setSource`
+        // writes only to that. Reading the list alone made the staleness check
+        // pass on a cell whose query had just been rewritten — which is the
+        // one case §20.8 exists for, and it was silently not firing in the app
+        // while its unit test passed by supplying the sources itself (U33-6).
+        if let notebook {
+            for cell in notebook.cells { currentSources[cell.id] = cell.source }
+        }
         return (runs, currentSources)
     }
 

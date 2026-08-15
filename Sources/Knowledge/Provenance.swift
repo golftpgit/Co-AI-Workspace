@@ -156,12 +156,13 @@ public struct Provenance: Sendable, Equatable, Codable {
     /// external credibility to claim, but still has to say which run made it.
     public static func authored(documentID: String, title: String, runID: String,
                                 page: Int? = nil, section: String? = nil,
+                                passage: TextSpan? = nil,
                                 accessedAt: Date = Date(),
                                 supersedes: String? = nil) -> Provenance {
         Provenance(documentID: documentID, title: title,
                    origin: .userAuthored(runID: runID), optionalTier: nil,
                    authors: [], year: nil, page: page, section: section,
-                   passage: nil, accessedAt: accessedAt, supersedes: supersedes)
+                   passage: passage, accessedAt: accessedAt, supersedes: supersedes)
     }
 
     /// Primary data this study collected (§20.3, P11.8).
