@@ -177,6 +177,34 @@ struct GateInvariantTests {
         #expect(await ran.count == 0)
     }
 
+    // P15.4 — the tool list is part of the cached prefix.
+    //
+    // vLLM caches by token prefix, and the tool list is rendered into the
+    // prompt ahead of the conversation. Two tools registered in a different
+    // order on the next launch — a plugin loading a moment sooner, an MCP
+    // server answering first — would render a different prefix and quietly cost
+    // every conversation its cache. Measured: a hit is 0.32s to first token
+    // against 3.35s cold (E.24), so this is 3 seconds per turn hanging off an
+    // ordering nobody would think to keep stable.
+    @Test("the advertised tool list is in the same order however it was registered")
+    func advertOrderIsStable() async throws {
+        let ran = Ledger()
+        let forwards = ToolGateway()
+        await forwards.register(SpyTool(name: "a_tool", ran: ran))
+        await forwards.register(SpyTool(name: "m_tool", ran: ran))
+        await forwards.register(SpyTool(name: "z_tool", ran: ran))
+
+        let backwards = ToolGateway()
+        await backwards.register(SpyTool(name: "z_tool", ran: ran))
+        await backwards.register(SpyTool(name: "m_tool", ran: ran))
+        await backwards.register(SpyTool(name: "a_tool", ran: ran))
+
+        let first = await forwards.adverts.map(\.name)
+        let second = await backwards.adverts.map(\.name)
+        #expect(first == ["a_tool", "m_tool", "z_tool"])
+        #expect(first == second, "the same tools rendered a different prompt prefix")
+    }
+
     @Test("a human's edit is what actually runs")
     func editedArgumentsAreTheOnesExecuted() async throws {
         let ran = Ledger()

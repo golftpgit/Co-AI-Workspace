@@ -190,3 +190,98 @@ if let best = levels.max(by: { $0.tokensPerSecond < $1.tokensPerSecond }) {
 if levels.contains(where: { $0.peakRunning == 0 && $0.peakWaiting == 0 }) {
     print("   ! คิวอ่านได้เป็น 0 ตลอด — /metrics อาจปิดอยู่ ตัวเลขคิวข้างบนจึงไม่ใช่หลักฐาน")
 }
+
+// ─────────────────────────────────────────────────────────────
+// P15.4 — does the prefix cache actually pay?
+//
+// The server was started with `--enable-prefix-caching`, and the app is built
+// so the stable part of a conversation comes first: one system message, then a
+// tool list sorted by name, then the history in order. That is a *claim* about
+// how the prompt is assembled. What follows is the measurement, because "the
+// prefix should be cached now" is exactly the kind of sentence this project has
+// been wrong about before.
+//
+// Three requests, and the third is the control:
+//
+//   1. a long prefix, never seen before      → cold
+//   2. the same prefix, one short turn added → should hit the cache
+//   3. a different prefix of the same length → cold again, proving that (2) was
+//      the cache and not the server merely being warmed up
+// ─────────────────────────────────────────────────────────────
+
+/// Time to the first token, which is what a person actually waits for. The
+/// tokens after it arrive at the generation rate measured above.
+func timeToFirstToken(_ messages: [LLMMessage]) async -> (ttft: Double, failed: String?) {
+    var request = LLMRequest(messages: messages)
+    request.maxTokens = 16
+    request.temperature = 0
+    request.timeout = 240
+
+    let startedAt = Date()
+    do {
+        let (_, _, events) = try await router.stream(request)
+        for try await event in events {
+            switch event {
+            case .textDelta, .reasoningDelta:
+                return (Date().timeIntervalSince(startedAt), nil)
+            default:
+                continue
+            }
+        }
+        return (Date().timeIntervalSince(startedAt), "สตรีมจบโดยไม่มีโทเคนเลย")
+    } catch {
+        return (Date().timeIntervalSince(startedAt), "\(error)")
+    }
+}
+
+/// Long enough that the prefix is worth caching — a real conversation with a
+/// document pasted into it is this size and larger.
+func filler(_ seed: String, paragraphs: Int = 40) -> String {
+    (1...paragraphs).map { index in
+        "ย่อหน้า \(index) ของ\(seed): "
+            + String(repeating: "ข้อมูลพื้นฐานของโครงการวิจัยนี้ถูกบันทึกไว้เพื่ออ้างอิงภายหลัง ", count: 6)
+    }.joined(separator: "\n")
+}
+
+print("")
+print("── prefix cache (P15.4) ──")
+
+let sharedPrefix: [LLMMessage] = [
+    .init(.system, "คุณเป็นผู้ช่วยวิจัย ตอบสั้นที่สุดเท่าที่ตอบได้"),
+    .init(.user, filler("โครงการ ก")),
+    .init(.assistant, "รับทราบครับ"),
+]
+
+let cold = await timeToFirstToken(sharedPrefix + [.init(.user, "สรุปสั้น ๆ ว่าเอกสารนี้เกี่ยวกับอะไร")])
+let warm = await timeToFirstToken(sharedPrefix + [
+    .init(.user, "สรุปสั้น ๆ ว่าเอกสารนี้เกี่ยวกับอะไร"),
+    .init(.assistant, "เป็นบันทึกอ้างอิงของโครงการ"),
+    .init(.user, "แล้วย่อหน้าแรกพูดถึงอะไร"),
+])
+let other = await timeToFirstToken([
+    .init(.system, "คุณเป็นผู้ช่วยวิจัย ตอบสั้นที่สุดเท่าที่ตอบได้"),
+    .init(.user, filler("โครงการ ข")),
+    .init(.assistant, "รับทราบครับ"),
+    .init(.user, "สรุปสั้น ๆ ว่าเอกสารนี้เกี่ยวกับอะไร"),
+])
+
+for (label, result) in [("คำขอแรก (เย็น)", cold),
+                        ("คำขอที่สอง prefix เดิม", warm),
+                        ("prefix อื่น ยาวเท่ากัน (ตัวคุม)", other)] {
+    if let failed = result.failed {
+        print("   ✗ \(label): \(failed.prefix(120))")
+    } else {
+        print(String(format: "   %-32@ TTFT %.2f วินาที", label as NSString, result.ttft))
+    }
+}
+
+if cold.failed == nil, warm.failed == nil, other.failed == nil {
+    let saved = (1 - warm.ttft / cold.ttft) * 100
+    print(String(format: "   prefix เดิมเร็วขึ้น %.0f%% · prefix อื่นใช้ %.2f วินาที (ควรใกล้เคียงคำขอแรก)",
+                 saved, other.ttft))
+    if warm.ttft < cold.ttft * 0.7 && other.ttft > warm.ttft * 1.3 {
+        print("   ✓ prefix cache ทำงานจริง และตัวคุมยืนยันว่าไม่ใช่แค่เครื่องอุ่นขึ้น")
+    } else {
+        print("   ! ยังไม่เห็นผลของ prefix cache อย่างชัดเจน — อย่าเพิ่งอ้างว่ามันช่วย")
+    }
+}
