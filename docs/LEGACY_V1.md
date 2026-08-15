@@ -112,7 +112,7 @@
 | Bridge trait + 3 platform + multi-account | P7.1–P7.3 | 🔶 โค้ดครบทั้ง 3 · **ยังไม่ได้ยิงกับแพลตฟอร์มจริง** (ต้องมีโทเคนของผู้ใช้) |
 | Notebook (SQL+Python) | P6.4, P6.8 | 🔶 ใช้ได้จริง · Python ในแอปที่ sandbox ไม่มี pandas/numpy |
 | Plugin system | P8.4 | ✅ ใช้ได้จริง — ติดตั้งแล้วทูลขึ้น tool list ทันที (ยืนยันในแอป sandbox) |
-| `install_package` | P8.4 | 🔴 **ยังไม่ได้ทำ** — `check.sh` ขึ้นว่า "ต้องมีนโยบายเน็ตก่อน" |
+| `install_package` | P8.4 | ✅ **ทำแล้ว (2026-08-15)** — argv ไม่ใช่ command line · ปฏิเสธชื่อที่ขึ้นต้นด้วยขีด (ซึ่ง argv ไม่ได้กัน) · ปฏิเสธ source distribution เป็นค่าเริ่มต้นเพราะ sdist รันโค้ดตอนติดตั้ง · ติดตั้งลงโปรเจกต์ไม่ใช่ลงเครื่อง · บันทึกเวอร์ชันที่ resolve ได้จริง · หยุดถามคนเสมอแม้อยู่โหมดอัตโนมัติเต็ม (P14.4) |
 | KB: PDF/DOCX/PPTX, graph, export/import | P2.3, P2.7 | 🔶 ทุกอย่างใช้ได้ · **ยกเว้น graph view** ซึ่งยังเป็นรายการ ไม่ใช่ภาพกราฟ |
 | **K1 Telegram remote approval** (ค้างใน v1) | P7.1 — ได้ฟรีจาก Approval Broker | 🔶 ตรรกะครบ · ยังไม่ได้ยิงกับบอทจริง |
 | **K2 OCR** (ค้างใน v1) | P2.3 — ได้ฟรีจาก Vision | ✅ ปิดแล้ว — ทดสอบกับ PDF สแกนที่ไม่มี text layer เลย |
