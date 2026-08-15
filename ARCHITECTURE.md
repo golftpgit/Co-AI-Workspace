@@ -1101,7 +1101,7 @@ graph LR
 
 ### 17.1 GX10 — วัดจากเครื่องจริงแล้ว (2026-08-15)
 
-**ASUS Ascent GX10 ที่ `192.168.1.205:8000`** · vLLM **0.27.1** · `TeichAI/Qwen3.8-27B-Fable-Distill` · **`--dtype bfloat16`** · `--max-model-len 32768` · `--kv-cache-dtype fp8` · `--enable-prefix-caching` · `--enable-chunked-prefill` · `--max-num-seqs 256`
+**ASUS Ascent GX10 ที่ `192.168.1.205:8000`** · vLLM **0.27.1** · **`unsloth/Qwen3.8-27B-NVFP4`** · `--max-model-len 32768` · `--kv-cache-dtype fp8` · `--enable-prefix-caching` · `--enable-chunked-prefill` · `--max-num-seqs 256` · **`--enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3`**
 
 > ผลวัดเต็มอยู่ที่ [E.19](docs/VERIFICATION_LOG.md#e19-gx10-เสิร์ฟจริงแล้ว--วัดจาก-endpoint-เป็น-2026-08-15) · **section นี้เขียนจากสิ่งที่ endpoint ตอบ ไม่ใช่จากสเปกที่ตั้งใจ** — และสองอย่างที่ตั้งใจไว้ไม่ตรงกับที่รันจริง
 
