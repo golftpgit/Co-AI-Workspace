@@ -126,7 +126,7 @@ struct ProjectsView: View {
             List {
                 Section {
                     Button {
-                        Task { await model.select(.general) }
+                        Task { await model.focus(.general) }
                     } label: {
                         Label("General — คุยทั่วไป", systemImage: "bubble.left")
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -138,7 +138,7 @@ struct ProjectsView: View {
                 Section("โปรเจกต์") {
                     ForEach(model.projects) { project in
                         Button {
-                            Task { await model.select(.project(project.id)) }
+                            Task { await model.open(project) }
                         } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {

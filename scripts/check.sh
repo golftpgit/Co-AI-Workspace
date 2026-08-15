@@ -859,6 +859,32 @@ else
   fail "the team screen's work-package picker is not passed to the run (P10.4/P10.15)"
 fi
 
+# P21.1 — a project is a tab, not a mode.
+#
+# The app held one `selection` and rebuilt every screen on change, so opening
+# the second project cost you the first. Two ways that comes back:
+#
+# 1. A stored single selection reappears on the view model. `selection` still
+#    exists as a *computed* reading of `workspaces.active`, which is fine — a
+#    stored one is the thing that cannot hold two.
+if grep -nE "var selection: Selection = |var selection: Selection\?" \
+   Sources/CoAIWorkspaceApp/ProjectsViewModel.swift | grep -q .; then
+  fail "the project selection went back to a single stored value — tabs cannot hold two (P21.1)"
+else
+  ok "which workspace is in front is read from the open set, not stored beside it"
+fi
+
+# 2. The tab strip is on screen. `OpenWorkspaces` can hold ten workspaces and
+#    be reachable from nothing, which is D6 in its usual shape: the capability
+#    exists and the person cannot get at it.
+if grep -rlq "WorkspaceTabBar(" \
+   $(ls Sources/CoAIWorkspaceApp/*.swift | grep -v "CoAIWorkspaceApp.swift") \
+   2>/dev/null || grep -q "WorkspaceTabBar(projects:" Sources/CoAIWorkspaceApp/CoAIWorkspaceApp.swift; then
+  ok "the open workspaces are drawn somewhere a person can click them"
+else
+  fail "nothing renders the workspace tab bar — projects would be openable and invisible (P21.1)"
+fi
+
 # P21.3 — every write to a project goes past the archive guard.
 #
 # Closing has been a gate with eight conditions since P10.10, and until now

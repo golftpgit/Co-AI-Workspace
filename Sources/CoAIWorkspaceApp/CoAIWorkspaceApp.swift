@@ -7,6 +7,7 @@ import Instruments
 import Persistence
 import AgentKit
 import CoreEngine
+import ProjectKit
 
 @main
 struct CoAIWorkspaceApp: App {
@@ -35,6 +36,14 @@ private struct RootView: View {
     /// still what draws each surface — see `screenView` — but nobody navigates by
     /// it any more.
     @State private var area = Area.chat
+    /// Which area each open tab was last on (§19.1.1, P21.1).
+    ///
+    /// This is what makes a tab remember where you were. Held here rather than
+    /// in `OpenWorkspaces`, which is a domain type in ProjectKit and has no
+    /// business knowing the app's screen areas — and held by tab *id* rather
+    /// than by `Tab`, so a closed and reopened project starts fresh rather than
+    /// resuming a place from before it was closed.
+    @State private var areaByTab: [String: Area] = [:]
     /// What the Workbench's tab bar last selected. Read through `workbenchTab`,
     /// never directly: which tabs exist depends on the scope, and this can name
     /// one the current scope does not have.
@@ -295,6 +304,16 @@ private struct RootView: View {
         Group {
             if let engine = environment.engine {
                 areaContent(engine)
+                    // Remembering where each tab was, and restoring it on the
+                    // way back. Switching to the project you were planning and
+                    // landing on Chat is the small daily cost of treating a
+                    // workspace as a mode rather than a place.
+                    .onChange(of: area) { _, now in
+                        areaByTab[projects.workspaces.active.id] = now
+                    }
+                    .onChange(of: projects.workspaces.active) { _, now in
+                        area = areaByTab[now.id] ?? .chat
+                    }
                     // Which projects exist is the shell's own question, not the
                     // Plan screen's: the switcher in the header, the Workbench's
                     // tab list and the status strip all read it. Attaching only
@@ -341,13 +360,14 @@ private struct RootView: View {
                 // it in.
                 Menu {
                     Button("General — คุยทั่วไป") {
-                        Task { await projects.select(.general) }
+                        Task { await projects.focus(.general) }
                     }
                     Divider()
-                    ForEach(projects.openProjects) { project in
-                        Button("\(project.name) · ขั้น\(project.stage.label)") {
-                            Task { await projects.select(.project(project.id)) }
-                        }
+                    // Opens a tab rather than replacing where you are (P21.1).
+                    // Archived projects are listed too: reading one is normal,
+                    // and leaving them out would make "closed" mean "gone".
+                    ForEach(projects.projects) { project in
+                        ProjectMenuButton(project: project, projects: projects)
                     }
                 } label: {
                     // The name, visible. Same finding as the picker: a menu
@@ -405,6 +425,16 @@ private struct RootView: View {
     @ViewBuilder
     private func areaContent(_ engine: Engine) -> some View {
         VStack(spacing: 0) {
+            // Above the area's own sub-tabs, and above every area, because a
+            // workspace is not one area's state — chat, the plan and the ledger
+            // all read it (§19.1.1, P21.1). Hidden while only General is open,
+            // so somebody who never opens a project never sees a tab bar with
+            // one tab in it.
+            if projects.workspaces.entries.count > 1 {
+                WorkspaceTabBar(projects: projects)
+                Divider()
+            }
+
             // Sub-tabs belong to the area, not to the screen inside it: one
             // picker per level, so "where am I" has one answer (§19.2.6).
             if let tabs = subTabs, tabs.count > 1 {
@@ -705,4 +735,107 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Opening a workspace (§19.1.1, P21.1)
+
+/// One row of the "open a project" menu.
+///
+/// Its own view because the menu is inside a `ToolbarItemGroup` builder, where
+/// the type-checker gave up on the whole expression once the row grew a second
+/// condition. Splitting it is not a style choice — it is the difference between
+/// the app compiling and not.
+private struct ProjectMenuButton: View {
+    let project: Project
+    let projects: ProjectsViewModel
+
+    var body: some View {
+        Button(label) { Task { await projects.open(project) } }
+    }
+
+    /// An archive says so in the menu, before it is opened — otherwise the only
+    /// signal is that everything turns out to be disabled once you are in it.
+    private var label: String {
+        project.isOpen
+            ? "\(project.name) · ขั้น\(project.stage.label)"
+            : "\(project.name) · ปิดแล้ว (อ่านอย่างเดียว)"
+    }
+}
+
+/// The strip of open workspaces (§19.1.1, P21.1).
+///
+/// The thing that makes a project a tab rather than a mode: the ones you are
+/// not looking at are still there, named, one click away. Before this the app
+/// held a single selection, so opening the second project cost you the first.
+struct WorkspaceTabBar: View {
+    let projects: ProjectsViewModel
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 4) {
+                ForEach(projects.workspaces.entries) { entry in
+                    tab(entry)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+        }
+        .frame(height: 30)
+        .background(.bar)
+    }
+
+    private func tab(_ entry: OpenWorkspaces.Entry) -> some View {
+        let isActive = entry.tab == projects.workspaces.active
+        return HStack(spacing: 4) {
+            Button {
+                Task { await projects.focus(entry.tab) }
+            } label: {
+                HStack(spacing: 4) {
+                    if entry.isArchived {
+                        // An archive is readable and not writable, and the tab
+                        // is where that has to be visible — a person who cannot
+                        // see it will read a refused edit as a bug.
+                        //
+                        // Hidden from the accessibility tree because it is
+                        // decoration for something the spoken label already
+                        // says in words; announcing "lock" as well is noise.
+                        Image(systemName: "lock").font(.caption2)
+                            .accessibilityHidden(true)
+                    }
+                    Text(entry.title).font(.caption).lineLimit(1)
+                }
+            }
+            .buttonStyle(.plain)
+            .fontWeight(isActive ? .semibold : .regular)
+            .accessibilityLabel(spoken(entry, isActive: isActive))
+
+            // General has no close button because it cannot be closed: it is
+            // where work that is not a promise happens, and there is nowhere
+            // else to fall back to.
+            if entry.tab != .general {
+                Button {
+                    Task { await projects.closeTab(entry.tab) }
+                } label: {
+                    Image(systemName: "xmark").font(.system(size: 8))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("ปิดแท็บ \(entry.title) — ปิดแค่หน้าต่าง ไม่ใช่ปิดโครงการ")
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(isActive ? AnyShapeStyle(.selection) : AnyShapeStyle(.clear),
+                    in: RoundedRectangle(cornerRadius: 5))
+        .accessibilityElement(children: .contain)
+    }
+
+    private func spoken(_ entry: OpenWorkspaces.Entry, isActive: Bool) -> String {
+        var parts = ["แท็บ \(entry.title)"]
+        if entry.isArchived { parts.append("ปิดแล้ว อ่านอย่างเดียว") }
+        parts.append(isActive ? "กำลังดูอยู่" : "กดเพื่อสลับมา")
+        return parts.joined(separator: " · ")
+    }
 }
