@@ -91,3 +91,14 @@ public actor RelationStore {
         }
     }
 }
+
+public extension StoredRelation {
+    /// The shape `EntityGraph` reads. Mapped here rather than there because
+    /// Persistence knows about Knowledge and not the reverse (§0.2's module
+    /// rule, and the same reason Roster carries a manifest's knowledge view as
+    /// text).
+    var forGraph: EntityGraph.Relation {
+        EntityGraph.Relation(subject: subject, predicate: predicate, object: object,
+                             chunkID: chunkID, documentID: documentID)
+    }
+}

@@ -163,7 +163,7 @@ for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer
                   ScaleReport ScoredResponses InstrumentDisposal ProjectTypeGateReader \
                   CodebookStore CodingAnalysis CellRunStore ManuscriptBuilder \
                   KnowledgeView ViewWidenings WidenViewTool InstallPackageTool \
-                  RoleMemory ToolProficiency; do
+                  RoleMemory ToolProficiency EntityGraph; do
   grep -rqE "$capability[(.]" Sources/CoAIWorkspaceApp --include=*.swift || UNWIRED="$UNWIRED $capability"
 done
 if [ -n "$UNWIRED" ]; then

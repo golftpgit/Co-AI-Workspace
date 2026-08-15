@@ -99,6 +99,15 @@ public final class KnowledgeViewModel {
         self.conflictDetector = detector
     }
 
+    /// One chunk by id, for the graph's "where did this arrow come from".
+    ///
+    /// Read from the live index rather than kept as a second copy: the graph
+    /// is looked at long after ingest, and a stale copy would show the passage
+    /// that used to be there.
+    public func chunk(id: String) -> IndexedChunk? {
+        index.allChunks.first { $0.id == id }
+    }
+
     public func reloadRelations() async {
         guard let relationStore else { return }
         relations = (try? await relationStore.load(scope: scope)) ?? []
@@ -495,6 +504,11 @@ public final class KnowledgeViewModel {
         // Each scope is its own body of knowledge, so switching means loading
         // a different one rather than filtering the same index.
         await reload()
+        // The relations too. They were loaded once at attach and never again,
+        // which nobody could see while nothing rendered them — the graph tab
+        // (P2.7) showed central's relations with "โปรเจกต์" selected, and the
+        // picker was telling the truth about a screen that was not.
+        await reloadRelations()
         await search()
     }
 }

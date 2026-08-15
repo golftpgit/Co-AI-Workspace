@@ -110,7 +110,7 @@ private struct RootView: View {
         // Workbench, in the order data travels (§19.2).
         case collect, coding, internalDB, externalDB, console, results
         // Knowledge.
-        case documents, conflicts, sources
+        case documents, graph, conflicts, sources
         // System.
         case models, budget, channels, status, inventory
 
@@ -125,6 +125,7 @@ private struct RootView: View {
             case .console: "สคริปต์ + คอนโซล"
             case .results: "ผลลัพธ์ + เอกสาร"
             case .documents: "เอกสาร"
+            case .graph: "กราฟ"
             case .conflicts: "ข้อขัดแย้ง"
             case .sources: "แหล่งและ tier"
             case .models: "โมเดล"
@@ -602,6 +603,19 @@ private struct RootView: View {
         case .conflicts: screenView(.conflicts, engine: engine)
         case .sources: SourcesView(registry: SourceRegistry(),
                                    search: engine.webSource, read: engine.pageReader)
+        // §11.4 / P2.7 — the relations have been extracted and stored since
+        // P2.7 and, until now, read by no view at all.
+        case .graph:
+            EntityGraphView(model: knowledge)
+                .id(projects.scope.storageKey)
+                .task {
+                    await knowledge.attach(store: engine.knowledge)
+                    await knowledge.attach(relations: engine.relations,
+                                           extractor: engine.relationExtractor)
+                    // Without this the scope picker's "โปรเจกต์" option has no
+                    // project to mean, exactly as on the documents tab.
+                    knowledge.currentProject = projects.selected?.id
+                }
         default: screenView(.knowledge, engine: engine)
         }
     }
@@ -630,7 +644,7 @@ private struct RootView: View {
         switch area {
         case .chat, .plan: nil
         case .workbench: workbenchTabs
-        case .knowledge: [.documents, .conflicts, .sources]
+        case .knowledge: [.documents, .graph, .conflicts, .sources]
         case .system: [.models, .budget, .channels, .status, .inventory]
         }
     }

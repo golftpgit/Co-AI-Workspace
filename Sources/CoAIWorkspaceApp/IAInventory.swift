@@ -72,7 +72,9 @@ enum IAInventory {
                 subTab: "ฐานข้อมูลภายใน · ฐานข้อมูลภายนอก",
                 state: .done),
         IAEntry(screen: "Knowledge Base", area: "คลังความรู้", subTab: "เอกสาร",
-                state: .partial("กราฟ entity/relation แสดงเป็นรายการต่อส่วน ยังไม่ใช่ภาพกราฟ")),
+                state: .partial("กราฟ entity/relation ทำแล้ว (แท็บ “กราฟ”) — "
+                                + "ย่านรอบสิ่งที่เลือก ไม่ใช่ทั้งกราฟ และทุกเส้นกดดูข้อความต้นทางได้ · "
+                                + "ยังไม่มีทางแก้ความสัมพันธ์จากหน้ากราฟโดยตรง")),
         IAEntry(screen: "Conflict Ledger", area: "คลังความรู้", subTab: "ข้อขัดแย้ง",
                 state: .done),
         IAEntry(screen: "Models", area: "ระบบ", subTab: "โมเดล",
