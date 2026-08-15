@@ -61,8 +61,11 @@ let package = Package(
         // SurrealDB access + everything durable: conversations, spans and
         // (from P2) the knowledge base. Client written in-house — see
         // ARCHITECTURE §11.5 for why not surrealdb.swift.
+        // DocGen is here for P11.9: the manuscript is a DocGen type and the
+        // only thing Persistence does with it is keep it, which is the same
+        // relationship it already has with ProjectKit and Instruments.
         .target(name: "Persistence", dependencies: ["AgentKit", "Observability", "Knowledge", "ProjectKit",
-                                                    "Instruments"]),
+                                                    "Instruments", "DocGen"]),
 
         // M5 — every model behind one interface, plus the router that decides
         // which tier serves a request (ARCHITECTURE §9).
