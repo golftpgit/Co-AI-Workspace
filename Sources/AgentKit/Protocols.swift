@@ -246,6 +246,14 @@ public struct Evidence: Sendable, Equatable, Codable {
         case statisticalCheck // assumption check result
         case citation         // source + tier
         case fileChange
+        /// What the screen looked like before and after (§23.3, P17.4).
+        ///
+        /// The whole reason a driver exists is for the system to test itself,
+        /// and "I clicked the button" is a claim. This is the evidence: two
+        /// accessibility snapshots with the action between them. QA's rule
+        /// follows from the shape — a screen that did not change did not do
+        /// anything, whatever the model says it did.
+        case screenObservation
     }
     public let kind: Kind
     public let summary: String
