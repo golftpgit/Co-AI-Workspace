@@ -270,6 +270,14 @@ struct Engine: Sendable {
         let embedder = MLXEmbedder()
         await gateway.register([
             RunShellTool(registry: processes),
+            // The only tool with the network open, and the only one that runs
+            // code nobody here wrote (§10, P8.4). Scoped per project so the
+            // packages a study depends on live with the study.
+            InstallPackageTool(registry: processes,
+                               directoryForScope: { [paths] scope in
+                                   guard case .project(let id) = scope else { return nil }
+                                   return paths.project(id).packagesDirectory
+                               }),
             KBSearchTool(
                 index: { [knowledgeStore, embedder] in
                     // Read at call time: documents are added while the app
