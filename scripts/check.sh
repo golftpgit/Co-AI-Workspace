@@ -162,7 +162,8 @@ for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer
                   TelegramChannel DiscordChannel LINEChannel ChannelRouter LimitationsBuilder ManifestParser \
                   ScaleReport ScoredResponses InstrumentDisposal ProjectTypeGateReader \
                   CodebookStore CodingAnalysis CellRunStore ManuscriptBuilder \
-                  KnowledgeView ViewWidenings WidenViewTool InstallPackageTool; do
+                  KnowledgeView ViewWidenings WidenViewTool InstallPackageTool \
+                  RoleMemory; do
   grep -rqE "$capability[(.]" Sources/CoAIWorkspaceApp --include=*.swift || UNWIRED="$UNWIRED $capability"
 done
 if [ -n "$UNWIRED" ]; then
