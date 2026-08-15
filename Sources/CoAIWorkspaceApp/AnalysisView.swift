@@ -615,7 +615,9 @@ private struct ConnectorRow: View {
             Text(connector.kind.rawValue + (connector.readOnly ? " · อ่านอย่างเดียว" : " · เขียนได้"))
                 .font(.caption2).foregroundStyle(.secondary)
             if let variable = connector.secretVariable, !connector.secretIsAvailable {
-                Text("ยังไม่ได้ตั้ง \(variable)")
+                // Says which of the two it is: never entered, or the Keychain
+                // would not open (P9.3).
+                Text(SecretPresentation.display(name: variable).text)
                     .font(.caption2).foregroundStyle(.orange)
             }
             ForEach(model.externalTables[connector.alias] ?? [], id: \.self) { table in
@@ -674,9 +676,10 @@ private struct ConnectorSheet: View {
                                       : "host=… port=… dbname=… user=… (ไม่ต้องใส่รหัสผ่าน)",
                       text: $target)
             if kind != .sqlite {
-                TextField("ชื่อตัวแปรสภาพแวดล้อมที่เก็บรหัสผ่าน (เช่น PGPASSWORD)",
-                          text: $secretVariable)
-                Text("รหัสผ่านไม่ถูกเก็บลงไฟล์ — เก็บแค่ชื่อตัวแปร และอ่านค่าตอนต่อเท่านั้น")
+                SecretField(name: $secretVariable, title: "ชื่อรหัสผ่าน",
+                            placeholder: "PGPASSWORD")
+                Text("รหัสผ่านไม่ถูกเก็บลงไฟล์ของแหล่งข้อมูล — ไฟล์เก็บแค่ชื่อ "
+                     + "ส่วนค่าอยู่ใน Keychain และถูกอ่านตอนต่อเท่านั้น")
                     .font(.caption2).foregroundStyle(.secondary)
             }
             Toggle("อ่านอย่างเดียว", isOn: $readOnly)

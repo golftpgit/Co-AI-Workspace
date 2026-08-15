@@ -609,6 +609,42 @@ else
   fail "accessibility rules (see above)"
 fi
 
+# P9.3 / risk R11 — the two ways the secrets work quietly comes undone.
+#
+# 1. The vault is installed at boot. Without this line every secret in the app
+#    falls back to an environment a Finder-launched `.app` does not have
+#    (measured: `launchctl getenv` returns nothing), and every paid endpoint,
+#    bot and connector goes back to being configurable but unusable — the D6
+#    shape this project has now hit eight times.
+if grep -q "SecretStore.install(" Sources/CoAIWorkspaceApp/Engine.swift; then
+  ok "the app installs a secret vault before anything reads a secret"
+else
+  fail "the app never installs a secret vault — every key would be unreachable (P9.3)"
+fi
+
+# 2. Nothing that holds a secret reads one straight from the environment.
+#    `EndpointRegistry.apiKey` did exactly that, which made "the one place a
+#    secret is looked up" two places — and the second one saw neither the
+#    Keychain nor a test override. Process-launch plumbing (Execution, Sidecar,
+#    MCPBridge's `ExecutableSearch` default) legitimately reads the environment
+#    and is not in scope here.
+STRAY_ENV=$(grep -rln "processInfo.environment" Sources/Config Sources/Channels \
+  Sources/Analysis --include=*.swift || true)
+if [ -n "$STRAY_ENV" ]; then
+  fail "a secret-bearing module reads the environment directly instead of SecretStore: $STRAY_ENV"
+else
+  ok "every secret goes through SecretStore, so the Keychain is really the one source"
+fi
+
+# 3. The audit that proves no store writes a secret to disk still exists. It is
+#    the only check of a property no single module owns, so deleting the target
+#    would silently retire P9.3's Done-when.
+if grep -q '"SecretsAuditTests"' Package.swift; then
+  ok "the secrets-on-disk audit is still part of the test suite"
+else
+  fail "the SecretsAuditTests target is gone — nothing checks that secrets stay off disk (P9.3)"
+fi
+
 if grep -rn ": \[String: Any\]" Sources --include=*.swift | grep -q "Sendable"; then
   fail "[String: Any] on a Sendable type (see ARCHITECTURE App. C)"
 else

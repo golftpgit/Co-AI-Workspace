@@ -52,6 +52,29 @@ public enum SidecarStatus: Sendable, Equatable {
     case failed(reason: String)
 
     public var isHealthy: Bool { if case .running = self { return true }; return false }
+
+    /// What this means for the person using the app (P9.4).
+    ///
+    /// The status itself is a diagnostic — "exited 1; 3 restarts in 60s" is
+    /// the right thing to keep and the wrong thing to show alone. When
+    /// SurrealDB gives up, everything durable in the app stops working, and a
+    /// screen that reports only the exit code leaves the user to infer that.
+    /// The raw reason stays, after the sentence, because whoever is debugging
+    /// still needs it.
+    public func explanation(id: String) -> String {
+        switch self {
+        case .stopped: "หยุดอยู่"
+        case .starting: "กำลังเริ่ม…"
+        case .running(let pid): "ทำงานอยู่ (pid \(pid))"
+        case .restarting(let attempt):
+            "หยุดไปเอง กำลังเริ่มใหม่ให้อัตโนมัติ (ครั้งที่ \(attempt)) — "
+                + "ระหว่างนี้สิ่งที่ต้องใช้ \(id) จะยังไม่ทำงาน"
+        case .failed(let reason):
+            "\(id) หยุดทำงานและเริ่มใหม่ไม่สำเร็จ — สิ่งที่ต้องใช้บริการนี้จะใช้ไม่ได้จนกว่าจะแก้ · "
+                + "ลองปิดแล้วเปิดแอปใหม่ ถ้ายังเป็นเหมือนเดิมให้ดู log ของ \(id) · "
+                + "รายละเอียด: \(reason)"
+        }
+    }
 }
 
 public enum SidecarError: Error, CustomStringConvertible, Equatable {

@@ -221,3 +221,38 @@ private actor Counter {
         return value >= threshold
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// P9.4 — the status is a diagnostic; the sentence beside it is what a person
+// can act on. Nine tests above already prove the *behaviour* (external kill,
+// bounded restarts, readiness timeout); this is the half of the Done-when
+// about the error being readable.
+// ─────────────────────────────────────────────────────────────
+
+@Suite("Sidecar status reads as something a person can act on")
+struct SidecarStatusExplanationTests {
+
+    @Test("giving up says what stops working and what to try, and keeps the raw reason")
+    func failedIsActionable() {
+        let text = SidecarStatus.failed(reason: "exited 1; 3 restarts in 60s")
+            .explanation(id: "surreal")
+        #expect(text.contains("surreal"))
+        // The consequence, which the exit code alone never conveyed.
+        #expect(text.contains("ใช้ไม่ได้"))
+        // Something to do.
+        #expect(text.contains("เปิดแอปใหม่"))
+        // And still debuggable.
+        #expect(text.contains("exited 1"))
+    }
+
+    @Test("restarting says the service is unavailable meanwhile rather than looking like progress")
+    func restartingIsHonest() {
+        let text = SidecarStatus.restarting(attempt: 2).explanation(id: "searxng")
+        #expect(text.contains("ยังไม่ทำงาน"))
+    }
+
+    @Test("running still reports the pid, which is what the healthy case is for")
+    func runningIsUnchanged() {
+        #expect(SidecarStatus.running(pid: 4242).explanation(id: "surreal").contains("4242"))
+    }
+}

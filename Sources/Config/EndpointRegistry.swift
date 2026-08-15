@@ -1,4 +1,5 @@
 import Foundation
+import AgentKit
 
 // ─────────────────────────────────────────────────────────────
 // Where the models above Tier 0.5 live (ARCHITECTURE §9.3, P5.5).
@@ -29,10 +30,10 @@ public struct InferenceEndpoint: Codable, Sendable, Equatable, Identifiable {
     public var baseURL: String
     public var model: String
     public var kind: Kind
-    /// Read from the environment rather than stored here: bootstrap.plist is a
+    /// The *name* the key is filed under, never the key: bootstrap.plist is a
     /// plain file in Application Support, and a key in it is a key on disk.
-    /// Keychain proper is P9.2; naming the variable is what lets a paid
-    /// endpoint work at all before then.
+    /// P9.3 moved the value behind this name into the Keychain; the property
+    /// keeps its name so that every saved config still decodes.
     public var apiKeyEnvironmentVariable: String?
     /// What a million tokens costs, so the governor can estimate before firing
     /// rather than count the damage afterwards. Nil for self-hosted.
@@ -59,12 +60,23 @@ public struct InferenceEndpoint: Codable, Sendable, Equatable, Identifiable {
 
     public var url: URL? { URL(string: baseURL) }
 
-    /// The key itself, from the environment. Absent is not an error here — the
-    /// probe reports it, and a paid endpoint with no key simply never becomes
-    /// available.
+    /// The key itself. Absent is not an error here — the probe reports it, and
+    /// a paid endpoint with no key simply never becomes available.
+    ///
+    /// Through `SecretStore` and not `ProcessInfo`, which is what it used to
+    /// read. That made this the one lookup that ignored the store meant to be
+    /// the only one: it saw no Keychain item and no test override, so "the one
+    /// place a secret is looked up" was two places, and the second one was the
+    /// one every paid endpoint went through.
     public var apiKey: String? {
-        apiKeyEnvironmentVariable.flatMap { ProcessInfo.processInfo.environment[$0] }
-            .flatMap { $0.isEmpty ? nil : $0 }
+        apiKeyEnvironmentVariable.flatMap { SecretStore.value($0) }
+    }
+
+    /// Whether the key is set, could not be read, or was never entered — which
+    /// the screen has to say differently (P9.3).
+    public var apiKeyStatus: SecretStatus {
+        guard let apiKeyEnvironmentVariable else { return .absent }
+        return SecretStore.status(apiKeyEnvironmentVariable)
     }
 }
 
@@ -124,6 +136,14 @@ public struct EndpointCheck: Sendable, Equatable {
         case unknownModel(available: [String])
         case unreachable(String)
         case missingKey(String)
+        /// The Keychain would not answer. Deliberately not folded into
+        /// `missingKey`: telling somebody to enter a key they already entered
+        /// is how an hour goes missing (P9.3).
+        case keyUnreadable(variable: String, detail: String)
+        /// The server answered, and said no to the key. Its own case because
+        /// "ต่อไม่ได้: HTTP 401" sends a person to check their network, and
+        /// the network is fine (P9.4).
+        case keyRejected(status: Int)
     }
 
     public let verdict: Verdict
@@ -136,7 +156,13 @@ public struct EndpointCheck: Sendable, Equatable {
             "ต่อได้ แต่ไม่มีโมเดลชื่อนี้ — ที่มีคือ "
                 + (available.isEmpty ? "(ไม่มีเลย)" : available.prefix(4).joined(separator: ", "))
         case .unreachable(let detail): "ต่อไม่ได้: \(detail)"
-        case .missingKey(let variable): "ยังไม่มีคีย์ — ตั้ง \(variable) ใน environment ก่อน"
+        case .missingKey(let variable): "ยังไม่มีคีย์ — ตั้งคีย์ของ “\(variable)” ก่อน"
+        case .keyUnreadable(let variable, let detail):
+            "อ่านคีย์ “\(variable)” จาก Keychain ไม่ได้ (\(detail)) — "
+                + "ไม่ได้แปลว่ายังไม่ได้ตั้ง"
+        case .keyRejected(let status):
+            "เซิร์ฟเวอร์ตอบแล้ว แต่ไม่รับคีย์ (HTTP \(status)) — "
+                + "เครือข่ายไม่ได้มีปัญหา ให้ตรวจว่าคีย์ถูกต้องและยังไม่หมดอายุ"
         }
     }
 }
@@ -150,9 +176,13 @@ public struct EndpointProbe: Sendable {
         guard let url = endpoint.url else {
             return EndpointCheck(verdict: .unreachable("URL ใช้ไม่ได้: \(endpoint.baseURL)"))
         }
-        if endpoint.kind == .paid, let variable = endpoint.apiKeyEnvironmentVariable,
-           endpoint.apiKey == nil {
-            return EndpointCheck(verdict: .missingKey(variable))
+        if endpoint.kind == .paid, let variable = endpoint.apiKeyEnvironmentVariable {
+            switch endpoint.apiKeyStatus {
+            case .present: break
+            case .absent: return EndpointCheck(verdict: .missingKey(variable))
+            case .unreadable(let detail):
+                return EndpointCheck(verdict: .keyUnreadable(variable: variable, detail: detail))
+            }
         }
 
         var request = URLRequest(url: url.appending(path: "models"))
@@ -166,6 +196,9 @@ public struct EndpointProbe: Sendable {
             guard let http = response as? HTTPURLResponse else {
                 return EndpointCheck(verdict: .unreachable("ไม่ได้รับ HTTP response"))
             }
+            if http.statusCode == 401 || http.statusCode == 403 {
+                return EndpointCheck(verdict: .keyRejected(status: http.statusCode))
+            }
             guard (200..<300).contains(http.statusCode) else {
                 return EndpointCheck(verdict: .unreachable("HTTP \(http.statusCode)"))
             }
@@ -174,7 +207,11 @@ public struct EndpointProbe: Sendable {
                 ? EndpointCheck(verdict: .ok(models: available.count))
                 : EndpointCheck(verdict: .unknownModel(available: available))
         } catch {
-            return EndpointCheck(verdict: .unreachable((error as NSError).localizedDescription))
+            // Through `ReadableFailure` rather than `localizedDescription`,
+            // which hands the user an English sentence from Foundation in the
+            // middle of a Thai screen (P9.4).
+            let failure = ReadableFailure.explain(error, doing: endpoint.name)
+            return EndpointCheck(verdict: .unreachable(failure.summary))
         }
     }
 

@@ -325,5 +325,11 @@ let package = Package(
         .testTarget(name: "ToolBeltTests",
                     dependencies: ["ToolBelt", "CoreEngine", "Persistence", "Sidecar", "Config",
                                    "Knowledge", "WebSearch", "Roster", "Analysis", "DocGen"]),
+        // P9.3's Done-when is a property of the whole app, not of one module:
+        // *no* store writes a secret to disk. It therefore needs a target that
+        // can reach every store that has one — which is exactly why the check
+        // did not exist before.
+        .testTarget(name: "SecretsAuditTests",
+                    dependencies: ["AgentKit", "Config", "Channels", "Analysis", "MCPBridge"]),
     ]
 )

@@ -1,4 +1,5 @@
 import SwiftUI
+import AgentKit
 import ToolBelt
 
 // ─────────────────────────────────────────────────────────────
@@ -59,7 +60,7 @@ final class FilesViewModel {
             problem = nil
         } catch {
             entries = []
-            problem = "\(error)"
+            problem = ReadableFailure.message(for: error, doing: "อ่านรายการไฟล์")
         }
     }
 
@@ -94,7 +95,7 @@ final class FilesViewModel {
         } catch {
             content = nil
             draft = ""; loaded = ""
-            problem = "\(error)"
+            problem = ReadableFailure.message(for: error, doing: "เปิดไฟล์นี้")
         }
     }
 
@@ -109,8 +110,10 @@ final class FilesViewModel {
             reload()
         } catch {
             // Includes the "somebody else wrote this file" refusal, which is
-            // the message that matters most here.
-            problem = "\(error)"
+            // the message that matters most here — so `message(for:)` passes our
+            // own sentences straight through and only translates the OS's
+            // (a full disk, a folder we may not write to · P9.4).
+            problem = ReadableFailure.message(for: error, doing: "บันทึกไฟล์นี้")
         }
     }
 

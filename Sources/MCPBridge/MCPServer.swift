@@ -11,8 +11,8 @@ import Execution
 // read before anything is connected to anything, and a person should be able
 // to open it and see exactly what will be launched on their machine. Secrets
 // are named, never written — `environmentVariables` maps a variable the server
-// wants to a variable we read at launch, so a token lives in the environment
-// and not in a file that gets copied around.
+// wants to a name we look up at launch, so a token lives in the Keychain
+// (P9.3) and not in a file that gets copied around.
 // ─────────────────────────────────────────────────────────────
 
 public struct MCPServerConfig: Sendable, Codable, Equatable, Identifiable {
@@ -30,9 +30,9 @@ public struct MCPServerConfig: Sendable, Codable, Equatable, Identifiable {
     /// take their root from it rather than from an argument, so a server with
     /// the wrong cwd is a server serving the wrong project.
     public var workingDirectory: String?
-    /// `SERVER_VARIABLE: our-variable-name`. The value is read from the
-    /// environment at launch; a name with nothing behind it is a blocker, not
-    /// an empty string quietly passed along.
+    /// `SERVER_VARIABLE: the-name-we-filed-it-under`. The value is looked up
+    /// at launch; a name with nothing behind it is a blocker, not an empty
+    /// string quietly passed along.
     public var environmentVariables: [String: String]
     public var isEnabled: Bool
 
@@ -72,9 +72,15 @@ public struct MCPServerConfig: Sendable, Codable, Equatable, Identifiable {
         if command.trimmingCharacters(in: .whitespaces).isEmpty {
             reasons.append("ยังไม่ได้ระบุคำสั่งที่จะรัน")
         }
-        for (wanted, variable) in environmentVariables.sorted(by: { $0.key < $1.key })
-        where !SecretStore.has(variable) {
-            reasons.append("ยังไม่ได้ตั้งตัวแปร \(variable) ที่เก็บค่าของ \(wanted)")
+        for (wanted, variable) in environmentVariables.sorted(by: { $0.key < $1.key }) {
+            switch SecretStore.status(variable) {
+            case .present: continue
+            case .absent:
+                reasons.append("ยังไม่ได้ตั้งค่าของ \(wanted) (“\(variable)”)")
+            case .unreadable(let detail):
+                // Not the same sentence as "not set" — P9.3's rule.
+                reasons.append("อ่านค่าของ \(wanted) (“\(variable)”) ไม่ได้: \(detail)")
+            }
         }
         if let workingDirectory,
            !FileManager.default.fileExists(atPath: workingDirectory) {
@@ -187,14 +193,10 @@ public enum CommandLookup {
 }
 
 /// A list file that will not decode. The copy is taken here, before anything
-/// can save over it — see `FileStoreSafety`.
+/// can save over it, and the report is kept where a screen can show it — a
+/// corrupt file that only ever reached the unified log is a list that went
+/// empty one morning with no explanation (P9.4).
 private func reportUnreadable(_ file: URL, kind: String, log: Logger) {
-    let backup = FileStoreSafety.preserveUnreadable(file)
-    if let backup {
-        log.error("""
-            \(kind, privacy: .public) file unreadable — kept a copy at \(backup.lastPathComponent, privacy: .public)             and starting from an empty list
-            """)
-    } else {
-        log.error("\(kind, privacy: .public) file unreadable — starting from an empty list")
-    }
+    let failure = FileStoreSafety.reportUnreadable(file, describedAs: kind)
+    log.error("\(failure.summary, privacy: .public)")
 }

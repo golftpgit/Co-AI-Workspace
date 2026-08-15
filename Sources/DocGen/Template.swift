@@ -257,14 +257,10 @@ public struct TemplateStore: Sendable {
 }
 
 /// A list file that will not decode. The copy is taken here, before anything
-/// can save over it — see `FileStoreSafety`.
+/// can save over it, and the report is kept where a screen can show it — a
+/// corrupt file that only ever reached the unified log is a list that went
+/// empty one morning with no explanation (P9.4).
 private func reportUnreadable(_ file: URL, kind: String, log: Logger) {
-    let backup = FileStoreSafety.preserveUnreadable(file)
-    if let backup {
-        log.error("""
-            \(kind, privacy: .public) file unreadable — kept a copy at \(backup.lastPathComponent, privacy: .public)             and starting from an empty list
-            """)
-    } else {
-        log.error("\(kind, privacy: .public) file unreadable — starting from an empty list")
-    }
+    let failure = FileStoreSafety.reportUnreadable(file, describedAs: kind)
+    log.error("\(failure.summary, privacy: .public)")
 }
