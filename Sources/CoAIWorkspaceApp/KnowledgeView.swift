@@ -210,7 +210,7 @@ private struct DocumentRow: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(document.title).font(.body).lineLimit(2)
             HStack(spacing: 6) {
-                TierBadge(tier: document.tier)
+                TierBadge(tier: document.tier, origin: document.origin)
                 Text("\(document.chunkCount) ส่วน")
                 if !document.hasVectors {
                     Label("ไม่มี vector", systemImage: "exclamationmark.circle")
@@ -243,7 +243,7 @@ private struct ResultRow: View {
                 .textSelection(.enabled)
 
             HStack(spacing: 8) {
-                TierBadge(tier: result.tier)
+                TierBadge(tier: result.tier, origin: result.chunk.provenance.origin)
                 Text(result.provenance.title).lineLimit(1)
                 if let page = result.provenance.page { Text("น. \(page)") }
                 if result.provenance.section == "OCR" {
@@ -276,6 +276,12 @@ private struct ResultRow: View {
 
 private struct TierBadge: View {
     let tier: SourceTier?
+    /// Needed only to say *why* there is no tier. Two origins legitimately
+    /// have none and they are not the same thing: something the system wrote,
+    /// and an interview. Saying "ระบบเขียนเอง" over a participant's words —
+    /// which is what this did until it was driven — describes the wrong thing
+    /// to somebody deciding how much to trust it.
+    var origin: Origin?
 
     var body: some View {
         Text(tier?.rawValue.uppercased() ?? "—")
@@ -284,8 +290,21 @@ private struct TierBadge: View {
             .padding(.vertical, 1)
             .background(colour.opacity(0.18), in: Capsule())
             .foregroundStyle(colour)
-            .accessibilityLabel(tier.map { "ระดับความน่าเชื่อถือ \($0.rawValue.uppercased())" }
-                                ?? "ระบบเขียนเอง ไม่มีระดับความน่าเชื่อถือภายนอก")
+            .accessibilityLabel(label)
+    }
+
+    private var label: String {
+        if let tier { return "ระดับความน่าเชื่อถือ \(tier.rawValue.uppercased())" }
+        switch origin {
+        case .fieldwork:
+            // Not "low credibility". Primary data is not on that scale at all
+            // (§11.3), and the scale is about published sources.
+            return "ข้อมูลปฐมภูมิของโครงการนี้ — ไม่ได้อยู่บนสเกลความน่าเชื่อถือของแหล่งภายนอก"
+        case .userAuthored:
+            return "ระบบเขียนเอง ไม่มีระดับความน่าเชื่อถือภายนอก"
+        default:
+            return "ไม่มีระดับความน่าเชื่อถือภายนอก"
+        }
     }
 
     private var colour: Color {

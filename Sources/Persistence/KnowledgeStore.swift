@@ -41,6 +41,13 @@ public actor KnowledgeStore {
         content.setString("origin", Self.encode(chunk.provenance.origin))
         content.set("page", chunk.provenance.page)
         content.setString("section", chunk.provenance.section)
+        // The character span, without which a chunk cites the whole document.
+        // It was not saved at all until P11.8 was driven: the offsets survived
+        // in memory and were gone on the next launch, so "this quotation points
+        // at that paragraph of the interview" was true until you quit the app
+        // (U33-4).
+        content.set("passage_start", chunk.provenance.passage?.start)
+        content.set("passage_end", chunk.provenance.passage?.end)
         content.set("authors", chunk.provenance.authors)
         content.set("year", chunk.provenance.year)
         content.setString("supersedes", chunk.provenance.supersedes)
@@ -113,10 +120,18 @@ public actor KnowledgeStore {
         let entities = row["entities"]?.arrayValue?.compactMap { $0.stringValue } ?? []
         let embedding = row["embedding"]?.arrayValue?.compactMap { value in value.doubleValue.map(Float.init) }
 
-        // A row whose tier is missing is not silently promoted to trustworthy:
-        // `authored` is the only provenance that legitimately has no tier, and
-        // anything else without one is treated as the least credible rather
-        // than as unknown.
+        // A row whose tier is missing is not silently promoted to trustworthy.
+        // **Two** origins legitimately have no tier, not one: what the system
+        // wrote itself, and fieldwork. An interview is not a weak source — it
+        // is not on that scale at all, and §11.3's corroboration rule reads T5
+        // as "least credible web page". Until this was driven, a transcript
+        // came back from the database as T5 and the participant's own words
+        // were displayed as the least trustworthy thing in the library
+        // (U33-3).
+        var passage: TextSpan?
+        if let start = row["passage_start"]?.intValue, let end = row["passage_end"]?.intValue {
+            passage = TextSpan(start: start, end: end)
+        }
         let provenance: Provenance
         if let tier = row["tier"]?.stringValue.flatMap(SourceTier.init(rawValue:)) {
             provenance = Provenance(
@@ -127,6 +142,7 @@ public actor KnowledgeStore {
                 year: row["year"]?.intValue,
                 page: row["page"]?.intValue,
                 section: row["section"]?.stringValue,
+                passage: passage,
                 accessedAt: accessedAt,
                 supersedes: row["supersedes"]?.stringValue)
         } else if case .userAuthored(let runID) = origin {
@@ -136,13 +152,23 @@ public actor KnowledgeStore {
                 runID: runID,
                 page: row["page"]?.intValue,
                 section: row["section"]?.stringValue,
+                passage: passage,
                 accessedAt: accessedAt,
                 supersedes: row["supersedes"]?.stringValue)
+        } else if case .fieldwork(let participantCode) = origin {
+            provenance = Provenance.fieldwork(
+                documentID: documentID,
+                title: row["title"]?.stringValue ?? documentID,
+                participantCode: participantCode,
+                collectedAt: accessedAt,
+                passage: passage,
+                section: row["section"]?.stringValue)
         } else {
             provenance = Provenance(
                 documentID: documentID,
                 title: row["title"]?.stringValue ?? documentID,
                 origin: origin, tier: .t5,
+                passage: passage,
                 accessedAt: accessedAt)
         }
 
