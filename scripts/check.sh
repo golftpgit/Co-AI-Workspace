@@ -652,6 +652,32 @@ else
   ok "every role has a knowledge view of its own, with no default arm"
 fi
 
+# The plan's status cells have to agree with themselves.
+#
+# Marking a task done by *appending* to its status cell leaves the row opening
+# with "— ยังไม่เริ่ม" and the ✅ somewhere in the middle — which is what a
+# reader scanning the table sees, and what I did to all eight P12 rows in one
+# edit. The dashboard is only trustworthy if the first marker in a cell is the
+# true one.
+STALE_STATUS=$(/usr/bin/python3 - <<'PLAN'
+import re
+bad = []
+for i, line in enumerate(open('IMPLEMENTATION_PLAN.md'), 1):
+    m = re.match(r'\| \*\*(P\d+\.\d+[a-z]?)\*\*[^|]*\|[^|]*\|[^|]*\|(.*)\|$', line)
+    if not m:
+        continue
+    task, status = m.group(1), m.group(2).strip()
+    if status.startswith('—') and ('✅' in status or '🔶' in status):
+        bad.append(f'{task}@{i}')
+print(' '.join(bad))
+PLAN
+)
+if [ -n "$STALE_STATUS" ]; then
+  fail "a plan row opens with a stale marker and closes with a newer one: $STALE_STATUS"
+else
+  ok "every task's status cell opens with its real state"
+fi
+
 # P12.8 — the coupling that would rot silently.
 #
 # `ToolProficiencyReader` decides "the rules stopped this" versus "this role got

@@ -145,11 +145,11 @@ baseline + change control · ทะเบียน 5 ตัว · รายง�
 
 - **ยังเซ็นแบบ ad-hoc** — Gatekeeper บนเครื่องอื่นจะปฏิเสธ ต้อง build จาก source เอง (ยังไม่ notarize เพราะยังไม่มี Developer ID)
 - **macOS 26 + Apple Silicon เท่านั้น** และต้องมี Xcode 26 + Metal Toolchain เพื่อ build
-- **หน้าจอยังไม่ครบ**: **Workflow Builder** กับ **File Viewer/Editor** ยังไม่ได้ทำเลย · หน้า Settings กับ Processes มีแล้วแต่ไม่ครบทุกหมวด — ตั้งค่าบางอย่าง (บัญชีบอต, connector, MCP server) ยังต้องแก้ไฟล์ JSON/plist เอง
+- **หน้าจอยังไม่ครบ**: หน้า Settings กับ Processes มีแล้วแต่ไม่ครบทุกหมวดของ [§15](ARCHITECTURE.md) · ยังไม่มี graph view ของ entity/relation · ยังไม่มีตัวแสดงรูปในหน้าไฟล์ และยังสร้าง/ลบ/เปลี่ยนชื่อไฟล์จากหน้านั้นไม่ได้
 - **ข้อจำกัดของ App Sandbox ที่วัดแล้ว**: แอปมองไม่เห็น `/opt/homebrew`, `/usr/local` และ `~/.lmstudio` → notebook ได้ Python จาก Command Line Tools ที่ไม่มี pandas/numpy (สถิติของแอปจึงเขียนเองใน Swift ทั้งชุด ไม่พึ่ง Python)
 - **คุณภาพขึ้นกับเครื่อง** — บนเครื่อง 16 GB ชั้นในเครื่องคือโมเดล 4B ซึ่งพอสำหรับงานเบา งานจริงต้องต่อ endpoint · ยังไม่เคยทดสอบกับ API ที่คิดเงิน
-- **secret ของ endpoint/connector/บอต ยังอยู่ใน environment variable ไม่ใช่ Keychain** (P9.3 ยังไม่ทำ — เก็บแค่*ชื่อ*ตัวแปรลงไฟล์ ไม่ใช่ค่า) · คีย์ที่ผูกคำตอบกับตัวผู้เข้าร่วมอยู่ใน Keychain แล้ว · **ยังไม่มี security review — ข้อนี้สำคัญที่สุดเพราะแอปรับข้อมูลจากคนนอกได้แล้ว**
-- ยังไม่มี read/write file เป็นทูล · ยังไม่มี graph view ของ entity/relation · การสกัด entity ภาษาไทยยังได้ clause ปนมา · ไม่มี plot/แผนภูมิ · ยังไม่มีหน้าจอ*ประกอบ*ต้นฉบับ (ทางส่งออกพร้อมแล้ว) · ไม่มี multi-user/sync/แอปมือถือ
+- **Keychain จะถามใหม่ทุกครั้งที่ build ใหม่** ตราบใดที่ยังเซ็นแบบ ad-hoc — ลายเซ็น ad-hoc คือแฮชของไบนารีเอง แอปที่ build ใหม่จึงเป็นคนละโปรแกรมในสายตาของ Keychain · แก้ได้ฟรีด้วยใบรับรองที่เซ็นเองในเครื่อง ดู `scripts/make-signing-identity.sh`
+- ยังไม่มี read/write file เป็นทูล · การสกัด entity ภาษาไทยยังได้ clause ปนมา · ยังไม่ตรวจลายเซ็นหรือที่มาของแพ็กเกจที่ `install_package` ติดตั้ง · ยังไม่เคยเดินโปรเจกต์ที่มีคำตอบจริงจนกดปิดบนหน้าจอ
 
 ---
 
