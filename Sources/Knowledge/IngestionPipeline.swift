@@ -21,6 +21,11 @@ public struct IngestionReport: Sendable, Equatable {
     public let nearDuplicatesSkipped: Int
     public let usedOCR: Bool
     public let pages: Int
+    /// How many chunks of an earlier version of this document were removed to
+    /// make room. Non-zero only when the same document was ingested before —
+    /// a corrected transcript (§20.9) — and worth reporting, because "เพิ่ม 12
+    /// ส่วน" hides that 11 older ones just stopped being citable.
+    public let chunksReplaced: Int
 
     public var duplicatesSkipped: Int { exactDuplicatesSkipped + nearDuplicatesSkipped }
 
@@ -28,7 +33,8 @@ public struct IngestionReport: Sendable, Equatable {
     /// disk and a page from the web both report what they did the same way.
     public init(documentID: String, chunksAdded: Int,
                 exactDuplicatesSkipped: Int, nearDuplicatesSkipped: Int,
-                usedOCR: Bool, pages: Int) {
+                usedOCR: Bool, pages: Int, chunksReplaced: Int = 0) {
+        self.chunksReplaced = chunksReplaced
         self.documentID = documentID
         self.chunksAdded = chunksAdded
         self.exactDuplicatesSkipped = exactDuplicatesSkipped
@@ -141,6 +147,78 @@ public struct IngestionPipeline: Sendable {
         return IngestionReport(documentID: id, chunksAdded: added,
                                exactDuplicatesSkipped: exact, nearDuplicatesSkipped: near,
                                usedOCR: document.usedOCR, pages: document.pages.count)
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Text that is already in the system
+    // ─────────────────────────────────────────────────────────
+
+    /// Ingests passages that came from inside the app rather than from a file
+    /// — an interview transcript (§20.9, P11.8).
+    ///
+    /// Chunking is done by the caller because `TranscriptIngest` has to record
+    /// *where in the transcript* each chunk came from, and a chunk that cannot
+    /// be cited back to a passage turns a two-hour interview into a citation
+    /// nobody can check. Everything after that — dedup, embedding,
+    /// near-duplicate rejection — is the same path an uploaded document takes,
+    /// because a transcript that were indexed differently would retrieve
+    /// differently from everything else in the project.
+    ///
+    /// **Re-ingesting replaces.** A transcript keeps its id when it is
+    /// corrected, so a second ingest is the *same document* said better. Adding
+    /// the corrected passages beside the old ones would leave the knowledge
+    /// base holding both versions of an interview with no way to tell which
+    /// answer came from the retracted one — the exact failure §20.9 corrects
+    /// transcripts to avoid. An uploaded file is content-addressed and so is a
+    /// genuinely different document when it changes; this is not.
+    public func ingest(chunks: [(chunk: Chunk, provenance: Provenance)],
+                       into index: inout KnowledgeIndex,
+                       scope: Scope,
+                       documentID: String,
+                       embedder: (any Embedder)? = nil) async throws -> IngestionReport {
+        if let embedder {
+            let diagnosis: EmbedderDiagnosis
+            do { diagnosis = try await diagnose(embedder) }
+            catch let error as EmbeddingError { throw IngestionError.embedding(error) }
+            guard diagnosis.isUsable else { throw IngestionError.embedderUnusable(diagnosis) }
+        }
+
+        // Before anything is inserted, and only once the embedder is known to
+        // work: a replace that threw halfway would otherwise leave the
+        // knowledge base with neither version.
+        let replaced = index.removeDocument(documentID)
+
+        var added = 0, exact = 0, near = 0
+        for (position, entry) in chunks.enumerated() {
+            let hash = Self.contentHash(entry.chunk.text)
+            guard !index.contains(contentHash: hash) else { exact += 1; continue }
+
+            var embedding: [Float]?
+            if let embedder {
+                do { embedding = try await embedder.embed(entry.chunk.text) }
+                catch let error as EmbeddingError { throw IngestionError.embedding(error) }
+            }
+            if let embedding, index.containsNearDuplicate(of: embedding, scope: scope,
+                                                          threshold: nearDuplicateThreshold) {
+                near += 1
+                continue
+            }
+
+            try index.insert(IndexedChunk(
+                id: "\(documentID)#c\(position)",
+                text: entry.chunk.text,
+                scope: scope,
+                provenance: entry.provenance,
+                embedding: embedding,
+                embeddingProfileID: embedding == nil ? nil : embedder?.profile.id,
+                contentHash: hash,
+                entities: EntityExtractor().entities(in: entry.chunk.text)))
+            added += 1
+        }
+
+        return IngestionReport(documentID: documentID, chunksAdded: added,
+                               exactDuplicatesSkipped: exact, nearDuplicatesSkipped: near,
+                               usedOCR: false, pages: 1, chunksReplaced: replaced)
     }
 
     /// Content-addressed, not path-addressed: the same file copied to a second

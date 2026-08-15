@@ -154,6 +154,15 @@ public final class CodingViewModel {
         _ = store
     }
 
+    /// Puts a sentence from another screen on this one.
+    ///
+    /// The knowledge base owns what happened to an ingested transcript —
+    /// including the refusals — and the person is looking at this screen when
+    /// they press the button, so this is where the answer has to appear.
+    public func report(_ status: Status?) {
+        self.status = status
+    }
+
     // MARK: - transcripts
 
     public func transcript(_ id: String) -> Transcript? {

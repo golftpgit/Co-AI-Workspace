@@ -3,6 +3,7 @@ import Observation
 import UniformTypeIdentifiers
 import AgentKit
 import Knowledge
+import Instruments
 import EmbeddingRuntime
 import Observability
 import Persistence
@@ -191,6 +192,82 @@ public final class KnowledgeViewModel {
                             isError: false)
         } else {
             status = Status(message: failed.joined(separator: "\n"), isError: true)
+        }
+    }
+
+    /// Puts an interview transcript into the knowledge base (§20.9, P11.8).
+    ///
+    /// Not `ingest(_ urls:)` with a temporary file, which was the tempting
+    /// shortcut: writing the transcript out and reading it back would lose the
+    /// character offsets, and those offsets are what let a retrieved chunk cite
+    /// *the passage* instead of the whole two-hour interview. `TranscriptIngest`
+    /// chunks it and keeps the spans; this puts the result through the same
+    /// dedup and embedding path an uploaded document takes.
+    ///
+    /// **Refused outside a project.** An interview belongs to the study that
+    /// collected it. Landing one in `central` would put a participant's words
+    /// in the library every other project searches, and in `policy` it would
+    /// become a rule the hook chain enforces — neither is a mistake worth
+    /// leaving available, and neither is undoable by the person who notices.
+    public func ingest(transcript: Transcript) async {
+        guard case .project = scope else {
+            status = Status(message: "บทถอดเทปเข้าคลังของโครงการเท่านั้น — "
+                            + "คลังกลางถูกค้นจากทุกโครงการ คำพูดของผู้เข้าร่วมจึงไม่ควรไปอยู่ตรงนั้น "
+                            + "(§20.7) · เปลี่ยนไปที่โครงการที่เก็บบทสัมภาษณ์นี้ก่อน",
+                            isError: true)
+            return
+        }
+        isWorking = true
+        defer { isWorking = false }
+
+        let chunks = TranscriptIngest.chunks(of: transcript)
+            .map { (chunk: $0.0, provenance: $0.1) }
+        guard !chunks.isEmpty else {
+            status = Status(message: "บทถอดเทปนี้ยังไม่มีเนื้อความให้เข้าคลัง", isError: true)
+            return
+        }
+
+        do {
+            var working = index
+            let report = try await pipeline.ingest(chunks: chunks, into: &working,
+                                                   scope: scope,
+                                                   documentID: transcript.id,
+                                                   embedder: embedder)
+            index = working
+
+            let newChunks = index.allChunks.filter {
+                $0.provenance.documentID == report.documentID
+            }
+            if let store {
+                // The old version's rows go too, or the database keeps passages
+                // the index has already stopped citing — a retracted sentence
+                // that comes back on the next launch.
+                if report.chunksReplaced > 0 { try await store.deleteDocument(transcript.id) }
+                try await store.save(newChunks)
+            }
+            await extractRelations(from: newChunks)
+            let conflicts = await reviewForConflicts(newChunks)
+
+            refresh()
+            var message = "เข้าคลังแล้ว \(report.chunksAdded) ส่วน จาก “\(transcript.title)” — "
+                + "แต่ละส่วนอ้างกลับไปที่ช่วงข้อความในบทถอดเทปได้"
+            if report.chunksReplaced > 0 {
+                // Said out loud: "เพิ่ม 12 ส่วน" on its own hides that eleven
+                // older passages just stopped being citable.
+                message += " · แทนที่ของเดิม \(report.chunksReplaced) ส่วน "
+                    + "เพราะบทถอดเทปนี้เคยเข้าคลังไปแล้ว"
+            }
+            if report.duplicatesSkipped > 0 {
+                message += " · ข้ามที่ซ้ำ \(report.duplicatesSkipped) ส่วน"
+            }
+            if conflicts > 0 {
+                message += " · พบความรู้ที่ขัดกัน \(conflicts) จุด ดูได้ที่แท็บข้อขัดแย้ง"
+            }
+            status = Status(message: message, isError: false)
+        } catch {
+            log.error("ingest transcript: \(error)")
+            status = Status(message: ReadableFailure.message(
+                for: error, doing: "นำบทถอดเทปเข้าคลังความรู้"), isError: true)
         }
     }
 

@@ -516,7 +516,18 @@ private struct RootView: View {
             // than a box inside "เก็บข้อมูล" because it is the other order of
             // work: there the instrument is designed before anybody answers,
             // here the text exists and the categories are built out of it.
-            CodingView(model: coding)
+            CodingView(model: coding, ingest: { transcript in
+                // The knowledge screen's own model does the work, so the index,
+                // the dedup and the conflict review are the ones the library
+                // already uses — a second path into the knowledge base would be
+                // a second set of rules about what is in it.
+                await knowledge.attach(store: engine.knowledge)
+                knowledge.scope = projects.scope
+                await knowledge.ingest(transcript: transcript)
+                coding.report(knowledge.status.map {
+                    CodingViewModel.Status(message: $0.message, isError: $0.isError)
+                })
+            })
                 .id(projects.scope.storageKey)
                 .task {
                     await coding.attach(store: CodebookStore(client: engine.client),
