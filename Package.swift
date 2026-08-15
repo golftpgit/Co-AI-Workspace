@@ -258,8 +258,11 @@ let package = Package(
         // produces is the span of control P16 builds an organisation on. An
         // executable for the same reason as MLXCheck: it needs hardware
         // `swift test` does not have, and it takes minutes.
+        // CoreEngine and Knowledge are here for P18.1: the conflict criteria
+        // are only worth anything if the model this app runs on actually
+        // applies them, and that cannot be checked with a scripted answer.
         .executableTarget(name: "TierOneCheck",
-                          dependencies: ["LLMProviders", "AgentKit"]),
+                          dependencies: ["LLMProviders", "AgentKit", "CoreEngine", "Knowledge"]),
 
         // M1 — hook chain, approval broker, tool gateway, agent loop. Every
         // decision the system makes lives here (ARCHITECTURE §5).

@@ -975,6 +975,25 @@ else
   ok "every project write goes past the archive guard, or is a documented exception"
 fi
 
+# P18.1 — the conflict criteria are three conditions, not one opinion.
+#
+# §11.7 borrows NLI's definition: a contradiction needs the same question, a
+# real mutual exclusion, and the same context — all three. It was one
+# `contradicts` boolean with the conditions described in the prompt, which asks
+# a model to do the reasoning *and* the bookkeeping and leaves nothing to check
+# afterwards. The pressure to go back is real, because one boolean is simpler
+# every time somebody touches this file.
+MISSING_CRITERIA=""
+for condition in sameQuestion mutuallyExclusive sameContext isTranslation; do
+  grep -q "\"$condition\"" Sources/CoreEngine/ConflictDetector.swift \
+    || MISSING_CRITERIA="$MISSING_CRITERIA $condition"
+done
+if [ -n "$MISSING_CRITERIA" ]; then
+  fail "the conflict schema stopped asking:$MISSING_CRITERIA (§11.7, P18.1)"
+else
+  ok "a conflict card still needs all three NLI conditions, and says so in the schema"
+fi
+
 # P15.2b — the model's thinking is cut in exactly one place.
 #
 # The rule is not "cut it" — it is *where*. A `<think>` tag reaching a screen is
