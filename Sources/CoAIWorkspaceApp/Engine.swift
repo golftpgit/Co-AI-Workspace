@@ -200,15 +200,29 @@ struct Engine: Sendable {
         let endpoints = config.effectiveEndpoints
         var endpointChecks: [String: EndpointCheck] = [:]
         let probe = EndpointProbe()
+        /// The window of the endpoint the app will normally talk to, as the
+        /// server reports it (§17.1, P15.3). Nil when nothing answered — and
+        /// nil stays nil rather than becoming a guessed number.
+        var defaultWindow: Int?
         for endpoint in endpoints.endpoints {
             guard let url = endpoint.url else { continue }
             // Probed at boot so the status dots are true when the screen opens,
             // and so a typo in a model name is visible before it is used
-            // (E.9 case 8a).
-            endpointChecks[endpoint.id] = await probe.check(endpoint)
+            // (E.9 case 8a). The same reply says how big the window is and
+            // which model is really being served, so neither is guessed
+            // (P15.1/P15.3).
+            let check = await probe.check(endpoint)
+            endpointChecks[endpoint.id] = check
+            if endpoint.id == endpoints.defaultEndpointID || defaultWindow == nil {
+                defaultWindow = check.served?.maxModelLength ?? defaultWindow
+            }
             executors.append(VLLMExecutor(
                 identifier: endpoint.name,
                 baseURL: url,
+                // Whatever the config says, including nothing: an empty name
+                // means "the model this server serves", and `VLLMExecutor`
+                // asks. A pinned name that no longer exists takes the endpoint
+                // out of the chain with nothing on screen saying why.
                 model: endpoint.model,
                 apiKey: endpoint.apiKey,
                 tier: endpoint.kind == .paid ? .paid : .selfHosted,
@@ -216,7 +230,17 @@ struct Engine: Sendable {
                     endpoint.outputPricePerMillion.map {
                         TokenPrice(inputPerMillion: input, outputPerMillion: $0)
                     }
-                }))
+                },
+                capabilities: .init(
+                    // Declared by the server, not by this file. It read 32_768
+                    // here for every endpoint, so raising `--max-model-len`
+                    // changed nothing and lowering it made the app overflow a
+                    // window it believed was bigger.
+                    contextWindow: check.served?.maxModelLength ?? 32_768,
+                    supportsTools: true,
+                    supportsStructuredOutput: true,
+                    supportsStreaming: true,
+                    supportsVision: false)))
         }
 
         // §9.5 — only the metered tier passes through it, and only ever to be
@@ -368,16 +392,21 @@ struct Engine: Sendable {
             directory: paths.skillsDirectory,
             knownTools: { [gateway] in Set(await gateway.registeredNames) }))
 
-        // The budget is what this machine can actually serve, not what the
-        // endpoint advertises. VLLMExecutor declares a 32k window; measured on
-        // 16 GB, a 7.6k-token prompt to a 9B model took ~7.4 GB of unified
-        // memory and the server started answering 500 — so the transcript is
-        // kept well under that and compaction (§5.6) is what holds it there.
+        // The window the server reports, minus room for the answer (§17.1,
+        // P15.3). It was `16_384` written here — half of a 32k window that was
+        // also written into Swift, so changing `--max-model-len` on the server
+        // moved neither number.
+        //
+        // The fallback is the old figure, and it is a floor rather than a
+        // guess: measured on 16 GB, a 7.6k-token prompt to a 9B model took
+        // ~7.4 GB of unified memory and the server began answering 500. With no
+        // endpoint reachable at boot, that is the machine the app is on.
+        let promptBudget = defaultWindow.map { ContextManager.promptBudget(forWindow: $0) } ?? 16_384
         let runner = AgentTurnRunner(router: router,
                                      gateway: gateway,
                                      transcript: conversations,
                                      spanSink: spans,
-                                     contextManager: ContextManager(budget: 16_384))
+                                     contextManager: ContextManager(budget: promptBudget))
 
         // The specialists share the router and the same gateway the chat uses,
         // so their tool calls go through the one hook chain (§5.3) rather than

@@ -80,6 +80,72 @@ public struct InferenceEndpoint: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+// ─────────────────────────────────────────────────────────────
+// What a server says it is (§17.1, P15.1/P15.3)
+//
+// Two facts, one request, and neither of them belongs in a config file:
+//
+//  • **which model it serves** — swapping a checkpoint changes the name, and a
+//    config that names the old one fails in the least useful way available: the
+//    executor drops out of the chain as "unavailable" and the app quietly
+//    answers from the 3B model on this machine instead.
+//  • **how big its window is** — the app used to declare 32k and budget 16k,
+//    both written into Swift. Change `--max-model-len` on the server and
+//    nothing here notices.
+// ─────────────────────────────────────────────────────────────
+
+public struct ServedModels: Sendable, Equatable {
+    public let ids: [String]
+    /// `max_model_len` as reported by vLLM. Nil on servers that do not report
+    /// it — LM Studio does not — and nil has to stay tellable from a number,
+    /// because "unknown" and "small" call for different behaviour.
+    public let maxModelLength: Int?
+
+    public init(ids: [String], maxModelLength: Int? = nil) {
+        self.ids = ids
+        self.maxModelLength = maxModelLength
+    }
+
+    /// Which model a request should name.
+    ///
+    /// Leaving the name blank in the config is the *recommended* setting for a
+    /// server that serves one model, which is what every self-hosted one does:
+    /// it means "whatever you are serving", and it is the only setting that
+    /// survives a checkpoint swap. It is refused on a server with several,
+    /// because choosing one for somebody is guessing — and a hosted API serving
+    /// two hundred models is exactly where the guess would be wrong.
+    public func resolve(configured: String) -> ModelResolution {
+        let configured = configured.trimmingCharacters(in: .whitespaces)
+        if configured.isEmpty {
+            switch ids.count {
+            case 0: return .servesNothing
+            case 1: return .served(ids[0])
+            default: return .ambiguous(available: ids)
+            }
+        }
+        return ids.contains(configured) ? .configured(configured) : .unknown(available: ids)
+    }
+}
+
+public enum ModelResolution: Sendable, Equatable {
+    /// The configured name is one the server serves.
+    case configured(String)
+    /// No name was configured and the server serves exactly one.
+    case served(String)
+    /// A name was configured and the server does not have it (E.9 case 8a).
+    case unknown(available: [String])
+    /// No name was configured and the server serves several.
+    case ambiguous(available: [String])
+    case servesNothing
+
+    public var name: String? {
+        switch self {
+        case .configured(let name), .served(let name): name
+        case .unknown, .ambiguous, .servesNothing: nil
+        }
+    }
+}
+
 public struct EndpointRegistry: Codable, Sendable, Equatable {
     public var endpoints: [InferenceEndpoint]
     public var defaultEndpointID: String?
@@ -128,6 +194,10 @@ public struct EndpointRegistry: Codable, Sendable, Equatable {
 public struct EndpointCheck: Sendable, Equatable {
     public enum Verdict: Sendable, Equatable {
         case ok(models: Int)
+        /// No model name was configured and the server serves several, so
+        /// there is nothing to send. Its own case rather than `unknownModel`:
+        /// that one says a name is wrong, this one says a name is needed.
+        case mustChooseModel(available: [String])
         /// The server answered, but does not serve the model that was typed.
         /// This is the case that has to be caught here: an OpenAI-compatible
         /// server accepts a request for a model it does not have and fails
@@ -147,11 +217,32 @@ public struct EndpointCheck: Sendable, Equatable {
     }
 
     public let verdict: Verdict
+    /// What the server said it serves, when it answered at all (P15.1/P15.3).
+    /// Carried on the check rather than fetched again: the name the app sends
+    /// and the window it budgets against are both in this one reply, and asking
+    /// twice is how they end up describing two different moments.
+    public let served: ServedModels?
+    /// The model this endpoint will actually be asked for. Nil when the server
+    /// could not be reached or the name could not be settled.
+    public let resolvedModel: String?
+
+    public init(verdict: Verdict, served: ServedModels? = nil, resolvedModel: String? = nil) {
+        self.verdict = verdict
+        self.served = served
+        self.resolvedModel = resolvedModel
+    }
+
     public var isUsable: Bool { if case .ok = verdict { return true }; return false }
 
     public var message: String {
         switch verdict {
-        case .ok(let count): "ต่อได้ · เสิร์ฟอยู่ \(count) โมเดล"
+        case .ok(let count):
+            "ต่อได้ · เสิร์ฟอยู่ \(count) โมเดล"
+                + (resolvedModel.map { " · ใช้ \($0)" } ?? "")
+                + (served?.maxModelLength.map { " · เพดานบริบท \($0)" } ?? "")
+        case .mustChooseModel(let available):
+            "ต่อได้ แต่เสิร์ฟหลายโมเดล — ต้องระบุชื่อ: "
+                + available.prefix(4).joined(separator: ", ")
         case .unknownModel(let available):
             "ต่อได้ แต่ไม่มีโมเดลชื่อนี้ — ที่มีคือ "
                 + (available.isEmpty ? "(ไม่มีเลย)" : available.prefix(4).joined(separator: ", "))
@@ -202,10 +293,22 @@ public struct EndpointProbe: Sendable {
             guard (200..<300).contains(http.statusCode) else {
                 return EndpointCheck(verdict: .unreachable("HTTP \(http.statusCode)"))
             }
-            let available = Self.modelNames(in: data)
-            return available.contains(endpoint.model)
-                ? EndpointCheck(verdict: .ok(models: available.count))
-                : EndpointCheck(verdict: .unknownModel(available: available))
+            let served = Self.served(in: data)
+            // The name is settled here, from what the server said, rather than
+            // trusted from the config — see `ServedModels.resolve`.
+            switch served.resolve(configured: endpoint.model) {
+            case .configured(let name), .served(let name):
+                return EndpointCheck(verdict: .ok(models: served.ids.count),
+                                     served: served, resolvedModel: name)
+            case .ambiguous(let available):
+                return EndpointCheck(verdict: .mustChooseModel(available: available),
+                                     served: served)
+            case .unknown, .servesNothing:
+                // A server that serves nothing lands here too, and correctly:
+                // the list it offers is empty, which is what the message says.
+                return EndpointCheck(verdict: .unknownModel(available: served.ids),
+                                     served: served)
+            }
         } catch {
             // Through `ReadableFailure` rather than `localizedDescription`,
             // which hands the user an English sentence from Foundation in the
@@ -215,9 +318,18 @@ public struct EndpointProbe: Sendable {
         }
     }
 
-    static func modelNames(in data: Data) -> [String] {
+    static func modelNames(in data: Data) -> [String] { served(in: data).ids }
+
+    /// Both facts from `/v1/models`: the names, and the window of the first
+    /// entry that reports one.
+    ///
+    /// The first that reports one, not the smallest: vLLM serves a single model
+    /// per process, and the entries after it on a multi-model server belong to
+    /// other models whose windows are their own business.
+    static func served(in data: Data) -> ServedModels {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let list = object["data"] as? [[String: Any]] else { return [] }
-        return list.compactMap { $0["id"] as? String }
+              let list = object["data"] as? [[String: Any]] else { return ServedModels(ids: []) }
+        return ServedModels(ids: list.compactMap { $0["id"] as? String },
+                            maxModelLength: list.compactMap { $0["max_model_len"] as? Int }.first)
     }
 }

@@ -134,7 +134,18 @@ struct EndpointsView: View {
             LabeledContent("URL") {
                 TextField("http://gx10:8000/v1", text: $model.draft.baseURL)
             }
-            LabeledContent("โมเดล") { TextField("qwen3.6-27b", text: $model.draft.model) }
+            LabeledContent("โมเดล") {
+                TextField("เว้นว่าง = ใช้ที่เซิร์ฟเวอร์เสิร์ฟอยู่", text: $model.draft.model)
+            }
+            // §17.1 / P15.1 — the recommended setting for a server that serves
+            // one model, which is what every self-hosted one does. A name
+            // written here becomes wrong the day the checkpoint is swapped, and
+            // the symptom is not an error: the endpoint drops out of the chain
+            // and the app answers from the small model on this Mac instead.
+            Text("เว้นช่องโมเดลว่างได้ถ้าเซิร์ฟเวอร์เสิร์ฟโมเดลเดียว — แอปจะถาม "
+                 + "`/v1/models` เอาชื่อจริงทุกครั้ง จึงไม่พังตอนสลับ checkpoint · "
+                 + "เซิร์ฟเวอร์ที่เสิร์ฟหลายโมเดลต้องระบุชื่อ")
+                .font(.caption).foregroundStyle(.secondary)
             Picker("ชนิด", selection: $model.draft.kind) {
                 Text("self-hosted (ฟรี)").tag(InferenceEndpoint.Kind.selfHosted)
                 Text("paid (คิดเงิน)").tag(InferenceEndpoint.Kind.paid)
@@ -200,7 +211,13 @@ private struct EndpointRow: View {
                             .background(.tint.opacity(0.15), in: Capsule())
                     }
                 }
-                Text("\(endpoint.model) · \(endpoint.baseURL)")
+                // The model actually in use, which is not always the one in the
+                // config: an endpoint with the name left blank is serving
+                // whatever it is serving, and the row has to say which
+                // (§17.1, P15.1). Falls back to the configured name until the
+                // first check answers.
+                Text("\(model.check(for: endpoint)?.resolvedModel ?? servedNameFallback) · "
+                     + endpoint.baseURL)
                     .font(.caption).foregroundStyle(.secondary)
                 if let check = model.check(for: endpoint) {
                     Text(check.message)
@@ -221,6 +238,14 @@ private struct EndpointRow: View {
         .buttonStyle(.link)
         .padding(12)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// What to show before anything has been asked of the server. "(ตามที่
+    /// เซิร์ฟเวอร์เสิร์ฟ)" rather than an empty gap, because an empty model
+    /// field is a deliberate setting here and a row that shows nothing reads
+    /// like a row that is broken.
+    private var servedNameFallback: String {
+        endpoint.model.isEmpty ? "(ตามที่เซิร์ฟเวอร์เสิร์ฟ)" : endpoint.model
     }
 
     /// §9.3 asks for a permanent dot rather than a probe per request: it costs

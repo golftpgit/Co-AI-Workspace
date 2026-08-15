@@ -127,6 +127,89 @@ struct EndpointProbeTests {
         #expect(EndpointProbe.modelNames(in: Data("<html>nope</html>".utf8)).isEmpty)
     }
 
+    // P15.3 — the window is the server's to declare. It was written into Swift
+    // as 32_768, so raising `--max-model-len` changed nothing and lowering it
+    // made the app overflow a window it believed was bigger.
+    @Test("the window comes out of the same catalogue reply as the name")
+    func readsTheWindow() {
+        let payload = Data(#"{"data":[{"id":"qwen-27b","max_model_len":32768}]}"#.utf8)
+        let served = EndpointProbe.served(in: payload)
+        #expect(served.ids == ["qwen-27b"])
+        #expect(served.maxModelLength == 32_768)
+    }
+
+    // LM Studio does not report it, and "unknown" must stay tellable from a
+    // number: one means fall back to what this machine can take, the other
+    // means budget against what the server said.
+    @Test("a server that does not report its window says nil, not zero")
+    func missingWindowIsNil() {
+        let served = EndpointProbe.served(in: Data(#"{"data":[{"id":"m"}]}"#.utf8))
+        #expect(served.maxModelLength == nil)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// P15.1 — which model to ask for is the server's answer, not the config's.
+//
+// A pinned name is wrong the day the checkpoint is swapped, and it fails in the
+// least useful way available: `isAvailable` goes false, the endpoint drops out
+// of the routing chain, and the app answers from the small local model with
+// nothing on screen saying why.
+// ─────────────────────────────────────────────────────────────
+
+@Suite("Which model an endpoint is really serving")
+struct ModelResolutionTests {
+
+    @Test("a blank name on a one-model server means that model")
+    func blankTakesTheOnlyModel() {
+        let served = ServedModels(ids: ["unsloth/Qwen3.8-27B-NVFP4"], maxModelLength: 32_768)
+        #expect(served.resolve(configured: "") == .served("unsloth/Qwen3.8-27B-NVFP4"))
+        // …and it keeps meaning that after a swap, which is the whole point.
+        let swapped = ServedModels(ids: ["unsloth/Qwen3.8-27B-FP8"])
+        #expect(swapped.resolve(configured: "").name == "unsloth/Qwen3.8-27B-FP8")
+    }
+
+    @Test("a blank name on a many-model server is refused, not guessed")
+    func blankOnManyIsRefused() {
+        let served = ServedModels(ids: ["gpt-4o", "gpt-4o-mini", "o3"])
+        #expect(served.resolve(configured: "") == .ambiguous(available: ["gpt-4o", "gpt-4o-mini", "o3"]))
+        // Guessing here would put a cheap request on whichever model happened
+        // to be listed first, which on a metered endpoint is a bill.
+        #expect(served.resolve(configured: "").name == nil)
+    }
+
+    @Test("a configured name still has to be one the server has")
+    func configuredNameIsChecked() {
+        let served = ServedModels(ids: ["qwen-27b"])
+        #expect(served.resolve(configured: "qwen-27b") == .configured("qwen-27b"))
+        #expect(served.resolve(configured: "qwen-72b") == .unknown(available: ["qwen-27b"]))
+    }
+
+    @Test("a server serving nothing is its own answer")
+    func servesNothing() {
+        #expect(ServedModels(ids: []).resolve(configured: "") == .servesNothing)
+    }
+
+    @Test("the check says which model will be used, and how big its window is")
+    func checkCarriesWhatWasLearned() {
+        let served = ServedModels(ids: ["qwen-27b"], maxModelLength: 32_768)
+        let check = EndpointCheck(verdict: .ok(models: 1), served: served,
+                                  resolvedModel: "qwen-27b")
+        #expect(check.isUsable)
+        #expect(check.message.contains("qwen-27b"))
+        #expect(check.message.contains("32768"))
+    }
+
+    @Test("needing a name is told apart from having the wrong one")
+    func chooseIsNotUnknown() {
+        let choose = EndpointCheck(verdict: .mustChooseModel(available: ["a", "b"]))
+        #expect(choose.isUsable == false)
+        #expect(choose.message.contains("ต้องระบุชื่อ"))
+        // The other message sends a person to fix a typo; this one sends them
+        // to make a choice. Same dot, different next step.
+        #expect(choose.message.contains("ไม่มีโมเดลชื่อนี้") == false)
+    }
+
     @Test("an unreachable endpoint is reported, not thrown")
     func unreachableIsAVerdict() async {
         let probe = EndpointProbe()

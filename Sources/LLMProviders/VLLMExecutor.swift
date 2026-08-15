@@ -10,9 +10,32 @@ import AgentKit
 // concurrency (ARCHITECTURE E.9).
 // ─────────────────────────────────────────────────────────────
 
+/// The model name this endpoint is serving right now (§17.1, P15.1).
+///
+/// A box rather than a stored property because `VLLMExecutor` is a value and
+/// the answer arrives from the network. Locked rather than an actor: it is read
+/// on the path of every request, and an actor hop per request to read a string
+/// is a cost with nothing on the other side of it.
+final class ServedModelName: @unchecked Sendable {
+    private let lock = NSLock()
+    private var name: String?
+
+    func current() -> String? { lock.withLock { name } }
+    func remember(_ value: String) { lock.withLock { name = value } }
+    /// Forgotten after the server refuses a request, so a checkpoint swapped
+    /// while the app is running is re-read rather than retried forever against
+    /// a name that is no longer there.
+    func forget() { lock.withLock { name = nil } }
+}
+
 public struct VLLMExecutor: LLMExecutor {
     let baseURL: URL
+    /// What the config asked for. **Empty means "whatever this server serves"**,
+    /// which is the setting that survives a checkpoint swap — the name changes,
+    /// and a config that pinned the old one would take the endpoint out of the
+    /// chain with nothing on screen saying why.
     let model: String
+    private let resolved = ServedModelName()
     let apiKey: String?
     public let identifier: String
     public let tier: ModelTier
@@ -43,15 +66,51 @@ public struct VLLMExecutor: LLMExecutor {
     /// OpenAI-compatible server will happily answer for a model that does not
     /// exist, so an unchecked typo fails much later and confusingly
     /// (ARCHITECTURE E.9, case 8a).
+    ///
+    /// With no name configured this is where the served one is learned, so an
+    /// endpoint that was down at launch works as soon as it comes up — the
+    /// router asks this before every escalation anyway.
     public func isAvailable() async -> Bool {
+        (try? await resolveModel()) != nil
+    }
+
+    /// The name to put in the request body.
+    ///
+    /// Asked of the server when the config left it blank, then kept. `nil` from
+    /// the server is not the same as a wrong name, so an unreachable endpoint
+    /// throws `unavailable` here rather than sending a request naming nothing.
+    func resolveModel() async throws -> String {
+        if let cached = resolved.current() { return cached }
+
         var request = URLRequest(url: baseURL.appending(path: "models"))
         request.timeoutInterval = 3
         if let apiKey { request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization") }
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse, http.statusCode == 200,
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let list = obj["data"] as? [[String: Any]] else { return false }
-        return list.contains { ($0["id"] as? String) == model }
+              let list = obj["data"] as? [[String: Any]] else {
+            throw LLMError.unavailable("\(identifier) ตอบ /v1/models ไม่ได้")
+        }
+        let served = list.compactMap { $0["id"] as? String }
+        let wanted = model.trimmingCharacters(in: .whitespaces)
+
+        if wanted.isEmpty {
+            // One model: it is the one. Several: refuse rather than pick —
+            // guessing on a server with two hundred models is how a cheap
+            // request lands on an expensive model.
+            guard served.count == 1 else {
+                throw LLMError.unavailable(served.isEmpty
+                    ? "\(identifier) ไม่ได้เสิร์ฟโมเดลไหนเลย"
+                    : "\(identifier) เสิร์ฟหลายโมเดล — ต้องระบุชื่อในหน้าตั้งค่า")
+            }
+            resolved.remember(served[0])
+            return served[0]
+        }
+        guard served.contains(wanted) else {
+            throw LLMError.unavailable("\(identifier) ไม่ได้เสิร์ฟโมเดลชื่อ \(wanted)")
+        }
+        resolved.remember(wanted)
+        return wanted
     }
 
     public func prewarm() async {
@@ -62,7 +121,7 @@ public struct VLLMExecutor: LLMExecutor {
 
     // MARK: request building
 
-    private func body(_ req: LLMRequest, stream: Bool) -> [String: Any] {
+    private func body(_ req: LLMRequest, stream: Bool, model: String) -> [String: Any] {
         var msgs: [[String: Any]] = []
         for m in req.messages {
             var d: [String: Any] = ["role": m.role.rawValue, "content": m.content]
@@ -105,7 +164,7 @@ public struct VLLMExecutor: LLMExecutor {
                              "parameters": parameters]]
     }
 
-    private func urlRequest(_ req: LLMRequest, stream: Bool) throws -> URLRequest {
+    private func urlRequest(_ req: LLMRequest, stream: Bool) async throws -> URLRequest {
         var r = URLRequest(url: baseURL.appendingPathComponent("chat/completions"))
         r.httpMethod = "POST"
         r.timeoutInterval = req.timeout
@@ -113,8 +172,10 @@ public struct VLLMExecutor: LLMExecutor {
         if let k = apiKey { r.setValue("Bearer \(k)", forHTTPHeaderField: "Authorization") }
         // Foundation escapes "/" as "\/" by default, which mangles any path or
         // URL inside a prompt (see ARCHITECTURE App. C.0 for where this bit us).
-        r.httpBody = try JSONSerialization.data(withJSONObject: body(req, stream: stream),
-                                                options: [.withoutEscapingSlashes])
+        let model = try await resolveModel()
+        r.httpBody = try JSONSerialization.data(
+            withJSONObject: body(req, stream: stream, model: model),
+            options: [.withoutEscapingSlashes])
         return r
     }
 
@@ -125,7 +186,7 @@ public struct VLLMExecutor: LLMExecutor {
             let task = Task {
                 do {
                     try rejectIfUnsupported(request)
-                    let urlReq = try urlRequest(request, stream: true)
+                    let urlReq = try await urlRequest(request, stream: true)
                     let (bytes, response) = try await URLSession.shared.bytes(for: urlReq)
                     guard let http = response as? HTTPURLResponse else {
                         throw LLMError.transport("no HTTPURLResponse")
@@ -133,6 +194,12 @@ public struct VLLMExecutor: LLMExecutor {
                     guard (200..<300).contains(http.statusCode) else {
                         var body = ""
                         for try await line in bytes.lines { body += line; if body.count > 400 { break } }
+                        // The name we asked for is one of the things a 4xx can
+                        // be about, and a checkpoint can be swapped while the
+                        // app is running. Forgetting it costs one extra request
+                        // on the next turn; keeping it costs every turn after
+                        // the swap (§17.1, P15.1).
+                        if (400..<500).contains(http.statusCode) { resolved.forget() }
                         throw LLMError.http(status: http.statusCode, body: body)
                     }
 
@@ -196,8 +263,20 @@ public struct VLLMExecutor: LLMExecutor {
                     continuation.finish(throwing: e)
                 } catch {
                     let ns = error as NSError
-                    continuation.finish(throwing: ns.code == NSURLErrorTimedOut
-                                        ? LLMError.timeout : LLMError.transport("\(error)"))
+                    guard ns.code != NSURLErrorTimedOut else {
+                        continuation.finish(throwing: LLMError.timeout)
+                        return
+                    }
+                    // A cable pulled mid-answer arrives here, and it used to
+                    // arrive on screen as Foundation's English sentence inside a
+                    // Thai one: "สตรีมคำตอบขาดกลางคัน: Error Domain=NSURL…
+                    // Code=-1005". Classified here, where the `URLError` still
+                    // exists — one hop later it is a string and nothing can be
+                    // said about it (§P9.4, P15.1). Anything `ReadableFailure`
+                    // cannot classify is passed through unchanged rather than
+                    // flattened into "ไม่สำเร็จ".
+                    continuation.finish(throwing: LLMError.transport(
+                        ReadableFailure.message(for: error, doing: identifier)))
                 }
             }
             continuation.onTermination = { _ in task.cancel() }
