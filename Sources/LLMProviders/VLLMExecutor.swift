@@ -206,6 +206,14 @@ public struct VLLMExecutor: LLMExecutor {
                     // tool_calls arrive fragmented across chunks — assemble by index
                     var toolAcc: [Int: (id: String, name: String, args: String)] = [:]
                     var finish = "unknown"
+                    // The server splits thinking from the answer only if it was
+                    // started with a reasoning parser. Without the flag the
+                    // `<think>` tags come down inside `content` exactly as a
+                    // local model's do — measured here twice (E.21) — so the
+                    // same splitter runs over this stream too (P15.2b). It is a
+                    // no-op on a server that does its own splitting: no tags,
+                    // nothing to cut.
+                    var splitter = ReasoningSplitter(startsInsideReasoning: false)
 
                     for try await line in bytes.lines {
                         try Task.checkCancellation()
@@ -227,7 +235,13 @@ public struct VLLMExecutor: LLMExecutor {
                         guard let delta = c["delta"] as? [String: Any] else { continue }
 
                         if let text = delta["content"] as? String, !text.isEmpty {
-                            continuation.yield(.textDelta(text))
+                            for segment in splitter.consume(text) {
+                                switch segment {
+                                case .answer(let answer): continuation.yield(.textDelta(answer))
+                                case .reasoning(let thought):
+                                    continuation.yield(.reasoningDelta(thought))
+                                }
+                            }
                         }
                         // Reasoning models spend their whole budget here before
                         // saying a word: dropping these chunks makes the app look
@@ -249,6 +263,17 @@ public struct VLLMExecutor: LLMExecutor {
                                 }
                                 toolAcc[idx] = acc
                             }
+                        }
+                    }
+
+                    // Whatever the splitter was still holding back in case it
+                    // turned out to be half a tag. A truncated tag is text the
+                    // model really produced, and dropping it would lose the end
+                    // of an answer without saying so.
+                    for segment in splitter.flush() {
+                        switch segment {
+                        case .answer(let answer): continuation.yield(.textDelta(answer))
+                        case .reasoning(let thought): continuation.yield(.reasoningDelta(thought))
                         }
                     }
 

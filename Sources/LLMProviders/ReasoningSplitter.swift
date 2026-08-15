@@ -3,25 +3,29 @@ import Foundation
 // ─────────────────────────────────────────────────────────────
 // Separating what a local model thought from what it said.
 //
-// A hosted OpenAI-compatible endpoint hands these back in two different
-// fields (`reasoning_content` vs `content` — ARCHITECTURE E.9 case 8c). A
-// model we run ourselves gives us one stream of text with `<think>` markers in
-// it, so the split has to happen here, and it has to happen while streaming:
-// merging the two would store thinking as the reply and make every
-// schema-constrained call return a paragraph of deliberation instead of JSON.
+// A hosted OpenAI-compatible endpoint hands these back in two different fields
+// (`reasoning_content` vs `content` — ARCHITECTURE E.9 case 8c) **when it was
+// started with a reasoning parser**. Without that flag it streams the `<think>`
+// tags inside `content` exactly as a model we run ourselves does — measured
+// here, twice (E.21) — so the two tiers have the same problem and this is the
+// one place either of them solves it (P15.2b).
+//
+// It has to happen while streaming: merging the two would store thinking as the
+// reply and make every schema-constrained call return a paragraph of
+// deliberation instead of JSON.
 //
 // The tags can be cut in half by a chunk boundary, so anything that could
 // still turn out to be the start of a tag is held back rather than emitted.
 // ─────────────────────────────────────────────────────────────
 
-enum ResponseSegment: Equatable, Sendable {
+public enum ResponseSegment: Equatable, Sendable {
     case answer(String)
     case reasoning(String)
 }
 
-struct ReasoningSplitter {
-    static let openTag = "<think>"
-    static let closeTag = "</think>"
+public struct ReasoningSplitter {
+    public static let openTag = "<think>"
+    public static let closeTag = "</think>"
 
     private var insideReasoning: Bool
     /// Text held back because it might be the first half of a tag.
@@ -34,11 +38,11 @@ struct ReasoningSplitter {
     ///   block open. Qwen-style templates append the opening tag themselves, so
     ///   the model's own output begins mid-thought with no tag to detect — see
     ///   `ChatTemplate.opensReasoningBlock`.
-    init(startsInsideReasoning: Bool) {
+    public init(startsInsideReasoning: Bool) {
         self.insideReasoning = startsInsideReasoning
     }
 
-    mutating func consume(_ chunk: String) -> [ResponseSegment] {
+    public mutating func consume(_ chunk: String) -> [ResponseSegment] {
         pending += chunk
         var segments: [ResponseSegment] = []
 
@@ -64,7 +68,7 @@ struct ReasoningSplitter {
 
     /// Whatever was held back at the end of the stream. A truncated tag is text
     /// the model actually produced; dropping it would silently lose output.
-    mutating func flush() -> [ResponseSegment] {
+    public mutating func flush() -> [ResponseSegment] {
         var segments: [ResponseSegment] = []
         append(pending, to: &segments)
         pending = ""

@@ -1,4 +1,8 @@
 import Foundation
+// The `<think>` tags are the same tags Tier 1 sees when its server has no
+// reasoning parser, so the splitter that knows them lives in LLMProviders now
+// (P15.2b).
+import LLMProviders
 import MLXLMCommon
 import Hub
 import Tokenizers

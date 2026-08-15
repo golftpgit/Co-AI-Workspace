@@ -972,6 +972,22 @@ else
   ok "every project write goes past the archive guard, or is a documented exception"
 fi
 
+# P15.2b — the model's thinking is cut in exactly one place.
+#
+# The rule is not "cut it" — it is *where*. A `<think>` tag reaching a screen is
+# a bug anybody can fix locally, and the fix that suggests itself is stripping
+# it in the view that noticed. Do that twice and the tags are being cut in two
+# places, differently, and the third screen still shows them. `ReasoningSplitter`
+# is the one place; everywhere else the two are already separate values.
+STRAY_THINK=$(grep -rnE '"</?think' Sources \
+  | grep -v "Sources/LLMProviders/ReasoningSplitter.swift" || true)
+if [ -n "$STRAY_THINK" ]; then
+  echo "$STRAY_THINK" | sed 's/^/   /' | head -5
+  fail "something outside ReasoningSplitter knows what a <think> tag looks like (P15.2b)"
+else
+  ok "the model's thinking is separated in one place, for both tiers"
+fi
+
 # P15.1/P15.3 — what the endpoint is, the endpoint says.
 #
 # Both numbers used to be written into Swift: a 32k window on every executor and
