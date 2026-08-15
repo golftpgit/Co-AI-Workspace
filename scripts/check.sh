@@ -110,6 +110,20 @@ else
   ok "tools are only reachable through the hook chain"
 fi
 
+# ARCHITECTURE §5.3 / §11.2, risk R14: the app must install a policy gate.
+#
+# `HookChain`'s `policyGate` defaults to `NoPolicyGate`, which is correct for a
+# test that is not about policy and catastrophic for the app: from P2.6 until
+# 2026-08-15 the app built `HookChain(stageGate:)` and therefore ran with no
+# policy at all, while eleven tests proved the gate worked. Nothing failed,
+# because the tests construct their own chain. This checks the wiring itself.
+POLICY_WIRING=$(grep -A3 "ToolGateway(chain: HookChain(" Sources/CoAIWorkspaceApp/Engine.swift | grep -c "policyGate:" || true)
+if [ "$POLICY_WIRING" -lt 1 ]; then
+  fail "the app builds its hook chain without a policyGate — policy rules would stop nothing (R14)"
+else
+  ok "the app installs a policy gate, so the policy scope can actually stop a call"
+fi
+
 # The app target has no unit tests — it is an executable — so "built but never
 # connected" is invisible to `swift test`. It has happened twice: v1's MCP
 # client that no session could reach (D6), and ConflictDetector, which passed 7

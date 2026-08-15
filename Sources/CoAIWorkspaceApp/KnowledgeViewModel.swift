@@ -46,6 +46,7 @@ public final class KnowledgeViewModel {
     /// Nil until the database is up. The screen still works without it — in
     /// memory only — and says so, rather than pretending an ingest was saved.
     private var store: KnowledgeStore?
+    private var policySource: PolicyLibrarySource?
     private var relationStore: RelationStore?
     private var relationExtractor: RelationExtractor?
     public private(set) var relations: [StoredRelation] = []
@@ -72,6 +73,12 @@ public final class KnowledgeViewModel {
     public func attach(store: KnowledgeStore) async {
         self.store = store
         await reload()
+    }
+
+    /// The hook chain's rulebook, so ingesting a policy document takes effect
+    /// on the next tool call rather than at the next launch (R14).
+    public func attach(policySource: PolicyLibrarySource) {
+        self.policySource = policySource
     }
 
     /// Relation extraction is optional: it needs a model, and a machine with
@@ -136,6 +143,10 @@ public final class KnowledgeViewModel {
         isWorking = true
         defer { isWorking = false }
 
+        // Whatever else this ingest does, if it lands in `policy` the gate has
+        // to stop using the rulebook it parsed before (R14).
+        defer { if scope == .policy { let source = policySource
+                                      Task { await source?.invalidate() } } }
         var added = 0, skipped = 0, conflicts = 0, failed: [String] = []
         for url in urls {
             // A sandboxed app reaches a chosen file only inside this scope.
