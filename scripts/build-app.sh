@@ -115,13 +115,37 @@ else
 fi
 
 echo "==> signing with App Sandbox entitlements"
+# Which identity to sign with, and why it matters beyond Gatekeeper.
+#
+# An **ad-hoc** signature has no certificate, so the app's designated
+# requirement is its own code-directory hash. Every rebuild changes that hash,
+# which means every rebuild is, to the keychain, a *different program* — and the
+# permission the user granted the previous build ("Always Allow") no longer
+# applies. That is why the keychain panel comes back after every build even
+# though nothing about the app's purpose changed.
+#
+# Any stable identity fixes it, including a self-signed one made locally in
+# thirty seconds: the requirement then names the certificate rather than the
+# bytes, and it survives rebuilds. `scripts/make-signing-identity.sh` explains
+# how. A paid Developer ID is still needed for notarisation (P9.6) — this is
+# about the keychain, which is a different problem with a free answer.
+SIGN_IDENTITY="${COAI_SIGN_IDENTITY:-Co-AI Workspace Dev}"
+if security find-identity -v -p codesigning 2>/dev/null | grep -qF "$SIGN_IDENTITY"; then
+  SIGN_WITH="$SIGN_IDENTITY"
+  echo "    signing with \"$SIGN_IDENTITY\" — keychain permission will survive rebuilds"
+else
+  SIGN_WITH="-"
+  echo "    no stable signing identity found; signing ad-hoc"
+  echo "    the keychain will ask again after every rebuild — see scripts/make-signing-identity.sh"
+fi
+
 # Sign helpers first — nested code must be signed before the outer bundle.
 for helper in "$APP/Contents/Resources/Helpers/"*; do
   [ -e "$helper" ] || continue
-  codesign --force --sign - --timestamp=none "$helper" 2>/dev/null || \
+  codesign --force --sign "$SIGN_WITH" --timestamp=none "$helper" 2>/dev/null || \
     echo "    warning: could not sign $(basename "$helper")"
 done
-codesign --force --sign - --timestamp=none \
+codesign --force --sign "$SIGN_WITH" --timestamp=none \
   --entitlements "$ROOT/Resources/CoAIWorkspace.entitlements" \
   "$APP"
 

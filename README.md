@@ -177,6 +177,22 @@ endpoint ของ Tier 1 ตั้งใน `bootstrap.plist` ที่
 `build-app.sh` จบด้วย `package-audit.sh` ซึ่งตรวจเฉพาะสิ่งที่ **ผ่านบนเครื่องนี้เสมอ ไม่ว่าจะพาไปเครื่องอื่นได้หรือไม่**:
 resource bundle ของ SwiftPM ทุกอันที่ binary อ้างถึงต้องอยู่ในแอป · ไม่ลิงก์ dylib นอกระบบ · sidecar/Metal kernel/`Metadata.appintents` ต้องครบ · ลายเซ็นและ App Sandbox ต้องผ่าน
 
+### Keychain ถามซ้ำทุกครั้งที่ build ใหม่
+
+ไม่ใช่การตั้งค่าที่ไหนในระบบ และไม่มีอะไรให้ปิด — **กล่องที่ขึ้นมาคือ ACL ของ Keychain ทำงานถูกต้องแล้ว**
+
+แอปเซ็นแบบ **ad-hoc** ซึ่งแปลว่าไม่มีใบรับรอง และ designated requirement ของมันคือ *แฮชของตัวไบนารีเอง* · build ใหม่ = แฮชใหม่ = **โปรแกรมคนละตัว**ในสายตาของ Keychain สิทธิ์ที่กด "Always Allow" ไว้ให้ build ก่อนหน้าจึงไม่ตรงอีกต่อไป
+
+แก้ด้วย**ใบรับรองที่เซ็นเองในเครื่อง** ซึ่งใช้เวลาราวสามสิบวินาทีและฟรี — requirement จะกลายเป็นชื่อใบรับรองแทนที่จะเป็นไบต์ จึงอยู่รอดข้ามการ build:
+
+```bash
+scripts/make-signing-identity.sh   # บอกขั้นตอนและตรวจว่ามีแล้วหรือยัง
+```
+
+สร้างใน **Keychain Access → Certificate Assistant → Create a Certificate…** ชื่อ `Co-AI Workspace Dev` · Identity Type **Self Signed Root** · Certificate Type **Code Signing** จากนั้น `build-app.sh` จะหยิบไปใช้เอง (ตั้งชื่ออื่นได้ด้วย `COAI_SIGN_IDENTITY`)
+
+คนละเรื่องกับ notarisation ข้างล่าง: อันนั้นคือ Gatekeeper บน**เครื่องอื่น**และต้องมี Developer ID ที่เสียเงิน · อันนี้คือ Keychain บน**เครื่องนี้** และมีทางแก้ที่ไม่ต้องจ่าย
+
 การแจกจริงต้องมี **Developer ID** ของเจ้าของแอปแล้วทำสองขั้นนี้เพิ่ม (ต้องมีบัญชี Apple Developer จึงทำแทนกันไม่ได้):
 
 ```bash

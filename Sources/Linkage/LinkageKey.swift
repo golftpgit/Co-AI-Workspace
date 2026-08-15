@@ -38,21 +38,51 @@ public enum LinkageKeyError: Error, CustomStringConvertible, Equatable {
 }
 
 /// The real one: a 256-bit key per project, created on first use.
+///
+/// **Read once per project per launch.** Every `SecItemCopyMatching` on a
+/// keychain item whose ACL does not already trust this exact binary raises the
+/// "…wants to use your confidential information" panel, and a `LinkageStore` is
+/// built afresh every time the workspace switches projects — so without the
+/// cache, moving between two studies asked twice, and moving back asked twice
+/// more. The key cannot change under us: it is written once and never rotated
+/// here, so a value read at 09:00 is the same value at 17:00.
+///
+/// This reduces how often the panel appears. It does not stop it: while the app
+/// is signed ad-hoc its code signature *is* its hash, so every rebuild is a
+/// different program as far as the keychain is concerned and the ACL granted to
+/// the previous build no longer matches. The fix for that is a stable signing
+/// identity, which is a build-time thing — see `scripts/build-app.sh`.
 public struct KeychainLinkageKeys: LinkageKeySource {
     private let service: String
     private let log = AppLog.logger("linkage-key")
+
+    private static let cacheLock = NSLock()
+    nonisolated(unsafe) private static var cache: [String: SymmetricKey] = [:]
 
     public init(service: String = "com.coaiworkspace.app.linkage") {
         self.service = service
     }
 
+    /// Forgets the cached keys. For tests, and for anything that has reason to
+    /// believe the keychain changed underneath it.
+    public static func forgetCachedKeys() {
+        cacheLock.withLock { cache.removeAll() }
+    }
+
     public func key(for project: String) throws -> SymmetricKey {
-        if let existing = try read(project) { return SymmetricKey(data: existing) }
-        let fresh = SymmetricKey(size: .bits256)
-        let bytes = fresh.withUnsafeBytes { Data($0) }
-        try write(project, bytes)
-        log.info("created a linkage key for a project")
-        return fresh
+        let cacheKey = "\(service)|\(project)"
+        if let cached = Self.cacheLock.withLock({ Self.cache[cacheKey] }) { return cached }
+
+        let key: SymmetricKey
+        if let existing = try read(project) {
+            key = SymmetricKey(data: existing)
+        } else {
+            key = SymmetricKey(size: .bits256)
+            try write(project, key.withUnsafeBytes { Data($0) })
+            log.info("created a linkage key for a project")
+        }
+        Self.cacheLock.withLock { Self.cache[cacheKey] = key }
+        return key
     }
 
     private func read(_ account: String) throws -> Data? {
