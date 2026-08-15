@@ -1,6 +1,7 @@
 import Foundation
 import AgentKit
 import LLMProviders
+import CoreEngine
 
 // ─────────────────────────────────────────────────────────────
 // How many streams Tier 1 can really take (ARCHITECTURE §17.1, P15.5).
@@ -284,4 +285,81 @@ if cold.failed == nil, warm.failed == nil, other.failed == nil {
     } else {
         print("   ! ยังไม่เห็นผลของ prefix cache อย่างชัดเจน — อย่าเพิ่งอ้างว่ามันช่วย")
     }
+}
+
+// ─────────────────────────────────────────────────────────────
+// P18.1 — do the criteria survive contact with the model that runs them?
+//
+// The unit tests prove what the detector does with an answer. They cannot prove
+// that this model, reading Thai and English side by side, answers the three
+// conditions sensibly — and the symptom that started §11.7 was precisely a
+// model answering confidently about a language it could not read.
+//
+// Eight pairs, the same ones the embedding calibration uses (E.25): four are
+// one sentence in two languages, four genuinely disagree across languages. A
+// card for any of the first four is the bug. No card for any of the second four
+// is the opposite failure, and just as reportable.
+// ─────────────────────────────────────────────────────────────
+
+let translations: [(String, String)] = [
+    ("การนอนหลับที่เพียงพอช่วยลดความเสี่ยงของโรคหัวใจในผู้ใหญ่",
+     "Adequate sleep reduces the risk of heart disease in adults"),
+    ("การออกกำลังกายสม่ำเสมอช่วยควบคุมระดับน้ำตาลในเลือดของผู้ป่วยเบาหวานชนิดที่ 2",
+     "Regular exercise helps control blood glucose in patients with type 2 diabetes"),
+    ("ผู้สูงอายุควรได้รับวัคซีนไข้หวัดใหญ่ทุกปีเพื่อลดการเข้ารักษาในโรงพยาบาล",
+     "Older adults should receive an annual influenza vaccine to reduce hospital admissions"),
+    ("การสูบบุหรี่เพิ่มความเสี่ยงของมะเร็งปอดอย่างมีนัยสำคัญ",
+     "Smoking significantly increases the risk of lung cancer"),
+]
+
+let disagreements: [(String, String)] = [
+    ("ผู้ใหญ่ควรนอนอย่างน้อยวันละ 7 ชั่วโมงเพื่อสุขภาพหัวใจที่ดี",
+     "Adults need no more than four hours of sleep for good heart health"),
+    ("ผู้ป่วยเบาหวานชนิดที่ 2 ควรเริ่มยา metformin เป็นยาตัวแรกเสมอ",
+     "Metformin should never be used as first-line therapy in type 2 diabetes"),
+    ("วัคซีนไข้หวัดใหญ่ลดอัตราการเข้ารักษาในโรงพยาบาลของผู้สูงอายุ",
+     "Influenza vaccination has no effect on hospital admissions in older adults"),
+    ("การสูบบุหรี่เพิ่มความเสี่ยงของมะเร็งปอด",
+     "Smoking has no measurable association with lung cancer risk"),
+]
+
+print("")
+print("── เกณฑ์ข้อขัดแย้งกับโมเดลจริง (P18.1) ──")
+
+let detector = ConflictDetector(router: router)
+
+var falseCards = 0
+for (thai, english) in translations {
+    let outcome = await detector.examine(thai, english)
+    switch outcome {
+    case .success(let finding):
+        falseCards += 1
+        print(String(format: "   ✗ คำแปลถูกยกเป็นการ์ด (%.2f): %@",
+                     finding.confidence, String(finding.explanation.prefix(70))))
+    case .failure(let reason):
+        print("   ✓ คำแปลไม่ถูกยก — \(reason)")
+    }
+}
+
+var missed = 0
+for (thai, english) in disagreements {
+    let outcome = await detector.examine(thai, english)
+    switch outcome {
+    case .success(let finding):
+        print(String(format: "   ✓ ขัดแย้งจริงถูกยก (%.2f)", finding.confidence))
+    case .failure(let reason):
+        missed += 1
+        print("   ✗ ขัดแย้งจริงถูกมองข้าม — \(reason)")
+    }
+}
+
+print("")
+print("   คำแปลที่ถูกยกผิด \(falseCards)/\(translations.count) "
+      + "· ข้อขัดแย้งจริงที่พลาด \(missed)/\(disagreements.count)")
+if falseCards == 0 && missed == 0 {
+    print("   ✓ เกณฑ์ §11.7 ทำงานกับโมเดลนี้จริง")
+} else if falseCards > 0 {
+    print("   ! ยังยกคำแปลเป็นการ์ดอยู่ — อาการเดิมของ §11.7 ยังไม่หาย")
+} else {
+    print("   ! เกณฑ์แน่นเกินไปกับโมเดลนี้ — ข้อขัดแย้งจริงหลุด ซึ่งเป็นความเสียหายอีกด้าน")
 }

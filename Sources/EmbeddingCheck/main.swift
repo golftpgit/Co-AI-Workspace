@@ -130,6 +130,16 @@ await check("a document ingested with the real model is findable") {
     return "\(first.chunksAdded) chunks, re-ingest added 0"
 }
 
+// Whether an embedding filter in front of the conflict detector is possible at
+// all (§11.7, P18.2). Here because this is the executable that can load the
+// weights — and the answer measured on them is no, which is why there is no
+// such filter in the code.
+print("")
+print("   — ด่านกรองด้วย embedding: วัดแล้วทำไมถึงไม่มี (P18.2) —")
+await TranslationCalibration(embedder: embedder).run(check: { name, body in
+    await check(name, body)
+})
+
 // The screens' logic, driven the way a person drives it. Not a replacement
 // for using the app — it cannot see a view — but it covers the wiring half of
 // what P1.10 found by hand.
