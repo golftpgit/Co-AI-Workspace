@@ -217,3 +217,18 @@ public enum RetentionCheck {
                                               dueOn: due))
     }
 }
+
+/// The two facts condition 8 needs that ProjectKit cannot reach itself: whether
+/// anybody ever answered (M16's store) and what the `policy` scope says (M7's).
+///
+/// One protocol rather than two, for the reason `ClosingLedgerReading` gives:
+/// a wiring that can answer one of these can answer the other, and splitting
+/// them only makes it possible to connect half. Optional on `ProjectService` —
+/// absent means `heldHumanData` is `nil`, which reads as `unchecked` and shows
+/// a grey dash rather than blocking every project in the app.
+public protocol RetentionFactsReading: Sendable {
+    /// `nil` when the project's response store could not be read at all —
+    /// which must not be confused with "nobody answered".
+    func heldHumanData(scope: Scope) async -> Bool?
+    func retentionRules(scope: Scope) async -> [RetentionRule]
+}

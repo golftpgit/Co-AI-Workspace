@@ -67,6 +67,11 @@ public struct PolicyLibrary: Sendable {
 
     public var count: Int { rules.count }
 
+    /// Every rule, for callers that need to look at the rulebook itself rather
+    /// than ask it about one action — the closing gate reads retention rules
+    /// out of it (P11.10).
+    public var allRules: [PolicyRule] { rules }
+
     /// Every rule that applies, hard constraints first so a caller that only
     /// looks at the first one still stops for the right reason.
     public func rules(matching action: PolicyAction) -> [PolicyRule] {
