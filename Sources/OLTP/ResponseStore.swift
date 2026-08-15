@@ -454,6 +454,16 @@ public actor ResponseStore {
         return Int(rows.first?.integer("n") ?? 0)
     }
 
+    /// Whether this project ever received an answer from anybody, across every
+    /// instrument and wave (§20.5, P11.10).
+    ///
+    /// Asked at the closing gate, where the question is not "how many" but
+    /// "does the promise made to participants apply to this project at all".
+    public func hasAnySubmission() async throws -> Bool {
+        let rows = try await database.query("SELECT COUNT(*) AS n FROM submission", [])
+        return Int(rows.first?.integer("n") ?? 0) > 0
+    }
+
     public func submissionIDs(instrument: String, version: Int) async throws -> [String] {
         try await database.query("""
             SELECT id FROM submission

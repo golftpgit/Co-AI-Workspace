@@ -196,3 +196,50 @@ struct RetentionClosingGateTests {
         #expect(condition?.satisfied == false)
     }
 }
+
+@Suite("Retention — the facts the gate is given")
+struct RetentionFactsTests {
+
+    private struct Facts: RetentionFactsReading {
+        var held: Bool?
+        var rules: [RetentionRule] = []
+        func heldHumanData(scope: Scope) async -> Bool? { held }
+        func retentionRules(scope: Scope) async -> [RetentionRule] { rules }
+    }
+
+    // The wiring, end to end through ProjectService: a project that collected
+    // answers and names a policy nobody wrote cannot be closed.
+    @Test("the service hands the gate real facts, and free text is refused there too")
+    func serviceFeedsTheGate() async throws {
+        let rules = RetentionPolicyReader.rules(in: [policy("เก็บข้อมูลผู้เข้าร่วมไว้ 5 ปีแล้วทำลาย")])
+        let service = ProjectService(store: MemoryProjectStore(),
+                                     retentionFacts: Facts(held: true, rules: rules))
+
+        let project = try await service.create(name: "การศึกษาภาวะหมดไฟ")
+        try await service.decideDisposition(disposition("เดี๋ยวค่อยว่ากัน"), for: project.id)
+
+        let facts = await service.closingFacts(of: project.id)
+        #expect(facts.heldHumanData == true)
+        #expect(facts.retentionRules.count == 1)
+        guard case .blocked = facts.retention else {
+            Issue.record("free text reached the gate and passed: \(facts.retention)")
+            return
+        }
+    }
+
+    // Without the wiring the condition must not block — the whole app would be
+    // unable to close a project because one reader is absent.
+    @Test("a service with no retention reader leaves the condition unchecked, not failing")
+    func absentReaderIsUnchecked() async throws {
+        let service = ProjectService(store: MemoryProjectStore())
+
+        let project = try await service.create(name: "โปรเจกต์ซอฟต์แวร์")
+        try await service.decideDisposition(disposition("เก็บไว้ที่เดิม", action: .keep),
+                                            for: project.id)
+
+        let facts = await service.closingFacts(of: project.id)
+        #expect(facts.heldHumanData == nil)
+        #expect(facts.retention.passes)
+        #expect(facts.retention.isVacuous)
+    }
+}

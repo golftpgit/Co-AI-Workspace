@@ -220,6 +220,12 @@ struct Engine: Sendable {
         // in the central knowledge base, so the service needs somewhere to put
         // them (§19.12 condition 7).
         let knowledgeStore = KnowledgeStore(client: client)
+        // R14 — P2.6's policy gate, installed. Until 2026-08-15 this line read
+        // `HookChain(stageGate:)`, which takes the default `NoPolicyGate`, so
+        // no rule in the `policy` scope had ever stopped a call in the built
+        // app while eleven tests said otherwise. `check.sh` now fails if the
+        // policy gate goes missing from here again.
+        let policySource = PolicyLibrarySource(reader: knowledgeStore)
         // §19.4 — the stage gate is wired here rather than defaulted off.
         // `HookChain()` with no reader refuses every project-scoped call, which
         // is the safe default for a library; the app is the place that knows
@@ -239,17 +245,15 @@ struct Engine: Sendable {
             // only place that has both the conflict ledger and the plans.
             closingLedger: ClosingLedger(conflicts: ConflictStore(client: client),
                                          plans: AnalysisPlanStore(client: client)),
-            reports: ReportStore(client: client))
+            reports: ReportStore(client: client),
+            // P11.10 — condition 8 reads the project's own response store and
+            // the same policy scope the hook chain enforces (R14).
+            retentionFacts: WorkspaceRetentionFacts(paths: paths,
+                                                    policySource: policySource))
         // §19.10 — an exception raised before the app closed must still stop
         // work after it reopens, so the blocked set is read at boot rather
         // than starting empty and filling in when somebody opens the screen.
         await projects.refreshExceptions()
-        // R14 — P2.6's policy gate, installed. Until 2026-08-15 this line read
-        // `HookChain(stageGate:)`, which takes the default `NoPolicyGate`, so
-        // no rule in the `policy` scope had ever stopped a call in the built
-        // app while eleven tests said otherwise. `check.sh` now fails if the
-        // policy gate goes missing from here again.
-        let policySource = PolicyLibrarySource(reader: knowledgeStore)
         let gateway = ToolGateway(chain: HookChain(stageGate: StageGate(reader: projects),
                                                    policyGate: StoredPolicyGate(source: policySource)),
                                   approver: broker,

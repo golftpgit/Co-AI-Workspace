@@ -25,6 +25,7 @@ public actor ProjectService {
     private let benefits: (any BenefitPersisting)?
     private let tailoring: (any TailoringPersisting)?
     private let closingLedger: (any ClosingLedgerReading)?
+    private let retentionFacts: (any RetentionFactsReading)?
     private let reports: (any ReportPersisting)?
     /// The gates this project's *type* declared, and what can be said about them
     /// (§20.2). `nil` means nothing is wired to read the type files — in which
@@ -52,7 +53,8 @@ public actor ProjectService {
                 tailoring: (any TailoringPersisting)? = nil,
                 closingLedger: (any ClosingLedgerReading)? = nil,
                 reports: (any ReportPersisting)? = nil,
-                typeGates: (any ProjectTypeGateReading)? = nil) {
+                typeGates: (any ProjectTypeGateReading)? = nil,
+                retentionFacts: (any RetentionFactsReading)? = nil) {
         self.reports = reports
         self.typeGates = typeGates
         self.store = store
@@ -64,6 +66,7 @@ public actor ProjectService {
         self.benefits = benefits
         self.tailoring = tailoring
         self.closingLedger = closingLedger
+        self.retentionFacts = retentionFacts
     }
 
     /// Hands over the numbers only the app can read (§19.16). Called by the
@@ -244,7 +247,9 @@ public actor ProjectService {
             pendingAssumptions: await closingLedger?.unconfirmedAssumptionCount(scope: project.scope),
             conformanceGaps: Conformance.gaps(await conformanceFacts(of: id),
                                               tailoring: await tailoringRecords(of: id)),
-            dataDisposition: project.dataDisposition)
+            dataDisposition: project.dataDisposition,
+            heldHumanData: await retentionFacts?.heldHumanData(scope: project.scope),
+            retentionRules: await retentionFacts?.retentionRules(scope: project.scope) ?? [])
     }
 
     // MARK: - baselines (§19.11)
