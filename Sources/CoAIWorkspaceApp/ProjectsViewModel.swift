@@ -23,10 +23,11 @@ import Observability
 public final class ProjectsViewModel {
     /// General or one project. There is no third state on purpose: `policy`
     /// scope is a knowledge partition, not a place to work (§11.2).
-    public enum Selection: Equatable {
-        case general
-        case project(ProjectID)
-    }
+    ///
+    /// Kept as a spelling of `OpenWorkspaces.Tab` rather than deleted, because
+    /// it reads better at call sites that mean "the thing in front" — and the
+    /// two cannot drift, since one converts to the other.
+    public typealias Selection = OpenWorkspaces.Tab
 
     public struct Status: Equatable {
         public var message: String
@@ -36,7 +37,12 @@ public final class ProjectsViewModel {
     public private(set) var projects: [Project] = []
     public private(set) var status: Status?
     public private(set) var isWorking = false
-    public private(set) var selection: Selection = .general
+    /// Which workspaces are open and which is in front (§19.1.1, P21.1).
+    ///
+    /// Was a single `Selection`, which is what made a project a *mode* rather
+    /// than a tab: opening the second one cost you the first. Somebody
+    /// researching two things at once is the ordinary case.
+    public private(set) var workspaces = OpenWorkspaces()
     /// The gate for whatever is selected, recomputed after every change, so the
     /// screen never shows a stale "ready to advance".
     public private(set) var gate: GateEvaluation?
@@ -150,17 +156,21 @@ public final class ProjectsViewModel {
 
     /// What every other screen asks for. General is `central`: shared
     /// knowledge, no ledger, no lifecycle.
-    public var scope: Scope {
-        switch selection {
-        case .general: .central
-        case .project(let id): .project(id)
-        }
-    }
+    public var selection: Selection { workspaces.active }
+    public var scope: Scope { workspaces.activeScope }
 
     public var selected: Project? {
-        guard case .project(let id) = selection else { return nil }
+        guard let id = workspaces.active.projectID else { return nil }
         return projects.first { $0.id == id }
     }
+
+    /// Whether the thing in front may be written to (§19.1.1, P21.3).
+    ///
+    /// The screen asks this before offering an action. It is **not** the rule —
+    /// `ProjectService.requireWritable` is, and it refuses whatever the screen
+    /// shows. This is so the button is disabled rather than failing when
+    /// pressed, which is a different job from enforcement.
+    public var activeIsWritable: Bool { workspaces.activeIsWritable }
 
     public var openProjects: [Project] { projects.filter(\.isOpen) }
 
@@ -271,11 +281,12 @@ public final class ProjectsViewModel {
         defer { isWorking = false }
         do {
             projects = try await service.projects()
-            // A project deleted or closed elsewhere must not leave the app
-            // pointed at it; falling back to General is always safe.
-            if case .project(let id) = selection, !projects.contains(where: { $0.id == id }) {
-                selection = .general
-            }
+            // Titles, access and existence all re-read at once. Replaces the
+            // ad-hoc "fall back to General if the selected project vanished" —
+            // which handled deletion and silently missed the case that matters
+            // more: a project closed elsewhere while its tab sat open, still
+            // offering every edit.
+            workspaces.reconcile(with: projects)
             await refreshGate()
         } catch {
             log.error("loading projects: \(error)")
@@ -283,8 +294,25 @@ public final class ProjectsViewModel {
         }
     }
 
-    public func select(_ selection: Selection) async {
-        self.selection = selection
+    /// Opens a project in a tab, or moves to it if it is already open.
+    public func open(_ project: Project) async {
+        workspaces.open(project)
+        status = nil
+        await refreshGate()
+    }
+
+    /// Moves to an already-open tab.
+    public func focus(_ tab: Selection) async {
+        workspaces.focus(tab)
+        status = nil
+        await refreshGate()
+    }
+
+    /// Closes a tab. **Closing a window, not closing a project** — the life
+    /// cycle's closing gate is a different act, and conflating the two would
+    /// let somebody end a project by tidying their screen.
+    public func closeTab(_ tab: Selection) async {
+        workspaces.close(tab)
         status = nil
         await refreshGate()
     }
@@ -309,7 +337,7 @@ public final class ProjectsViewModel {
                 name: trimmed, kind: type.kind, typeName: type.type,
                 startingPlan: { WBSTemplate.packages(template, project: $0) })
             await reload()
-            await select(.project(project.id))
+            await open(project)
             let planted = WBSTemplate.packages(template, project: project.id).count
             status = Status(message: planted > 0
                             ? "สร้าง '\(trimmed)' แบบ\(type.label) แล้ว — อยู่ขั้นเริ่มต้น "
@@ -380,7 +408,7 @@ public final class ProjectsViewModel {
                 try await conversations.reassign(conversationID, to: project.scope)
             }
             await reload()
-            await select(.project(project.id))
+            await open(project)
             status = Status(
                 message: draft.isReadyForG1
                     ? "ยกระดับเป็นโปรเจกต์แล้ว — ตรวจขอบเขตอีกครั้งแล้วกดผ่าน G1 ได้เลย"
