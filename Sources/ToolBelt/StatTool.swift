@@ -39,7 +39,7 @@ public struct StatTestTool: AgentTool {
                    "mann_whitney", "wilcoxon", "kruskal_wallis", "fisher_exact",
                    "linear_regression", "logistic_regression",
                    "risk_ratio", "odds_ratio", "risk_difference", "nnt",
-                   "diagnostic_accuracy"],
+                   "diagnostic_accuracy", "survival"],
           "description": "ชนิดการทดสอบ"
         },
         "groups": {
@@ -61,6 +61,16 @@ public struct StatTestTool: AgentTool {
         },
         "names": { "type": "array", "items": { "type": "string" },
                    "description": "ชื่อตัวแปรต้น ตามลำดับเดียวกับ predictors" },
+        "times": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "number" } },
+          "description": "เวลาติดตามรายกลุ่ม สำหรับ survival (สองกลุ่ม)"
+        },
+        "events": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "number" } },
+          "description": "1 = เกิดเหตุการณ์ · 0 = censored (ยังไม่เกิดจนหมดการติดตาม) — ต้องยาวเท่ากับ times ของกลุ่มเดียวกัน"
+        },
         "prevalence": {
           "type": "number",
           "description": "ความชุกของโรค **ในประชากรที่จะใช้การทดสอบนี้จริง** (0-1) — จำเป็นสำหรับ diagnostic_accuracy เพราะ PPV/NPV ขึ้นกับความชุก ไม่ใช่คุณสมบัติของการทดสอบ"
@@ -145,6 +155,24 @@ public struct StatTestTool: AgentTool {
             // would invent a p-value for a thing that does not have one.
             case "risk_ratio", "odds_ratio", "risk_difference", "nnt":
                 return ToolOutput(text: try Self.epidemiology(test, table: try table()))
+            case "survival":
+                // Censoring is what makes this its own test rather than a
+                // two-sample comparison of times, so the tool asks for it
+                // explicitly rather than inferring it from anything.
+                let times = try arguments.matrix("times")
+                let events = try arguments.matrix("events")
+                guard times.count == 2, events.count == 2,
+                      times[0].count == events[0].count,
+                      times[1].count == events[1].count else {
+                    throw ToolError.invalidArguments(
+                        "survival ต้องมี 'times' และ 'events' อย่างละสองกลุ่ม และยาวเท่ากันในกลุ่มเดียวกัน")
+                }
+                func group(_ index: Int) -> [SurvivalObservation] {
+                    zip(times[index], events[index]).map {
+                        SurvivalObservation(time: $0, event: $1 != 0)
+                    }
+                }
+                result = try StatGate.survival(group(0), group(1))
             case "diagnostic_accuracy":
                 return ToolOutput(text: try Self.diagnostic(
                     table: try table(),

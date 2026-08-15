@@ -65,6 +65,35 @@ struct StatToolTests {
         }
     }
 
+    /// P19.3 through the path the Analyst uses, censoring included: the tool
+    /// asks for the censoring flags explicitly rather than inferring them,
+    /// because inferring them is how a censored subject silently becomes an
+    /// event.
+    @Test("a survival comparison comes back with the PH assumption attached")
+    func survivalThroughTheTool() async throws {
+        let text = try await run("""
+        {"test": "survival",
+         "times":  [[6,6,6,6,7,9,10,10,11,13,16,17,19,20,22,23,25,32,32,34,35],
+                    [1,1,2,2,3,4,4,5,5,8,8,8,8,11,11,12,12,15,17,22,23]],
+         "events": [[1,1,1,0,1,0,1,0,0,1,1,0,0,0,1,1,0,0,0,0,0],
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]]}
+        """)
+        // Freireich: χ² 16.79, HR about 4.5 the other way round — the tool is
+        // given 6-MP first, so the ratio is its inverse.
+        #expect(text.contains("16.79"))
+        #expect(text.contains("HR ="))
+        #expect(text.contains("proportional hazards"))
+    }
+
+    @Test("a survival call with mismatched censoring flags is refused")
+    func survivalNeedsMatchingFlags() async {
+        await #expect(throws: (any Error).self) {
+            _ = try await run("""
+            {"test": "survival", "times": [[1,2,3],[4,5,6]], "events": [[1,1],[1,1,1]]}
+            """)
+        }
+    }
+
     @Test("a predictive value arrives with the prevalence it depends on")
     func predictiveValuesCarryPrevalence() async throws {
         let text = try await run("""

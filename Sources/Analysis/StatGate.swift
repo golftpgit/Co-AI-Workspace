@@ -531,22 +531,55 @@ public enum StatGate {
             alternatives: [])
     }
 
-    /// Survival analysis is in §12.3's table and is **not** implemented here
-    /// (P19.0, P19.3).
+    /// Two survival curves compared, with the assumption the comparison rests
+    /// on checked (P19.3).
     ///
-    /// **This throws where it used to answer.** The old version returned a
-    /// `StatResult` carrying `NaN`, whatever summary the caller passed in, and
-    /// an assumption row marked unchecked — honest in content and wrong in
-    /// shape. A result is a thing that gets rendered, quoted and pasted into a
-    /// manuscript; the one row saying "nothing was computed" is the row a
-    /// reader skims. §2.5's rule is evidence over claims, and a summary handed
-    /// in by the caller and handed straight back is a claim wearing a result's
-    /// clothes.
+    /// **This used to refuse, and before that it lied.** The first version
+    /// returned a `StatResult` carrying `NaN` and whatever summary the caller
+    /// passed in — a claim wearing a result's clothes. P19.0 made it throw. It
+    /// now computes, and the throw stays for the case that has not been built:
+    /// `StatError.notImplemented` is still the answer for anything in §12.3's
+    /// table that this module cannot do.
     ///
-    /// Kaplan–Meier, log-rank and Cox belong here and are P19.3's work. Until
-    /// then this refuses, and the refusal says what to do instead.
-    public static func survival() throws -> StatResult {
-        throw StatError.notImplemented(test: .survival, plannedIn: "P19.3")
+    /// The log-rank test is the answer; the Cox fit is run alongside it to get
+    /// the hazard ratio a paper reports and to make the proportional-hazards
+    /// check possible at all — a comparison whose assumption was never tested
+    /// is the thing §12.3 exists to stop.
+    public static func survival(_ a: [SurvivalObservation],
+                                _ b: [SurvivalObservation]) throws -> StatResult {
+        let test = try Survival.logRank(a, b)
+        let all = a + b
+        let group = [Double](repeating: 0, count: a.count)
+            + [Double](repeating: 1, count: b.count)
+
+        // A Cox fit that will not converge does not stop the comparison: the
+        // log-rank result stands on its own, and the assumption is then
+        // reported as unchecked rather than as passed.
+        guard let fit = try? Survival.cox(all, covariates: [group]) else {
+            return StatResult(
+                test: .survival, statistic: test.statistic, pValue: test.pValue,
+                degreesOfFreedom: 1, summary: test.summary,
+                assumptions: [AssumptionCheck(
+                    name: "proportional hazards", wasChecked: false, passed: false,
+                    statistic: nil, pValue: nil,
+                    detail: "โมเดล Cox ไม่ลู่เข้า จึงยังตรวจสมมติฐานไม่ได้ — ไม่ใช่ว่าผ่าน")],
+                alternatives: [])
+        }
+        let hazard = fit.hazardRatios[0]
+        let interval = fit.confidenceIntervals[0]
+        return StatResult(
+            test: .survival,
+            statistic: test.statistic,
+            pValue: test.pValue,
+            degreesOfFreedom: 1,
+            summary: test.summary + String(format: " · HR = %.3f (95%% CI %.3f–%.3f)",
+                                           hazard, interval.lower, interval.upper),
+            assumptions: [Survival.proportionalHazards(all, covariates: [group], fit: fit)],
+            // No alternative *test* to offer: when proportional hazards fails
+            // the answer is to report by period or to let the coefficient vary
+            // with time, and neither is another row in this enum. The
+            // assumption's own detail says so, which is where a reader looks.
+            alternatives: [])
     }
 
     // MARK: - the checks themselves
