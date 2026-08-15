@@ -141,25 +141,39 @@ struct ProcessControlTests {
     @Test("pause suspends the process and resume lets it finish")
     func pauseAndResume() async throws {
         let registry = ProcessRegistry()
+        let started = scratch().appending(path: "started")
         let done = scratch().appending(path: "done")
+
+        // The child says when it is *running* before it does the work worth
+        // suspending. Without that marker this test waited for
+        // `registry.live()` and then paused, which meant the window it needed
+        // to win included process launch — and on a loaded machine the whole
+        // 0.2s of work finished inside it. It failed two runs in three during a
+        // full suite and passed on its own, which is the kind of red people
+        // learn to re-run instead of read.
         let running = Task {
             try await registry.run(
-                .shell("sleep 0.2; echo ok > \(done.path(percentEncoded: false))",
-                       workingDirectory: scratch(), timeout: .seconds(20)),
+                .shell("echo up > \(started.path(percentEncoded: false)); sleep 1; "
+                       + "echo ok > \(done.path(percentEncoded: false))",
+                       workingDirectory: scratch(), timeout: .seconds(30)),
                 label: "pausable")
         }
 
         let entry = try await waitForValue { await registry.live().first }
+        try await waitUntil { FileManager.default.fileExists(atPath: started.path(percentEncoded: false)) }
         try await registry.pause(entry.id)
         #expect(await registry.live().first?.state == .paused)
 
-        // Long past the 0.2s sleep: a suspended process makes no progress.
-        try await Task.sleep(for: .milliseconds(500))
-        #expect(!FileManager.default.fileExists(atPath: done.path(percentEncoded: false)))
+        // Twice the sleep the child still had to do. Unpaused it would have
+        // finished; suspended it makes no progress at all.
+        try await Task.sleep(for: .seconds(2))
+        #expect(!FileManager.default.fileExists(atPath: done.path(percentEncoded: false)),
+                "the process kept running while suspended")
 
         try await registry.resume(entry.id)
         let outcome = try await running.value
         #expect(outcome.succeeded)
+        #expect(FileManager.default.fileExists(atPath: done.path(percentEncoded: false)))
     }
 
     /// SIGTERM to a suspended process is queued, not delivered. Stopping a

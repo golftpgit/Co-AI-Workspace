@@ -652,6 +652,24 @@ else
   ok "every role has a knowledge view of its own, with no default arm"
 fi
 
+# A test must not guess a port and then bind it.
+#
+# `SocketTests` used `UInt16.random(in: 49_200...50_800)` and called that "a
+# port nobody is using". It is a guess, and it collided often enough to fail one
+# full run in three while passing in isolation — the kind of red people learn to
+# re-run rather than read. Port 0 asks the system, and `start(serving:port:)`
+# reports back what it got, so there is no window between choosing and binding.
+# Comment lines skipped, or the note explaining this rule trips it — the same
+# way the force-unwrap rule's first version did.
+GUESSED_PORTS=$(grep -rn "start(serving:" Tests --include=*.swift \
+  | grep -vE ":[0-9]+: *//" | grep -v "anyFreePort" | grep -v "port: 0" || true)
+if [ -n "$GUESSED_PORTS" ]; then
+  echo "$GUESSED_PORTS" | sed 's/^/   /' | head -5
+  fail "a test binds a port it chose itself instead of asking for one (port 0)"
+else
+  ok "no test guesses a port before binding it"
+fi
+
 # The plan's status cells have to agree with themselves.
 #
 # Marking a task done by *appending* to its status cell leaves the row opening
