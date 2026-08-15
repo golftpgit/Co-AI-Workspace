@@ -90,9 +90,12 @@ enum IAInventory {
                                 + "และยังสร้าง/ลบ/เปลี่ยนชื่อไฟล์จากหน้านี้ไม่ได้")),
         IAEntry(screen: "Processes", area: "สนทนา", subTab: "แถบขวา: โปรเซส",
                 state: .partial("เห็นโปรเซสที่รันอยู่และสั่งหยุดได้ · ยังไม่มีตารางข้ามทุกบทสนทนา")),
-        IAEntry(screen: "Settings", area: "ระบบ", subTab: "งบ + endpoint · โมเดล · ปลั๊กอิน",
-                state: .partial("มีหมวด inference/งบ/โมเดล/ปลั๊กอิน/MCP · หมวดที่เหลือใน §15 "
-                                + "ยังไม่มีหน้า (P8.6)")),
+        IAEntry(screen: "Settings", area: "ระบบ",
+                subTab: "งบ + endpoint · โมเดล · ช่องทาง · ปลั๊กอิน",
+                state: .partial("มีหมวด inference/งบ/โมเดล/ปลั๊กอิน/ช่องทาง · "
+                                + "**ยังไม่มีหน้าเพิ่ม MCP server เอง** — `MCPServerStore` อยู่บน "
+                                + "engine และไม่มีหน้าจอไหนอ่าน (ปลั๊กอินที่แพ็กมาแล้วเพิ่มได้) · "
+                                + "หมวดที่เหลือใน §15 ยังไม่มีหน้า")),
         // Not in §14.2 because it did not exist then. Listed so the inventory is
         // the whole app rather than only the parts that were reorganised.
         IAEntry(screen: "Plan", area: "แผนงาน",

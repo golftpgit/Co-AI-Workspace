@@ -1,0 +1,233 @@
+import SwiftUI
+import AgentKit
+import Channels
+
+// ─────────────────────────────────────────────────────────────
+// Setting up a chat channel (ARCHITECTURE §8.2, §15).
+//
+// P7.3/P7.4 built Telegram, Discord and LINE, and `Engine` has held a
+// `ChannelAccountStore` since then that **no view ever read**. Configuring a
+// bot meant writing JSON by hand next to the database, and after P9.3 moved
+// secrets into the Keychain there was still nowhere to type the token. Found
+// during the secrets audit; recorded there and built here, because it is a gap
+// in P7 rather than in the security work.
+//
+// Two things the screen is arranged around:
+//
+//  • **The allow-list is the security model.** A bot's username is public and
+//    the token is the only secret, so who may talk to it is a list — and an
+//    empty list means nobody. The field says so where somebody is about to
+//    leave it empty, not in a document.
+//  • **Changes take effect at the next launch.** The channels are started once,
+//    in `Engine.build`. Pretending otherwise — a screen that looks live while
+//    the running bot still has yesterday's allow-list — would be worse than
+//    saying it plainly, so it is said plainly.
+// ─────────────────────────────────────────────────────────────
+
+@MainActor
+@Observable
+final class ChannelsViewModel {
+    private(set) var accounts: [ChannelAccount] = []
+    var editing: ChannelAccountDraft?
+    /// The account being edited, or nil when the draft is a new one.
+    private(set) var editingID: String?
+    private(set) var problem: String?
+
+    private var store: ChannelAccountStore?
+
+    func attach(store: ChannelAccountStore) {
+        self.store = store
+        reload()
+    }
+
+    func reload() {
+        accounts = store?.load() ?? []
+    }
+
+    func startNew() {
+        editingID = nil
+        editing = ChannelAccountDraft()
+    }
+
+    func edit(_ account: ChannelAccount) {
+        editingID = account.id
+        editing = ChannelAccountDraft(account)
+    }
+
+    func save() {
+        guard let store, let draft = editing, draft.canSave else { return }
+        do {
+            try store.add(draft.account(id: editingID))
+            editing = nil
+            editingID = nil
+            problem = nil
+            reload()
+        } catch {
+            problem = ReadableFailure.message(for: error, doing: "บันทึกรายชื่อบอท")
+        }
+    }
+
+    func remove(_ account: ChannelAccount) {
+        guard let store else { return }
+        do {
+            try store.remove(account.id)
+            problem = nil
+            reload()
+        } catch {
+            problem = ReadableFailure.message(for: error, doing: "ลบบอทออกจากรายชื่อ")
+        }
+    }
+}
+
+struct ChannelsView: View {
+    @Bindable var model: ChannelsViewModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                header
+                if model.accounts.isEmpty {
+                    Text("ยังไม่มีบอทในรายการ — เพิ่มได้ด้วยปุ่มด้านบน")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(model.accounts) { account in
+                    row(account)
+                }
+                if let problem = model.problem {
+                    Text(problem).font(.callout).foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+                footnote
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .sheet(isPresented: Binding(get: { model.editing != nil },
+                                    set: { if !$0 { model.editing = nil } })) {
+            if model.editing != nil {
+                ChannelEditor(model: model)
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("ช่องทาง").font(.title2.bold())
+                Text("บอทที่คุยกับเวิร์กสเปซนี้ได้ — ทุกช่องทางเดินผ่านแกนเดียวกันและ hook chain เดียวกัน (§8.2)")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("เพิ่มบอท") { model.startNew() }
+                .buttonStyle(.borderedProminent)
+        }
+    }
+
+    private func row(_ account: ChannelAccount) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Circle()
+                    .fill(account.isReady ? Color.green : Color.orange)
+                    .frame(width: 8, height: 8)
+                Text(account.name).fontWeight(.medium)
+                Text(account.platform.label).font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button("แก้") { model.edit(account) }
+                    .buttonStyle(.borderless).font(.caption)
+                Button("ลบ", role: .destructive) { model.remove(account) }
+                    .buttonStyle(.borderless).font(.caption)
+            }
+            Text("รับจาก \(account.allowedChats.count) chat id"
+                 + (account.scope == .central ? " · ทั้งเวิร์กสเปซ" : " · เฉพาะโปรเจกต์"))
+                .font(.caption2).foregroundStyle(.secondary)
+            // `blockers` distinguishes "not set" from "the Keychain would not
+            // open" since P9.3 — sending somebody to re-enter a token they
+            // already entered is how an hour goes missing.
+            ForEach(account.blockers, id: \.self) { blocker in
+                Text("• \(blocker)").font(.caption2).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(account.name) · \(account.platform.label) · "
+                            + (account.isReady ? "พร้อมทำงาน" : "ยังไม่พร้อม"))
+    }
+
+    private var footnote: some View {
+        Text("เปลี่ยนที่นี่แล้วมีผลตอนเปิดแอปครั้งถัดไป — ช่องทางถูกเริ่มครั้งเดียวตอนบูต "
+             + "หน้าจอที่ทำเหมือนมีผลทันทีทั้งที่บอทที่กำลังวิ่งยังถือรายการเมื่อวานอยู่ แย่กว่าการบอกตรง ๆ")
+            .font(.caption2).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+
+private struct ChannelEditor: View {
+    @Bindable var model: ChannelsViewModel
+
+    var body: some View {
+        if let draft = Binding($model.editing) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(draft.wrappedValue.name.isEmpty ? "เพิ่มบอท"
+                                                     : "แก้ \(draft.wrappedValue.name)")
+                    .font(.headline)
+
+                Picker("แพลตฟอร์ม", selection: draft.platform) {
+                    ForEach(ChannelPlatform.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+
+                LabeledContent("ชื่อ") {
+                    TextField("บอทกลุ่มวิจัย", text: draft.name)
+                }
+
+                if !draft.wrappedValue.platform.isLocal {
+                    SecretField(name: draft.tokenVariable, title: "ชื่อโทเคนของบอท",
+                                placeholder: "TELEGRAM_BOT_TOKEN")
+                    if draft.wrappedValue.platform == .line {
+                        SecretField(name: draft.signingSecretVariable,
+                                    title: "ชื่อ channel secret (ตรวจลายเซ็น webhook)",
+                                    placeholder: "LINE_CHANNEL_SECRET")
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        LabeledContent("chat id ที่อนุญาต") {
+                            TextField("123456789, 987654321", text: draft.allowedChatsText)
+                        }
+                        Text("คั่นด้วยจุลภาค เว้นวรรค หรือขึ้นบรรทัดใหม่ก็ได้ · "
+                             + "อ่านได้ \(draft.wrappedValue.allowedChats.count) รายการ")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+
+                LabeledContent("โมเดลเฉพาะช่องทางนี้ (ว่าง = ตามตัวจัดเส้นทาง)") {
+                    TextField("qwen3.6-27b", text: draft.modelOverride)
+                }
+                Toggle("เปิดใช้งาน", isOn: draft.isEnabled)
+
+                ForEach(draft.wrappedValue.problems, id: \.self) { problem in
+                    Text("• \(problem)").font(.caption).foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                ForEach(draft.wrappedValue.warnings, id: \.self) { warning in
+                    Text(.init("• \(warning)")).font(.caption).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack {
+                    Spacer()
+                    Button("ปิด") { model.editing = nil }
+                    Button("บันทึก") { model.save() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!draft.wrappedValue.canSave)
+                }
+            }
+            .padding(20)
+            .frame(width: 540)
+        }
+    }
+}

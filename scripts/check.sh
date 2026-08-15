@@ -609,6 +609,27 @@ else
   fail "accessibility rules (see above)"
 fi
 
+# D6, one layer in: wired into the engine and reachable from no screen.
+#
+# The rule above catches a capability the app never constructs. It does not
+# catch the variant found during P9.3: `Engine` has held a `ChannelAccountStore`
+# since P7.3 and **no view ever read it**, so all three chat channels could only
+# be configured by editing JSON beside the database. The capability was wired;
+# the person was not.
+#
+# So these engine properties must be read by something that is not Engine.swift.
+UNREACHABLE=""
+for property in channelAccounts templates plugins knowledge conflicts projects; do
+  grep -rlq "engine\.$property" --include=*.swift \
+    $(ls Sources/CoAIWorkspaceApp/*.swift | grep -v "Engine.swift") \
+    || UNREACHABLE="$UNREACHABLE $property"
+done
+if [ -n "$UNREACHABLE" ]; then
+  fail "on the engine but on no screen — configurable only by editing files:$UNREACHABLE"
+else
+  ok "everything a person configures has a screen, not just a store"
+fi
+
 # P9.3 / risk R11 — the two ways the secrets work quietly comes undone.
 #
 # 1. The vault is installed at boot. Without this line every secret in the app
