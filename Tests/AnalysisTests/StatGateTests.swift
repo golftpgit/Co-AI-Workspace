@@ -279,21 +279,39 @@ struct StatGateTests {
         #expect(result.statistic > 0.9)             // R²
     }
 
-    /// P19.0 — a test this module cannot run must refuse, not answer.
+    /// P19.0 → P19.3. This refused for one commit and now computes; what has
+    /// to survive is the shape of the refusal, because `notImplemented` is
+    /// still the answer for everything in §12.3's table this module cannot do.
     ///
-    /// It used to return a `StatResult` with `NaN` and an unchecked assumption:
-    /// honest in content, wrong in shape. Anything shaped like a result gets
-    /// rendered like one, and the row saying nothing was computed is the row a
-    /// reader skims. The refusal also has to say what to do instead, or it is
-    /// just a dead end.
-    @Test("a test that is not implemented refuses instead of returning a result")
-    func survivalRefuses() {
-        #expect(throws: StatError.notImplemented(test: .survival, plannedIn: "P19.3")) {
-            _ = try StatGate.survival()
-        }
-        let message = StatError.notImplemented(test: .survival, plannedIn: "P19.3").description
+    /// The rule it encodes: anything shaped like a result gets rendered like
+    /// one, quoted like one and pasted into a manuscript like one, and the row
+    /// saying nothing was computed is the row a reader skims. A refusal also
+    /// has to say what to do instead, or it is a dead end.
+    @Test("a test that is not implemented refuses, and says what to do instead")
+    func unimplementedTestsRefuse() {
+        let message = StatError.notImplemented(test: .survival, plannedIn: "P19.4").description
         #expect(message.contains("ยังคำนวณ"))
         #expect(message.contains("เครื่องมือภายนอก"), "the refusal does not say what to do instead")
+    }
+
+    /// P19.3 — the gate now answers the survival question, with the assumption
+    /// the answer rests on attached like every other one (§12.3).
+    @Test("comparing two survival curves comes back with the PH check attached")
+    func survivalIsCheckedLikeEverythingElse() throws {
+        let treated = (1...12).map {
+            SurvivalObservation(time: Double($0) * 3, event: $0 % 4 != 0)
+        }
+        let control = (1...12).map { SurvivalObservation(time: Double($0), event: true) }
+
+        let result = try StatGate.survival(treated, control)
+        #expect(result.test == .survival)
+        #expect(result.pValue < 0.05)
+        #expect(result.summary.contains("HR ="))
+        let assumption = try #require(result.assumptions.first)
+        #expect(assumption.name == "proportional hazards")
+        // Checked or refused, never silently assumed: both are honest, and the
+        // one thing that is not is an empty assumption list.
+        #expect(assumption.wasChecked || assumption.detail.contains("ยังไม่ได้ตรวจ"))
     }
 
     @Test("logistic regression says out loud which assumption it cannot check")
