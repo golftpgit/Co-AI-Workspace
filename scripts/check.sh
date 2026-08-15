@@ -163,7 +163,7 @@ for capability in ConflictDetector RelationExtractor TeamOrchestrator QAReviewer
                   ScaleReport ScoredResponses InstrumentDisposal ProjectTypeGateReader \
                   CodebookStore CodingAnalysis CellRunStore ManuscriptBuilder \
                   KnowledgeView ViewWidenings WidenViewTool InstallPackageTool \
-                  RoleMemory; do
+                  RoleMemory ToolProficiency; do
   grep -rqE "$capability[(.]" Sources/CoAIWorkspaceApp --include=*.swift || UNWIRED="$UNWIRED $capability"
 done
 if [ -n "$UNWIRED" ]; then
@@ -650,6 +650,23 @@ if [ -n "$VIEW_GAPS" ]; then
   fail "the knowledge-view switch is not exhaustive by construction:$VIEW_GAPS"
 else
   ok "every role has a knowledge view of its own, with no default arm"
+fi
+
+# P12.8 — the coupling that would rot silently.
+#
+# `ToolProficiencyReader` decides "the rules stopped this" versus "this role got
+# it wrong" by matching the prefix `ToolGateway` writes into the span's detail.
+# Reword one without the other and refusals quietly start counting as
+# incompetence — a number that then goes *up* when the guard rails are loosened.
+MISSING_PREFIX=""
+for prefix in "policy hard stop" "stage gate" "denied" "plan-only"; do
+  grep -q "detail: \"$prefix" Sources/CoreEngine/ToolGateway.swift \
+    || MISSING_PREFIX="$MISSING_PREFIX '$prefix'"
+done
+if [ -n "$MISSING_PREFIX" ]; then
+  fail "the proficiency reader looks for span details the gateway no longer writes:$MISSING_PREFIX"
+else
+  ok "a call the rules stopped is still told apart from a call the role got wrong"
 fi
 
 # P14.4 — the tools that ask a person even under full autonomy.

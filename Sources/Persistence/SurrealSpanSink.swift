@@ -152,6 +152,38 @@ public actor SurrealSpanSink: SpanSink {
             .sorted { $0.calls > $1.calls }
     }
 
+    /// How well each role uses each tool (§21.1 layer 3, P12.8).
+    ///
+    /// Across projects on purpose, like the forecast band below: proficiency
+    /// built from one project's spans is a statement about that project. The
+    /// detail line comes back too, because it is the only thing that separates
+    /// "the rules stopped this" from "this role got it wrong" — see
+    /// `ToolProficiencyReader`.
+    public func toolProficiency(limit: Int = 2_000) async throws -> [ToolProficiency] {
+        let rows = try await client.query("""
+            SELECT name, role, status, detail FROM span
+            WHERE string::starts_with(name, 'tool:') AND role != NONE
+            ORDER BY started_at DESC LIMIT $limit
+            """, vars: ["limit": limit]).first?.rows ?? []
+
+        let attempts = rows.compactMap { row -> ToolProficiencyReader.Attempt? in
+            guard let name = row["name"]?.stringValue,
+                  let rawRole = row["role"]?.stringValue,
+                  let role = Role(rawValue: rawRole),
+                  let status = row["status"]?.stringValue else { return nil }
+            // A call still running is not yet an outcome. Counting it as a
+            // failure would make a busy moment look like a bad one.
+            guard status != SpanStatus.running.rawValue,
+                  status != SpanStatus.awaitingApproval.rawValue else { return nil }
+            return ToolProficiencyReader.Attempt(
+                role: role,
+                tool: String(name.dropFirst("tool:".count)),
+                succeeded: status == SpanStatus.succeeded.rawValue,
+                detail: row["detail"]?.stringValue)
+        }
+        return ToolProficiencyReader.aggregate(attempts)
+    }
+
     /// Durations of finished work of the same shape, for the forecast band.
     /// Deliberately across projects: the whole point of a p90 is that it comes
     /// from more than the project asking for it.

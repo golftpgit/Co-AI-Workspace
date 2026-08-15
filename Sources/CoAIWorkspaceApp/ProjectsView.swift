@@ -641,6 +641,44 @@ struct ProjectsView: View {
         .accessibilityLabel("คำขอเปลี่ยนแปลงที่รอการยืนยัน: \(proposal.headline)")
     }
 
+    /// §21.1 layer 3 / P12.8 — what each role has actually been able to do.
+    ///
+    /// Beside RACI because that is where somebody decides who to give work to,
+    /// and this is the only place in the app that answers "have they done this
+    /// kind of thing before". A tool used fewer than five times shows no
+    /// percentage: one call out of one is 100%, and a panel that prints that
+    /// teaches people either to trust it wrongly or to stop reading it.
+    @ViewBuilder private var proficiencyPanel: some View {
+        if !model.proficiency.isEmpty {
+            DisclosureGroup("ความชำนาญเครื่องมือของแต่ละบทบาท") {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Role.allCases, id: \.self) { role in
+                        let rows = model.proficiency(for: role)
+                        if !rows.isEmpty {
+                            Text(role.rawValue).font(.caption).fontWeight(.medium)
+                            ForEach(rows, id: \.tool) { row in
+                                Text("· \(row.tool) — \(row.summary)")
+                                    .font(.caption2)
+                                    .foregroundStyle(row.isTooFewToJudge ? .secondary : .primary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                    // The threshold from the type, not a number typed again
+                    // here: two copies of it drift, and the caption is the only
+                    // place a reader learns why some rows have no percentage.
+                    Text("นับข้ามโปรเจกต์ · การเรียกที่ถูกกฎหยุดไว้ไม่นับเป็นความผิดของบทบาท "
+                         + "และเครื่องมือที่ใช้ไม่ถึง \(ToolProficiency.leastMeaningfulSample) ครั้ง "
+                         + "ไม่แสดงเปอร์เซ็นต์ เพราะ 1 จาก 1 คือ 100% และไม่ได้บอกอะไร")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(.callout)
+        }
+    }
+
     // MARK: - order, board and RACI (§19.7–§19.9)
 
     /// Not a Gantt, and it says so. §19.7: the horizontal axis of a real Gantt
@@ -815,6 +853,7 @@ struct ProjectsView: View {
     private func raciBox(_ project: Project) -> some View {
         GroupBox("ทีม & RACI") {
             VStack(alignment: .leading, spacing: 8) {
+                proficiencyPanel
                 if model.wbs.leaves.isEmpty {
                     Text("ยังไม่มีใบงานให้มอบหมาย").font(.callout).foregroundStyle(.secondary)
                 }
