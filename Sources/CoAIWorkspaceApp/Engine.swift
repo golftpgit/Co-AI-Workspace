@@ -273,6 +273,12 @@ struct Engine: Sendable {
             registers: RegisterStore(client: client),
             baselines: BaselineStore(client: client),
             lessons: LessonPublisher(knowledge: knowledgeStore),
+            // §19.1.1's handover (P21.4): the external references this project
+            // gathered go up with their tiers, the precedents it declared
+            // become everybody's, and the participants' words stay exactly
+            // where the people who gave them agreed they would.
+            handover: ClosingHandoverStore(knowledge: knowledgeStore,
+                                           conflicts: ConflictStore(client: client)),
             benefits: BenefitStore(client: client),
             tailoring: TailoringStore(client: client),
             // §19.12 conditions 4–5. Wired here for the reason the whole gate

@@ -210,3 +210,33 @@ public protocol RegisterPersisting: Sendable {
 public protocol LessonPublishing: Sendable {
     func publish(_ lessons: [RegisterEntry], from project: Project) async throws
 }
+
+/// What a project leaves behind for the next one (§19.1.1, P21.4).
+///
+/// Lessons are the part somebody wrote deliberately. This is the rest: the
+/// external references the project gathered and the conflict decisions it
+/// declared as precedent — and, just as much, everything that must **not**
+/// follow it up. Participants agreed to one study; their answers do not become
+/// library stock because the study finished.
+///
+/// A protocol here for the same reason as `LessonPublishing`: ProjectKit
+/// decides *when* this happens — at closing, once — and knows nothing about
+/// what a knowledge base is.
+public protocol ClosingKnowledgeHandover: Sendable {
+    /// - Returns: how many chunks moved and how many deliberately stayed, so
+    ///   the closing report can say so rather than leaving it to be assumed.
+    @discardableResult
+    func handOver(from project: Project) async throws -> HandoverCount
+}
+
+public struct HandoverCount: Sendable, Equatable {
+    public let movedUp: Int
+    public let keptInProject: Int
+    public let precedents: Int
+
+    public init(movedUp: Int, keptInProject: Int, precedents: Int) {
+        self.movedUp = movedUp
+        self.keptInProject = keptInProject
+        self.precedents = precedents
+    }
+}

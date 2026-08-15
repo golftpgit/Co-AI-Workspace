@@ -22,6 +22,9 @@ public actor ProjectService {
     private let registers: (any RegisterPersisting)?
     private let baselines: (any BaselinePersisting)?
     private let lessons: (any LessonPublishing)?
+    /// §19.1.1's other half: what else the project leaves to the next one, and
+    /// what must not follow it (P21.4).
+    private let handover: (any ClosingKnowledgeHandover)?
     private let benefits: (any BenefitPersisting)?
     private let tailoring: (any TailoringPersisting)?
     private let closingLedger: (any ClosingLedgerReading)?
@@ -49,6 +52,7 @@ public actor ProjectService {
                 registers: (any RegisterPersisting)? = nil,
                 baselines: (any BaselinePersisting)? = nil,
                 lessons: (any LessonPublishing)? = nil,
+                handover: (any ClosingKnowledgeHandover)? = nil,
                 benefits: (any BenefitPersisting)? = nil,
                 tailoring: (any TailoringPersisting)? = nil,
                 closingLedger: (any ClosingLedgerReading)? = nil,
@@ -63,6 +67,7 @@ public actor ProjectService {
         self.registers = registers
         self.baselines = baselines
         self.lessons = lessons
+        self.handover = handover
         self.benefits = benefits
         self.tailoring = tailoring
         self.closingLedger = closingLedger
@@ -345,10 +350,15 @@ public actor ProjectService {
     /// them. Nothing here knows what a knowledge base is — that is the point of
     /// `LessonPublishing`.
     private func publishLessons(of project: Project) async throws {
-        guard let lessons else { return }
-        let entries = await entries(of: project.id, kind: .lesson)
-        guard !entries.isEmpty else { return }
-        try await lessons.publish(entries, from: project)
+        if let lessons {
+            let entries = await entries(of: project.id, kind: .lesson)
+            if !entries.isEmpty { try await lessons.publish(entries, from: project) }
+        }
+        // The rest of §19.1.1's handover, in the same breath as the lessons:
+        // external references up, participants' data emphatically not. Failing
+        // here fails the close — a project reported as closed whose knowledge
+        // silently did not move is the state this task exists to end.
+        if let handover { try await handover.handOver(from: project) }
     }
 
     public func refreshExceptions() async {
