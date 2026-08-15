@@ -374,7 +374,11 @@ private struct EntityEditor: View {
 
 // MARK: - scope picker
 
-private enum ScopeChoice: String, CaseIterable, Identifiable {
+/// Shared with the graph tab: both draw one library and both have to say which
+/// one. `private` while there was a single caller, `internal` now that there
+/// are two — a second copy would drift and the two tabs would disagree about
+/// what "โปรเจกต์" means.
+enum ScopeChoice: String, CaseIterable, Identifiable {
     case central, project, policy
 
     init(_ scope: Scope) {
