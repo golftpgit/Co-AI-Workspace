@@ -185,3 +185,15 @@ public actor KnowledgeStore {
         }
     }
 }
+
+/// The `policy` scope, for the hook chain (§11.2, R14).
+///
+/// A tiny conformance rather than a new type: the gate needs one question
+/// answered and `KnowledgeStore` is already the thing that answers it. Errors
+/// are propagated on purpose — `StoredPolicyGate` turns an unreadable scope
+/// into a refusal, and swallowing them here would quietly turn it into consent.
+extension KnowledgeStore: PolicyChunkReading {
+    public func policyChunks() async throws -> [IndexedChunk] {
+        try await load(scope: .policy)
+    }
+}

@@ -55,6 +55,8 @@ struct Engine: Sendable {
     /// for search and writes through to this, so closing the app does not
     /// throw away what was ingested (P2.7).
     let knowledge: KnowledgeStore
+    /// The hook chain's rulebook, so ingest can invalidate it (R14).
+    let policySource: PolicyLibrarySource
     let router: ModelRouter
     let processes: ProcessRegistry
     let gateway: ToolGateway
@@ -242,7 +244,14 @@ struct Engine: Sendable {
         // work after it reopens, so the blocked set is read at boot rather
         // than starting empty and filling in when somebody opens the screen.
         await projects.refreshExceptions()
-        let gateway = ToolGateway(chain: HookChain(stageGate: StageGate(reader: projects)),
+        // R14 — P2.6's policy gate, installed. Until 2026-08-15 this line read
+        // `HookChain(stageGate:)`, which takes the default `NoPolicyGate`, so
+        // no rule in the `policy` scope had ever stopped a call in the built
+        // app while eleven tests said otherwise. `check.sh` now fails if the
+        // policy gate goes missing from here again.
+        let policySource = PolicyLibrarySource(reader: knowledgeStore)
+        let gateway = ToolGateway(chain: HookChain(stageGate: StageGate(reader: projects),
+                                                   policyGate: StoredPolicyGate(source: policySource)),
                                   approver: broker,
                                   spanSink: spans,
                                   modes: .default)
@@ -485,7 +494,7 @@ struct Engine: Sendable {
                       conflictDetector: ConflictDetector(router: router),
                       relations: RelationStore(client: client),
                       relationExtractor: RelationExtractor(router: router),
-                      knowledge: knowledgeStore,
+                      knowledge: knowledgeStore, policySource: policySource,
                       router: router, processes: processes, gateway: gateway,
                       broker: broker, runner: runner,
                       team: team, taskLedger: taskLedger, projects: projects,

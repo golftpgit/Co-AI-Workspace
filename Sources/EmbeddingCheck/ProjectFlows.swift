@@ -3,6 +3,7 @@ import AgentKit
 import Persistence
 import ProjectKit
 import CoreEngine
+import Knowledge
 
 // ─────────────────────────────────────────────────────────────
 // One project, driven end to end the way a person drives it (§19, P10).
@@ -59,8 +60,13 @@ struct ProjectFlows {
 
         let shell = RanFlag()
         let search = RanFlag()
+        // R14: the same policy gate the app installs, reading the same `policy`
+        // scope out of the same database. The unit tests use a fake reader; this
+        // is the only place the whole path runs end to end.
+        let policySource = PolicyLibrarySource(reader: knowledge)
         let gateway = ToolGateway(
-            chain: HookChain(stageGate: StageGate(reader: projects)),
+            chain: HookChain(stageGate: StageGate(reader: projects),
+                             policyGate: StoredPolicyGate(source: policySource)),
             modes: OperatingModes(autonomy: .fullAutonomous))
         await gateway.register([
             SpyTool(name: "run_shell", riskLevel: .high, flag: shell),
@@ -531,6 +537,50 @@ struct ProjectFlows {
                 throw CheckFailure("โครงการปิดแล้วอ่านไม่ได้ — มันต้องเป็นบันทึกที่ย้อนดูได้")
             }
             return "อ่านได้ · เขียนไม่ได้"
+        }
+
+        // ── R14 ───────────────────────────────────────────────────
+        // The whole path, against the real database: a rule written into the
+        // `policy` scope stops a real call through the real gateway. Before
+        // 2026-08-15 the app ran with `NoPolicyGate`, so this was true in unit
+        // tests and false everywhere a person would ever meet it.
+        await check("นโยบายที่เพิ่งเขียนลง policy scope หยุดคำสั่งได้จริง") {
+            // Nothing in the scope yet: an unrelated command has to run, or the
+            // gate is over-blocking — which is how a safety feature gets removed.
+            shell.reset()
+            let before = try await gateway.call(
+                "run_shell", argumentsJSON: #"{"command":"swift build"}"#,
+                context: ToolContext(scope: .central))
+            guard before.didExecute, shell.ran else {
+                throw CheckFailure("นโยบายยังว่าง แต่คำสั่งธรรมดาถูกบล็อก — บล็อกเกินจริง")
+            }
+
+            // One rule, one chunk — the shape `PolicyDocumentParser` expects
+            // and the shape ingestion produces for a policy document (P2.6).
+            let rule = IndexedChunk(
+                id: "c_policy_check", text: "- ห้ามลบฐานข้อมูลผลการทดลอง", scope: .policy,
+                provenance: Provenance(documentID: "doc_policy_check",
+                                       title: "นโยบายข้อมูลของการตรวจนี้",
+                                       origin: .upload(filename: "policy.md"), tier: .t1),
+                embedding: nil, embeddingProfileID: nil, contentHash: "policy_check_hash")
+            try await knowledge.save(rule)
+            await policySource.invalidate()
+
+            shell.reset()
+            let outcome = try await gateway.call(
+                "run_shell",
+                argumentsJSON: #"{"command":"ลบฐานข้อมูลผลการทดลอง ทั้งหมด"}"#,
+                context: ToolContext(scope: .central))
+
+            guard case .blockedByPolicy(let why) = outcome else {
+                throw CheckFailure("นโยบายอยู่ในฐานข้อมูลแล้วแต่ไม่ได้หยุดอะไร — ได้ \(outcome)")
+            }
+            guard !shell.ran else { throw CheckFailure("ทูลถูกเรียกทั้งที่ควรถูกหยุด") }
+            guard why.contains("ห้ามลบฐานข้อมูลผลการทดลอง"),
+                  why.contains("นโยบายข้อมูลของการตรวจนี้") else {
+                throw CheckFailure("ข้อความที่คืนมาไม่ได้ยกกฎกับที่มาให้ดู: \(why)")
+            }
+            return "กฎในฐานข้อมูลหยุดคำสั่งได้ พร้อมยกกฎคำต่อคำและชื่อเอกสาร"
         }
 
         await reopen(check: check, project: project, leafID: leafID)

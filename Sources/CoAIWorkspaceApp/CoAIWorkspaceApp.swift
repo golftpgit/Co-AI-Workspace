@@ -213,6 +213,7 @@ private struct RootView: View {
                     KnowledgeView(model: knowledge)
                         .task {
                             await knowledge.attach(store: engine.knowledge)
+                            knowledge.attach(policySource: engine.policySource)
                             await knowledge.attach(relations: engine.relations,
                                                    extractor: engine.relationExtractor)
                             knowledge.attach(conflicts: engine.conflicts,

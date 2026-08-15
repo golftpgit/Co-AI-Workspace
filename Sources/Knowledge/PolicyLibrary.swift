@@ -147,3 +147,17 @@ private extension String {
         String(drop(while: predicate))
     }
 }
+
+
+/// Where the `policy` scope's text comes from (§11.2, R14).
+///
+/// Declared here rather than beside the gate that uses it because the gate
+/// lives in CoreEngine and the store that answers it lives in Persistence —
+/// and Persistence must not depend on CoreEngine. This is the module both of
+/// them already import.
+///
+/// Throwing is part of the contract: a scope that cannot be read is not an
+/// empty scope, and the gate is required to tell those apart.
+public protocol PolicyChunkReading: Sendable {
+    func policyChunks() async throws -> [IndexedChunk]
+}
