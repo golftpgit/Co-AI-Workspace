@@ -130,6 +130,10 @@ public final class ProjectsViewModel {
     /// a file, and that is the honest degradation.
     private var paths: AppPaths?
     private var spans: SurrealSpanSink?
+    /// §21.1 layer 3 / P12.8 — how well each role actually uses each tool,
+    /// from the spans. Across projects on purpose: proficiency built from one
+    /// project's spans is a statement about that project.
+    public private(set) var proficiency: [ToolProficiency] = []
     private var spend: SurrealSpendLedger?
     private var ledger: TaskLedgerStore?
     private let log = AppLog.logger("projects-ui")
@@ -168,6 +172,19 @@ public final class ProjectsViewModel {
         self.spend = spend
         self.ledger = ledger
         await refreshGate()
+        await refreshProficiency()
+    }
+
+    /// Read once when the screen attaches rather than on every redraw: it is a
+    /// scan of up to two thousand spans, and it changes on the scale of days.
+    public func refreshProficiency() async {
+        guard let spans else { return }
+        proficiency = (try? await spans.toolProficiency()) ?? []
+    }
+
+    /// What this role has been measured at, most-used first.
+    public func proficiency(for role: Role) -> [ToolProficiency] {
+        proficiency.filter { $0.role == role }
     }
 
     public func reload() async {
