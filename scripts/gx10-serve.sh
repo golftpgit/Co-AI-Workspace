@@ -20,27 +20,23 @@
 # needs before anybody trusts it.
 set -uo pipefail
 
-MODEL_DIR="${MODEL_DIR:-$HOME/models/Qwen3.8-27B-NVFP4}"
-MODEL_REPO="${MODEL_REPO:-unsloth/Qwen3.8-27B-NVFP4}"
-# The name the app asks for. Kept stable across checkpoint changes on purpose:
-# ARCHITECTURE §17.1, EndpointRegistry and the verification log all name this,
-# and re-quantising the weights is not a reason to edit three documents.
-SERVED_NAME="${SERVED_NAME:-TeichAI/Qwen3.8-27B-Fable-Distill}"
+# Served by its real repo id. An earlier draft pinned a stable alias with
+# `--served-model-name` so a checkpoint swap could not break the app's config
+# — the wrong fix for a problem that should not exist: the app reads the id
+# from `/v1/models` (P15.1), so there is nothing to keep stable, and an alias
+# would only make the endpoint claim to be something it is not.
+MODEL="${MODEL:-unsloth/Qwen3.8-27B-NVFP4}"
 PORT="${PORT:-8000}"
 
 command -v vllm >/dev/null || { echo "✗ vllm not on PATH"; exit 1; }
 
-# ── the weights ──────────────────────────────────────────────
 # NVFP4 rather than bfloat16, and the difference is not a preference:
 # 27B at bf16 is ~54 GB read per generated token, and this machine's memory
 # bandwidth (~273 GB/s) caps that at ~5 tokens/second. Measured: 4.7. The
-# NVFP4 checkpoint measured 11.8 on the same box (docs/VERIFICATION_LOG.md
+# NVFP4 checkpoint measured ~11 on the same box (docs/VERIFICATION_LOG.md
 # E.19, E.20). It is a hardware ceiling, not a tuning problem.
-if [ ! -d "$MODEL_DIR" ]; then
-  echo "── downloading $MODEL_REPO → $MODEL_DIR"
-  hf download "$MODEL_REPO" --local-dir "$MODEL_DIR" || {
-    echo "✗ download failed"; exit 1; }
-fi
+#
+# vLLM downloads the repo itself on first run; no separate fetch step.
 
 # ── parser names, asked rather than assumed ──────────────────
 # The names differ between vLLM versions and between model families, and both
@@ -66,15 +62,21 @@ pick() {          # pick <flag-name> <candidate>...
 }
 
 # Qwen3 writes tool calls as XML (`<function=name><parameter=x>`), NOT as the
-# JSON that the `hermes` parser expects. Measured on this exact checkpoint.
-TOOL_PARSER="$(pick tool-call-parser qwen3_xml qwen3_coder hermes)" || exit 1
+# JSON that `hermes` expects — `hermes` returned `tool_calls: null` on this
+# exact checkpoint while answering 200.
+#
+# `qwen3_coder` first because it is the one **measured working here**
+# (E.20): a tool call came back parsed with valid JSON arguments. `qwen3_xml`
+# is the same format under a newer name on builds that have it, and ordering
+# by what was proven rather than by what sounds newer is the whole point.
+TOOL_PARSER="$(pick tool-call-parser qwen3_coder qwen3_xml hermes)" || exit 1
 # The model closes its scratchpad with `</think>` and never opens one — the
 # chat template supplies the opening tag. Parsers for that pattern:
 REASON_PARSER="$(pick reasoning-parser qwen3 deepseek_r1 qwen3_xml)" || exit 1
 
 echo "── tool-call-parser : $TOOL_PARSER"
 echo "── reasoning-parser : $REASON_PARSER"
-echo "── serving as       : $SERVED_NAME  (port $PORT)"
+echo "── model           : $MODEL  (port $PORT)"
 echo
 
 # `--dtype` is deliberately NOT set. On a quantised checkpoint vLLM reads the
@@ -83,8 +85,7 @@ echo
 #
 # `--quantization` is deliberately NOT set either — 0.27.x detects it from the
 # checkpoint, and naming the wrong scheme fails at load time.
-exec vllm serve "$MODEL_DIR" \
-  --served-model-name "$SERVED_NAME" \
+exec vllm serve "$MODEL" \
   --trust-remote-code \
   --max-model-len 32768 \
   --gpu-memory-utilization 0.90 \
