@@ -94,6 +94,14 @@ public final class ProjectsViewModel {
     /// says, rather than drawing a band around a guess.
     public private(set) var forecast: ScheduleEstimate?
 
+    /// The schedule on a calendar axis (§19.7, P10.9). `nil` until spans have
+    /// been read; empty rows are a real answer, not a missing one.
+    public private(set) var timeline: ScheduleTimeline?
+    /// How many pieces of work the chart is not drawing. A picture that quietly
+    /// shows part of the history reads as complete — the same rule the knowledge
+    /// graph's horizon count exists for.
+    public private(set) var timelineBeyondLimit = 0
+
     public struct Slice: Sendable, Equatable, Identifiable {
         public let key: String
         public let amount: Double
@@ -223,6 +231,28 @@ public final class ProjectsViewModel {
             durations += (try? await spans.durations(forRole: role)) ?? []
         }
         return Schedule.estimate(from: durations, basis: .turns)
+    }
+
+    /// Turns the project's recorded work into a chart (§19.7, P10.9).
+    ///
+    /// Read from the same population `elapsedByWorkPackage` sums — top-level
+    /// spans — so the picture and the total beside it are two views of one set
+    /// of rows rather than two answers to one question.
+    private func refreshTimeline(spans: SurrealSpanSink, project id: ProjectID) async {
+        guard let work = try? await spans.topLevelWork(project: .init(id.rawValue)) else {
+            timeline = nil
+            return
+        }
+        timelineBeyondLimit = max(0, work.total - work.spans.count)
+        timeline = ScheduleTimeline.build(
+            intervals: work.spans.compactMap { span in
+                guard let ended = span.endedAt else { return nil }
+                return ScheduleTimeline.Interval(
+                    id: span.id.rawValue, workPackage: span.workPackage,
+                    start: span.startedAt, end: ended,
+                    succeeded: span.status == .succeeded)
+            },
+            leaves: wbs.leaves)
     }
 
     public func refreshProficiency() async {
@@ -682,6 +712,7 @@ public final class ProjectsViewModel {
 
         if let spans {
             elapsed = (try? await spans.elapsedByWorkPackage(project: .init(id.rawValue))) ?? [:]
+            await refreshTimeline(spans: spans, project: id)
             let spent = elapsed.values.reduce(0, +)
             // The frame is a multiple of how long this kind of work usually
             // takes, so an unfinished plan with no history has no ratio to

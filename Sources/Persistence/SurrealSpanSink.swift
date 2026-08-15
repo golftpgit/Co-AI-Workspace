@@ -109,10 +109,20 @@ public actor SurrealSpanSink: SpanSink {
     /// Summed rather than wall-clocked from first to last: a package worked on
     /// across three days did not take three days, and the number people act on
     /// has to be the one they would recognise.
+    ///
+    /// **Top-level spans only.** A tool call is a child of the turn that made
+    /// it, and both carry the work package — so without `parent = NONE` this
+    /// counted every tool call twice: once inside its turn's duration and once
+    /// on its own. A turn of one minute containing three fifteen-second calls
+    /// reported 105 seconds against the leaf. The same shape now applies to the
+    /// team, where an attempt sits inside its assignment. The rule is the
+    /// invariant, not the list: **a span that sits inside another span's
+    /// duration is never added to it.**
     public func elapsedByWorkPackage(project: ProjectID) async throws -> [String: TimeInterval] {
         let rows = try await client.query("""
             SELECT work_package, started_at, ended_at FROM span
             WHERE project_id = type::string($pid) AND work_package != NONE
+              AND parent = NONE
             """, vars: ["pid": project.rawValue]).first?.rows ?? []
 
         var totals: [String: TimeInterval] = [:]
@@ -212,21 +222,34 @@ public actor SurrealSpanSink: SpanSink {
         return Self.seconds(rows)
     }
 
-    /// Finished assignments in one project, in the order they ran — the rows a
+    /// The work one project actually did, as pieces on a calendar — the rows a
     /// schedule with a real time axis is drawn from (§19.7, P10.9).
     ///
-    /// A bar needs a start, an end and something to sit on. The first two have
-    /// existed on every span since P1.6; the third is `work_package`, and rows
-    /// without one come back all the same. Work outside the plan is real work,
-    /// and a chart that hid it would make the plan look like the whole story.
-    public func assignments(project: ProjectID) async throws -> [Span] {
+    /// The **same population** `elapsedByWorkPackage` sums, and deliberately so:
+    /// the chart sits beside that total, and a picture drawn from one set of
+    /// rows next to a number computed from another is two answers to one
+    /// question. Hence top-level spans only — an attempt inside an assignment,
+    /// or a tool call inside a turn, is already inside a piece that is drawn.
+    ///
+    /// Unfinished work is left out because it has no end to draw to, not
+    /// because it does not count; the caller says how many were dropped.
+    ///
+    /// Work with no leaf comes back too. It is real time the project spent, and
+    /// hiding it would make the plan look like the whole story.
+    public func topLevelWork(project: ProjectID,
+                             limit: Int = 500) async throws -> (spans: [Span], total: Int) {
+        let counted = try await client.query("""
+            SELECT count() AS total FROM span
+            WHERE project_id = type::string($pid) AND parent = NONE AND ended_at != NONE
+            GROUP ALL
+            """, vars: ["pid": project.rawValue]).first?.rows.first?["total"]?.intValue ?? 0
+
         let rows = try await client.query("""
             SELECT * FROM span
-            WHERE project_id = type::string($pid) AND name = type::string($name)
-            ORDER BY started_at ASC
-            """, vars: ["pid": project.rawValue,
-                        "name": Span.assignmentName]).first?.rows ?? []
-        return rows.compactMap(Self.span(from:))
+            WHERE project_id = type::string($pid) AND parent = NONE AND ended_at != NONE
+            ORDER BY started_at DESC LIMIT $limit
+            """, vars: ["pid": project.rawValue, "limit": limit]).first?.rows ?? []
+        return (rows.compactMap(Self.span(from:)).sorted { $0.startedAt < $1.startedAt }, counted)
     }
 
     /// Durations of finished turns by the same role — the *fallback* population

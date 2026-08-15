@@ -330,6 +330,7 @@ struct ProjectsView: View {
         if tab == .plan {
             wbsBox(project)
             scheduleBox()
+            timelineBox()
         }
 
         if tab == .board {
@@ -747,20 +748,113 @@ struct ProjectsView: View {
                         Text("มี \(paths.count) เส้นทางที่ยาวเท่ากัน — ช้าเส้นไหนก็ช้าทั้งโครงการ")
                             .font(.caption2).foregroundStyle(.secondary)
                     }
-                    // Was "span ยังไม่ผูกกับใบงาน" — no longer true, and a
-                    // caption that explains an absence by a cause that has
-                    // been fixed is worse than no caption. What is still
-                    // missing is narrower and worth naming exactly: the
-                    // durations exist per leaf (the figure beside each bar is
-                    // one), what is not decided is what a bar on a calendar
-                    // axis should mean when a leaf was touched on Monday and
-                    // again on Thursday with 40 minutes of work in between.
-                    Text("แกนนอนคือลำดับ ไม่ใช่เวลา — เวลาที่ใช้จริงต่อใบมีแล้ว (ตัวเลขข้างแถบ) แต่แถบบนแกนปฏิทินยังไม่วาด เพราะงานที่แตะวันจันทร์แล้วแตะอีกทีวันพฤหัส ไม่ได้ใช้เวลาสี่วัน (§19.7, P10.9)")
+                    Text("แกนนอนตรงนี้คือลำดับ ไม่ใช่เวลา — แกนเวลาจริงอยู่ในกล่องถัดไป")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// The schedule on a calendar axis (§19.7, P10.9) — the thing four plan
+    /// items said could not be drawn honestly.
+    ///
+    /// A row is one mark per piece of work, and **a gap stays a gap**. The
+    /// obvious drawing — one bar per leaf from first touch to last — reads as
+    /// four days of work when a leaf was touched on Monday and again on
+    /// Thursday, and shading it to show that only forty minutes was real does
+    /// not help: the eye reads the rectangle, not the fill.
+    @ViewBuilder
+    private func timelineBox() -> some View {
+        if let timeline = model.timeline {
+            GroupBox("แกนเวลาจริง — งานที่เกิดขึ้นจริงบนปฏิทิน") {
+                VStack(alignment: .leading, spacing: 6) {
+                    if timeline.isEmpty {
+                        Text("ยังไม่มีงานที่บันทึกเวลาไว้ในโปรเจกต์นี้ — แถบจะขึ้นเองเมื่อมีงานจบ")
+                            .font(.callout).foregroundStyle(.secondary)
+                    } else {
+                        Text("ช่วง \(axisLabel(timeline)) · แต่ละขีดคือหนึ่งงานที่เกิดขึ้นจริง **ช่องว่างระหว่างขีดคือช่วงที่ไม่มีใครทำงานนี้** ไม่ใช่งานที่ยืดยาว")
+                            .font(.caption2).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        ForEach(timeline.rows) { row in
+                            timelineRow(row)
+                        }
+                        if model.timelineBeyondLimit > 0 {
+                            Text("ยังมีอีก \(model.timelineBeyondLimit) ชิ้นที่เก่ากว่านี้และไม่ได้วาด — "
+                                 + "ภาพนี้จึงไม่ใช่ทั้งหมดของประวัติ")
+                                .font(.caption2).foregroundStyle(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Text("แถบสีจางคืองานที่ไม่ผ่านหรือถูกยกเลิก — มันใช้เวลาไปจริง จึงยังอยู่บนแกน")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private func timelineRow(_ row: ScheduleTimeline.Row) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(row.title).font(.callout).lineLimit(1)
+                if row.hasStarted {
+                    Text("ทำจริง \(formatDuration(row.workedSeconds))")
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("ยังไม่เริ่ม").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 200, alignment: .leading)
+
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.08)).frame(height: 12)
+                    ForEach(row.segments) { segment in
+                        // The clamp that keeps a forty-second job visible lives
+                        // here and not in `ScheduleTimeline`: it is a fact about
+                        // pixels, and in the model every number computed
+                        // downstream would inherit it.
+                        let width = max(3, (segment.to - segment.from) * geometry.size.width)
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(segment.succeeded
+                                  ? Color.accentColor
+                                  : Color.secondary.opacity(0.45))
+                            .frame(width: width, height: 12)
+                            .offset(x: segment.from * geometry.size.width)
+                    }
+                }
+                .frame(height: 16)
+            }
+            .frame(height: 16)
+            .accessibilityElement()
+            .accessibilityLabel(rowSpokenLabel(row))
+        }
+        .padding(.vertical, 1)
+        .overlay(alignment: .bottomLeading) {
+            if let note = row.gapNote {
+                Text(note).font(.caption2).foregroundStyle(.orange)
+                    .offset(y: 10)
+            }
+        }
+        .padding(.bottom, row.gapNote == nil ? 0 : 12)
+    }
+
+    /// A chart is not readable by a screen reader, so the row says in words what
+    /// the marks say in pixels — including the gap, which is the whole point.
+    private func rowSpokenLabel(_ row: ScheduleTimeline.Row) -> String {
+        guard row.hasStarted else { return "\(row.title) — ยังไม่เริ่ม" }
+        let base = "\(row.title) — \(row.segments.count) ช่วงงาน "
+            + "รวมเวลาที่ทำจริง \(formatDuration(row.workedSeconds))"
+        guard let note = row.gapNote else { return base }
+        return base + " · " + note
+    }
+
+    private func axisLabel(_ timeline: ScheduleTimeline) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM HH:mm"
+        return "\(formatter.string(from: timeline.start)) – \(formatter.string(from: timeline.end))"
     }
 
     private func formatDuration(_ seconds: TimeInterval) -> String {
