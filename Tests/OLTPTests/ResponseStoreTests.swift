@@ -156,3 +156,67 @@ struct ResponseStoreTests {
         #expect(try await reopened.submissionCount(instrument: "in_1", version: 1) == 1)
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// The one fact the closing gate asks this store (§20.5, P11.10).
+//
+// `hasAnySubmission` decides whether §19.12's condition 8 applies to a project
+// at all: a study that collected answers has to name a real retention policy
+// before it can close, and a software project has nothing to promise anybody.
+// Getting it wrong in either direction is bad in a different way — a false
+// `true` makes every project invent a promise (R10's ceremony), a false
+// `false` waves a study past the one condition that exists to protect the
+// people in it.
+//
+// It had no test until a real response was driven through the field server and
+// somebody went looking for what read it.
+// ─────────────────────────────────────────────────────────────
+
+@Suite("Whether anybody answered at all")
+struct HasAnySubmissionTests {
+
+    @Test("a store nobody has answered says so")
+    func emptyIsFalse() async throws {
+        let (store, directory) = try await temporaryStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        #expect(try await store.hasAnySubmission() == false)
+    }
+
+    @Test("one answer is enough — the question is whether the promise applies, not how many")
+    func oneIsEnough() async throws {
+        let (store, directory) = try await temporaryStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        try await store.append(submission(1))
+        #expect(try await store.hasAnySubmission())
+    }
+
+    // The gate asks across the whole project, not per instrument: a study that
+    // collected under one instrument and then retired it still collected.
+    @Test("it counts across every instrument and every wave")
+    func spansInstrumentsAndWaves() async throws {
+        let (store, directory) = try await temporaryStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        try await store.append(submission(1, instrument: "in_retired", version: 1))
+        try await store.append(submission(2, instrument: "in_current", version: 3))
+        #expect(try await store.hasAnySubmission())
+    }
+
+    // Reopening is what actually happens: the closing gate runs months after
+    // the answers came in, in a different process.
+    @Test("it is still true after the store is closed and opened again")
+    func survivesReopening() async throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appending(path: "oltp-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appending(path: "responses.sqlite")
+
+        let first = try await ResponseStore(path: path)
+        try await first.append(submission(1))
+
+        let reopened = try await ResponseStore(path: path)
+        #expect(try await reopened.hasAnySubmission())
+    }
+}
