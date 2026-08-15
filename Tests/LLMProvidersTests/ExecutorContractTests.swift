@@ -19,7 +19,16 @@ import ExecutorContract
 // tier everything else falls back to (§9.2 rule 4).
 // ─────────────────────────────────────────────────────────────
 
-private let lmStudio = URL(string: "http://127.0.0.1:1234/v1")!
+/// Where Tier 1 is, for this machine.
+///
+/// LM Studio on the loopback by default, because that is what a laptop has.
+/// `COAI_TEST_ENDPOINT` points the whole contract at another one — the GX10 on
+/// the LAN, say — which is the only way these cases run against the model the
+/// app will actually use in anger (§17.1, P15.2). Same shape as
+/// `COAI_TEST_MODEL` below: which endpoint exists is a property of the machine,
+/// not of the repo.
+private let tierOne: URL = ProcessInfo.processInfo.environment["COAI_TEST_ENDPOINT"]
+    .flatMap { URL(string: $0) } ?? URL(string: "http://127.0.0.1:1234/v1")!
 
 /// Which model to test against is a property of the machine, not of the repo —
 /// the same per-machine setting as `selfHostedEndpoint` in `bootstrap.plist`.
@@ -31,7 +40,7 @@ private func servedModel() async -> String? {
     if let pinned = ProcessInfo.processInfo.environment["COAI_TEST_MODEL"], !pinned.isEmpty {
         return pinned
     }
-    var request = URLRequest(url: lmStudio.appending(path: "models"))
+    var request = URLRequest(url: tierOne.appending(path: "models"))
     request.timeoutInterval = 2
     guard let (data, response) = try? await URLSession.shared.data(for: request),
           (response as? HTTPURLResponse)?.statusCode == 200,
@@ -94,13 +103,13 @@ struct OnDeviceExecutorTests {
 @Suite("OpenAI-compatible executor (Tier 1)", .serialized)
 struct VLLMExecutorTests {
     private func executor(_ model: String) -> VLLMExecutor {
-        VLLMExecutor(baseURL: lmStudio, model: model)
+        VLLMExecutor(baseURL: tierOne, model: model)
     }
 
     @Test("keeps the executor contract", .timeLimit(.minutes(10)))
     func keepsTheContract() async {
         guard let model = await servedModel() else {
-            skipped("no OpenAI-compatible endpoint on :1234 — Tier 1 unchecked")
+            skipped("no OpenAI-compatible endpoint at \(tierOne.absoluteString) — Tier 1 unchecked")
             return
         }
         await runContract(against: executor(model))
@@ -109,14 +118,14 @@ struct VLLMExecutorTests {
     @Test("availability also validates the configured model name", .timeLimit(.minutes(1)))
     func availabilityChecksModel() async {
         guard let model = await servedModel() else {
-            skipped("no OpenAI-compatible endpoint on :1234 — Tier 1 unchecked")
+            skipped("no OpenAI-compatible endpoint at \(tierOne.absoluteString) — Tier 1 unchecked")
             return
         }
         #expect(await executor(model).isAvailable())
 
         // A server will answer for a model that does not exist, so the check
         // has to be ours (ARCHITECTURE E.9, case 8a).
-        let typo = VLLMExecutor(baseURL: lmStudio, model: "no-such-model-xyz")
+        let typo = VLLMExecutor(baseURL: tierOne, model: "no-such-model-xyz")
         #expect(await typo.isAvailable() == false)
     }
 
@@ -136,12 +145,12 @@ struct LiveRoutingTests {
     @Test("a live chain answers even when Tier 0 refuses", .timeLimit(.minutes(4)))
     func liveChain() async throws {
         guard let model = await servedModel() else {
-            skipped("no OpenAI-compatible endpoint on :1234 — Tier 1 unchecked")
+            skipped("no OpenAI-compatible endpoint at \(tierOne.absoluteString) — Tier 1 unchecked")
             return
         }
         let router = ModelRouter(executors: [
             OnDeviceExecutor(),
-            VLLMExecutor(baseURL: lmStudio, model: model),
+            VLLMExecutor(baseURL: tierOne, model: model),
         ])
 
         var request = LLMRequest(messages: [

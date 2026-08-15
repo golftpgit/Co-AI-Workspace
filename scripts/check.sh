@@ -972,6 +972,33 @@ else
   ok "every project write goes past the archive guard, or is a documented exception"
 fi
 
+# P15.1/P15.3 — what the endpoint is, the endpoint says.
+#
+# Both numbers used to be written into Swift: a 32k window on every executor and
+# a 16k prompt budget beside it. Changing `--max-model-len` on the server moved
+# neither, and lowering it made the app overflow a window it believed was
+# bigger. The failure is silent in both directions, which is why it is a rule
+# rather than a comment.
+#
+# 1. The prompt budget is a value, not a literal at the call.
+if grep -nE "ContextManager\(budget: [0-9]" Sources/CoAIWorkspaceApp/Engine.swift | grep -q .; then
+  grep -nE "ContextManager\(budget: [0-9]" Sources/CoAIWorkspaceApp/Engine.swift | sed 's/^/   /'
+  fail "the context budget is written into the app again instead of read from the server (P15.3)"
+else
+  ok "the prompt budget is computed from the window the server reports"
+fi
+
+# 2. The executor is told the window that was measured, not a constant. The
+#    fallback constant is allowed and expected — a server that reports nothing
+#    has to leave the app with something — but `maxModelLength` has to be what
+#    is asked first.
+if awk '/executors.append\(VLLMExecutor\(/,/^        }$/' Sources/CoAIWorkspaceApp/Engine.swift \
+   | grep -q "maxModelLength"; then
+  ok "each endpoint's context window comes from its own /v1/models reply"
+else
+  fail "an executor is built with a hardcoded context window (P15.3)"
+fi
+
 if grep -rn ": \[String: Any\]" Sources --include=*.swift | grep -q "Sendable"; then
   fail "[String: Any] on a Sendable type (see ARCHITECTURE App. C)"
 else

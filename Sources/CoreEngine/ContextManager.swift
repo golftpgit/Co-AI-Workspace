@@ -95,6 +95,26 @@ public struct ContextManager: Sendable {
         self.keepRecent = keepRecent
     }
 
+    /// What is left over for the input, out of a model's whole window
+    /// (§17.1, P15.3).
+    ///
+    /// **The window is shared with the answer**, which is the part that keeps
+    /// being forgotten: on this endpoint the reasoning is billed against
+    /// `max_tokens` too, and a request capped at 200 came back with 931
+    /// characters of thinking, an empty `content` and `finish_reason: length` —
+    /// an answer that is missing with no error attached (E.20). So the prompt
+    /// gets the window minus a reserve, and the reserve is a quarter rather
+    /// than a fixed number because a quarter of 8k and a quarter of 128k are
+    /// both about one long answer.
+    ///
+    /// Floored at 2k of prompt so an absurdly small window still leaves
+    /// something to say, and the caller is expected to pass a real number: a
+    /// server that does not report its window is nil upstream, not 0 here.
+    public static func promptBudget(forWindow window: Int) -> Int {
+        let reserve = max(1_024, window / 4)
+        return max(2_048, window - reserve)
+    }
+
     public var threshold: Int { Int(Double(budget) * compactAt) }
 
     public func tokens(_ messages: [LLMMessage]) -> Int {

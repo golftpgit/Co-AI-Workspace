@@ -37,6 +37,36 @@ private func transcript() -> [LLMMessage] {
     return messages
 }
 
+// P15.3 — the prompt budget comes from the window the server reports, and the
+// window is shared with the answer. Measured on this endpoint: a request capped
+// at 200 tokens came back with 931 characters of reasoning, an empty `content`
+// and `finish_reason: length` (E.20) — an answer that is missing with nothing
+// saying so.
+@Suite("Budgeting inside a model's window")
+struct PromptBudgetTests {
+    @Test("the answer gets room, so the prompt does not take the whole window")
+    func reservesRoomForTheAnswer() {
+        // The GX10 as it is serving today.
+        #expect(ContextManager.promptBudget(forWindow: 32_768) == 24_576)
+        #expect(ContextManager.promptBudget(forWindow: 32_768) < 32_768)
+    }
+
+    @Test("a bigger window is a bigger prompt, not the same number")
+    func followsTheServer() {
+        // The whole point: `--max-model-len` moves and the app moves with it.
+        let small = ContextManager.promptBudget(forWindow: 8_192)
+        let large = ContextManager.promptBudget(forWindow: 131_072)
+        #expect(small < large)
+        #expect(small == 6_144)
+        #expect(large == 98_304)
+    }
+
+    @Test("an absurdly small window still leaves something to say")
+    func hasAFloor() {
+        #expect(ContextManager.promptBudget(forWindow: 512) == 2_048)
+    }
+}
+
 @Suite("Context compaction")
 struct ContextManagerTests {
     @Test("compacting starts before the window is full, not when it overflows")
