@@ -7,6 +7,7 @@ import Instruments
 import Persistence
 import AgentKit
 import CoreEngine
+import LLMProviders
 import ProjectKit
 
 @main
@@ -70,6 +71,9 @@ private struct RootView: View {
     @State private var models = ModelsViewModel()
     @State private var endpoints = EndpointsViewModel()
     @State private var channels = ChannelsViewModel()
+    /// §22.6's dashboard. App-wide rather than per workspace: a run's command
+    /// tree is the organisation's, and it crosses projects.
+    @State private var commandTree = CommandTreeViewModel()
     /// Which workspaces are open and which one is in front (§19.1). Held at the
     /// root because it is not one screen's state: chat, knowledge and the ledger
     /// all read it, which is what replaced the hardcoded `ProjectID("default")`.
@@ -116,7 +120,7 @@ private struct RootView: View {
         // Knowledge.
         case documents, graph, conflicts, sources
         // System.
-        case models, budget, channels, status, inventory
+        case models, budget, channels, status, command, inventory
 
         var id: String { rawValue }
 
@@ -136,6 +140,7 @@ private struct RootView: View {
             case .budget: "งบ + endpoint"
             case .channels: "ช่องทาง"
             case .status: "สถานะระบบ"
+            case .command: "สายบังคับบัญชา"
             case .inventory: "ผังหน้าจอ"
             }
         }
@@ -711,6 +716,20 @@ private struct RootView: View {
         case .channels:
             ChannelsView(model: channels)
                 .task { channels.attach(store: engine.channelAccounts) }
+        // §22.6 / P16.5 — who is commanding whom, and who is actually
+        // working. Lit from spans, never from an agent's own report.
+        case .command:
+            CommandTreeScreen(model: commandTree)
+                .task {
+                    commandTree.attach(
+                        spans: { (try? await engine.spans.recent(limit: 300)) ?? [] },
+                        // The server's own queue beside our count of lit boxes
+                        // (P15.6). Nil when no endpoint is configured, and the
+                        // screen says so rather than showing a confident zero.
+                        loadReader: engine.endpoints.endpoint(
+                            id: engine.endpoints.defaultEndpointID)?.url
+                            .map(ServerLoadReader.init(baseURL:)))
+                }
         // R13's checklist, in the app: where each of §14.2's screens went, and
         // which of them are honestly not built yet.
         case .inventory: IAInventoryView()
@@ -725,7 +744,7 @@ private struct RootView: View {
         case .chat, .plan: nil
         case .workbench: workbenchTabs
         case .knowledge: [.documents, .graph, .conflicts, .sources]
-        case .system: [.models, .budget, .channels, .status, .inventory]
+        case .system: [.models, .budget, .channels, .status, .command, .inventory]
         }
     }
 
