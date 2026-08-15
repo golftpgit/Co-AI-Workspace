@@ -11,6 +11,7 @@ struct BootStatusView: View {
     /// P8.4 — owned here rather than rebuilt on each body pass, for the reason
     /// every other view model on this project is owned by its screen.
     @State private var plugins = PluginsViewModel()
+    @State private var mcpServers = MCPServersViewModel()
     @ScaledMetric private var labelColumn: CGFloat = 150
 
     var body: some View {
@@ -24,6 +25,12 @@ struct BootStatusView: View {
                 sidecarSection
                 engineSection
                 if let engine = environment.engine {
+                    Divider()
+                    // Servers named by command, above the packaged plugins:
+                    // both end up as MCP tools, and until now only the second
+                    // half had a screen.
+                    MCPServersView(model: mcpServers)
+                        .task { mcpServers.attach(store: engine.mcpServers) }
                     Divider()
                     PluginsSection(model: plugins)
                         .task {
