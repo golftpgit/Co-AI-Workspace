@@ -52,12 +52,14 @@ private func approvedInstrument() throws -> PublishedInstrument {
         by: "ผู้วิจัย")
 }
 
-/// A port nobody else in this test run is using. Ports are a shared resource in
-/// the same way database files are (see `check.sh`'s rule about that), so each
-/// suite picks its own rather than trusting a constant.
-private func freePort() -> UInt16 {
-    UInt16.random(in: 49_200...50_800)
-}
+/// Ask the system for a port instead of guessing one.
+///
+/// This was `UInt16.random(in: 49_200...50_800)`, which is not "a port nobody
+/// is using" — it is a guess, and it collided often enough to fail one full run
+/// in three while passing on its own. Port 0 means "you choose", and
+/// `start(serving:port:)` reports back what it actually got, so there is no gap
+/// between finding a port and binding it for anything else to slip into.
+private let anyFreePort: UInt16 = 0
 
 private func request(_ method: String, _ path: String, port: UInt16,
                      body: String? = nil) async throws -> (status: Int, body: String) {
@@ -85,11 +87,13 @@ struct SocketTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = try await ResponseStore(path: directory.appending(path: "responses.sqlite"))
         let host = FieldServerHost(store: store)
-        let port = freePort()
-        let address = try await host.start(serving: published, port: port)
+        let address = try await host.start(serving: published, port: anyFreePort)
         defer { Task { await host.stop() } }
+        let port = address.port
 
-        #expect(address.port == port)
+        // The address has to name a real port — reporting the 0 that was asked
+        // for would be a caller that cannot reach its own server.
+        #expect(port != 0)
 
         let page = try await request("GET", "/", port: port)
         #expect(page.status == 200)
@@ -116,8 +120,7 @@ struct SocketTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = try await ResponseStore(path: directory.appending(path: "responses.sqlite"))
         let host = FieldServerHost(store: store)
-        let port = freePort()
-        _ = try await host.start(serving: published, port: port)
+        let port = try await host.start(serving: published, port: anyFreePort).port
         defer { Task { await host.stop() } }
 
         let items = published.instrument.ordered
@@ -158,8 +161,7 @@ struct SocketTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = try await ResponseStore(path: directory.appending(path: "responses.sqlite"))
         let host = FieldServerHost(store: store)
-        let port = freePort()
-        _ = try await host.start(serving: published, port: port)
+        let port = try await host.start(serving: published, port: anyFreePort).port
         defer { Task { await host.stop() } }
 
         await host.closeWave()
@@ -184,8 +186,7 @@ struct SocketTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = try await ResponseStore(path: directory.appending(path: "responses.sqlite"))
         let host = FieldServerHost(store: store)
-        let port = freePort()
-        _ = try await host.start(serving: published, port: port)
+        let port = try await host.start(serving: published, port: anyFreePort).port
         defer { Task { await host.stop() } }
 
         for path in ["/admin", "/responses", "/api/v1/responses", "/status"] {

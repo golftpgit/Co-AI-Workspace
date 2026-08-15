@@ -112,6 +112,20 @@ public actor FieldServerHost {
     /// Takes the approved instrument by value: from here on the server serves a
     /// snapshot, so editing in the app — which §20.6 already turns into a new
     /// version — cannot change the form under somebody who is halfway through it.
+    /// Starts listening and returns the address it is **actually** on.
+    ///
+    /// - Parameter port: `0` asks the system for a free one, which is the only
+    ///   race-free way to get a port. The old shape — a caller finds a free
+    ///   port, then asks to bind it — has a gap between the two in which
+    ///   anything else can take it, and that gap is exactly what made
+    ///   `SocketTests` fail once in three full runs and pass on its own.
+    ///   Picking-then-binding is not slow, it is wrong.
+    ///
+    /// It also waits until the listener is *ready* before returning. It used to
+    /// return as soon as `start` had been called, so the address handed back
+    /// named a socket that might not be accepting yet — a second race, latent
+    /// for the same reason as the first: the app only ever started one server
+    /// and then waited for a human to open a browser.
     public func start(serving instrument: PublishedInstrument,
                       port: UInt16 = 8_760) async throws -> ServingAddress {
         guard listener == nil else { throw FieldServerError.alreadyRunning }
@@ -121,6 +135,8 @@ public actor FieldServerHost {
         // internet is not on offer. Binding to the LAN interfaces is exactly the
         // middle, and there is no tunnel here to widen it.
         parameters.allowLocalEndpointReuse = true
+        // `NWEndpoint.Port(rawValue: 0)` is `.any`, which is what asks the
+        // system to choose.
         guard let endpointPort = NWEndpoint.Port(rawValue: port) else {
             throw FieldServerError.portUnavailable(port, "หมายเลขพอร์ตไม่ถูกต้อง")
         }
@@ -136,10 +152,15 @@ public actor FieldServerHost {
             connection.start(queue: .global(qos: .userInitiated))
             Task { await self?.serve(connection) }
         }
-        listener.start(queue: .global(qos: .userInitiated))
+        try await Self.startAndWaitUntilReady(listener, requested: port)
+
+        // What it is really on, which is the requested port unless 0 was asked
+        // for. Reported rather than echoed back: a caller told "8760" when the
+        // system chose 51234 cannot reach its own server.
+        let boundPort = listener.port?.rawValue ?? port
 
         self.listener = listener
-        self.port = port
+        self.port = boundPort
         self.published = instrument
 
         // Resume the round that is already open for this version rather than
@@ -167,8 +188,47 @@ public actor FieldServerHost {
                                          + "v\(instrument.instrument.version) · wave \(fresh.id)"))
         }
 
-        log.info("field server open on \(port, privacy: .public) for instrument \(instrument.id, privacy: .public)")
-        return ServingAddress(port: port, hosts: Self.lanAddresses())
+        log.info("field server open on \(boundPort, privacy: .public) for instrument \(instrument.id, privacy: .public)")
+        return ServingAddress(port: boundPort, hosts: Self.lanAddresses())
+    }
+
+    /// Starts the listener and does not come back until it is accepting, or
+    /// has failed, or ten seconds have passed.
+    ///
+    /// `nonisolated` and static so the state handler is not hopping onto this
+    /// actor while the actor is awaiting it.
+    private nonisolated static func startAndWaitUntilReady(_ listener: NWListener,
+                                                           requested port: UInt16) async throws {
+        final class Once: @unchecked Sendable {
+            private let lock = NSLock()
+            private var done = false
+            func claim() -> Bool { lock.withLock { done ? false : { done = true; return true }() } }
+        }
+        let once = Once()
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            listener.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    if once.claim() { continuation.resume() }
+                case .failed(let error), .waiting(let error):
+                    // `.waiting` means it cannot bind — usually the port is
+                    // taken. Treated as a failure rather than waited on, so a
+                    // caller is told rather than left hanging.
+                    if once.claim() {
+                        continuation.resume(throwing:
+                            FieldServerError.portUnavailable(port, "\(error)"))
+                    }
+                case .cancelled:
+                    if once.claim() {
+                        continuation.resume(throwing:
+                            FieldServerError.portUnavailable(port, "ถูกยกเลิกก่อนเริ่มรับ"))
+                    }
+                default:
+                    break
+                }
+            }
+            listener.start(queue: .global(qos: .userInitiated))
+        }
     }
 
     /// Stops listening. **Does not close the round**, because those are two
