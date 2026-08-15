@@ -29,6 +29,26 @@ final class ServedModelName: @unchecked Sendable {
 }
 
 public struct VLLMExecutor: LLMExecutor {
+    /// The session every OpenAI-compatible endpoint is spoken to through.
+    ///
+    /// **Not `URLSession.shared`, and this was measured** (P15.5, E.23).
+    /// Foundation allows six connections per host and queues the rest, so six
+    /// specialists working at once was not a coincidence of the GPU — it was
+    /// this number. On the GX10, six streams answered in the same time as one
+    /// (9.1s vs 9.3s: batching is nearly free) while the seventh waited for a
+    /// free socket and took 14.9s. A team of four plus chat plus a workflow is
+    /// already at the limit, and nothing anywhere says so: the requests simply
+    /// take turns.
+    ///
+    /// Sixteen because the ceiling should be the server's to declare, not
+    /// Foundation's to impose by default — what the GPU does past that is
+    /// `TierOneCheck`'s question, and it can now be asked.
+    static let session: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.httpMaximumConnectionsPerHost = 16
+        return URLSession(configuration: configuration)
+    }()
+
     let baseURL: URL
     /// What the config asked for. **Empty means "whatever this server serves"**,
     /// which is the setting that survives a checkpoint swap — the name changes,
@@ -79,13 +99,17 @@ public struct VLLMExecutor: LLMExecutor {
     /// Asked of the server when the config left it blank, then kept. `nil` from
     /// the server is not the same as a wrong name, so an unreachable endpoint
     /// throws `unavailable` here rather than sending a request naming nothing.
-    func resolveModel() async throws -> String {
+    ///
+    /// Public so a screen or a measurement can print which model it is really
+    /// talking to — "the endpoint named in the config" is not an answer to that
+    /// question once the name is allowed to be blank.
+    public func resolveModel() async throws -> String {
         if let cached = resolved.current() { return cached }
 
         var request = URLRequest(url: baseURL.appending(path: "models"))
         request.timeoutInterval = 3
         if let apiKey { request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization") }
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
+        guard let (data, response) = try? await Self.session.data(for: request),
               let http = response as? HTTPURLResponse, http.statusCode == 200,
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let list = obj["data"] as? [[String: Any]] else {
@@ -187,7 +211,7 @@ public struct VLLMExecutor: LLMExecutor {
                 do {
                     try rejectIfUnsupported(request)
                     let urlReq = try await urlRequest(request, stream: true)
-                    let (bytes, response) = try await URLSession.shared.bytes(for: urlReq)
+                    let (bytes, response) = try await Self.session.bytes(for: urlReq)
                     guard let http = response as? HTTPURLResponse else {
                         throw LLMError.transport("no HTTPURLResponse")
                     }

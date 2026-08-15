@@ -97,7 +97,10 @@ DUP_SCOPE=$(grep -rlE "enum Scope[[:space:]]*[:{]" Sources --include=*.swift | w
 
 # The rule is about *library* targets: a library that prints has no way to be
 # quiet. Executables are where output is the product — the app writes through
-# AppLog, and EmbeddingCheck's whole job is to print what it found.
+# AppLog, and EmbeddingCheck, MLXCheck and TierOneCheck exist to print what they
+# measured. The list is spelled out rather than derived from Package.swift: an
+# executable added here is a deliberate act, and having to name it is the point
+# at which somebody asks whether the printing belongs in a library.
 #
 # Anchored on a word boundary since P11.1's gate work: `InstrumentFootprint(`
 # ends in the same six letters, and so would any `Blueprint(` or `Sprint(`. A
@@ -110,7 +113,7 @@ DUP_SCOPE=$(grep -rlE "enum Scope[[:space:]]*[:{]" Sources --include=*.swift | w
 if grep -rnE "(^|[^A-Za-z0-9_.])print\(" Sources --include=*.swift \
    | grep -vE ":[0-9]+:[[:space:]]*(///?|\*)" \
    | grep -v "^Sources/CoAIWorkspaceApp" | grep -v "^Sources/EmbeddingCheck" \
-   | grep -v "^Sources/MLXCheck" | grep -q .; then
+   | grep -v "^Sources/MLXCheck" | grep -v "^Sources/TierOneCheck" | grep -q .; then
   fail "print() outside the app target — use AppLog/os.Logger"
 else
   ok "no stray print() in library targets"
