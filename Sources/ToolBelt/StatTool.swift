@@ -37,7 +37,9 @@ public struct StatTestTool: AgentTool {
           "type": "string",
           "enum": ["welch_t", "student_t", "paired_t", "anova", "chi_square",
                    "mann_whitney", "wilcoxon", "kruskal_wallis", "fisher_exact",
-                   "linear_regression", "logistic_regression"],
+                   "linear_regression", "logistic_regression",
+                   "risk_ratio", "odds_ratio", "risk_difference", "nnt",
+                   "diagnostic_accuracy"],
           "description": "ชนิดการทดสอบ"
         },
         "groups": {
@@ -58,7 +60,11 @@ public struct StatTestTool: AgentTool {
           "description": "ตัวแปรต้น หนึ่งรายการต่อหนึ่งตัวแปร"
         },
         "names": { "type": "array", "items": { "type": "string" },
-                   "description": "ชื่อตัวแปรต้น ตามลำดับเดียวกับ predictors" }
+                   "description": "ชื่อตัวแปรต้น ตามลำดับเดียวกับ predictors" },
+        "prevalence": {
+          "type": "number",
+          "description": "ความชุกของโรค **ในประชากรที่จะใช้การทดสอบนี้จริง** (0-1) — จำเป็นสำหรับ diagnostic_accuracy เพราะ PPV/NPV ขึ้นกับความชุก ไม่ใช่คุณสมบัติของการทดสอบ"
+        }
       },
       "required": ["test"]
     }
@@ -132,6 +138,17 @@ public struct StatTestTool: AgentTool {
             case "logistic_regression":
                 let (y, predictors, names) = try regression()
                 result = try StatGate.logisticRegression(y: y, predictors: predictors, names: names)
+            // §12.6.1's measures (P19.1/P19.2). Their own branch because they
+            // do not produce a `StatResult`: there is no p-value and no
+            // assumption to check — an estimate and its interval *is* the
+            // answer, and wrapping them in a shape built for hypothesis tests
+            // would invent a p-value for a thing that does not have one.
+            case "risk_ratio", "odds_ratio", "risk_difference", "nnt":
+                return ToolOutput(text: try Self.epidemiology(test, table: try table()))
+            case "diagnostic_accuracy":
+                return ToolOutput(text: try Self.diagnostic(
+                    table: try table(),
+                    prevalence: try arguments.number("prevalence")))
             default:
                 throw ToolError.invalidArguments("ไม่รู้จักการทดสอบ '\(test)'")
             }
@@ -152,5 +169,59 @@ public struct StatTestTool: AgentTool {
         } catch let error as StatError {
             throw ToolError.invalidArguments("\(error)")
         }
+    }
+
+    /// A 2×2 as `[[exposed cases, exposed non-cases], [unexposed cases,
+    /// unexposed non-cases]]` — the order a textbook prints it in, said out
+    /// loud in the error, because a transposed table inverts the conclusion
+    /// without looking wrong.
+    private static func twoByTwo(_ rows: [[Int]]) throws -> TwoByTwo {
+        guard rows.count == 2, rows.allSatisfy({ $0.count == 2 }) else {
+            throw ToolError.invalidArguments(
+                "ต้องเป็นตาราง 2×2: [[ป่วย+สัมผัส, ไม่ป่วย+สัมผัส], [ป่วย+ไม่สัมผัส, ไม่ป่วย+ไม่สัมผัส]]")
+        }
+        return TwoByTwo(exposedCases: rows[0][0], exposedNonCases: rows[0][1],
+                        unexposedCases: rows[1][0], unexposedNonCases: rows[1][1])
+    }
+
+    private static func line(_ label: String, _ estimate: Estimate) -> String {
+        String(format: "%@: %.4f (95%% CI %.4f–%.4f · %@)",
+               label, estimate.value, estimate.lower, estimate.upper, estimate.method)
+    }
+
+    private static func epidemiology(_ test: String, table rows: [[Int]]) throws -> String {
+        let table = try twoByTwo(rows)
+        switch test {
+        case "risk_ratio": return line("RR", try Epidemiology.riskRatio(table))
+        case "odds_ratio": return line("OR", try Epidemiology.oddsRatio(table))
+        case "risk_difference": return line("RD", try Epidemiology.riskDifference(table))
+        default: return line("NNT", try Epidemiology.numberNeededToTreat(table))
+        }
+    }
+
+    private static func diagnostic(table rows: [[Int]], prevalence: Double) throws -> String {
+        guard rows.count == 2, rows.allSatisfy({ $0.count == 2 }) else {
+            throw ToolError.invalidArguments(
+                "ต้องเป็นตาราง 2×2: [[TP, FN], [FP, TN]]")
+        }
+        let table = DiagnosticTable(truePositives: rows[0][0], falseNegatives: rows[0][1],
+                                    falsePositives: rows[1][0], trueNegatives: rows[1][1])
+        let values = try DiagnosticAccuracy.predictiveValues(table, prevalence: prevalence)
+        let ratios = try? DiagnosticAccuracy.likelihoodRatios(table)
+        var text = [
+            line("sensitivity", try DiagnosticAccuracy.sensitivity(table)),
+            line("specificity", try DiagnosticAccuracy.specificity(table)),
+            String(format: "PPV: %.4f · NPV: %.4f — **ที่ความชุก %.4f**",
+                   values.positive, values.negative, values.atPrevalence),
+        ]
+        if let ratios {
+            text.append(String(format: "LR+: %.3f · LR−: %.3f (ไม่ขึ้นกับความชุก)",
+                               ratios.positive, ratios.negative))
+        }
+        // Said every time, because this is the sentence the numbers above are
+        // most often read without: the predictive values are properties of the
+        // test *and this population*, and quoting them elsewhere is wrong.
+        text.append("PPV/NPV เปลี่ยนตามความชุก — ตัวเลขข้างบนใช้ได้เฉพาะกับประชากรที่มีความชุกตามที่ระบุ")
+        return text.joined(separator: "\n")
     }
 }

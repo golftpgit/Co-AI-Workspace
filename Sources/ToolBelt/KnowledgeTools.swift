@@ -276,6 +276,18 @@ struct Arguments {
         values[key] as? Int ?? (values[key] as? String).flatMap(Int.init)
     }
 
+    /// One number, required. Thrown rather than defaulted: the caller that
+    /// needs this is `diagnostic_accuracy`, where a missing prevalence would
+    /// have to be invented, and an invented prevalence produces a predictive
+    /// value that is confidently wrong (P19.2).
+    func number(_ key: String) throws -> Double {
+        guard let value = (values[key] as? NSNumber)?.doubleValue
+                ?? (values[key] as? String).flatMap(Double.init) else {
+            throw ToolError.invalidArguments("ต้องมี \(key) เป็นตัวเลข")
+        }
+        return value
+    }
+
     func strings(_ key: String) -> [String] {
         values[key] as? [String] ?? []
     }
