@@ -251,7 +251,11 @@ public struct ManuscriptSection: Sendable, Codable, Equatable {
     }
 }
 
-public struct Manuscript: Sendable, Codable, Equatable {
+public struct Manuscript: Sendable, Codable, Equatable, Identifiable {
+    public let id: String
+    /// Which project this belongs to. A thesis draft is a project artefact —
+    /// General having one would mean a manuscript that belongs to no study.
+    public var scope: Scope
     public var title: String
     public var authors: [String]
     public var style: CitationStyle
@@ -260,8 +264,11 @@ public struct Manuscript: Sendable, Codable, Equatable {
     /// five are always present because the type says so.
     public var sections: [ManuscriptChapter: [ManuscriptSection]]
 
-    public init(title: String, authors: [String] = [], style: CitationStyle = .apa,
+    public init(id: String = OpaqueID.make("ms"), scope: Scope = .central,
+                title: String, authors: [String] = [], style: CitationStyle = .apa,
                 sections: [ManuscriptChapter: [ManuscriptSection]] = [:]) {
+        self.id = id
+        self.scope = scope
         self.title = title
         self.authors = authors
         self.style = style
@@ -269,9 +276,23 @@ public struct Manuscript: Sendable, Codable, Equatable {
     }
 
     /// Every number this manuscript claims, in chapter order.
+    ///
+    /// *Claims*, not "has a reference for". A reference whose placeholder the
+    /// author edited out of the sentence is not reported anywhere in the text,
+    /// so binding it would refuse the export over a number nobody is quoting,
+    /// and printing it in the appendix would list a figure the reader cannot
+    /// find in the chapter (see `ManuscriptComposition`).
     public var references: [ResultReference] {
         ManuscriptChapter.allCases.flatMap { chapter in
-            (sections[chapter] ?? []).flatMap { $0.reported.flatMap(\.references) }
+            (sections[chapter] ?? []).flatMap { $0.reported.flatMap(\.claimedReferences) }
+        }
+    }
+
+    /// References the text no longer has a place for. Shown while writing;
+    /// never a reason to refuse a document.
+    public var orphanedReferences: [ResultReference] {
+        ManuscriptChapter.allCases.flatMap { chapter in
+            (sections[chapter] ?? []).flatMap { $0.reported.flatMap(\.orphanedReferences) }
         }
     }
 }

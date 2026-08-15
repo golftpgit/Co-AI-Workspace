@@ -58,6 +58,10 @@ private struct RootView: View {
     @State private var models = ModelsViewModel()
     @State private var endpoints = EndpointsViewModel()
     @State private var analysis = AnalysisViewModel()
+    /// P11.9 — assembling the five-chapter manuscript. Its own model rather
+    /// than more fields on `AnalysisViewModel`, which is already the largest
+    /// on the project.
+    @State private var manuscripts = ManuscriptViewModel()
     @State private var instruments = InstrumentsViewModel()
     @State private var coding = CodingViewModel()
     /// Which workspace everything else is looking at (§19.1). Held at the root
@@ -565,7 +569,13 @@ private struct RootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .results:
-            screenView(.analysis, engine: engine, analysisPane: .plan)
+            // Two things live here: the pre-registered method (§12.4) and the
+            // manuscript it eventually becomes (§20.8). One picker, because
+            // they are two stages of the same document rather than two screens.
+            ResultsPane(analysis: analysis, manuscripts: manuscripts, engine: engine,
+                        scope: projects.scope,
+                        analysisView: { screenView(.analysis, engine: engine,
+                                                   analysisPane: .plan) })
         default:
             // Reachable only if a tab from another area were assigned here, which
             // `subTabs` never does. Showing the console beats an empty pane.

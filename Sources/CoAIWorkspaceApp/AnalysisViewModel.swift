@@ -688,19 +688,32 @@ public final class AnalysisViewModel {
     /// Refuses rather than rendering a gap. That refusal is the reason the
     /// feature exists: a draft with a hole where a mean should be gets sent
     /// anyway, and a draft with a *stale* mean looks perfect.
+    /// The runs a manuscript is checked against, and what each cell holds
+    /// *now* — so a number produced before an edit is refused instead of
+    /// quietly reported against the new question.
+    ///
+    /// One accessor rather than two copies of this because the preview on
+    /// screen and the export must see the same evidence. A preview that says
+    /// "ready to export" beside an export that refuses is worse than no
+    /// preview at all.
+    public func manuscriptEvidence() async -> (runs: [CellRun],
+                                               currentSources: [String: String]) {
+        guard let cellRuns else { return ([], [:]) }
+        let runs = (try? await cellRuns.runs(scope: scope)) ?? []
+        var currentSources: [String: String] = [:]
+        for book in notebooks {
+            for cell in book.cells { currentSources[cell.id] = cell.source }
+        }
+        return (runs, currentSources)
+    }
+
     public func exportManuscript(_ manuscript: Manuscript, to url: URL) async {
         guard let cellRuns else {
             status = Status(message: "ยังไม่ได้ต่อกับที่เก็บผลการรัน — "
                             + "ตัวเลขในเล่มต้องมาจากเซลล์ที่รันจริง", isError: true)
             return
         }
-        let runs = (try? await cellRuns.runs(scope: scope)) ?? []
-        // What each cell holds *now*, so a number produced before an edit is
-        // refused instead of quietly reported against the new question.
-        var currentSources: [String: String] = [:]
-        for book in notebooks {
-            for cell in book.cells { currentSources[cell.id] = cell.source }
-        }
+        let (runs, currentSources) = await manuscriptEvidence()
 
         do {
             var draft = try ManuscriptBuilder.draft(manuscript, runs: runs,
