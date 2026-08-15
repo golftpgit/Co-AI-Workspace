@@ -139,6 +139,11 @@ print("   — ด่านกรองด้วย embedding: วัดแล้
 await TranslationCalibration(embedder: embedder).run(check: { name, body in
     await check(name, body)
 })
+// §11.8 / P18.3 — the same question asked about entity *names*, which is not
+// the same question as P18.2 asked about sentences.
+await TranslationCalibration(embedder: embedder).alignment(check: { name, body in
+    await check(name, body)
+})
 
 // The screens' logic, driven the way a person drives it. Not a replacement
 // for using the app — it cannot see a view — but it covers the wiring half of
