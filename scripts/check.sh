@@ -859,6 +859,35 @@ else
   fail "the team screen's work-package picker is not passed to the run (P10.4/P10.15)"
 fi
 
+# P21.3 — every write to a project goes past the archive guard.
+#
+# Closing has been a gate with eight conditions since P10.10, and until now
+# nothing stopped anybody editing the project afterwards — which makes the
+# closing report a claim about a state that moved after it was written. The
+# guard is easy to forget on the *next* write method somebody adds, and the
+# symptom is silent: the write just works.
+#
+# So every public mutating entry point on ProjectService must either call
+# `requireWritable` or be one of the two documented exceptions:
+#   • `measure`/`save(_ benefit:)` — §19.12's post-project review adds a fact
+#     rather than changing an agreement, and it is dated months after closing;
+#   • `persist` — the primitive the closing transition itself writes through.
+UNGUARDED=$(awk '
+  /^    public func (update|save|record|remove|complete|decideChange)/ { fn=$0; body=""; depth=0 }
+  fn != "" { body = body "\n" $0 }
+  fn != "" && /^    }/ {
+    if (body !~ /requireWritable/ && body !~ /benefit/ && body !~ /Benefit/)
+      print fn
+    fn=""
+  }
+' Sources/ProjectKit/ProjectService.swift | sed 's/^ *//')
+if [ -n "$UNGUARDED" ]; then
+  echo "$UNGUARDED" | sed 's/^/   /'
+  fail "a write to a project that never checks whether it was closed (P21.3)"
+else
+  ok "every project write goes past the archive guard, or is a documented exception"
+fi
+
 if grep -rn ": \[String: Any\]" Sources --include=*.swift | grep -q "Sendable"; then
   fail "[String: Any] on a Sendable type (see ARCHITECTURE App. C)"
 else
