@@ -86,6 +86,7 @@ public actor ProjectService {
     }
 
     public func record(_ entry: RegisterEntry) async throws {
+        try await requireWritable(entry.projectID)
         try await registers?.save(entry)
     }
 
@@ -95,6 +96,10 @@ public actor ProjectService {
     /// become the new agreement by being edited (§19.11).
     public func decideChange(_ entry: RegisterEntry, approve: Bool,
                              by person: String) async throws {
+        // Guarded here as well as in `record`: this also freezes a baseline,
+        // and a guard that only exists on one of the two writes is a guard
+        // somebody will move without noticing the other.
+        try await requireWritable(entry.projectID)
         let decided = try entry.decided(approve: approve, by: person)
         try await record(decided)
         guard approve, let project = await project(entry.projectID) else { return }
@@ -371,11 +376,13 @@ public actor ProjectService {
 
     public func save(_ package: WorkPackage) async throws {
         guard let plans else { return }
+        try await requireWritable(package.projectID)
         try await plans.save(package)
     }
 
     public func removePackage(_ packageID: String, from id: ProjectID) async throws {
         guard let plans else { return }
+        try await requireWritable(id)
         try await plans.delete(packageID, project: id)
     }
 
@@ -440,6 +447,7 @@ public actor ProjectService {
     /// enforced in one place rather than at each caller (§19.15 invariant 4).
     public func complete(_ packageID: String, in id: ProjectID,
                          with evidence: [Evidence]) async throws {
+        try await requireWritable(id)
         let wbs = await breakdown(of: id)
         try await save(wbs.complete(packageID, with: evidence))
     }
@@ -505,11 +513,38 @@ public actor ProjectService {
         typeGates = reader
     }
 
+    /// Edits a project. **Refuses once it is closed** (§19.1.1, P21.3).
     public func update(_ project: Project) async throws {
+        try await requireWritable(project.id)
+        try await persist(project)
+    }
+
+    /// The unguarded write, for the paths that legitimately change a project
+    /// *while* closing it. `advance` sets `stage = .closed` and must be able to
+    /// store that — a guard here would make the last transition the one thing
+    /// the system could not record.
+    private func persist(_ project: Project) async throws {
         var updated = project
         updated.updatedAt = Date()
         try await store.save(updated)
         byID[updated.id] = updated
+    }
+
+    // MARK: - the archive rule (§19.1.1, P21.3)
+
+    /// Refuses a write to a closed project.
+    ///
+    /// **At the service, not in the view.** Hiding the button leaves every
+    /// other caller — the agent's tools, a channel, a future screen — able to
+    /// write to an archive, and the whole reason for closing is that the
+    /// closing report describes something that will not change afterwards.
+    ///
+    /// A project this service has never heard of passes through: the store
+    /// decides what an unknown id means, and refusing here would turn a
+    /// not-loaded-yet cache into a permission error.
+    private func requireWritable(_ id: ProjectID) async throws {
+        guard let project = await project(id), !project.isOpen else { return }
+        throw LifecycleError.projectIsArchived(name: project.name)
     }
 
     /// The gate for the *next* stage boundary, or nil for a closed project.

@@ -50,6 +50,13 @@ public enum LifecycleError: Error, CustomStringConvertible, Equatable {
     case gateNotPassed(gate: String, unmet: [String])
     case alreadyClosed
     case dispositionIncomplete
+    /// A write to a project that has been closed (§19.1.1, P21.3).
+    ///
+    /// Distinct from `alreadyClosed`, which means "there is no next stage to
+    /// advance to". This one means "the agreement is final" — an archive that
+    /// can still be edited makes the closing report describe something that
+    /// changed after it was written.
+    case projectIsArchived(name: String)
 
     public var description: String {
         switch self {
@@ -61,6 +68,9 @@ public enum LifecycleError: Error, CustomStringConvertible, Equatable {
             return "โครงการปิดแล้ว"
         case .dispositionIncomplete:
             return "ต้องบอกทั้งนโยบายที่ใช้และชื่อคนที่ตัดสิน"
+        case .projectIsArchived(let name):
+            return "“\(name)” ปิดไปแล้ว — เปิดอ่านได้ทั้งหมด แต่แก้ไม่ได้ "
+                + "(บันทึกผลประโยชน์ที่วัดได้ภายหลังยังทำได้ เพราะเป็นการเพิ่มข้อเท็จจริง ไม่ใช่แก้ข้อตกลง)"
         }
     }
 }
