@@ -77,6 +77,8 @@ final class ChatViewModel {
     private let engine: Engine
     private let scope: Scope
     private var turn: Task<Void, Never>?
+    /// Whether `prepare` has run. See it for why the flag is here.
+    private var prepared = false
 
     init(engine: Engine, scope: Scope = .central) {
         self.engine = engine
@@ -154,6 +156,22 @@ final class ChatViewModel {
         // A request raised before the window was ready is still outstanding;
         // the broker replays it on subscribe, so nothing is lost across a
         // reopen either.
+    }
+
+    /// Everything this screen needs doing once, done once (§19.1.1, P21.2).
+    ///
+    /// The model outlives the view now — it belongs to the workspace — so the
+    /// view's `task` runs again on every rebuild while the model is already
+    /// wired and already loaded. Guarded here rather than in the view because
+    /// the view is the thing being rebuilt: a flag it holds is a flag that goes
+    /// away with it.
+    func prepare() async {
+        guard !prepared else { return }
+        prepared = true
+        await adoptDefaultWorkingDirectory()
+        await attach()
+        await load()
+        await loadWorkPackages()
     }
 
     // MARK: - conversations

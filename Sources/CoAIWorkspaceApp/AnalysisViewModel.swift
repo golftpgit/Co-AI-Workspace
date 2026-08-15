@@ -345,6 +345,11 @@ public final class AnalysisViewModel {
 
     public func state(for id: String) -> CellState { cellStates[id] ?? .idle }
 
+    /// Whether a cell is running right now (§19.1.1, P21.2). Asked when a tab
+    /// is closing: a notebook halfway through a query is work in flight, and
+    /// letting go of the model would not stop it, only lose sight of it.
+    public var isRunning: Bool { cellStates.values.contains(.running) }
+
     /// What the cell would do, for the label next to the run button. The same
     /// call the runner will make when it decides whether to refuse.
     public func effect(for cell: NotebookCell) -> SQLAssessment? {

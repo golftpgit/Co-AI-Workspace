@@ -815,10 +815,12 @@ fi
 #    turns the whole feature off: the schedule loses its durations and the
 #    forecast band quietly falls back to chat turns. D6 again, and this time the
 #    hole is a default argument rather than a missing screen.
-#    The range stops at the closing `})` of the call, not at the first `)`:
+#    The range stops at the closing brace of the factory, not at the first `)`:
 #    the first version of this rule ran to end of file and passed happily with
-#    the argument deleted, because `spans:` appears again further down.
-if awk '/let team = TeamOrchestrator\(/,/^            \}\)/' Sources/CoAIWorkspaceApp/Engine.swift \
+#    the argument deleted, because `spans:` appears again further down. The lead
+#    is built inside `WorkspaceTeams`'s factory since P21.2 — one per workspace —
+#    so that block is the construction site now.
+if awk '/let teams = WorkspaceTeams \{/,/^        \}$/' Sources/CoAIWorkspaceApp/Engine.swift \
    | grep -q "spans:"; then
   ok "the team writes spans, so its work has a duration anybody can read"
 else
@@ -899,6 +901,46 @@ if grep -rlq "WorkspaceTabBar(" \
   ok "the open workspaces are drawn somewhere a person can click them"
 else
   fail "nothing renders the workspace tab bar — projects would be openable and invisible (P21.1)"
+fi
+
+# P21.2 — the work belongs to the workspace, not to the screen.
+#
+# Three ways this comes back, and each has been the shape of a real bug here:
+#
+# 1. A single lead for the whole app. It was one `TeamOrchestrator` re-pointed
+#    with `use(scope:)` on every switch — which mid-run is refused, so the tab
+#    you switched *to* filed its rows under the project you left. `team(for:)`
+#    is the only way to reach one now.
+if grep -rnE "engine\.team([^s(]|$)" Sources/CoAIWorkspaceApp/*.swift | grep -q .; then
+  grep -rnE "engine\.team([^s(]|$)" Sources/CoAIWorkspaceApp/*.swift | sed 's/^/   /' | head -3
+  fail "a screen reached for one app-wide team lead — it belongs to a workspace (P21.2)"
+else
+  ok "the team lead is asked for by workspace, never shared across them"
+fi
+
+# 2. A per-workspace model comes back as one shared instance on the root view.
+#    That is the state the app was in: one `TeamViewModel`, one
+#    `AnalysisViewModel`, re-pointed at whichever project was in front, so the
+#    rows of the one you left merged into the one you arrived at.
+SHARED_MODELS=$(grep -nE \
+  "@State private var (team|analysis|manuscripts|instruments|coding|workflows|knowledge) = " \
+  Sources/CoAIWorkspaceApp/CoAIWorkspaceApp.swift)
+if [ -n "$SHARED_MODELS" ]; then
+  echo "$SHARED_MODELS" | sed 's/^/   /' | head -5
+  fail "a workspace's screen model is held once for the whole app (P21.2)"
+else
+  ok "every scoped screen model comes from the per-workspace registry"
+fi
+
+# 3. Closing a tab throws away work that is still running. Closing a tab closes
+#    a window, not the project (§19.1.1) — and not the run either: the release
+#    path is what refuses to let go of a busy workspace, so a close that skips
+#    it would leave the run writing rows with nothing on screen able to see it.
+if grep -q "workspaces.release(" Sources/CoAIWorkspaceApp/CoAIWorkspaceApp.swift \
+   && grep -q "teams.release(" Sources/CoAIWorkspaceApp/CoAIWorkspaceApp.swift; then
+  ok "closing a tab lets go of its models and its lead, and both refuse while busy"
+else
+  fail "closing a tab never releases its workspace — or does it without the busy check (P21.2)"
 fi
 
 # P21.3 — every write to a project goes past the archive guard.

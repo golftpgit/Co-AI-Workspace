@@ -14,43 +14,32 @@ import CoreEngine
 // across 16 buttons afterwards.
 // ─────────────────────────────────────────────────────────────
 
-/// Owns the one view model this window uses.
+/// Draws the conversation of one workspace.
 ///
-/// It is built in `task`, not in `init`: `init` runs on every body pass, and a
-/// view model built there subscribed a fresh approval channel each time under
-/// the same id. The broker kept the newest — an instance SwiftUI had already
-/// thrown away — so approvals were delivered to nothing and turns hung with no
-/// banner on screen. One instance, created once, attached once.
+/// **The model is not built here** (§19.1.1, P21.2). It used to be — in `task`
+/// rather than `init`, because `init` runs on every body pass and a model built
+/// there subscribed a fresh approval channel each time, so approvals were
+/// delivered to an instance SwiftUI had already thrown away and turns hung with
+/// no banner on screen.
+///
+/// Building it once per view was not enough, because the view's identity is the
+/// workspace: switching tabs threw the model away, and with it the turn that was
+/// streaming into it. The model now belongs to the workspace (`WorkspaceModels`)
+/// and outlives every rebuild of this view, which is what makes a turn started
+/// in one project survive a look at another.
 struct ChatView: View {
-    let engine: Engine
-    /// Which workspace this conversation belongs to (§19.1). The root view
-    /// gives the view a new identity when it changes, so the model — and with
-    /// it the conversation list — is rebuilt rather than left showing the
-    /// project you just left.
-    let scope: Scope
+    @Bindable var model: ChatViewModel
     /// Called when the user promotes this conversation (§19.1, P10.3). Owned
     /// by the root view because creating a project changes which workspace the
     /// whole app is in, which is not chat's decision to make.
     let promote: (DraftedBrief, String?) async -> Void
-    @State private var model: ChatViewModel?
 
     var body: some View {
-        Group {
-            if let model {
-                ChatScreen(model: model, promote: promote)
-            } else {
-                ProgressView().controlSize(.small)
-            }
-        }
-        .task {
-            guard model == nil else { return }
-            let created = ChatViewModel(engine: engine, scope: scope)
-            model = created
-            await created.adoptDefaultWorkingDirectory()
-            await created.attach()
-            await created.load()
-            await created.loadWorkPackages()
-        }
+        ChatScreen(model: model, promote: promote)
+            // Idempotent, and it has to be: this runs again every time the view
+            // is rebuilt, and a second subscribe would be the same delivered-to-
+            // nobody bug arriving the other way round.
+            .task { await model.prepare() }
     }
 }
 

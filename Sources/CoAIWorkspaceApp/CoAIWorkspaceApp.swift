@@ -58,26 +58,21 @@ private struct RootView: View {
     /// commands and the file list is where their output lands (§14.2, P8.6),
     /// so they belong in one tab with a switch rather than two tabs apart.
     @State private var consolePane = ConsolePane.notebook
-    @State private var workflows = WorkflowViewModel()
-    /// Owned here rather than built inside the view: a model recreated on each
-    /// body pass loses whatever the user just did to it (P1.10's bug).
-    @State private var knowledge = KnowledgeViewModel()
+    /// One set of screen models per open workspace (§19.1.1, P21.2).
+    ///
+    /// These used to be one of each, held right here, and re-pointed at
+    /// whichever workspace was in front — so a project was a mode the models
+    /// were put into, and the work running inside them belonged to the screen
+    /// rather than to the project. What is left here is the models with no
+    /// workspace: the system screens, and the shell itself.
+    @State private var workspaces = WorkspaceModels()
     @State private var conflicts = ConflictViewModel()
-    @State private var team = TeamViewModel()
     @State private var models = ModelsViewModel()
     @State private var endpoints = EndpointsViewModel()
-    @State private var analysis = AnalysisViewModel()
-    /// P11.9 — assembling the five-chapter manuscript. Its own model rather
-    /// than more fields on `AnalysisViewModel`, which is already the largest
-    /// on the project.
-    @State private var manuscripts = ManuscriptViewModel()
     @State private var channels = ChannelsViewModel()
-    @State private var instruments = InstrumentsViewModel()
-    @State private var coding = CodingViewModel()
-    /// Which workspace everything else is looking at (§19.1). Held at the root
-    /// because it is not one screen's state: chat, knowledge and the ledger all
-    /// read the same selection, which is what replaced the hardcoded
-    /// `ProjectID("default")`.
+    /// Which workspaces are open and which one is in front (§19.1). Held at the
+    /// root because it is not one screen's state: chat, knowledge and the ledger
+    /// all read it, which is what replaced the hardcoded `ProjectID("default")`.
     @State private var projects = ProjectsViewModel()
 
     /// §19.2's four areas, plus the system. Each one is a different question:
@@ -195,9 +190,10 @@ private struct RootView: View {
     private func screenView(_ screen: Screen, engine: Engine,
                             analysisPane: AnalysisView.Pane? = nil,
                             explorerFocus: AnalysisView.ExplorerFocus = .both) -> some View {
+                let workspace = workspace(engine)
                 switch screen {
                 case .chat:
-                    ChatView(engine: engine, scope: projects.scope,
+                    ChatView(model: workspace.chat,
                              promote: { draft, conversationID in
                                  await projects.promote(draft,
                                                         conversationID: conversationID,
@@ -207,9 +203,12 @@ private struct RootView: View {
                                  // the G1 conditions still to fill in.
                                  area = .plan
                              })
-                        // Identity by scope: switching workspace has to build a
-                        // new view model, or the conversation list stays the one
-                        // from the project you just left.
+                        // Identity by scope, still — but for what it is actually
+                        // for. The view's own `State` (a half-typed message, an
+                        // open sheet) is this tab's, and rebuilding is how it
+                        // stays this tab's. What must *not* die with the view —
+                        // the model and the turn streaming into it — no longer
+                        // lives here (§19.1.1, P21.2).
                         .id(projects.scope.storageKey)
                 case .projects:
                     ProjectsView(model: projects,
@@ -226,52 +225,48 @@ private struct RootView: View {
                                                   paths: engine.paths)
                         }
                 case .knowledge:
-                    KnowledgeBaseView(model: knowledge)
-                        .task {
-                            await knowledge.attach(store: engine.knowledge)
-                            knowledge.attach(policySource: engine.policySource)
-                            await knowledge.attach(relations: engine.relations,
-                                                   extractor: engine.relationExtractor)
-                            knowledge.attach(conflicts: engine.conflicts,
-                                             detector: engine.conflictDetector)
-                            knowledge.currentProject = projects.selected?.id
-                        }
+                    KnowledgeBaseView(model: workspace.knowledge)
+                        .task { await wireKnowledge(workspace, engine) }
                 case .conflicts:
                     ConflictView(model: conflicts)
                         .task { await conflicts.attach(store: engine.conflicts) }
                 case .team:
-                    TeamView(model: team)
-                        // Rebuilt on a workspace switch, like Chat and Analysis:
-                        // the ledger, the open leaves and the lead's own scope
-                        // all belong to one project, and a screen that kept the
-                        // last one's rows would be offering to rework somebody
-                        // else's work.
+                    TeamView(model: workspace.team)
                         .id(projects.scope.storageKey)
-                        .task { await team.attach(team: engine.team,
-                                                  ledger: engine.taskLedger,
-                                                  gateway: engine.gateway,
-                                                  projects: engine.projects,
-                                                  scope: projects.scope) }
+                        // Attached once per workspace, and the lead is that
+                        // workspace's own (§19.1.1, P21.2). Before this the
+                        // screen re-pointed one shared lead on every switch,
+                        // which a run in flight makes impossible: the switch is
+                        // refused, and the next project's rows are filed under
+                        // the last one's name.
+                        .task {
+                            guard workspace.needsWiring("team") else { return }
+                            await workspace.team.attach(
+                                team: engine.team(for: workspace.scope),
+                                ledger: engine.taskLedger,
+                                gateway: engine.gateway,
+                                projects: engine.projects,
+                                scope: workspace.scope)
+                        }
                 case .analysis:
-                    AnalysisView(model: analysis, chosen: analysisPane,
+                    AnalysisView(model: workspace.analysis, chosen: analysisPane,
                                  explorerFocus: explorerFocus)
-                        // Same identity trick as Chat: switching workspace has
-                        // to rebuild the screen, or it keeps showing the tables
-                        // of the project you just left (§19.1).
                         .id(projects.scope.storageKey)
                         .task {
+                            guard workspace.needsWiring("analysis") else { return }
                             // Per-project files: its own DuckDB, its own
                             // notebooks, its own connectors.
-                            let stores = await engine.stores(for: projects.scope)
-                            await analysis.attach(store: stores.analysis,
-                                                  kernel: engine.notebookKernel,
-                                                  library: stores.notebooks,
-                                                  cellRuns: CellRunStore(client: engine.client))
-                            analysis.attach(connectors: stores.connectors)
-                            await analysis.attach(plans: engine.plans,
-                                                  detector: engine.gapDetector,
-                                                  knowledge: engine.knowledge)
-                            analysis.attach(templates: engine.templates)
+                            let stores = await engine.stores(for: workspace.scope)
+                            await workspace.analysis.attach(
+                                store: stores.analysis,
+                                kernel: engine.notebookKernel,
+                                library: stores.notebooks,
+                                cellRuns: CellRunStore(client: engine.client))
+                            workspace.analysis.attach(connectors: stores.connectors)
+                            await workspace.analysis.attach(plans: engine.plans,
+                                                            detector: engine.gapDetector,
+                                                            knowledge: engine.knowledge)
+                            workspace.analysis.attach(templates: engine.templates)
                         }
                 case .endpoints:
                     EndpointsView(model: endpoints)
@@ -298,6 +293,44 @@ private struct RootView: View {
                                 })
                         }
                 }
+    }
+
+    /// Wires this workspace's knowledge base, once, whichever of its two tabs
+    /// is opened first (§11.4, §19.1.1).
+    private func wireKnowledge(_ workspace: Workspace, _ engine: Engine) async {
+        guard workspace.needsWiring("knowledge") else { return }
+        await workspace.knowledge.attach(store: engine.knowledge)
+        workspace.knowledge.attach(policySource: engine.policySource)
+        await workspace.knowledge.attach(relations: engine.relations,
+                                         extractor: engine.relationExtractor)
+        workspace.knowledge.attach(conflicts: engine.conflicts,
+                                   detector: engine.conflictDetector)
+        // Without this the scope picker's "โปรเจกต์" option has no project to
+        // mean.
+        workspace.knowledge.currentProject = workspace.projectID
+    }
+
+    /// Closes a tab, and lets go of what it was holding.
+    ///
+    /// **Closing a window, not stopping the work** (§19.1.1): the run keeps
+    /// writing rows either way, so both registries refuse to let go of a
+    /// workspace with work in flight. Dropping it would not stop anything — it
+    /// would only lose the thing that can still see it, and reopening the tab
+    /// would then show an idle screen over live work.
+    private func close(_ tab: OpenWorkspaces.Tab, _ engine: Engine) async {
+        await projects.closeTab(tab)
+        if workspaces.release(tab.scope) {
+            await engine.teams.release(tab.scope)
+        }
+    }
+
+    /// The models of the workspace in front (§19.1.1, P21.2).
+    ///
+    /// A lookup rather than a stored property: which workspace is in front
+    /// changes with a click, and the models of the ones behind it are still
+    /// there, still holding their state and whatever they have running.
+    private func workspace(_ engine: Engine) -> Workspace {
+        workspaces.workspace(for: projects.scope, engine: engine)
     }
 
     var body: some View {
@@ -431,7 +464,9 @@ private struct RootView: View {
             // so somebody who never opens a project never sees a tab bar with
             // one tab in it.
             if projects.workspaces.entries.count > 1 {
-                WorkspaceTabBar(projects: projects)
+                WorkspaceTabBar(projects: projects, close: { tab in
+                    await close(tab, engine)
+                })
                 Divider()
             }
 
@@ -532,48 +567,55 @@ private struct RootView: View {
     /// inside of.
     @ViewBuilder
     private func workbenchArea(_ engine: Engine) -> some View {
+        let workspace = workspace(engine)
         switch workbenchTab {
         case .collect:
             // Both halves of the data path's first step: M15 designs the
             // instrument and gets it past its gate (P11.2/P11.4), and M16 opens
             // it to the local network once it has (P11.5). Two modules, one tab,
             // because to the person doing it that is one piece of work.
-            InstrumentsView(model: instruments)
+            InstrumentsView(model: workspace.instruments)
                 .id(projects.scope.storageKey)
                 .task {
+                    guard workspace.needsWiring("instruments") else { return }
                     // The project's own analytical store, so answers can be
                     // pulled across into it (§19.17). Passed in rather than
                     // opened here: one project, one `.duckdb`, and the place
                     // that knows which is `WorkspaceStores`.
-                    let stores = await engine.stores(for: projects.scope)
-                    await instruments.attach(store: InstrumentStore(client: engine.client),
-                                             scope: projects.scope,
-                                             paths: engine.paths,
-                                             analysis: stores.analysis,
-                                             spans: engine.spans)
+                    let stores = await engine.stores(for: workspace.scope)
+                    await workspace.instruments.attach(
+                        store: InstrumentStore(client: engine.client),
+                        scope: workspace.scope,
+                        paths: engine.paths,
+                        analysis: stores.analysis,
+                        spans: engine.spans)
                 }
         case .coding:
             // The qualitative half of M15 (§20.3, P11.8). Its own tab rather
             // than a box inside "เก็บข้อมูล" because it is the other order of
             // work: there the instrument is designed before anybody answers,
             // here the text exists and the categories are built out of it.
-            CodingView(model: coding, ingest: { transcript in
+            CodingView(model: workspace.coding, ingest: { transcript in
                 // The knowledge screen's own model does the work, so the index,
                 // the dedup and the conflict review are the ones the library
                 // already uses — a second path into the knowledge base would be
-                // a second set of rules about what is in it.
-                await knowledge.attach(store: engine.knowledge)
-                knowledge.scope = projects.scope
-                await knowledge.ingest(transcript: transcript)
-                coding.report(knowledge.status.map {
+                // a second set of rules about what is in it. This workspace's
+                // model, so what is ingested lands in the project the text was
+                // coded in (§19.1.1).
+                await workspace.knowledge.attach(store: engine.knowledge)
+                workspace.knowledge.scope = workspace.scope
+                await workspace.knowledge.ingest(transcript: transcript)
+                workspace.coding.report(workspace.knowledge.status.map {
                     CodingViewModel.Status(message: $0.message, isError: $0.isError)
                 })
             })
                 .id(projects.scope.storageKey)
                 .task {
-                    await coding.attach(store: CodebookStore(client: engine.client),
-                                        scope: projects.scope,
-                                        spans: engine.spans)
+                    guard workspace.needsWiring("coding") else { return }
+                    await workspace.coding.attach(
+                        store: CodebookStore(client: engine.client),
+                        scope: workspace.scope,
+                        spans: engine.spans)
                 }
         case .internalDB:
             screenView(.analysis, engine: engine,
@@ -600,13 +642,14 @@ private struct RootView: View {
                     // The palette is whatever the gateway can reach, so this
                     // screen needs the live gateway rather than a tool list
                     // captured at boot (§10, P8.5).
-                    WorkflowView(model: workflows)
+                    WorkflowView(model: workspace.workflows)
                         .id(projects.scope.storageKey)
                         .task {
-                            await workflows.attach(
+                            guard workspace.needsWiring("workflows") else { return }
+                            await workspace.workflows.attach(
                                 store: WorkflowStore(file: workflowFile(engine)),
                                 gateway: engine.gateway,
-                                context: ToolContext(scope: projects.scope))
+                                context: ToolContext(scope: workspace.scope))
                         }
                 case .files:
                     // The workspace's own folder, inside the container, so a
@@ -624,8 +667,9 @@ private struct RootView: View {
             // Two things live here: the pre-registered method (§12.4) and the
             // manuscript it eventually becomes (§20.8). One picker, because
             // they are two stages of the same document rather than two screens.
-            ResultsPane(analysis: analysis, manuscripts: manuscripts, engine: engine,
-                        scope: projects.scope,
+            ResultsPane(analysis: workspace.analysis,
+                        manuscripts: workspace.manuscripts,
+                        engine: engine, workspace: workspace,
                         analysisView: { screenView(.analysis, engine: engine,
                                                    analysisPane: .plan) })
         default:
@@ -637,6 +681,7 @@ private struct RootView: View {
 
     @ViewBuilder
     private func knowledgeArea(_ engine: Engine) -> some View {
+        let workspace = workspace(engine)
         switch knowledgeTab {
         case .conflicts: screenView(.conflicts, engine: engine)
         case .sources: SourcesView(registry: SourceRegistry(),
@@ -644,16 +689,13 @@ private struct RootView: View {
         // §11.4 / P2.7 — the relations have been extracted and stored since
         // P2.7 and, until now, read by no view at all.
         case .graph:
-            EntityGraphView(model: knowledge)
+            EntityGraphView(model: workspace.knowledge)
                 .id(projects.scope.storageKey)
-                .task {
-                    await knowledge.attach(store: engine.knowledge)
-                    await knowledge.attach(relations: engine.relations,
-                                           extractor: engine.relationExtractor)
-                    // Without this the scope picker's "โปรเจกต์" option has no
-                    // project to mean, exactly as on the documents tab.
-                    knowledge.currentProject = projects.selected?.id
-                }
+                // The same wiring as the documents tab, because it is the same
+                // model: the graph and the document list are two readings of one
+                // knowledge base, and wiring them separately is how the scope
+                // picker ended up meaning different things on the two tabs.
+                .task { await wireKnowledge(workspace, engine) }
         default: screenView(.knowledge, engine: engine)
         }
     }
@@ -770,6 +812,10 @@ private struct ProjectMenuButton: View {
 /// held a single selection, so opening the second project cost you the first.
 struct WorkspaceTabBar: View {
     let projects: ProjectsViewModel
+    /// Closing is the root view's to do, not this bar's: a tab holds a set of
+    /// screen models and a team lead, and letting go of those is a decision
+    /// about the whole app (§19.1.1, P21.2).
+    let close: (OpenWorkspaces.Tab) async -> Void
 
     var body: some View {
         ScrollView(.horizontal) {
@@ -816,7 +862,7 @@ struct WorkspaceTabBar: View {
             // else to fall back to.
             if entry.tab != .general {
                 Button {
-                    Task { await projects.closeTab(entry.tab) }
+                    Task { await close(entry.tab) }
                 } label: {
                     Image(systemName: "xmark").font(.system(size: 8))
                 }
