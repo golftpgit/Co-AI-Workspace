@@ -53,6 +53,20 @@ public actor AXNavigator {
                               root: root)
     }
 
+    /// What has keyboard focus right now, as a value.
+    ///
+    /// The other half of §14.4: a tree where everything has a name says
+    /// nothing about the order somebody reaches those names in, and focus
+    /// order is only answerable by moving focus and looking (P8.7).
+    public func focused() throws -> ScreenElement? {
+        try requirePermission()
+        let application = AXUIElementCreateApplication(pid)
+        guard let element = Self.copy(application, kAXFocusedUIElementAttribute) else {
+            return nil
+        }
+        return Self.describe(element)
+    }
+
     /// Presses the control a query names, and reports what changed.
     ///
     /// The before/after pair is not a nicety — it is the evidence (§23.3). A

@@ -163,7 +163,13 @@ private struct ChatScreen: View {
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel("สร้างบทสนทนาใหม่")
+                // ⌘N, because Tab does not reach buttons on macOS unless the
+                // person has turned Full Keyboard Access on — measured, not
+                // assumed: a Tab walk of this screen stops at three places,
+                // all of them text fields or the list (E.30). Starting a
+                // conversation was mouse-only, which is §14.4's whole point.
+                .keyboardShortcut("n", modifiers: .command)
+                .accessibilityLabel("สร้างบทสนทนาใหม่ (⌘N)")
             }
             HStack(spacing: 6) {
                 TextField("ค้นในบทสนทนา", text: $model.query)

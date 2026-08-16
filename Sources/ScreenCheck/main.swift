@@ -72,6 +72,34 @@ struct ScreenCheck {
                       + (element.centre.map { "\(Int($0.x)),\(Int($0.y))" } ?? "—")
                       + " — inside: \(where_)")
             }
+            // §14.4's other half: everything having a name says nothing about
+            // the order somebody reaches those names in (P8.7). Answered by
+            // moving focus and looking, which is the only way it can be.
+            if CommandLine.arguments.contains("--focus-order") {
+                print("\nfocus order (Tab ×20):")
+                var seen: [String] = []
+                for step in 1...20 {
+                    tab()
+                    try? await Task.sleep(for: .milliseconds(140))
+                    let focused = try? await navigator.focused()
+                    let name = focused.map { element in
+                        element.label.isEmpty
+                            ? "\(element.role) — ไม่มีชื่อ"
+                            : "\(element.role) “\(element.label)”"
+                    } ?? "(nothing focused)"
+                    print("  \(step). \(name)")
+                    seen.append(name)
+                }
+                // A cycle that returns to where it started is a window a
+                // keyboard user can get out of; one that never repeats is
+                // usually focus escaping into the toolbar and not coming back.
+                let unique = Set(seen).count
+                print("  distinct stops: \(unique) of \(seen.count)"
+                      + (unique < seen.count ? " — the order cycles" : " — never repeated in 20"))
+                let unnamed = seen.filter { $0.contains("ไม่มีชื่อ") }.count
+                print("  stops with nothing to announce: \(unnamed)")
+            }
+
             // Neighbours, when asked: an unlabelled control is identified by
             // what sits beside it far more easily than by its coordinates.
             if CommandLine.arguments.contains("--neighbours") {
@@ -86,6 +114,15 @@ struct ScreenCheck {
         } catch {
             print("could not read the screen: \(error)")
         }
+    }
+
+    /// One Tab, through the same event path a person's keyboard uses.
+    static func tab() {
+        let source = CGEventSource(stateID: .hidSystemState)
+        let down = CGEvent(keyboardEventSource: source, virtualKey: 0x30, keyDown: true)
+        let up = CGEvent(keyboardEventSource: source, virtualKey: 0x30, keyDown: false)
+        down?.post(tap: .cghidEventTap)
+        up?.post(tap: .cghidEventTap)
     }
 
     /// Whether this is furniture AppKit drew rather than a control this app
