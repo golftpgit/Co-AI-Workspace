@@ -975,6 +975,35 @@ else
   ok "every project write goes past the archive guard, or is a documented exception"
 fi
 
+# P20.2 — the design system is enforced, or it is another document.
+#
+# §24.1 names consistency as the worst of this app's four HIG problems, and the
+# cause is in the history: screens were built one at a time in task order, so
+# spacings of 4, 6, 8, 10 and 12 are all present and none of them was chosen.
+# `DesignTokens.swift` is where the numbers live now.
+#
+# The list below is the debt, spelled out: every view file that predates the
+# system and still writes its own numbers. **It may only shrink.** A file not on
+# it that hardcodes a padding, a corner radius or a raw colour fails — which is
+# what stops the token file from becoming one more good intention (P20.2's
+# Done-when).
+LEGACY_VIEWS="AnalysisView.swift ApprovalBanner.swift BootStatusView.swift ChannelsView.swift ChatView.swift CoAIWorkspaceApp.swift CodingView.swift ConflictView.swift EndpointsView.swift EntityGraphView.swift FilesView.swift IAInventory.swift InstrumentsView.swift KnowledgeBaseView.swift MCPServersView.swift ManuscriptView.swift ModelsView.swift ParticipantsBox.swift ProjectsView.swift ResponsesBox.swift SourcesView.swift StatusBarView.swift TeamView.swift WorkflowView.swift"
+UNTOKENISED=""
+for file in Sources/CoAIWorkspaceApp/*.swift; do
+  name="$(basename "$file")"
+  [ "$name" = "DesignTokens.swift" ] && continue
+  case " $LEGACY_VIEWS " in *" $name "*) continue ;; esac
+  if grep -qE "\.padding\([0-9]|cornerRadius: [0-9]|Color\(red:" "$file"; then
+    UNTOKENISED="$UNTOKENISED $name"
+  fi
+done
+if [ -n "$UNTOKENISED" ]; then
+  echo "  $UNTOKENISED" | sed 's/^/  /'
+  fail "a view writes its own spacing or colour instead of using the design tokens (§24, P20.2)"
+else
+  ok "every view outside the legacy list uses the design tokens"
+fi
+
 # P17.5 — what the driver reads off the screen never becomes an instruction.
 #
 # §23.2 rule 4. The protection is structural rather than textual: a tool result
