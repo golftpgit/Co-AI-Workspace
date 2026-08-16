@@ -151,6 +151,15 @@ public enum Schema {
         "DEFINE INDEX IF NOT EXISTS relation_chunk ON relation FIELDS chunk_id",
         "DEFINE FIELD IF NOT EXISTS document_id ON relation TYPE string",
         "DEFINE FIELD IF NOT EXISTS scope_kind ON relation TYPE string",
+
+        // §11.4 — edges a person deleted. Kept as their own rows rather than
+        // by removing the relation, because the document gets re-read: an
+        // extraction that resurrected a rejected edge would undo somebody's
+        // correction every time the file was ingested again.
+        "DEFINE TABLE IF NOT EXISTS relation_rejection SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON relation_rejection TYPE string",
+        "DEFINE INDEX IF NOT EXISTS relation_rejection_uid ON relation_rejection FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS rejected_at ON relation_rejection TYPE datetime",
         "DEFINE FIELD IF NOT EXISTS project_id ON relation TYPE option<string>",
         "DEFINE FIELD IF NOT EXISTS created_at ON relation TYPE datetime",
 

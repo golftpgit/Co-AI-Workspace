@@ -377,6 +377,32 @@ public final class KnowledgeViewModel {
         await fillEntitiesWhereTaggerCannot(found, in: chunks)
     }
 
+    /// Throws out one edge (§11.4, P12).
+    ///
+    /// The arrow goes; the passage does not. And the rejection is recorded, so
+    /// re-reading the document does not quietly put it back — a correction
+    /// that an ingest can undo is a correction nobody will trust twice.
+    public func rejectRelation(_ relation: StoredRelation) async {
+        guard let relationStore else { return }
+        do {
+            try await relationStore.reject(relation)
+            await reloadRelations()
+            status = Status(message: "ลบความสัมพันธ์นี้แล้ว — ข้อความต้นทางยังอยู่ "
+                            + "และการอ่านเอกสารนี้อีกครั้งจะไม่สร้างมันขึ้นมาใหม่",
+                            isError: false)
+        } catch {
+            log.error("rejecting relation: \(error)")
+            status = Status(message: "ลบความสัมพันธ์ไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    /// The stored edge behind a drawn one, or `nil` if it has gone.
+    public func relation(matching edge: EntityGraph.Edge) -> StoredRelation? {
+        relations.first { $0.chunkID == edge.chunkID
+            && $0.subject == edge.subject && $0.object == edge.object
+            && $0.predicate == edge.predicate }
+    }
+
     /// Names the entities in documents `NLTagger` has no tagger for.
     ///
     /// It publishes no `.nameType` scheme for Thai, so a Thai document is

@@ -95,4 +95,49 @@ struct RelationStoreTests {
         #expect(try await store.load(scope: .project(ProjectID("alpha"))).count == 1)
         #expect(try await store.load(scope: .central).isEmpty)
     }
+
+    /// P12 — a person disagreeing with the model's reading, and the
+    /// disagreement surviving the next ingest.
+    @Test("a rejected edge stays gone when the document is read again",
+          .timeLimit(.minutes(2)))
+    func rejectionSurvivesReExtraction() async throws {
+        guard let server = try await makeServer(port: 18_497) else { return }
+        defer { Task { await server.shutdown() } }
+        let store = RelationStore(client: await server.client)
+
+        let wrong = relation("ยาพาราเซตามอล", "รักษา", "มะเร็ง")
+        let right = relation("ยาพาราเซตามอล", "ลด", "ไข้")
+        try await store.save([wrong, right], scope: .central)
+        #expect(try await store.load(scope: .central).count == 2)
+
+        try await store.reject(wrong)
+        #expect(try await store.load(scope: .central).map(\.object) == ["ไข้"])
+
+        // The document is ingested again and the extractor reads the same
+        // sentence the same way. Without the rejection this is where the
+        // person's correction quietly disappears.
+        try await store.save([wrong, right], scope: .central)
+        let after = try await store.load(scope: .central)
+        #expect(after.count == 1, "a rejected edge came back on re-ingest")
+        #expect(after.first?.object == "ไข้")
+    }
+
+    @Test("rejecting an edge leaves the others alone", .timeLimit(.minutes(2)))
+    func rejectionIsNarrow() async throws {
+        guard let server = try await makeServer(port: 18_498) else { return }
+        defer { Task { await server.shutdown() } }
+        let store = RelationStore(client: await server.client)
+
+        // Same subject, same chunk, different claim — the id is the whole
+        // triple plus the chunk, so one going does not take the other.
+        let a = relation("ยา ก", "รักษา", "โรค ข")
+        let b = relation("ยา ก", "ทำให้เกิด", "ผลข้างเคียง")
+        try await store.save([a, b], scope: .central)
+        try await store.reject(a)
+
+        let left = try await store.load(scope: .central)
+        #expect(left.count == 1)
+        #expect(left.first?.predicate == "ทำให้เกิด")
+        #expect(try await store.rejections().contains(a.id))
+    }
 }
