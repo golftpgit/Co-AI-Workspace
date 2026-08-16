@@ -76,6 +76,17 @@ struct TeamView: View {
                     .disabled(model.isRunning)
                     .accessibilityLabel("เป้าหมายที่จะให้ทีมทำ")
 
+                // §5.5 / P4.8 — the third thing a person walking away wants to
+                // bound, beside "how many times" and "how much money": how many
+                // tokens this run may spend. Blank is no ceiling, which is what
+                // it has always been; the field does not invent one.
+                TextField("เพดานโทเคน", text: $model.tokenCeiling)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 110)
+                    .disabled(model.isRunning)
+                    .accessibilityLabel("เพดานโทเคนของการรันนี้")
+                    .accessibilityHint("เว้นว่างไว้ = ไม่จำกัด · ถึงเพดานแล้วงานที่เหลือจะค้างไว้ให้คนตัดสิน")
+
                 if model.isRunning {
                     ProgressView().controlSize(.small)
                     // Stopping is not the same as finishing, and the screen

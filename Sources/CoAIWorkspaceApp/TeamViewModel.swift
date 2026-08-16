@@ -97,6 +97,11 @@ public final class TeamViewModel {
     public private(set) var isPlanning = false
     public private(set) var status: Status?
     public var goal = ""
+    /// A token ceiling for one run (§5.5, P4.8), as typed. Blank means no
+    /// ceiling, which is the honest default: a number chosen here would be a
+    /// limit nobody set, and the first time it stopped a real run it would
+    /// look like a fault.
+    public var tokenCeiling = ""
     public private(set) var scope: Scope = .central
 
     /// Which leaf of the plan this run is work against (§19.6, P10.4).
@@ -282,13 +287,17 @@ public final class TeamViewModel {
 
         let untilDone = await gateway?.currentModes.runUntilDone ?? false
         let leaf = workPackage
+        // P4.8 — the ceiling the person typed, or none. Blank means none
+        // rather than a number this screen chose for them.
+        let ceiling = Int(tokenCeiling.trimmingCharacters(in: .whitespaces))
 
         run = Task { [weak self] in
             // The orchestrator emits from its own actor; every event is hopped
             // back to the main actor before it touches view state.
             let deliverables = await team.run(goal: goal, plan: approved,
                                               runUntilDone: untilDone,
-                                              workPackage: leaf) { event in
+                                              workPackage: leaf,
+                                              tokenCeiling: ceiling) { event in
                 Task { @MainActor in self?.apply(event) }
             }
             await MainActor.run {
@@ -400,6 +409,14 @@ public final class TeamViewModel {
         case .continuing(let remaining):
             status = Status(message: "ทำต่อเองตาม Run-until-done — เหลืองานค้างในบันทึก \(remaining) งาน",
                             isError: false)
+
+        case .budgetExhausted(let summary, let remaining):
+            // Marked as an error state on purpose: the run stopped short, and
+            // a neutral note is how somebody reads a truncated run as a
+            // finished one (P4.8).
+            status = Status(message: "หยุดเพราะถึงเพดานโทเคนของการรันนี้ — \(summary) "
+                            + "· เหลืองานที่ยังไม่ผ่าน \(remaining) งาน อยู่ในบันทึกให้สั่งต่อได้",
+                            isError: true)
 
         case .finished:
             isRunning = false

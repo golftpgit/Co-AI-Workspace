@@ -23,11 +23,17 @@ public struct SpecialistEnvironment: Sendable {
     let router: ModelRouter
     let gateway: ToolGateway
     let maxToolRounds: Int
+    /// The run's token ceiling (P4.8). Shared with the lead rather than owned
+    /// here: what a person sets a limit on is "this run", and a specialist has
+    /// no idea it is one of several.
+    let budget: RunBudget?
 
-    public init(router: ModelRouter, gateway: ToolGateway, maxToolRounds: Int = 8) {
+    public init(router: ModelRouter, gateway: ToolGateway, maxToolRounds: Int = 8,
+                budget: RunBudget? = nil) {
         self.router = router
         self.gateway = gateway
         self.maxToolRounds = maxToolRounds
+        self.budget = budget
     }
 }
 
@@ -76,8 +82,20 @@ struct SpecialistEngine: Sendable {
                 throw SpecialistError.modelUnavailable("\(error)")
             }
 
+            // Counted whether or not this round produced anything useful:
+            // the tokens are spent either way (P4.8).
+            await environment.budget?.record(completion.usage)
+
             if !completion.text.isEmpty { summary = completion.text }
             guard !completion.toolCalls.isEmpty else { break }
+
+            // Asked between rounds, never inside a call: a request cut off
+            // halfway has spent its prompt and bought nothing.
+            if await environment.budget?.isExhausted == true {
+                summary += summary.isEmpty ? "" : "\n\n"
+                summary += "[หยุดกลางทาง — ถึงเพดานโทเคนของการรันนี้]"
+                break
+            }
 
             messages.append(.init(.assistant, completion.text,
                                   toolCalls: completion.toolCalls))
