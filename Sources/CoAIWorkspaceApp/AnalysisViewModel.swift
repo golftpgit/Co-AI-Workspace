@@ -187,6 +187,27 @@ public final class AnalysisViewModel {
 
     public func selectTemplate(_ id: String?) { selectedTemplateID = id }
 
+    /// Edits a template in place (P7.9). Until now the only way to change one
+    /// was to upload another file, which meant a template with one heading in
+    /// the wrong order was a template you lived with.
+    ///
+    /// A refused edit — an empty heading, a duplicate, a move to nowhere —
+    /// leaves the template alone and says so, because the alternative is a
+    /// screen that appears to accept a rename and quietly keeps the old one.
+    public func editTemplate(_ id: String, _ change: (DocumentTemplate) -> DocumentTemplate?) {
+        guard let templateStore, let current = templates.first(where: { $0.id == id }) else { return }
+        guard let edited = change(current) else {
+            status = Status(message: "แก้ไม่ได้ — หัวข้อว่าง ซ้ำกับหัวข้ออื่น หรือย้ายไปตำแหน่งที่ไม่มี",
+                            isError: true)
+            return
+        }
+        do {
+            templates = try templateStore.replace(edited)
+        } catch {
+            status = Status(message: "บันทึกแม่แบบไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
     /// The documents that could be a proposal.
     ///
     /// §12.4's trigger is `doc_type: proposal`, and documents now carry the
