@@ -276,19 +276,31 @@ public struct TemplateStore: Sendable {
 
     public func load() -> [DocumentTemplate] {
         guard let data = try? Data(contentsOf: file) else { return [] }
-        guard let templates = try? JSONDecoder().decode([DocumentTemplate].self, from: data) else {
+        // P9.2 — both shapes: the envelope this build writes, and the bare
+        // array every file written before it is. A newer file is left alone
+        // and reported rather than read as though we understood it.
+        switch VersionedList.decode(data, as: DocumentTemplate.self) {
+        case .list(let templates, _):
+            return templates
+        case .fromNewerBuild(let version):
+            FileStoreIncidents.shared.record(.newerSchema(doing: "template", version: version))
+            return []
+        case .unreadable:
             reportUnreadable(file, kind: "template", log: log)
             return []
         }
-        return templates
     }
 
     public func save(_ templates: [DocumentTemplate]) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        // P9.2 — a file from a newer build is not written over. Running on
+        // defaults for one session is recoverable; overwriting is not, and the
+        // build somebody would go back to is the one that lost their settings.
+        guard VersionedList.mayOverwrite(file, of: DocumentTemplate.self) else {
+            throw FileStoreError.fileFromNewerBuild
+        }
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
-        try encoder.encode(templates).write(to: file, options: .atomic)
+        try VersionedList.encode(templates).write(to: file, options: .atomic)
     }
 
     @discardableResult

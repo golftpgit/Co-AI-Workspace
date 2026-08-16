@@ -179,6 +179,21 @@ public struct ReadableFailure: Sendable, Equatable {
             detail: detail)
     }
 
+    /// A list file written by a build newer than this one (P9.2).
+    ///
+    /// Deliberately not `unreadableFile`: that one says "we kept a copy and
+    /// replaced it", and this one must say the opposite — the file is fine,
+    /// it is *this* app that is behind, and nothing has been written over. The
+    /// advice is the difference between the two.
+    public static func newerSchema(doing: String, version: Int) -> ReadableFailure {
+        ReadableFailure(
+            kind: .fileUnreadable(backup: nil),
+            what: "ไฟล์ของ\(doing) ถูกเขียนโดยแอปรุ่นใหม่กว่านี้ (เวอร์ชัน \(version))",
+            whatToDo: "รอบนี้ใช้รายการว่างไปก่อน และ**ไม่ได้เขียนทับไฟล์นั้น** — "
+                + "เปิดด้วยรุ่นใหม่กว่าแล้วของเดิมยังอยู่ครบ",
+            detail: doing)
+    }
+
     public static func serviceDown(name: String, detail: String = "") -> ReadableFailure {
         ReadableFailure(
             kind: .serviceDown(name: name),

@@ -1064,6 +1064,22 @@ else
   fail "re-ingesting a document resurrects edges a person deleted (§11.4)"
 fi
 
+# P9.2 — the four list files carry a schema version, and none of them
+# hand-rolls its own encoder again.
+#
+# The failure this catches is a store going back to `JSONEncoder().encode(list)`:
+# it compiles, it round-trips today, and the release that adds a field is the
+# one that eats somebody's bots.
+BARE=$(grep -rn "encoder.encode(" Sources/Analysis/Connectors.swift \
+  Sources/Channels/ChannelAccount.swift Sources/DocGen/Template.swift \
+  Sources/MCPBridge/MCPServer.swift 2>/dev/null || true)
+if [ -n "$BARE" ]; then
+  echo "$BARE" | sed 's/^/   /' | head -3
+  fail "a list store writes a bare array again — no schema version (P9.2)"
+else
+  ok "every list file is written with its schema version"
+fi
+
 # P6.7 / §12.4 — a document's type is declared, never inferred.
 #
 # `doc_type: proposal` is what turns a document into an analysis plan. The

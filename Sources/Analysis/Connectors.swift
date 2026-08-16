@@ -188,11 +188,19 @@ public struct ConnectorStore: Sendable {
 
     public func load() -> [DBConnector] {
         guard let data = try? Data(contentsOf: file) else { return [] }
-        guard let connectors = try? JSONDecoder().decode([DBConnector].self, from: data) else {
+        // P9.2 — both shapes: the envelope this build writes, and the bare
+        // array every file written before it is. A newer file is left alone
+        // and reported rather than read as though we understood it.
+        switch VersionedList.decode(data, as: DBConnector.self) {
+        case .list(let connectors, _):
+            return connectors
+        case .fromNewerBuild(let version):
+            FileStoreIncidents.shared.record(.newerSchema(doing: "connector", version: version))
+            return []
+        case .unreadable:
             reportUnreadable(file, kind: "connector", log: log)
             return []
         }
-        return connectors
     }
 
     public func load(scope: Scope) -> [DBConnector] {
@@ -200,11 +208,15 @@ public struct ConnectorStore: Sendable {
     }
 
     public func save(_ connectors: [DBConnector]) throws {
+        // P9.2 — a file from a newer build is not written over. Running on
+        // defaults for one session is recoverable; overwriting is not, and the
+        // build somebody would go back to is the one that lost their settings.
+        guard VersionedList.mayOverwrite(file, of: DBConnector.self) else {
+            throw FileStoreError.fileFromNewerBuild
+        }
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(connectors).write(to: file, options: .atomic)
+        try VersionedList.encode(connectors).write(to: file, options: .atomic)
     }
 
     @discardableResult

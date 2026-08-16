@@ -112,19 +112,27 @@ public struct MCPServerStore: Sendable {
 
     public func load() -> [MCPServerConfig] {
         guard let data = try? Data(contentsOf: file) else { return [] }
-        guard let servers = try? JSONDecoder().decode([MCPServerConfig].self, from: data) else {
+        // P9.2 — both shapes, and a newer file is reported rather than read as
+        // though this build understood it.
+        switch VersionedList.decode(data, as: MCPServerConfig.self) {
+        case .list(let servers, _):
+            return servers
+        case .fromNewerBuild(let version):
+            FileStoreIncidents.shared.record(.newerSchema(doing: "MCP server", version: version))
+            return []
+        case .unreadable:
             reportUnreadable(file, kind: "MCP server", log: log)
             return []
         }
-        return servers
     }
 
     public func save(_ servers: [MCPServerConfig]) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard VersionedList.mayOverwrite(file, of: MCPServerConfig.self) else {
+            throw FileStoreError.fileFromNewerBuild
+        }
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
-        try encoder.encode(servers).write(to: file, options: .atomic)
+        try VersionedList.encode(servers).write(to: file, options: .atomic)
     }
 }
 
