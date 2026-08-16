@@ -74,6 +74,10 @@ public struct FileEntry: Sendable, Equatable, Identifiable {
 public enum FileContent: Sendable, Equatable {
     case editable(text: String, token: SaveToken)
     case readOnly(text: String, because: String)
+    /// An image, as the bytes on disk (P8.6). Bytes rather than a decoded
+    /// image because this module has no UI framework in it and should not
+    /// gain one — decoding belongs where the drawing happens.
+    case image(data: Data, name: String)
     case cannotShow(String)
 }
 
@@ -301,7 +305,17 @@ public struct WorkspaceFiles: Sendable {
             }
 
         case .image:
-            return .cannotShow("ไฟล์รูป — ยังไม่มีตัวแสดงรูปในหน้านี้")
+            // The same ceiling as text, for the same reason: a 40 MB scan
+            // held in memory to be looked at once is a screen that stops
+            // responding on a machine also running a model.
+            guard info.size <= Self.editableByteLimit else {
+                throw FileAccessError.tooLarge(name: info.name, bytes: info.size,
+                                               limit: Self.editableByteLimit)
+            }
+            guard let data = try? Data(contentsOf: target) else {
+                return .cannotShow("อ่านไฟล์รูปไม่ได้")
+            }
+            return .image(data: data, name: info.name)
 
         case .opaque(let why):
             return .cannotShow(why)

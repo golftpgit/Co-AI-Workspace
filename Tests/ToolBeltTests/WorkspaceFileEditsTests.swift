@@ -111,3 +111,43 @@ struct WorkspaceFileEditsTests {
         }
     }
 }
+
+@Suite("Opening an image (P8.6)")
+struct WorkspaceImageTests {
+
+    /// It used to say "ยังไม่มีตัวแสดงรูป", which is honest and still means
+    /// somebody has to leave the app to look at a scan they just collected.
+    @Test("an image opens as bytes, with its name")
+    func imagesOpen() throws {
+        let (files, root) = workspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // A 1×1 PNG, as bytes — the smallest real one.
+        let png = Data(base64Encoded: """
+        iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+        """)!
+        try png.write(to: root.appending(path: "scan.png"))
+
+        guard case .image(let data, let name) = try files.open(root.appending(path: "scan.png")) else {
+            Issue.record("the image did not open as an image")
+            return
+        }
+        #expect(name == "scan.png")
+        #expect(data == png)
+    }
+
+    /// The same ceiling as text, for the same reason: a 40 MB scan held in
+    /// memory to be looked at once is a screen that stops responding on a
+    /// machine that is also running a model.
+    @Test("an image over the ceiling is refused rather than loaded")
+    func hugeImagesAreRefused() throws {
+        let (files, root) = workspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let big = Data(repeating: 0, count: WorkspaceFiles.editableByteLimit + 1)
+        try big.write(to: root.appending(path: "huge.png"))
+        #expect(throws: FileAccessError.self) {
+            _ = try files.open(root.appending(path: "huge.png"))
+        }
+    }
+}

@@ -86,6 +86,22 @@ private func discordAccount(allowing channels: [String] = ["C1"]) -> ChannelAcco
                           tokenVariable: "COAI_TEST_DISCORD", allowedChats: channels)
 }
 
+
+/// Waits for a condition instead of sleeping for a guess.
+///
+/// A fixed sleep long enough on an idle machine is a sleep too short on a busy
+/// one — this suite is 1,600 tests and the reconnect test failed exactly that
+/// way once. Polling asserts the same thing without asserting a schedule.
+private func eventually(within seconds: Double = 3,
+                        _ condition: @Sendable () async -> Bool) async -> Bool {
+    let deadline = ContinuousClock.now + .seconds(seconds)
+    while ContinuousClock.now < deadline {
+        if await condition() { return true }
+        try? await Task.sleep(for: .milliseconds(20))
+    }
+    return await condition()
+}
+
 @Suite("Discord gateway", .serialized)
 struct DiscordChannelTests {
 
@@ -371,10 +387,10 @@ struct DiscordResumeTests {
         let channel = DiscordChannel(account: discordAccount(), socket: socket,
                                      firstReconnectDelay: .milliseconds(20))
         await channel.start(handler: Sink())
-        try await Task.sleep(for: .milliseconds(400))
+        let reconnected = await eventually { await socket.connections.count >= 2 }
         await channel.stop()
 
-        #expect(await socket.connections.count >= 2, "the bot went quiet when the socket dropped")
+        #expect(reconnected, "the bot went quiet when the socket dropped")
     }
 
     /// The half that matters: identify starts a new session and loses whatever
@@ -390,7 +406,9 @@ struct DiscordResumeTests {
         let channel = DiscordChannel(account: discordAccount(), socket: socket,
                                      firstReconnectDelay: .milliseconds(20))
         await channel.start(handler: Sink())
-        try await Task.sleep(for: .milliseconds(400))
+        _ = await eventually {
+            await socket.sentFrames().contains { $0.contains("\"op\":6") }
+        }
         await channel.stop()
 
         let frames = await socket.sentFrames()
@@ -423,7 +441,7 @@ struct DiscordResumeTests {
         let channel = DiscordChannel(account: discordAccount(), socket: socket,
                                      firstReconnectDelay: .milliseconds(20))
         await channel.start(handler: Sink())
-        try await Task.sleep(for: .milliseconds(400))
+        _ = await eventually { await socket.connections.count >= 2 }
         await channel.stop()
 
         let ops = await socket.sentFrames().compactMap { decoded(Data($0.utf8))["op"] as? NSNumber }

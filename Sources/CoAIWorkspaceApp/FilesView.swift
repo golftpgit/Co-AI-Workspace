@@ -136,7 +136,9 @@ final class FilesViewModel {
                 draft = text; loaded = text; token = saveToken
             case .readOnly(let text, _):
                 draft = text; loaded = text
-            case .cannotShow:
+            case .image, .cannotShow:
+                // Nothing editable, so the buffer is emptied rather than left
+                // holding the last file's text under a picture.
                 draft = ""; loaded = ""
             }
             problem = nil
@@ -371,6 +373,27 @@ struct FilesView: View {
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Space.box)
+                }
+            case .image(let data, let name):
+                // Decoded here rather than in ToolBelt: that module has no UI
+                // framework in it and should not gain one for a preview.
+                if let image = NSImage(data: data) {
+                    ScrollView([.horizontal, .vertical]) {
+                        Image(nsImage: image)
+                            .resizable().scaledToFit()
+                            .frame(maxWidth: .infinity)
+                            .padding(Space.box)
+                    }
+                    .accessibilityLabel("รูป \(name)")
+                    // Said, because a picture is the one thing on this screen
+                    // a screen reader cannot describe: the app knows the file
+                    // name and the size and nothing about what is in it.
+                    .accessibilityHint("แอปไม่ทราบว่าในรูปมีอะไร — แสดงไฟล์ตามที่อยู่บนดิสก์")
+                } else {
+                    ContentUnavailableView("เปิดรูปนี้ไม่ได้", systemImage: "photo.badge.exclamationmark",
+                                           description: Text("ไฟล์นามสกุลรูป แต่ระบบถอดรหัสไม่ได้ — "
+                                                             + "อาจเป็นไฟล์เสียหรือชนิดที่ macOS ไม่รองรับ"))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             case .cannotShow(let why):
                 ContentUnavailableView("เปิดในหน้านี้ไม่ได้", systemImage: "doc.questionmark",
