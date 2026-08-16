@@ -151,7 +151,11 @@ public actor TeamOrchestrator {
     public init(router: ModelRouter,
                 specialists: [Role: any Specialist],
                 reviewer: QAReviewer = QAReviewer(),
-                maxFanOut: Int = 4,
+                // §22.1's span of control, not a second number. It was 4 here
+                // and 7 in `CommandRules`, so "how wide may a plan be" had two
+                // answers and the one that ran was whichever the caller
+                // happened to hit (P16.2's outstanding item).
+                maxFanOut: Int = CommandRules.spanOfControl,
                 retryCap: Int = 3,
                 ledgerStore: TaskLedgerStore? = nil,
                 spans: (any SpanSink)? = nil,
@@ -725,11 +729,15 @@ public actor TeamOrchestrator {
     private func validate(_ plan: TeamPlan) throws {
         guard !plan.assignments.isEmpty else { throw TeamError.emptyPlan }
 
+
         let engineering = plan.assignments.filter { $0.role == .engineer }
         guard engineering.count <= 1 else {
             throw TeamError.engineerFannedOut(count: engineering.count)
         }
-        guard plan.assignments.count <= maxFanOut else {
+        // Asked through the shared rule, so the number the lead enforces and
+        // the number `CommandRules` publishes cannot disagree — they were 4
+        // and 7 (P16.2's outstanding item).
+        guard !CommandRules.needsSplitting(assignments: plan.assignments.count, cap: maxFanOut) else {
             throw TeamError.fanOutTooWide(count: plan.assignments.count, cap: maxFanOut)
         }
     }

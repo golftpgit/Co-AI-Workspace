@@ -132,8 +132,14 @@ public enum CommandRules {
     public static let spanOfControl = 7
 
     /// Whether this plan needs splitting at all.
-    public static func needsSplitting(assignments: Int) -> Bool {
-        assignments > spanOfControl
+    ///
+    /// `cap` exists so the lead asks *this* rule rather than comparing against
+    /// a number of its own: it had `maxFanOut = 4` while this file published 7,
+    /// so "how wide may a plan be" had two answers and the one that ran was
+    /// whichever the caller happened to hit. Tests still narrow the cap
+    /// deliberately, which is a different thing from a second opinion.
+    public static func needsSplitting(assignments: Int, cap: Int = spanOfControl) -> Bool {
+        assignments > cap
     }
 
     /// Whether a sub-team may be created, or why not.

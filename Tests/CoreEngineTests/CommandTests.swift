@@ -204,3 +204,29 @@ struct DynamicScalingTests {
             independent: true, budgetShortfallUSD: 1, leadRole: .researcher).isAllowed == false)
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// P16.2's outstanding item — the lead had its own idea of how wide a plan may
+// be.
+// ─────────────────────────────────────────────────────────────
+@Suite("One span of control (P16.2)")
+struct SpanOfControlTests {
+
+    /// `TeamOrchestrator` compared against `maxFanOut = 4` while `CommandRules`
+    /// published 7, so "how wide may a plan be" had two answers and the one
+    /// that ran was whichever the caller happened to hit.
+    @Test("the lead's default cap is the published span of control")
+    func defaultCapIsTheRule() {
+        #expect(CommandRules.spanOfControl == 7)
+        #expect(CommandRules.needsSplitting(assignments: 7) == false)
+        #expect(CommandRules.needsSplitting(assignments: 8))
+    }
+
+    /// A test narrowing the cap deliberately is a different thing from a second
+    /// opinion about the rule, so the parameter stays.
+    @Test("a narrower cap is asked of the same rule")
+    func narrowerCapStillGoesThroughTheRule() {
+        #expect(CommandRules.needsSplitting(assignments: 5, cap: 4))
+        #expect(CommandRules.needsSplitting(assignments: 4, cap: 4) == false)
+    }
+}
