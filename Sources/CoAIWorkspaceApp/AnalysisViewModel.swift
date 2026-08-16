@@ -189,19 +189,26 @@ public final class AnalysisViewModel {
 
     /// The documents that could be a proposal.
     ///
-    /// §12.4 says the trigger is `doc_type: proposal`, and the ingest pipeline
-    /// does not record a document type yet — so this lists everything and lets
-    /// a person point at the right one, rather than filtering on a field that
-    /// does not exist and quietly showing nothing.
+    /// §12.4's trigger is `doc_type: proposal`, and documents now carry the
+    /// kind their owner declared (P6.7). Proposals come first and are marked;
+    /// **everything else is still listed**, because a document ingested before
+    /// the field existed has no kind at all, and a filter that hid it would
+    /// hide most of the library from somebody who cannot see why.
     public func loadKnowledgeDocuments() async {
         guard let knowledge else { return }
         let chunks = (try? await knowledge.load(scope: scope)) ?? []
-        var seen: [String: String] = [:]
+        var seen: [String: (title: String, isProposal: Bool)] = [:]
         for chunk in chunks where seen[chunk.provenance.documentID] == nil {
-            seen[chunk.provenance.documentID] = chunk.provenance.title
+            seen[chunk.provenance.documentID] = (chunk.provenance.title,
+                                                 chunk.provenance.isProposal)
         }
-        knowledgeDocuments = seen.map { (id: $0.key, title: $0.value) }
-            .sorted { $0.title < $1.title }
+        knowledgeDocuments = seen
+            .map { (id: $0.key, title: $0.value.isProposal
+                    ? "\($0.value.title) — โครงร่างวิจัย" : $0.value.title) }
+            .sorted { lhs, rhs in
+                let lp = lhs.title.hasSuffix("โครงร่างวิจัย"), rp = rhs.title.hasSuffix("โครงร่างวิจัย")
+                return lp == rp ? lhs.title < rhs.title : lp
+            }
     }
 
     /// Loads a document out of the knowledge base into the proposal box, in

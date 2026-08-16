@@ -1024,6 +1024,22 @@ else
   fail "r_eval can install packages without the always-ask tool (§5.5, P14.4)"
 fi
 
+# P6.7 / §12.4 — a document's type is declared, never inferred.
+#
+# `doc_type: proposal` is what turns a document into an analysis plan. The
+# cheap way to fill the field is to look at the title or ask a model, and then
+# a literature review with the word "โครงร่าง" in it becomes somebody's
+# analysis plan. The pipeline takes the kind as an argument and writes it
+# unchanged; anything in there that reads the text to decide is the failure.
+KIND_GUESS=$(grep -nE "documentKind = .*(title|text|contains|lowercased)" \
+  Sources/Knowledge/*.swift || true)
+if [ -n "$KIND_GUESS" ]; then
+  echo "$KIND_GUESS" | sed 's/^/   /' | head -3
+  fail "a document's kind is being inferred from its content (§12.4, P6.7)"
+else
+  ok "a document's kind comes from the person who added it"
+fi
+
 # P10.8 — an agent proposes; a person decides.
 #
 # Comments are stripped before the second half: the file explains at length

@@ -148,7 +148,12 @@ public final class KnowledgeViewModel {
 
     // MARK: - ingestion
 
-    public func ingest(_ urls: [URL], tier: SourceTier) async {
+    /// `kind` is what the person said this document is (§12.4, P6.7). It is
+    /// asked once, beside the tier, and it is never guessed: `doc_type:
+    /// proposal` is what turns a document into an analysis plan, and a system
+    /// that inferred it would start writing plans out of literature reviews.
+    public func ingest(_ urls: [URL], tier: SourceTier,
+                       kind: DocumentKind? = nil) async {
         guard !urls.isEmpty else { return }
         isWorking = true
         defer { isWorking = false }
@@ -171,7 +176,8 @@ public final class KnowledgeViewModel {
                 // runs on the main actor.
                 var working = index
                 let report = try await pipeline.ingest(url, into: &working, scope: scope,
-                                                       tier: tier, embedder: embedder)
+                                                       tier: tier, kind: kind,
+                                                       embedder: embedder)
                 index = working
                 added += report.chunksAdded
                 skipped += report.duplicatesSkipped

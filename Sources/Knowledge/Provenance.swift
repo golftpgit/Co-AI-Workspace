@@ -99,6 +99,33 @@ public struct TextSpan: Sendable, Equatable, Codable {
     }
 }
 
+/// What kind of document this is (§12.4, P6.7).
+///
+/// **Declared by the person who added it, never inferred.** §12.4's trigger is
+/// `doc_type: proposal` — reading a research proposal turns into an analysis
+/// plan — and a system that guessed the type would start writing analysis
+/// plans out of literature reviews. `other` is the honest default and is not a
+/// failure state: most documents are not any of these.
+public enum DocumentKind: String, Sendable, Equatable, Codable, CaseIterable {
+    case proposal
+    case paper
+    case guideline
+    case dataset
+    case report
+    case other
+
+    public var label: String {
+        switch self {
+        case .proposal: "โครงร่างวิจัย"
+        case .paper: "งานวิจัย"
+        case .guideline: "แนวปฏิบัติ"
+        case .dataset: "ชุดข้อมูล"
+        case .report: "รายงาน"
+        case .other: "อื่น ๆ"
+        }
+    }
+}
+
 public struct Provenance: Sendable, Equatable, Codable {
     public let documentID: String
     public let title: String
@@ -119,6 +146,12 @@ public struct Provenance: Sendable, Equatable, Codable {
     public let accessedAt: Date
     /// The earlier revision of the same document, if this replaces one.
     public let supersedes: String?
+    /// What kind of document this is (§12.4, P6.7). Optional in the decoder
+    /// like `passage`: rows written before this field existed have no such
+    /// key, and an index that stopped loading would be a migration nobody
+    /// asked for. `nil` means nobody has said — which is different from
+    /// somebody having said `other`.
+    public let documentKind: DocumentKind?
 
     /// `optionalTier`, not `tier`: with the same label this would be the same
     /// call site as the public initialiser below, because `SourceTier`
@@ -126,7 +159,9 @@ public struct Provenance: Sendable, Equatable, Codable {
     /// `self.init` would resolve straight back to itself.
     private init(documentID: String, title: String, origin: Origin, optionalTier: SourceTier?,
                  authors: [String], year: Int?, page: Int?, section: String?,
-                 passage: TextSpan?, accessedAt: Date, supersedes: String?) {
+                 passage: TextSpan?, accessedAt: Date, supersedes: String?,
+                 documentKind: DocumentKind? = nil) {
+        self.documentKind = documentKind
         self.documentID = documentID
         self.title = title
         self.origin = origin
@@ -146,10 +181,12 @@ public struct Provenance: Sendable, Equatable, Codable {
     public init(documentID: String, title: String, origin: Origin, tier: SourceTier,
                 authors: [String] = [], year: Int? = nil, page: Int? = nil,
                 section: String? = nil, passage: TextSpan? = nil,
-                accessedAt: Date = Date(), supersedes: String? = nil) {
+                accessedAt: Date = Date(), supersedes: String? = nil,
+                documentKind: DocumentKind? = nil) {
         self.init(documentID: documentID, title: title, origin: origin, optionalTier: tier,
                   authors: authors, year: year, page: page, section: section,
-                  passage: passage, accessedAt: accessedAt, supersedes: supersedes)
+                  passage: passage, accessedAt: accessedAt, supersedes: supersedes,
+                  documentKind: documentKind)
     }
 
     /// Written by the system: an analysis result, a generated summary. Has no
@@ -191,8 +228,19 @@ public struct Provenance: Sendable, Equatable, Codable {
         Provenance(documentID: documentID, title: title, origin: origin,
                    optionalTier: tier, authors: authors, year: year, page: page,
                    section: section, passage: passage, accessedAt: accessedAt,
-                   supersedes: supersedes)
+                   supersedes: supersedes, documentKind: documentKind)
     }
+
+    /// The same provenance with its kind declared. Used at ingest, where the
+    /// person answers the question — the pipeline never fills this in.
+    public func declaring(kind: DocumentKind) -> Provenance {
+        Provenance(documentID: documentID, title: title, origin: origin,
+                   optionalTier: tier, authors: authors, year: year, page: page,
+                   section: section, passage: passage, accessedAt: accessedAt,
+                   supersedes: supersedes, documentKind: kind)
+    }
+
+    public var isProposal: Bool { documentKind == .proposal }
 
     /// True when this row can be cited with a credibility claim attached.
     public var isExternallySourced: Bool { tier != nil }
