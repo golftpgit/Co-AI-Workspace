@@ -30,6 +30,13 @@ public final class ConflictViewModel {
     /// of a decision, not a task.
     public var showsDecided = false
 
+    /// The history of whichever card is expanded (§11.6, P3.7). Loaded on
+    /// demand rather than with the list: most cards are never reopened, and a
+    /// query per card on every reload would be paid by everybody for the
+    /// benefit of nobody.
+    public private(set) var history: [ConflictDecisionRecord] = []
+    public private(set) var historyFor: String?
+
     private var store: ConflictStore?
     private let log = AppLog.logger("conflict-ui")
 
@@ -93,6 +100,49 @@ public final class ConflictViewModel {
         } catch {
             log.error("saving decision: \(error)")
             status = Status(message: "บันทึกคำตัดสินไม่สำเร็จ: \(error)", isError: true)
+        }
+    }
+
+    /// Everything ever decided about this card, oldest first.
+    public func loadHistory(of conflict: StoredConflict) async {
+        guard let store else { return }
+        historyFor = conflict.id
+        do {
+            history = try await store.history(of: conflict.id)
+        } catch {
+            log.error("loading conflict history: \(error)")
+            history = []
+        }
+    }
+
+    public func closeHistory() {
+        historyFor = nil
+        history = []
+    }
+
+    /// Takes a decision back (P3.7). The old decision stays in the history —
+    /// this adds an entry saying the card was reopened and why, which is what
+    /// somebody meeting it in six months needs in order to tell a change of
+    /// mind from a mis-click.
+    public func reopen(_ conflict: StoredConflict, reason: String) async {
+        guard let store else {
+            status = Status(message: "ยังต่อฐานข้อมูลไม่ได้ — การกลับคำตัดสินจะไม่ถูกบันทึก",
+                            isError: true)
+            return
+        }
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            try await store.reopen(conflict.id, reason: reason)
+            await reload()
+            if historyFor == conflict.id { await loadHistory(of: conflict) }
+            status = Status(message: "กลับมาเป็นคำถามที่ยังไม่ตัดสิน — คำตัดสินเดิมยังอยู่ในประวัติ",
+                            isError: false)
+        } catch let error as ConflictHistoryError {
+            status = Status(message: error.description, isError: true)
+        } catch {
+            log.error("reopening conflict: \(error)")
+            status = Status(message: "กลับคำตัดสินไม่สำเร็จ: \(error)", isError: true)
         }
     }
 }

@@ -102,6 +102,84 @@ struct ConflictStoreTests {
         #expect(try await store.load(scope: .central).count == 1)
     }
 
+    /// P3.7's remainder: a history you can go back on.
+    @Test("a reversed decision leaves both the old decision and the reason behind",
+          .timeLimit(.minutes(2)))
+    func decisionsCanBeReversedWithoutLosingTheOldOne() async throws {
+        guard let server = try await makeServer(port: 18_474) else { return }
+        defer { Task { await server.shutdown() } }
+        let store = ConflictStore(client: await server.client)
+
+        var ledger = ConflictLedger()
+        let conflict = ledger.record(
+            question: "ค่ามาตรฐาน",
+            a: side("5", tier: .t2, year: 2025, title: "ก"),
+            b: side("7", tier: .t2, year: 2024, title: "ข"),
+            scope: .central, now: now)
+        try await store.save(conflict, scope: .central)
+
+        try await store.recordDecision(
+            ConflictDecision(resolution: .preferA(reason: "ใหม่กว่า"), scope: .central,
+                             decidedAt: now, decidedByHuman: true),
+            for: conflict.id, note: "ตัดสินครั้งแรก")
+        #expect(try await store.open(scope: .central).isEmpty)
+
+        // Somebody found out the newer paper was retracted.
+        try await store.reopen(conflict.id, reason: "งานที่เลือกไว้ถูกถอนตีพิมพ์")
+        #expect(try await store.open(scope: .central).count == 1,
+                "reopening left the card closed")
+
+        try await store.recordDecision(
+            ConflictDecision(resolution: .preferB(reason: "อีกฝั่งยังยืนอยู่"), scope: .central,
+                             decidedAt: now, decidedByHuman: true),
+            for: conflict.id, note: "ตัดสินใหม่หลังการถอนตีพิมพ์")
+
+        let history = try await store.history(of: conflict.id)
+        #expect(history.count == 3, "the history lost an entry")
+        // Nothing was overwritten: the decision that was later reversed is
+        // still readable, which is the entire point of a reversible history.
+        guard case .preferA = history.first?.decision?.resolution else {
+            Issue.record("the original decision is gone: \(history)")
+            return
+        }
+        #expect(history[1].isReopening)
+        #expect(history[1].note.contains("ถอนตีพิมพ์"))
+        guard case .preferB = history.last?.decision?.resolution else {
+            Issue.record("the current decision is not the last entry: \(history)")
+            return
+        }
+        // Oldest first, so "what did we think, and when did that change" reads
+        // top to bottom.
+        #expect(history[0].recordedAt <= history[1].recordedAt)
+    }
+
+    /// A reversal with no reason is indistinguishable from a mis-click when
+    /// somebody meets it in six months.
+    @Test("reopening without a reason is refused", .timeLimit(.minutes(2)))
+    func reopeningNeedsAReason() async throws {
+        guard let server = try await makeServer(port: 18_475) else { return }
+        defer { Task { await server.shutdown() } }
+        let store = ConflictStore(client: await server.client)
+
+        var ledger = ConflictLedger()
+        let conflict = ledger.record(
+            question: "ค่ามาตรฐาน",
+            a: side("5", tier: .t2, year: 2025, title: "ก"),
+            b: side("7", tier: .t2, year: 2024, title: "ข"),
+            scope: .central, now: now)
+        try await store.save(conflict, scope: .central)
+        try await store.recordDecision(
+            ConflictDecision(resolution: .preferA(reason: "ใหม่กว่า"), scope: .central,
+                             decidedAt: now, decidedByHuman: true),
+            for: conflict.id)
+
+        await #expect(throws: ConflictHistoryError.reversalNeedsAReason) {
+            try await store.reopen(conflict.id, reason: "   ")
+        }
+        // And the card is still decided — a refused reversal changes nothing.
+        #expect(try await store.open(scope: .central).isEmpty)
+    }
+
     @Test("a decision made for one project does not bind another",
           .timeLimit(.minutes(2)))
     func scopesAreSeparate() async throws {
