@@ -207,8 +207,14 @@ final class ChatViewModel {
             return
         }
         do {
+            // P10.14 — the vector half, when there is a model to make one
+            // with. Nil leaves the search exactly as it was: an embedding
+            // model that is not loaded must not turn a word search into no
+            // search.
+            let vector = try? await engine.embedder.embed(trimmed)
             matches = try await engine.conversations.search(
-                trimmed, scope: searchesEverywhere ? nil : scope)
+                trimmed, scope: searchesEverywhere ? nil : scope,
+                queryVector: vector)
             loadError = matches.isEmpty ? "ไม่พบข้อความที่ตรงกับ “\(trimmed)”" : nil
         } catch {
             loadError = "ค้นบทสนทนาไม่สำเร็จ: \(error)"
@@ -234,7 +240,19 @@ final class ChatViewModel {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         try? await engine.conversations.rename(conversation.id, title: trimmed)
+        await rememberSubject(of: conversation.id, named: trimmed)
         await load()
+    }
+
+    /// Files what this conversation is about, as a vector (P10.14).
+    ///
+    /// Done when it gets its name, which is the moment there is something to
+    /// embed and the only moment worth the cost — one embedding per
+    /// conversation, not one per message. A failure is silence: a search that
+    /// still works by words is not worth interrupting somebody over.
+    private func rememberSubject(of id: String, named title: String) async {
+        guard let vector = try? await engine.embedder.embed(title) else { return }
+        try? await engine.conversations.saveEmbedding(vector, for: id)
     }
 
     /// Names a conversation after the first thing asked in it, once.
@@ -248,6 +266,9 @@ final class ChatViewModel {
         let title = BriefDraft.summarise(text)
         guard !title.isEmpty else { return }
         try? await engine.conversations.rename(conversation.id, title: title)
+        // The first thing asked is a better description of what a conversation
+        // is about than its shortened title, so that is what gets embedded.
+        await rememberSubject(of: conversation.id, named: text)
         await load()
     }
 

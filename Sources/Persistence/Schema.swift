@@ -73,6 +73,12 @@ public enum Schema {
         "DEFINE FIELD IF NOT EXISTS scope_kind ON conversation TYPE string",
         "DEFINE FIELD IF NOT EXISTS project_id ON conversation TYPE option<string>",
         "DEFINE FIELD IF NOT EXISTS created_at ON conversation TYPE datetime",
+        // §19.2.2 / P10.14 — what a conversation is *about*, as a vector, so
+        // searching for "ยาปฏิชีวนะก่อนผ่าตัด" finds the one titled
+        // "เตรียมผู้ป่วยก่อนเข้าห้องผ่าตัด". Written when the title is, and
+        // absent on every row from before this existed — which the search
+        // treats as "no semantic opinion", never as "no match".
+        "DEFINE FIELD IF NOT EXISTS embedding ON conversation TYPE option<array<float>>",
         "DEFINE FIELD IF NOT EXISTS updated_at ON conversation TYPE datetime",
         "DEFINE INDEX IF NOT EXISTS conversation_updated ON conversation FIELDS updated_at",
         "DEFINE FIELD IF NOT EXISTS pinned ON conversation TYPE bool DEFAULT false",

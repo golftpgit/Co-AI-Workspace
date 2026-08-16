@@ -150,8 +150,16 @@ public actor ConversationStore {
     /// search (§11 / P2.2).
     ///
     /// `scope` nil searches everywhere, which is the "ค้นข้ามโปรเจกต์" button.
+    /// - Parameter queryVector: the query, embedded. When present, the
+    ///   conversations whose stored subject vector is close to it are fused
+    ///   into the ranking with the same RRF the knowledge index uses (§11.5) —
+    ///   so a search for "ยาปฏิชีวนะก่อนผ่าตัด" can surface a conversation
+    ///   called "เตรียมผู้ป่วยก่อนเข้าห้องผ่าตัด" that never says the words.
+    ///   `nil` leaves the search exactly as it was, which is what happens when
+    ///   no embedding model is loaded.
     public func search(_ query: String, scope: Scope?,
-                       limit: Int = 20, conversationLimit: Int = 300) async throws -> [ConversationMatch] {
+                       limit: Int = 20, conversationLimit: Int = 300,
+                       queryVector: [Float]? = nil) async throws -> [ConversationMatch] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
 
@@ -186,18 +194,126 @@ public actor ConversationStore {
             best[hit.conversation] = (scored.score, Self.snippet(hit.content))
         }
 
-        return best.compactMap { id, hit in
-            byID[id].map { ConversationMatch(conversation: $0, snippet: hit.snippet, score: hit.score) }
+        let lexical = best.compactMap { id, hit -> (id: String, match: ConversationMatch)? in
+            byID[id].map { (id, ConversationMatch(conversation: $0, snippet: hit.snippet,
+                                                  score: hit.score)) }
         }
-        .sorted { $0.score > $1.score }
-        .prefix(limit)
-        .map { $0 }
+        .sorted { $0.match.score > $1.match.score }
+
+        guard let queryVector else {
+            return lexical.prefix(limit).map(\.match)
+        }
+        let vectors = try await embeddings(scope: scope, limit: conversationLimit)
+        return Self.fuse(lexical: lexical, vectors: vectors, queryVector: queryVector,
+                         conversations: byID, limit: limit)
+    }
+
+    /// Reciprocal rank fusion, with the constant the knowledge index already
+    /// uses. One rule for "how do a word search and a vector search combine",
+    /// in two places, is one rule; two would drift and the second one would be
+    /// the one nobody tuned.
+    static let rrfK = 60.0
+
+    static func fuse(lexical: [(id: String, match: ConversationMatch)],
+                     vectors: [String: [Float]],
+                     queryVector: [Float],
+                     conversations: [String: Conversation],
+                     limit: Int) -> [ConversationMatch] {
+        var fused: [String: (match: ConversationMatch, score: Double)] = [:]
+        for (index, entry) in lexical.enumerated() {
+            fused[entry.id] = (entry.match, 1 / (rrfK + Double(index + 1)))
+        }
+
+        let semantic = vectors
+            .compactMap { id, vector -> (id: String, similarity: Double)? in
+                let similarity = Self.cosine(queryVector, vector)
+                // A floor, because every vector is a little bit like every
+                // other one and a ranking with no floor is a list of every
+                // conversation in mildly arbitrary order.
+                return similarity >= 0.35 ? (id, similarity) : nil
+            }
+            .sorted { $0.similarity > $1.similarity }
+
+        for (index, entry) in semantic.enumerated() {
+            let contribution = 1 / (rrfK + Double(index + 1))
+            if let existing = fused[entry.id] {
+                fused[entry.id] = (existing.match, existing.score + contribution)
+            } else if let conversation = conversations[entry.id] {
+                // Found by subject alone: there is no matching sentence to
+                // quote, and the snippet says that rather than showing the
+                // first line as though it were the hit.
+                fused[entry.id] = (ConversationMatch(conversation: conversation,
+                                                     snippet: "— ตรงกับเรื่องที่คุยกัน ไม่ใช่คำที่พิมพ์ —",
+                                                     score: entry.similarity),
+                                   contribution)
+            }
+        }
+
+        return fused.values
+            .sorted { $0.score == $1.score
+                ? $0.match.conversation.id < $1.match.conversation.id
+                : $0.score > $1.score }
+            .prefix(limit)
+            .map(\.match)
+    }
+
+    static func cosine(_ a: [Float], _ b: [Float]) -> Double {
+        guard a.count == b.count, !a.isEmpty else { return 0 }
+        var dot = 0.0, left = 0.0, right = 0.0
+        for index in a.indices {
+            dot += Double(a[index]) * Double(b[index])
+            left += Double(a[index]) * Double(a[index])
+            right += Double(b[index]) * Double(b[index])
+        }
+        guard left > 0, right > 0 else { return 0 }
+        return dot / (left.squareRoot() * right.squareRoot())
     }
 
     private static func snippet(_ content: String, limit: Int = 140) -> String {
         let flat = content.replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return flat.count <= limit ? flat : String(flat.prefix(limit)) + "…"
+    }
+
+    /// Files what a conversation is about, as a vector (§19.2.2, P10.14).
+    ///
+    /// Written when a conversation gets its name, which is the moment there is
+    /// something to embed and the only moment it is worth the cost — one
+    /// embedding per conversation rather than one per message. What it buys is
+    /// finding a conversation whose subject matches without the words matching;
+    /// what it cannot do is find a phrase buried in the middle of a long
+    /// conversation, and the word search is what does that.
+    public func saveEmbedding(_ vector: [Float], for id: String) async throws {
+        try await client.exec(
+            "UPDATE conversation SET embedding = $vector WHERE uid = type::string($uid)",
+            vars: ["uid": id, "vector": vector.map { Double($0) }])
+    }
+
+    /// The stored vectors for the conversations in scope. Rows written before
+    /// this existed simply have none.
+    public func embeddings(scope: Scope?, limit: Int = 300) async throws -> [String: [Float]] {
+        var vars: [String: Any] = ["limit": limit]
+        var sql = "SELECT uid, embedding FROM conversation WHERE embedding != NONE"
+        if let scope {
+            sql += " AND scope_kind = $kind"
+            vars["kind"] = ScopeColumns.kind(scope)
+            if let projectID = ScopeColumns.projectID(scope) {
+                sql += " AND project_id = $pid"
+                vars["pid"] = projectID
+            }
+        }
+        sql += " LIMIT $limit"
+
+        let rows = try await client.query(sql, vars: vars).first?.rows ?? []
+        var vectors: [String: [Float]] = [:]
+        for row in rows {
+            guard let id = row["uid"]?.stringValue,
+                  let values = row["embedding"]?.arrayValue else { continue }
+            let vector = values.compactMap { $0.doubleValue.map(Float.init) }
+            guard !vector.isEmpty else { continue }
+            vectors[id] = vector
+        }
+        return vectors
     }
 
     public func rename(_ id: String, title: String) async throws {
