@@ -130,6 +130,36 @@ public enum Distributions {
         return exp(logCoefficient + Double(k) * log(p) + Double(n - k) * log(1 - p))
     }
 
+    /// Exact 95% limits for a Poisson count, through the χ² relationship.
+    ///
+    /// Used where a normal approximation would embarrass itself: with six
+    /// observed deaths, mean ± 1.96√mean reaches below zero, and a negative
+    /// number of deaths is not a confidence limit.
+    public static func poissonInterval(observed: Int,
+                                       confidence: Double = 0.95) -> (low: Double, high: Double) {
+        guard observed >= 0 else { return (0, 0) }
+        let alpha = 1 - confidence
+        let low = observed == 0 ? 0 : chiSquareQuantile(alpha / 2, degreesOfFreedom: Double(2 * observed)) / 2
+        let high = chiSquareQuantile(1 - alpha / 2, degreesOfFreedom: Double(2 * observed + 2)) / 2
+        return (low, high)
+    }
+
+    /// The χ² quantile, by bisection on the CDF. Slower than a closed form and
+    /// exact enough for an interval nobody reads past three digits.
+    public static func chiSquareQuantile(_ p: Double, degreesOfFreedom: Double) -> Double {
+        guard p > 0, p < 1, degreesOfFreedom > 0 else { return 0 }
+        var low = 0.0, high = max(1, degreesOfFreedom) * 100
+        for _ in 0..<200 {
+            let middle = (low + high) / 2
+            if 1 - chiSquarePValue(middle, degreesOfFreedom: degreesOfFreedom) < p {
+                low = middle
+            } else {
+                high = middle
+            }
+        }
+        return (low + high) / 2
+    }
+
     public static func regularizedIncompleteBeta(_ x: Double, _ a: Double, _ b: Double) -> Double {
         if x <= 0 { return 0 }
         if x >= 1 { return 1 }
