@@ -103,6 +103,22 @@ struct StageGateTests {
         #expect(authored.ran)
     }
 
+    /// P14.2 — R arrives through a bridge the app does not control, so the
+    /// only thing keeping it inside the rules is its classification on this
+    /// side. Both tables say the same thing about it, and this is the half
+    /// that has teeth: during planning, `r_eval` does not run.
+    @Test("Planning refuses r_eval, whatever the bridge would have said")
+    func planningRefusesR() async throws {
+        let ran = RanFlag()
+        let gateway = await gateway(stages: ["p1": .planning],
+                                    tools: [SpyTool(name: "r_eval", riskLevel: .high, flag: ran)])
+
+        let blocked = try await gateway.call("r_eval", argumentsJSON: #"{"code":"1+1"}"#,
+                                             context: ToolContext(scope: .project(ProjectID("p1"))))
+        #expect(!blocked.didExecute)
+        #expect(!ran.ran)
+    }
+
     @Test("Execution allows everything the risk chain allows")
     func executionIsOpen() async throws {
         let flag = RanFlag()

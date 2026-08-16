@@ -153,6 +153,11 @@ let package = Package(
         // signals, registry (ARCHITECTURE §13). Knows nothing about agents.
         .target(name: "Execution", dependencies: ["AgentKit", "Observability", "Config"]),
 
+        // M-R — the bridge to a real R (ARCHITECTURE §12.7, P14). Its own
+        // target because nothing else may depend on R being installed: the
+        // statistics in `Analysis` are Swift and stay that way.
+        .target(name: "RBridge", dependencies: ["Execution", "Observability"]),
+
         // M6 — the tools themselves. Depends on Execution, never the reverse,
         // and CoreEngine never depends on this: tools plug in via AgentTool.
         // Analysis is here for `run_stat_test` (P6.6): the Statistical
@@ -165,7 +170,8 @@ let package = Package(
         // able to see a tool.
         .target(name: "ToolBelt",
                 dependencies: ["AgentKit", "Observability", "Execution",
-                               "Knowledge", "WebSearch", "Analysis", "Roster", "DocGen"]),
+                               "Knowledge", "WebSearch", "Analysis", "Roster", "DocGen",
+                               "RBridge"]),
 
         // M6/MCP — other people's tools (ARCHITECTURE §6.2, P8.3). Its own
         // target rather than part of ToolBelt so the SDK, its NIO and its
@@ -330,6 +336,7 @@ let package = Package(
         .testTarget(name: "FieldServerTests", dependencies: ["FieldServer", "Instruments", "OLTP"]),
         .testTarget(name: "EmbeddingRuntimeTests", dependencies: ["EmbeddingRuntime"]),
         .testTarget(name: "ExecutionTests", dependencies: ["Execution", "Config"]),
+        .testTarget(name: "RBridgeTests", dependencies: ["RBridge"]),
         .testTarget(name: "AnalysisTests", dependencies: ["Analysis", "OLTP", "DocGen"]),
         .testTarget(name: "ChannelsTests", dependencies: ["Channels"]),
         // CoreEngine is here for the reason P8.3 exists: the Done-when is that
@@ -350,7 +357,8 @@ let package = Package(
         // database and a real sidecar alongside the tools and the gate.
         .testTarget(name: "ToolBeltTests",
                     dependencies: ["ToolBelt", "CoreEngine", "Persistence", "Sidecar", "Config",
-                                   "Knowledge", "WebSearch", "Roster", "Analysis", "DocGen"]),
+                                   "Knowledge", "WebSearch", "Roster", "Analysis", "DocGen",
+                                   "RBridge"]),
         // P9.3's Done-when is a property of the whole app, not of one module:
         // *no* store writes a secret to disk. It therefore needs a target that
         // can reach every store that has one — which is exactly why the check

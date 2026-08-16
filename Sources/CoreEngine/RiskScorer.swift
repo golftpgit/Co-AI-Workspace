@@ -77,6 +77,9 @@ public struct DefaultRiskScorer: RiskScoring {
 
         "run_shell": .high,
         "install_package": .high,
+        // Arbitrary R on the person's machine, with their libraries and their
+        // files (§12.7). "It is only statistics" does not lower it.
+        "r_eval": .high,
     ]
 
     /// Names classified above for tools that **do not exist yet**, each with

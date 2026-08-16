@@ -1012,6 +1012,35 @@ else
   ok "numbers are drawn on solid layers, never on glass"
 fi
 
+# P14 — R is a bridge, not a dependency.
+#
+# 1. The statistics stay Swift. The plan says R blocks nobody, and the way that
+#    stops being true is one `import RBridge` inside the analysis layer: from
+#    then on a machine without R has a broken statistics screen.
+R_LEAK=$(grep -rln "import RBridge" Sources/Analysis Sources/StatKit Sources/CoreEngine \
+  Sources/Instruments 2>/dev/null || true)
+if [ -n "$R_LEAK" ]; then
+  echo "$R_LEAK" | sed 's/^/   /'
+  fail "a statistics module now depends on R being installed (§12.7, P14)"
+else
+  ok "the statistics layer does not depend on R"
+fi
+
+# 2. The setup helper says how to install and does not install. A helper that
+#    runs install.packages to turn its own light green has changed the person's
+#    machine to pass its own check (§19.15, P14.4).
+#    Checked as execution rather than as a word: the advice string names the
+#    command on purpose, and a rule that cannot tell advice from a spawn would
+#    force the helper to be vaguer than it should be.
+INSTALLS=$(grep -rn "install.packages" Sources --include=*.swift \
+  | grep -E "run\(|Process\(|arguments:|executableURL" || true)
+if [ -n "$INSTALLS" ]; then
+  echo "$INSTALLS" | sed 's/^/   /' | head -3
+  fail "something in Sources runs install.packages instead of telling the person to (P14.1)"
+else
+  ok "R packages are the person's to install; the app only says which"
+fi
+
 # P20.6 — the screen leans on the type the person declared, and on nothing else.
 #
 # 1. Emphasis cannot reach usage. The spans record every screen anybody opens,
