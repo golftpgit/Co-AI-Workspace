@@ -45,6 +45,16 @@ public enum StatisticalTest: String, Sendable, Codable, CaseIterable {
     case wilcoxonSignedRank
     case kruskalWallis
     case fisherExact
+    /// Bland ch. 13 — paired proportions. A plain χ² on the same table throws
+    /// the pairing away and answers a question nobody asked.
+    case mcNemar
+    /// Bland ch. 13 — an ordered exposure. A plain χ² would give the same
+    /// answer with the columns shuffled.
+    case chiSquareTrend
+    /// Bland ch. 11–12.
+    case correlation
+    /// Bland ch. 20 — agreement between raters, with the chance part removed.
+    case kappa
     /// §12.6.1's count models (P19.4). The negative binomial is listed as its
     /// own test rather than a mode of the Poisson because the gate proposes it
     /// *by name* when dispersion fails, and a proposal has to be runnable.
@@ -71,6 +81,10 @@ public enum StatisticalTest: String, Sendable, Codable, CaseIterable {
         case .wilcoxonSignedRank: "Wilcoxon signed-rank"
         case .kruskalWallis: "Kruskal–Wallis"
         case .fisherExact: "Fisher's exact"
+        case .mcNemar: "McNemar (สัดส่วนแบบจับคู่)"
+        case .chiSquareTrend: "ไคสแควร์สำหรับแนวโน้ม"
+        case .correlation: "ความสัมพันธ์ (Pearson/Spearman)"
+        case .kappa: "ความตรงกันระหว่างผู้ให้คะแนน (κ)"
         }
     }
 
@@ -79,6 +93,11 @@ public enum StatisticalTest: String, Sendable, Codable, CaseIterable {
     public var isParametric: Bool {
         switch self {
         case .mannWhitney, .wilcoxonSignedRank, .kruskalWallis, .fisherExact: false
+        // κ and the two table tests make no distributional assumption about
+        // the data; the trend test assumes only that the ordering means
+        // something, which is a design question rather than a distribution.
+        case .mcNemar, .chiSquareTrend, .kappa: false
+        case .correlation: true
         default: true
         }
     }
@@ -326,6 +345,85 @@ public enum StatGate {
     /// Fisher's exact test for a 2×2 table — the answer when the expected
     /// counts are too small for chi-square. Two-sided by the usual convention:
     /// every table at least as unlikely as the observed one.
+    /// Bland ch. 13 — paired proportions, through the gate so the result
+    /// carries the same shape every other test's does.
+    public static func mcNemar(_ table: [[Int]]) throws -> StatResult {
+        guard table.count == 2, table[0].count == 2, table[1].count == 2 else {
+            throw StatError.badShape("McNemar ใช้ตาราง 2×2 ของ*คู่* (ก่อน × หลัง)")
+        }
+        let result = try PairedCategorical.mcNemar(bothPositive: table[0][0],
+                                                   changedOneWay: table[0][1],
+                                                   changedOtherWay: table[1][0],
+                                                   bothNegative: table[1][1])
+        return StatResult(test: .mcNemar, statistic: result.statistic, pValue: result.pValue,
+                          degreesOfFreedom: result.exact ? nil : 1,
+                          summary: result.summary,
+                          assumptions: [], alternatives: [])
+    }
+
+    /// Bland ch. 13 — proportions across an ordered exposure.
+    public static func chiSquareTrend(_ groups: [(cases: Int, total: Int)],
+                                      scores: [Double]? = nil) throws -> StatResult {
+        let result = try PairedCategorical.trend(groups, scores: scores)
+        return StatResult(test: .chiSquareTrend, statistic: result.statistic,
+                          pValue: result.pValue, degreesOfFreedom: 1,
+                          summary: result.summary,
+                          // The one assumption worth stating: the order has to
+                          // mean something. Nothing in the numbers can check
+                          // it, so it is said rather than tested.
+                          assumptions: [AssumptionCheck(
+                            name: "ลำดับของกลุ่มมีความหมาย",
+                            // Nothing in the numbers can check this: it is a
+                            // fact about the design. Reported as unchecked
+                            // rather than as passed, which is what
+                            // `wasChecked` is for.
+                            wasChecked: false, passed: true,
+                            statistic: nil, pValue: nil,
+                            detail: "การทดสอบนี้ถือว่ากลุ่มเรียงตามปริมาณจริง — "
+                                + "ถ้าสลับลำดับได้โดยไม่เสียความหมาย ให้ใช้ไคสแควร์ธรรมดา")],
+                          alternatives: [.chiSquare])
+    }
+
+    /// Bland ch. 11–12.
+    public static func correlation(_ x: [Double], _ y: [Double],
+                                   kind: Correlation.Kind = .pearson) throws -> StatResult {
+        let result = try Reliability.correlation(x, y, kind: kind)
+        // Pearson assumes the relationship is a straight line and both are
+        // roughly Normal; Spearman does not. Reported as a check rather than
+        // enforced, because a bent relationship is a finding about the data.
+        var assumptions: [AssumptionCheck] = []
+        if kind == .pearson {
+            let spearman = try Reliability.correlation(x, y, kind: .spearman)
+            let gap = abs(spearman.coefficient) - abs(result.coefficient)
+            assumptions.append(AssumptionCheck(
+                name: "ความสัมพันธ์เป็นเส้นตรง",
+                wasChecked: true, passed: gap < 0.1,
+                statistic: spearman.coefficient, pValue: nil,
+                detail: gap < 0.1
+                    ? "Pearson กับ Spearman ใกล้เคียงกัน — ไม่มีสัญญาณว่าความสัมพันธ์โค้ง"
+                    : String(format: "Spearman (%.3f) สูงกว่า Pearson (%.3f) อยู่มาก — "
+                             + "ความสัมพันธ์น่าจะโค้ง ใช้ Spearman หรืออธิบายรูปร่างก่อน",
+                             spearman.coefficient, result.coefficient)))
+        }
+        return StatResult(test: .correlation, statistic: result.coefficient,
+                          pValue: result.pValue, degreesOfFreedom: Double(result.n - 2),
+                          summary: result.summary, assumptions: assumptions,
+                          alternatives: assumptions.contains(where: \.isWarning) ? [.correlation] : [])
+    }
+
+    /// Bland ch. 20.
+    public static func kappa(_ first: [Int], _ second: [Int],
+                             ordered: Bool = false) throws -> StatResult {
+        let result = try Reliability.kappa(first, second, ordered: ordered)
+        return StatResult(test: .kappa, statistic: result.value, pValue: .nan,
+                          degreesOfFreedom: nil, summary: result.interpretation,
+                          // κ has no null hypothesis worth testing here — "is
+                          // agreement better than chance" is answered by the
+                          // interval, and a p-value beside it invites reading
+                          // significance as agreement.
+                          assumptions: [], alternatives: [])
+    }
+
     public static func fisherExact(_ table: [[Int]]) throws -> StatResult {
         guard table.count == 2, table[0].count == 2, table[1].count == 2 else {
             throw StatError.badShape("Fisher's exact ที่นี่รองรับเฉพาะตาราง 2×2")

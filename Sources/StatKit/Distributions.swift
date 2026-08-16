@@ -97,6 +97,39 @@ public enum Distributions {
 
     /// I_x(a, b) — the regularised incomplete beta, by the standard continued
     /// fraction with Lentz's method.
+    /// Two-sided exact binomial p-value — the sum of every outcome no more
+    /// likely than the one observed.
+    ///
+    /// Written as that definition rather than as "double the smaller tail",
+    /// which is the shortcut most software takes and which is only equal to
+    /// this when the distribution is symmetric. At p = 0.5 — McNemar's case —
+    /// they agree; away from it they do not, and the shortcut is the one that
+    /// reports the wrong number.
+    public static func binomialTwoSided(successes: Int, trials: Int,
+                                        probability: Double) -> Double {
+        guard trials > 0, successes >= 0, successes <= trials,
+              probability > 0, probability < 1 else { return 1 }
+        let observed = binomialProbability(successes, trials, probability)
+        // A hair of slack, because two outcomes that are equally likely in
+        // exact arithmetic differ in the last bit here, and dropping one of
+        // them halves the p-value.
+        let tolerance = observed * 1e-7
+        var total = 0.0
+        for k in 0...trials {
+            let p = binomialProbability(k, trials, probability)
+            if p <= observed + tolerance { total += p }
+        }
+        return min(1, total)
+    }
+
+    static func binomialProbability(_ k: Int, _ n: Int, _ p: Double) -> Double {
+        // Through logs: 170! overflows a Double, and a trial count of 200 is
+        // an ordinary study.
+        let logCoefficient = lgamma(Double(n) + 1) - lgamma(Double(k) + 1)
+            - lgamma(Double(n - k) + 1)
+        return exp(logCoefficient + Double(k) * log(p) + Double(n - k) * log(1 - p))
+    }
+
     public static func regularizedIncompleteBeta(_ x: Double, _ a: Double, _ b: Double) -> Double {
         if x <= 0 { return 0 }
         if x >= 1 { return 1 }
