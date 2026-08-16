@@ -48,6 +48,14 @@ final class ChatViewModel {
     private(set) var bubbles: [Bubble] = []
     private(set) var isRunning = false
     private(set) var routedVia: String?
+    /// Which model the person asked for, or nil for "let the chain decide"
+    /// (§9.2, P15.1). Per conversation, not global: it answers "run *this* one
+    /// on something bigger", and a setting that outlived the question would
+    /// quietly spend a large model on everything after it.
+    var chosenModel: String?
+    /// What there is to choose between, from the router itself — a list built
+    /// anywhere else would offer an endpoint that is not in the chain.
+    private(set) var offeredModels: [(identifier: String, label: String)] = []
     /// The routing rule that chose that tier, from the router's own selection
     /// pass (P20.5) — shown next to the tier so "why is it using that model"
     /// has an answer that is not a guess.
@@ -308,6 +316,19 @@ final class ChatViewModel {
         }
     }
 
+    /// Reads what the chain has, so the picker cannot offer something that is
+    /// not in it. A choice naming a deleted endpoint is harmless by design —
+    /// the router falls back to its ordinary order — but offering it would
+    /// still be a lie on screen.
+    func refreshOfferedModels() async {
+        offeredModels = await engine.router.offered.map { entry in
+            (identifier: entry.identifier, label: "\(entry.identifier) · \(entry.tier.label)")
+        }
+        if let chosenModel, !offeredModels.contains(where: { $0.identifier == chosenModel }) {
+            self.chosenModel = nil
+        }
+    }
+
     // MARK: - the model behind Tier 0.5
 
     func refreshLocalModels() async {
@@ -351,7 +372,9 @@ final class ChatViewModel {
                                              conversationID: conversation.id,
                                              scope: scope,
                                              workingDirectory: workingDirectory,
-                                             workPackage: workPackage)
+                                             workPackage: workPackage,
+                                             policy: RoutingPolicy.disposable
+                                                 .asking(for: chosenModel))
         // Inherits MainActor isolation, so every bubble update lands on the
         // main actor without hopping.
         turn = Task { [weak self] in
