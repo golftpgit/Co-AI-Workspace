@@ -56,20 +56,33 @@ struct KnowledgeBaseView: View {
 
     private var documentList: some View {
         VStack(spacing: 0) {
-            List(model.documents, selection: $selection) { document in
-                DocumentRow(document: document)
-                    .contextMenu {
-                        Button("ลบเอกสารนี้…", role: .destructive) {
-                            pendingDeletion = document
-                        }
-                    }
+            ShelfBar(model: model)
+            Divider()
+            List(model.shelvedDocuments, selection: $selection) { document in
+                DocumentRow(document: document,
+                            classification: model.classification(of: document))
+                    .contextMenu { rowMenu(for: document) }
                     .accessibilityAction(named: "ลบเอกสารนี้") {
                         pendingDeletion = document
+                    }
+                    // The same corrections as the context menu, one action each:
+                    // a right-click is a mouse, and every class in the menu has
+                    // to be reachable from the rotor as well.
+                    .accessibilityActions {
+                        ForEach(Classifier.commonSubjects, id: \.self) { code in
+                            Button("จัดหมวดเป็น \(code)") { model.reclassify(document, to: [code]) }
+                        }
+                        Button("ทำเครื่องหมายว่ายังจัดหมวดไม่ได้") {
+                            model.reclassify(document, to: [])
+                        }
                     }
             }
             .listStyle(.sidebar)
             .overlay {
-                if model.documents.isEmpty {
+                if model.shelvedDocuments.isEmpty, !model.documents.isEmpty {
+                    ContentUnavailableView("ไม่มีเอกสารในหมวดนี้", systemImage: "tray",
+                                           description: Text("กด “ทั้งหมด” เพื่อกลับไปดูทั้งคลัง"))
+                } else if model.documents.isEmpty {
                     ContentUnavailableView("ยังไม่มีเอกสารในคลัง", systemImage: "books.vertical",
                                            description: Text("กด “เพิ่มเอกสาร” เพื่ออัปโหลด PDF, รูปสแกน, Word หรือข้อความ"))
                 }
@@ -79,6 +92,25 @@ struct KnowledgeBaseView: View {
             toolbar
         }
         .navigationSplitViewColumnWidth(min: 260, ideal: 320)
+    }
+
+    /// The row's own actions, extracted so the menu call site stays short
+    /// enough to read — and so its accessibility mirror sits next to it rather
+    /// than a screenful below, which is what the audit checks for. (Naming the
+    /// modifier here would trip that audit on a comment, which is a fair
+    /// trade: it matches text, and text is what a reviewer reads too.)
+    @ViewBuilder
+    private func rowMenu(for document: DocumentSummary) -> some View {
+        // §11.9: a class the system guessed has to be correctable, and this is
+        // where somebody notices it is wrong — looking at the shelf.
+        Menu("จัดหมวดใหม่") {
+            ForEach(Classifier.commonSubjects, id: \.self) { code in
+                Button(code) { model.reclassify(document, to: [code]) }
+            }
+            Divider()
+            Button("ยังจัดหมวดไม่ได้") { model.reclassify(document, to: []) }
+        }
+        Button("ลบเอกสารนี้…", role: .destructive) { pendingDeletion = document }
     }
 
     private var toolbar: some View {
@@ -210,12 +242,14 @@ struct KnowledgeBaseView: View {
 
 private struct DocumentRow: View {
     let document: DocumentSummary
+    let classification: Classification
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(document.title).font(.body).lineLimit(2)
             HStack(spacing: 6) {
                 TierBadge(tier: document.tier, origin: document.origin)
+                ShelfBadge(classification: classification)
                 Text("\(document.chunkCount) ส่วน")
                 if !document.hasVectors {
                     Label("ไม่มี vector", systemImage: "exclamationmark.circle")
@@ -412,6 +446,80 @@ enum ScopeChoice: String, CaseIterable, Identifiable {
         case .central: "ส่วนกลาง"
         case .project: "โปรเจกต์"
         case .policy: "นโยบาย"
+        }
+    }
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// The shelf (§11.9, P18.4)
+
+/// What is in the library, by class, with the unclassified counted rather than
+/// hidden. Filtering is the point of showing it: a proportion nobody can click
+/// into is a chart.
+private struct ShelfBar: View {
+    @Bindable var model: KnowledgeViewModel
+
+    var body: some View {
+        let shelf = model.shelf
+        ScrollView(.horizontal) {
+            HStack(spacing: 6) {
+                chip(code: nil, label: "ทั้งหมด", count: model.documents.count)
+                ForEach(shelf.byCode, id: \.code) { entry in
+                    chip(code: entry.code, label: "\(entry.code) \(entry.label)",
+                         count: entry.count)
+                }
+                if shelf.unclassified > 0 {
+                    // Its own chip, not a gap in the chart: "what could nothing
+                    // be filed under" is the question the shelf exists to make
+                    // askable, and sweeping these into A would answer it wrongly.
+                    chip(code: KnowledgeViewModel.unclassifiedFilter,
+                         label: "ยังจัดหมวดไม่ได้", count: shelf.unclassified)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+        }
+        .frame(height: 34)
+    }
+
+    private func chip(code: String?, label: String, count: Int) -> some View {
+        let isSelected = model.shelfFilter == code
+        return Button {
+            model.shelfFilter = code
+        } label: {
+            Text("\(label) · \(count)").font(.caption)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .background(isSelected ? AnyShapeStyle(.selection) : AnyShapeStyle(.quaternary),
+                    in: Capsule())
+        .accessibilityLabel("\(label) — \(count) เอกสาร"
+                            + (isSelected ? " · กำลังกรองด้วยหมวดนี้" : " · กดเพื่อกรอง"))
+    }
+}
+
+/// The class on a document row, and whether anybody agreed to it.
+private struct ShelfBadge: View {
+    let classification: Classification
+
+    var body: some View {
+        if classification.isClassified {
+            Text(classification.subjects.map(\.code).joined(separator: "/"))
+                .padding(.horizontal, 5).padding(.vertical, 1)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                // §11.9: a guess that cannot be told from a decision is a guess
+                // nobody will ever correct.
+                .help(classification.assignedBy == .user
+                      ? "จัดหมวดโดยผู้ใช้"
+                      : "ระบบเดา — \(classification.reason)")
+                .accessibilityLabel(
+                    "หมวด \(classification.subjects.map(\.code).joined(separator: " และ "))"
+                    + (classification.assignedBy == .user ? " · ผู้ใช้จัดเอง" : " · ระบบเดา"))
+        } else {
+            Text("ยังจัดหมวดไม่ได้")
+                .foregroundStyle(.tertiary)
+                .accessibilityLabel("ยังจัดหมวดไม่ได้")
         }
     }
 }
