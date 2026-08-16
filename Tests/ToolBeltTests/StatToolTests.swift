@@ -112,6 +112,19 @@ struct StatToolTests {
         #expect(text.contains("ผลนี้ยังใช้สรุปไม่ได้ตามที่เป็นอยู่"))
     }
 
+    /// P19.5 — clustered data through the Analyst's own path. The warning is
+    /// the deliverable here: the estimate looks the same either way.
+    @Test("clustered data comes back corrected, and says what the wrong interval was")
+    func clusteringReachesTheAnalyst() async throws {
+        let text = try await run("""
+        {"test": "clustered", "groups": [[52,55,53,54,51],[68,71,69,70,72],[45,44,47,46,43],
+                                          [61,63,60,62,64],[75,77,74,76,78],[57,58,56,59,55]]}
+        """)
+        #expect(text.contains("แก้ตามการจับกลุ่มแล้ว"))
+        #expect(text.contains("ข้อมูลซ้อนชั้น"))
+        #expect(text.contains("ผลนี้ยังใช้สรุปไม่ได้ตามที่เป็นอยู่"))
+    }
+
     @Test("a predictive value arrives with the prevalence it depends on")
     func predictiveValuesCarryPrevalence() async throws {
         let text = try await run("""

@@ -50,6 +50,9 @@ public enum StatisticalTest: String, Sendable, Codable, CaseIterable {
     /// *by name* when dispersion fails, and a proposal has to be runnable.
     case poissonRegression
     case negativeBinomialRegression
+    /// §12.6.1's multilevel model (P19.5). Random intercepts today; the slope
+    /// half refuses by name rather than approximating.
+    case mixedModel
 
     public var label: String {
         switch self {
@@ -61,6 +64,7 @@ public enum StatisticalTest: String, Sendable, Codable, CaseIterable {
         case .linearRegression: "การถดถอยเชิงเส้น"
         case .logisticRegression: "การถดถอยโลจิสติก"
         case .survival: "การวิเคราะห์การรอดชีพ"
+        case .mixedModel: "โมเดลหลายระดับ (ข้อมูลซ้อนชั้น)"
         case .poissonRegression: "การถดถอยปัวซง (ข้อมูลนับ)"
         case .negativeBinomialRegression: "การถดถอย negative binomial (ข้อมูลนับที่กระจายเกิน)"
         case .mannWhitney: "Mann–Whitney U"
@@ -535,6 +539,36 @@ public enum StatGate {
             degreesOfFreedom: nil,
             summary: terms,
             assumptions: assumptions,
+            alternatives: [])
+    }
+
+    /// A clustered comparison, with the independence assumption checked
+    /// against the shape of the data (P19.5).
+    ///
+    /// The mean and its interval are computed **from the multilevel fit**, not
+    /// from the observations as if they were independent — otherwise this would
+    /// be the very analysis it warns about, with a warning attached.
+    public static func clustered(_ clusters: [[Double]]) throws -> StatResult {
+        let fit = try Multilevel.randomIntercept(clusters)
+        let values = clusters.flatMap { $0 }
+        let mean = Statistics.mean(values)
+        let naiveError = (Statistics.variance(values) / Double(values.count)).squareRoot()
+        let corrected = naiveError * fit.standardErrorInflation
+        let z = Epidemiology.z95
+
+        return StatResult(
+            test: .mixedModel,
+            statistic: mean,
+            // No null hypothesis is being tested here — this is an estimate and
+            // its interval. A p-value invented for it would be a p-value about
+            // a question nobody asked.
+            pValue: .nan,
+            degreesOfFreedom: Double(fit.clusters - 1),
+            summary: String(format: "ค่าเฉลี่ย %.4f (95%% CI %.4f–%.4f · แก้ตามการจับกลุ่มแล้ว) "
+                            + "· ถ้าคิดแบบข้อมูลอิสระจะได้ %.4f–%.4f ซึ่งแคบเกินจริง",
+                            mean, mean - z * corrected, mean + z * corrected,
+                            mean - z * naiveError, mean + z * naiveError),
+            assumptions: [Multilevel.independenceCheck(fit)],
             alternatives: [])
     }
 
