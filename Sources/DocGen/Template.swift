@@ -67,6 +67,54 @@ public struct DocumentTemplate: Sendable, Codable, Equatable, Identifiable {
     }
 
     public var headings: [String] { sections.map(\.heading) }
+
+    /// Renames a heading, keeping everything else about the section (P7.9).
+    ///
+    /// A rename rather than a replace because `guidance` is the only record of
+    /// what the accepted document had under that heading, and it is not
+    /// recoverable once thrown away — the sample file may be long gone.
+    ///
+    /// An empty name is refused: a section with no heading cannot be found in
+    /// the finished document, so the "is anything missing" check would pass it
+    /// forever.
+    public func renaming(_ index: Int, to heading: String) -> DocumentTemplate? {
+        let trimmed = heading.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard sections.indices.contains(index), !trimmed.isEmpty else { return nil }
+        // Two sections with one name is a document where "หัวข้อนี้ยังว่าง"
+        // cannot say which one.
+        guard !sections.enumerated().contains(where: { $0.offset != index
+            && $0.element.heading.caseInsensitiveCompare(trimmed) == .orderedSame }) else {
+            return nil
+        }
+        var next = self
+        next.sections[index].heading = trimmed
+        return next
+    }
+
+    /// Turns a section's "must be there" on or off.
+    ///
+    /// Everything the sample had starts required — it was in a document
+    /// somebody accepted, which is the only evidence available about what
+    /// matters. Turning it off is a person disagreeing with that evidence, and
+    /// they are allowed to.
+    public func settingRequired(_ index: Int, _ required: Bool) -> DocumentTemplate? {
+        guard sections.indices.contains(index) else { return nil }
+        var next = self
+        next.sections[index].isRequired = required
+        return next
+    }
+
+    /// Moves a section to another position. Order is the order the document is
+    /// read in, and a template learned from a file that put Methods last
+    /// should be fixable without finding another file.
+    public func moving(_ index: Int, to destination: Int) -> DocumentTemplate? {
+        guard sections.indices.contains(index), sections.indices.contains(destination),
+              index != destination else { return nil }
+        var next = self
+        let section = next.sections.remove(at: index)
+        next.sections.insert(section, at: destination)
+        return next
+    }
 }
 
 public enum TemplateError: Error, CustomStringConvertible, Equatable {
@@ -247,6 +295,22 @@ public struct TemplateStore: Sendable {
     public func add(_ template: DocumentTemplate) throws -> [DocumentTemplate] {
         var templates = load().filter { $0.id != template.id }
         templates.append(template)
+        try save(templates)
+        return templates
+    }
+
+    /// Writes an edited template back **where it was** (P7.9).
+    ///
+    /// Not `add`, which appends: a template that jumped to the bottom of the
+    /// list every time somebody renamed a heading would be a list nobody could
+    /// keep their place in.
+    @discardableResult
+    public func replace(_ template: DocumentTemplate) throws -> [DocumentTemplate] {
+        var templates = load()
+        guard let index = templates.firstIndex(where: { $0.id == template.id }) else {
+            return try add(template)
+        }
+        templates[index] = template
         try save(templates)
         return templates
     }

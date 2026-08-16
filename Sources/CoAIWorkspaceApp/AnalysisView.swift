@@ -1,4 +1,5 @@
 import SwiftUI
+import DocGen
 import UniformTypeIdentifiers
 import AgentKit
 import Analysis
@@ -750,6 +751,12 @@ private struct PlanPane: View {
                       allowedContentTypes: [.init(filenameExtension: "docx") ?? .data]) { result in
             if case .success(let url) = result { model.importTemplate(from: url) }
         }
+        .sheet(isPresented: $editingTemplate) {
+            if let id = model.selectedTemplateID,
+               let template = model.templates.first(where: { $0.id == id }) {
+                TemplateEditor(template: template, model: model)
+            }
+        }
     }
 
     private var list: some View {
@@ -888,6 +895,8 @@ private struct PlanPane: View {
         }
     }
 
+    @State private var editingTemplate = false
+
     private func header(_ plan: AnalysisPlan) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
@@ -911,6 +920,13 @@ private struct PlanPane: View {
                     Label("เพิ่มแม่แบบจากไฟล์", systemImage: "doc.badge.plus")
                 }
                 .help("เลือกไฟล์ .docx ที่มีหัวข้อครบ แล้วระบบจะจำโครงของมันไว้")
+                // P7.9's other half: a template learned from a file with one
+                // heading in the wrong place used to be a template you lived
+                // with, because the only way to change it was another file.
+                if model.selectedTemplateID != nil {
+                    Button("แก้แม่แบบ") { editingTemplate = true }
+                        .accessibilityLabel("แก้หัวข้อของแม่แบบที่เลือกอยู่")
+                }
                 // §14.1: a pre-registration is something you send to somebody.
                 Button { exporting = true } label: {
                     Label("ส่งออก .docx", systemImage: "square.and.arrow.up")
@@ -1177,5 +1193,89 @@ private struct ConfirmSheet: View {
         }
         .padding(Space.section)
         .frame(width: 520)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+
+/// Editing a learned template (§14.1, P7.9).
+///
+/// Every section starts required because it was in a document somebody's
+/// committee accepted — the only evidence available about what matters. This
+/// sheet is where a person disagrees with that evidence, which they are
+/// entitled to do; the refusals live on the type, so a rename to nothing or to
+/// a name another section already has is turned down wherever it comes from.
+private struct TemplateEditor: View {
+    let template: DocumentTemplate
+    @Bindable var model: AnalysisViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var renaming: [Int: String] = [:]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.box) {
+            SectionHeading(title: "แก้แม่แบบ “\(template.name)”",
+                           help: "หัวข้อที่เรียนมาจากเอกสารจริง — เปลี่ยนชื่อ สลับลำดับ "
+                               + "หรือบอกว่าหัวข้อไหนไม่จำเป็นก็ได้ · สิ่งที่ไฟล์ตัวอย่างเขียนไว้ใต้หัวข้อ "
+                               + "จะติดไปกับหัวข้อเสมอ")
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.row) {
+                    ForEach(Array(template.sections.enumerated()), id: \.offset) { index, section in
+                        HStack(spacing: Space.row) {
+                            TextField("ชื่อหัวข้อ", text: Binding(
+                                get: { renaming[index] ?? section.heading },
+                                set: { renaming[index] = $0 }))
+                                .textFieldStyle(.roundedBorder)
+                                .onSubmit {
+                                    let name = renaming[index] ?? section.heading
+                                    model.editTemplate(template.id) { $0.renaming(index, to: name) }
+                                    renaming[index] = nil
+                                }
+                                .accessibilityLabel("ชื่อหัวข้อที่ \(index + 1)")
+
+                            Toggle("จำเป็น", isOn: Binding(
+                                get: { section.isRequired },
+                                set: { required in
+                                    model.editTemplate(template.id) {
+                                        $0.settingRequired(index, required)
+                                    }
+                                }))
+                                .toggleStyle(.checkbox)
+
+                            Button {
+                                model.editTemplate(template.id) { $0.moving(index, to: index - 1) }
+                            } label: { Image(systemName: "arrow.up") }
+                                .disabled(index == 0)
+                                .accessibilityLabel("ย้าย \(section.heading) ขึ้น")
+                            Button {
+                                model.editTemplate(template.id) { $0.moving(index, to: index + 1) }
+                            } label: { Image(systemName: "arrow.down") }
+                                .disabled(index == template.sections.count - 1)
+                                .accessibilityLabel("ย้าย \(section.heading) ลง")
+                        }
+                        if let guidance = section.guidance {
+                            // Kept in front of the person editing: it is the
+                            // only record of what the accepted document had
+                            // under this heading, and the file may be gone.
+                            Text(guidance).font(.caption2).foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                }
+            }
+            .frame(minHeight: 220)
+
+            if let status = model.status, status.isError {
+                Text(status.message).font(.callout).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack {
+                Spacer()
+                Button("เสร็จแล้ว") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(Space.section)
+        .frame(width: 560)
     }
 }
