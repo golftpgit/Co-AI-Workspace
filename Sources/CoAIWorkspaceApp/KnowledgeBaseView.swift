@@ -226,7 +226,7 @@ struct KnowledgeBaseView: View {
         panel.nameFieldStringValue = "knowledge-base.json"
         panel.allowedContentTypes = [.json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        model.export(to: url)
+        Task { await model.export(to: url) }
     }
 
     private func importArchive() {

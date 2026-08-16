@@ -460,11 +460,19 @@ public final class KnowledgeViewModel {
 
     // MARK: - export / import
 
-    public func export(to url: URL) {
+    /// P9.5 — encoding and writing happen off the main actor. Measured on a
+    /// 24 MB archive: doing this here stalls the main actor for 81.6 ms, which
+    /// is five dropped frames and reads as the app having hung; off it, 2.6 ms
+    /// (E.29). Nothing bounds the size of somebody's knowledge base, so this
+    /// only gets worse with use.
+    public func export(to url: URL) async {
+        let archive = index.export()
         do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-            try encoder.encode(index.export()).write(to: url)
+            try await Task.detached(priority: .userInitiated) {
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+                try encoder.encode(archive).write(to: url)
+            }.value
             status = Status(message: "ส่งออกแล้ว: \(url.lastPathComponent)", isError: false)
         } catch {
             status = Status(message: "ส่งออกไม่สำเร็จ: \(error)", isError: true)
@@ -478,8 +486,10 @@ public final class KnowledgeViewModel {
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
 
         do {
-            let archive = try JSONDecoder().decode(KnowledgeArchive.self,
-                                                   from: Data(contentsOf: url))
+            // Read and decode off the main actor, for the reason in `export`.
+            let archive = try await Task.detached(priority: .userInitiated) {
+                try JSONDecoder().decode(KnowledgeArchive.self, from: Data(contentsOf: url))
+            }.value
             var working = index
             let added = try await working.importArchive(archive, embedder: embedder)
             index = working

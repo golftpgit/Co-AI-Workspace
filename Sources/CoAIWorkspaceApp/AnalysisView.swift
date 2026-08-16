@@ -742,7 +742,7 @@ private struct PlanPane: View {
                       document: PlanDocument(),
                       contentType: .data,
                       defaultFilename: model.plan?.title ?? "analysis-plan") { result in
-            if case .success(let url) = result { model.exportPlan(to: url) }
+            if case .success(let url) = result { Task { await model.exportPlan(to: url) } }
         }
         // P7.9 — a template is learned from a document, so this is an import
         // of somebody's own file rather than a form to fill in.
