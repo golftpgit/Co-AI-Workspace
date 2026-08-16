@@ -108,6 +108,11 @@ public final class ProjectsViewModel {
     /// graph's horizon count exists for.
     public private(set) var timelineBeyondLimit = 0
 
+    /// Where the work that has not started would land (§19.7, P10.9's third
+    /// axis). `nil` until a project is open; a projection with no rows is a
+    /// real answer and the screen says which leaves could not be forecast.
+    public private(set) var projection: ScheduleProjection?
+
     public struct Slice: Sendable, Equatable, Identifiable {
         public let key: String
         public let amount: Double
@@ -241,6 +246,19 @@ public final class ProjectsViewModel {
             durations += (try? await spans.durations(forRole: role)) ?? []
         }
         return Schedule.estimate(from: durations, basis: .turns)
+    }
+
+    /// The forward pass over the leaves that have not started (P10.9).
+    ///
+    /// One band for the whole project rather than one per leaf, and that is a
+    /// limitation worth stating: `forecastBand` picks the kind this project
+    /// produces most, so a plan mixing a literature review with a bug fix gets
+    /// the review's timing for both. Per-leaf bands need per-leaf deliverable
+    /// kinds on the work package, which the type does not carry yet.
+    private func refreshProjection(project id: ProjectID) {
+        let started = Set(elapsed.filter { $0.value > 0 }.keys)
+        let band = forecast
+        projection = ScheduleForecast.project(wbs, started: started, now: Date()) { _ in band }
     }
 
     /// Turns the project's recorded work into a chart (§19.7, P10.9).
@@ -744,6 +762,9 @@ public final class ProjectsViewModel {
         if let spans {
             elapsed = (try? await spans.elapsedByWorkPackage(project: .init(id.rawValue))) ?? [:]
             await refreshTimeline(spans: spans, project: id)
+            // After `elapsed`, because which leaves have started is read from
+            // it — and work that has started is measured, never projected.
+            refreshProjection(project: id)
             let spent = elapsed.values.reduce(0, +)
             // The frame is a multiple of how long this kind of work usually
             // takes, so an unfinished plan with no history has no ratio to
