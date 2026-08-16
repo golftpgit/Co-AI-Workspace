@@ -41,6 +41,10 @@ struct Engine: Sendable {
     let pageReader: HeadlessPageReader
 
     let conversations: ConversationStore
+    /// Held so it outlives `build` — a notification-centre delegate is a weak
+    /// reference, and one that is deallocated is a banner whose buttons do
+    /// nothing.
+    @MainActor private static var approvalResponder: ApprovalNotificationResponder?
     /// The one embedder, shared (§11.5). Exposed because conversation search
     /// needs a query vector (P10.14) and a second instance would be a second
     /// model loaded into the same memory.
@@ -576,6 +580,16 @@ struct Engine: Sendable {
         let notifier = Notifier(delivery: UserNotificationDelivery(),
                                 userIsWatching: { await MainActor.run { NSApp.isActive } })
         await broker.subscribe(notifier)
+        // P7.5's other half — the banner asked a question and had no way to
+        // answer it, so the only route was to open the app and find the
+        // request. For run-until-done that means a turn held open until
+        // somebody comes back to their desk, which is the situation the
+        // notification exists for.
+        await MainActor.run {
+            let responder = ApprovalNotificationResponder(broker: broker)
+            responder.attach()
+            Self.approvalResponder = responder
+        }
 
         // §6.2 — MCP servers, connected and put on the tool list. This runs
         // before the roster is read, and that order is the point: a manifest
