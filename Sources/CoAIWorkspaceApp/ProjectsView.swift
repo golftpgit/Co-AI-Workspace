@@ -341,6 +341,7 @@ struct ProjectsView: View {
 
         if tab == .team {
             raciBox(project)
+            raciTableBox()
         }
 
         if tab == .closing {
@@ -1011,6 +1012,79 @@ struct ProjectsView: View {
             return
         }
         Task { await model.complete(package.id, evidence: package.evidence) }
+    }
+
+    /// The RACI as a table (§19.9, P10.9).
+    ///
+    /// The editor above is per package, and the questions this table exists
+    /// for are questions across rows: who is responsible for everything, who is
+    /// on the project and carries nothing, which package is accountable to
+    /// somebody and assigned to nobody. None of them can be seen one package
+    /// at a time.
+    @ViewBuilder
+    private func raciTableBox() -> some View {
+        let matrix = RACIMatrix.build(model.wbs)
+        if !matrix.rows.isEmpty && !matrix.actors.isEmpty {
+            GroupBox("ตาราง RACI ทั้งโครงการ") {
+                ScrollView(.horizontal) {
+                    Grid(alignment: .leading, horizontalSpacing: Space.box,
+                         verticalSpacing: Space.tight) {
+                        GridRow {
+                            Text("ใบงาน").font(.caption.weight(.semibold))
+                            ForEach(Array(matrix.actors.enumerated()), id: \.offset) { _, actor in
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Text(actor.label).font(.caption.weight(.semibold))
+                                    // The bottleneck, counted rather than
+                                    // squinted at down a column.
+                                    Text("R×\(matrix.responsibleCount(for: actor))")
+                                        .font(.caption2).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        Divider()
+                        ForEach(matrix.rows) { row in
+                            GridRow {
+                                HStack(spacing: Space.tight) {
+                                    Text(row.title).font(.callout).lineLimit(1)
+                                    if row.isUnassigned {
+                                        Text("ไม่มีคนทำ").font(.caption2)
+                                            .foregroundStyle(.orange)
+                                    }
+                                }
+                                ForEach(Array(row.cells.enumerated()), id: \.offset) { _, letters in
+                                    // Every letter that applies, not the
+                                    // strongest one: somebody who is both A
+                                    // and C on a package is what a reader of
+                                    // this table is looking for.
+                                    Text(letters.map(\.rawValue).joined(separator: ""))
+                                        .font(.system(.caption, design: .monospaced))
+                                        .foregroundStyle(letters.contains(.accountable)
+                                                         ? Color.primary : .secondary)
+                                }
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel(spokenRow(row, actors: matrix.actors))
+                        }
+                    }
+                    .padding(.vertical, Space.tight)
+                }
+                if !matrix.uninvolved.isEmpty {
+                    Text("อยู่ในโครงการแต่ไม่ได้ถือตัวอักษรไหนเลย: "
+                         + matrix.uninvolved.map(\.label).joined(separator: ", "))
+                        .font(.caption2).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    /// A grid read left to right by a screen reader is a list of letters, so
+    /// the row is spoken as sentences instead.
+    private func spokenRow(_ row: RACIMatrix.Row, actors: [RACIActor]) -> String {
+        let parts = zip(actors, row.cells).compactMap { actor, letters -> String? in
+            letters.isEmpty ? nil : "\(actor.label) \(letters.map(\.rawValue).joined(separator: " "))"
+        }
+        return "\(row.title): " + (parts.isEmpty ? "ยังไม่ได้กำหนดใคร" : parts.joined(separator: " · "))
     }
 
     /// §19.9 — one accountable per package, and the screen cannot express two.
