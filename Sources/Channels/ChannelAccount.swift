@@ -111,7 +111,13 @@ public struct ChannelAccount: Sendable, Codable, Equatable, Identifiable {
         // become ready by having neither: `isLocal` is an exemption from the
         // token *and* the allow-list together, and only for a sender that is
         // already on this machine.
-        return platform.isLocal || (token != nil && !allowedChats.isEmpty)
+        //
+        // `has`, not `token`: this runs while the app is starting, and reading
+        // the *value* out of the Keychain is the call macOS holds until a
+        // person approves it — which froze boot at 0% CPU with a spinner that
+        // could not say what it was waiting for. Whether a token exists is a
+        // question that cannot prompt, and it is the question being asked.
+        return platform.isLocal || (SecretStore.has(tokenVariable) && !allowedChats.isEmpty)
     }
 
     /// Why this account is not running, in the words the screen shows.
