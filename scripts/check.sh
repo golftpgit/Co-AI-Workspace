@@ -1024,6 +1024,19 @@ else
   fail "r_eval can install packages without the always-ask tool (§5.5, P14.4)"
 fi
 
+# §11.4 — a correction to the graph survives the next ingest.
+#
+# Deleting an edge without recording the rejection works perfectly until the
+# document is read again, at which point the same arrow comes back and the
+# person's correction is undone by an ingest they never saw. The filter has to
+# live in `save`, because that is the one path every extraction goes through.
+if grep -A 4 "public func save(_ relations" Sources/Persistence/RelationStore.swift \
+   | grep -q "rejected"; then
+  ok "a rejected graph edge is not written back by the next extraction"
+else
+  fail "re-ingesting a document resurrects edges a person deleted (§11.4)"
+fi
+
 # P6.7 / §12.4 — a document's type is declared, never inferred.
 #
 # `doc_type: proposal` is what turns a document into an analysis plan. The

@@ -37,8 +37,15 @@ public actor RelationStore {
         self.client = client
     }
 
+    /// Saves what the extractor read, minus anything a person has already
+    /// rejected (§11.4).
+    ///
+    /// The filter is here rather than at the call site because re-ingesting a
+    /// document is the moment a correction gets undone, and every path that
+    /// writes relations goes through this one.
     public func save(_ relations: [StoredRelation], scope: Scope) async throws {
-        for relation in relations {
+        let rejected = try await rejections()
+        for relation in relations where !rejected.contains(relation.id) {
             var content = ContentBuilder()
             content.setString("uid", relation.id)
             content.setString("subject", relation.subject)
@@ -72,6 +79,31 @@ public actor RelationStore {
             return StoredRelation(subject: subject, predicate: predicate, object: object,
                                   chunkID: chunkID, documentID: documentID)
         } ?? []
+    }
+
+    /// Deletes one edge, and records that a person deleted it.
+    ///
+    /// **Deleting a relation deletes a reading, not the sentence.** The chunk
+    /// stays exactly where it was; what goes is the model's claim about what
+    /// it connects. The rejection is what makes the correction stick: without
+    /// it, re-reading the document puts the same arrow back and the person's
+    /// work is undone by an ingest they did not know had happened.
+    public func reject(_ relation: StoredRelation) async throws {
+        try await client.exec("DELETE relation WHERE uid = type::string($uid)",
+                              vars: ["uid": relation.id])
+        var content = ContentBuilder()
+        content.setString("uid", relation.id)
+        content.raw("rejected_at", "time::now()")
+        try await client.exec(
+            "UPSERT relation_rejection CONTENT \(content.content) WHERE uid = type::string($uid)",
+            vars: content.vars)
+    }
+
+    /// The edges a person has thrown out, by id.
+    public func rejections() async throws -> Set<String> {
+        let rows = try await client.query("SELECT uid FROM relation_rejection")
+            .first?.rows ?? []
+        return Set(rows.compactMap { $0["uid"]?.stringValue })
     }
 
     /// Called when a document leaves the knowledge base. An edge that outlives

@@ -242,6 +242,20 @@ private struct EdgeSourceSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack {
+                // Disagreeing with the reading is the point of this sheet, so
+                // the way to do it is in it (§11.4). Destructive styling
+                // because it removes something a person will not see again —
+                // but what it removes is a claim, not the passage above it.
+                if let stored = model.relation(matching: edge) {
+                    Button("ไม่ใช่ความสัมพันธ์นี้ — ลบออก", role: .destructive) {
+                        Task {
+                            await model.rejectRelation(stored)
+                            dismiss()
+                        }
+                    }
+                    .accessibilityHint("ลบเฉพาะเส้นความสัมพันธ์ ข้อความต้นทางยังอยู่ "
+                                       + "และการอ่านเอกสารซ้ำจะไม่สร้างเส้นนี้ขึ้นมาอีก")
+                }
                 Spacer()
                 Button("ปิด") { dismiss() }
             }
