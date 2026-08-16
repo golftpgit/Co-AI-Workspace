@@ -190,8 +190,12 @@ private struct NotebookPane: View {
             Divider()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(notebook.cells) { cell in
-                        CellView(model: model, cell: cell)
+                    ForEach(Array(notebook.cells.enumerated()), id: \.element.id) { index, cell in
+                        // The number is for the screen reader, not the eye:
+                        // three buttons all called "รันเซลล์นี้" are the same
+                        // button to somebody who cannot see which cell they
+                        // are next to (measured, E.30).
+                        CellView(number: index + 1, model: model, cell: cell)
                     }
                     HStack {
                         Button { model.addCell(kind: .sql) } label: {
@@ -274,6 +278,8 @@ private struct KernelBadge: View {
 }
 
 private struct CellView: View {
+    /// Where this cell sits in the notebook, 1-based. Only ever spoken.
+    let number: Int
     @Bindable var model: AnalysisViewModel
     let cell: NotebookCell
 
@@ -293,6 +299,7 @@ private struct CellView: View {
                     .labelsHidden()
                     .pickerStyle(.segmented)
                     .frame(width: 140)
+                    .accessibilityLabel("ชนิดของเซลล์ที่ \(number)")
 
                 // What this cell would do, before it is run. The same
                 // assessment the runner will enforce — not a second opinion.
@@ -312,12 +319,12 @@ private struct CellView: View {
                     Button { Task { await model.run(cell.id) } } label: {
                         Image(systemName: "play.fill")
                     }
-                    .accessibilityLabel("รันเซลล์นี้")
+                    .accessibilityLabel("รันเซลล์ที่ \(number)")
                 }
                 Button(role: .destructive) { model.removeCell(cell.id) } label: {
                     Image(systemName: "trash")
                 }
-                .accessibilityLabel("ลบเซลล์นี้")
+                .accessibilityLabel("ลบเซลล์ที่ \(number)")
             }
             .buttonStyle(.borderless)
 

@@ -72,6 +72,35 @@ struct ScreenCheck {
                       + (element.centre.map { "\(Int($0.x)),\(Int($0.y))" } ?? "—")
                       + " — inside: \(where_)")
             }
+            // What VoiceOver would actually say, judged as speech rather than
+            // as presence. A tree where everything has a name can still be a
+            // tree nobody can navigate: two buttons called the same thing are
+            // ambiguous the moment you cannot see which is which, and a label
+            // that is three sentences long is read out in full, every time,
+            // before the person can act on it.
+            print("\nhow it would sound:")
+            let named = snapshot.root.flattened.filter {
+                Self.interactive.contains($0.role) && !$0.label.isEmpty
+            }
+            let tooLong = named.filter { $0.label.count > 80 }
+            print("  labels over 80 characters: \(tooLong.count)")
+            for element in tooLong.prefix(5) {
+                print("    [\(element.role)] \(element.label.prefix(70))…")
+            }
+            // Options inside a named control are not ambiguous: a screen
+            // reader announces the parent first, so "ชนิดของเซลล์ที่ 2, Python"
+            // tells you which Python. Counting them as duplicates would report
+            // every segmented picker in the app forever (measured, E.30).
+            var counts: [String: Int] = [:]
+            for element in named where !Self.hasNamedParent(element, in: snapshot.root) {
+                counts[element.label, default: 0] += 1
+            }
+            let duplicated = counts.filter { $0.value > 1 }
+            print("  controls sharing a name: \(duplicated.count)")
+            for (label, count) in duplicated.sorted(by: { $0.key < $1.key }).prefix(5) {
+                print("    ×\(count) “\(label)”")
+            }
+
             // §14.4's other half: everything having a name says nothing about
             // the order somebody reaches those names in (P8.7). Answered by
             // moving focus and looking, which is the only way it can be.
@@ -123,6 +152,22 @@ struct ScreenCheck {
         let up = CGEvent(keyboardEventSource: source, virtualKey: 0x30, keyDown: false)
         down?.post(tap: .cghidEventTap)
         up?.post(tap: .cghidEventTap)
+    }
+
+    /// Whether the element sits inside a control that has its own name.
+    static func hasNamedParent(_ target: ScreenElement, in root: ScreenElement) -> Bool {
+        func walk(_ element: ScreenElement, nearestName: String?) -> Bool? {
+            if element.centre == target.centre && element.role == target.role
+                && element.label == target.label {
+                return nearestName != nil
+            }
+            let name = element.label.isEmpty ? nearestName : element.label
+            for child in element.children {
+                if let found = walk(child, nearestName: name) { return found }
+            }
+            return nil
+        }
+        return walk(root, nearestName: nil) ?? false
     }
 
     /// Whether this is furniture AppKit drew rather than a control this app
