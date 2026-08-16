@@ -339,7 +339,11 @@ let package = Package(
         .testTarget(name: "CoreEngineTests", dependencies: ["CoreEngine", "Knowledge"]),
         // The regression net over decisions no model is involved in (P9.1).
         .testTarget(name: "GoldenTaskTests",
-                    dependencies: ["CoreEngine", "LLMProviders", "ToolBelt", "Analysis"]),
+                    dependencies: ["CoreEngine", "LLMProviders", "ToolBelt", "Analysis"],
+                    // Read by path, not bundled: the point of these files is
+                    // that they are reviewed as text in a diff, and a resource
+                    // copied into a bundle is a file nobody opens.
+                    exclude: ["routing.golden", "risk.golden"]),
         .testTarget(name: "KnowledgeTests", dependencies: ["Knowledge"]),
         .testTarget(name: "WebSearchTests", dependencies: ["WebSearch", "Knowledge"]),
         .testTarget(name: "InstrumentsTests", dependencies: ["Instruments", "StatKit"]),
