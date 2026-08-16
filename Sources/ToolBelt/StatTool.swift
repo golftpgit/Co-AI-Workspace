@@ -39,7 +39,8 @@ public struct StatTestTool: AgentTool {
                    "mann_whitney", "wilcoxon", "kruskal_wallis", "fisher_exact",
                    "linear_regression", "logistic_regression",
                    "risk_ratio", "odds_ratio", "risk_difference", "nnt",
-                   "diagnostic_accuracy", "survival", "count_regression", "clustered", "meta_analysis"],
+                   "diagnostic_accuracy", "survival", "count_regression", "clustered", "meta_analysis",
+                   "mcnemar", "chi_square_trend", "correlation", "spearman", "kappa"],
           "description": "ชนิดการทดสอบ"
         },
         "groups": {
@@ -144,6 +145,23 @@ public struct StatTestTool: AgentTool {
                 result = try StatGate.chiSquare(try table())
             case "fisher_exact":
                 result = try StatGate.fisherExact(try table())
+            // Bland ch. 13, 11–12 and 20 — the tests the gate could not offer.
+            case "mcnemar":
+                result = try StatGate.mcNemar(try table())
+            case "chi_square_trend":
+                let rows = try table()
+                // Each row is one group: cases, then the rest of that group.
+                result = try StatGate.chiSquareTrend(rows.map { row in
+                    (cases: row.first ?? 0, total: row.reduce(0, +))
+                })
+            case "correlation", "spearman":
+                let (a, b) = try pair()
+                result = try StatGate.correlation(a, b,
+                                                  kind: test == "spearman" ? .spearman : .pearson)
+            case "kappa":
+                let (a, b) = try pair()
+                result = try StatGate.kappa(a.map { Int($0.rounded()) },
+                                            b.map { Int($0.rounded()) })
             case "mann_whitney":
                 let (a, b) = try pair()
                 result = try StatGate.mannWhitney(a, b)
