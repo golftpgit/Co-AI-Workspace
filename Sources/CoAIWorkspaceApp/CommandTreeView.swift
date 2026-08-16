@@ -77,12 +77,12 @@ struct CommandTreeScreen: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
+                    LazyVStack(alignment: .leading, spacing: Space.tight) {
                         ForEach(model.roots) { root in
                             CommandRows(node: root, depth: 0, model: model)
                         }
                     }
-                    .padding(12)
+                    .padding(Space.box)
                 }
             }
         }
@@ -91,7 +91,7 @@ struct CommandTreeScreen: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Space.tight) {
                 Text("สายบังคับบัญชา").font(.headline)
                 // The reconciliation line is the one a person should read, so
                 // it is the one next to the title.
@@ -102,7 +102,7 @@ struct CommandTreeScreen: View {
             Button("อ่านใหม่") { Task { await model.refresh() } }
                 .accessibilityLabel("อ่านสถานะสายบังคับบัญชาใหม่")
         }
-        .padding(12)
+        .padding(Space.box)
     }
 }
 
@@ -120,7 +120,7 @@ private struct CommandRows: View {
     private var isCollapsed: Bool { model.collapsed.contains(node.id.rawValue) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Space.tight) {
             row
             if !isCollapsed {
                 ForEach(node.children) { child in
@@ -131,10 +131,10 @@ private struct CommandRows: View {
     }
 
     private var row: some View {
-        HStack(spacing: 8) {
-            Color.clear.frame(width: CGFloat(depth) * 16, height: 1)
+        HStack(spacing: Space.row) {
+            Color.clear.frame(width: CGFloat(depth) * Space.section, height: 1)
             if node.children.isEmpty {
-                Color.clear.frame(width: 16, height: 1)
+                Color.clear.frame(width: Space.section, height: 1)
             } else {
                 Button {
                     if isCollapsed { model.collapsed.remove(node.id.rawValue) }
@@ -160,7 +160,7 @@ private struct CommandRows: View {
                     .font(.caption).monospacedDigit().foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, Space.tight)
         // One row, one spoken sentence, in the words `CommandTree` chose: the
         // view must not invent its own vocabulary for a state, or the screen
         // and the log describe the same run differently.
