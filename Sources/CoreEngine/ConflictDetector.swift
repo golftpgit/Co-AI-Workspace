@@ -231,7 +231,13 @@ public struct ConflictDetector: Sendable {
                 else { continue }
 
                 filed.append(ledger.record(
-                    question: finding.question.isEmpty ? question : finding.question,
+                    // U12 — a card is titled by what the two passages disagree
+                    // about, not by what somebody typed into the search box.
+                    // The model's question is used when it is about them, and
+                    // replaced by the two claims themselves when it is not.
+                    question: ConflictHeadline.headline(
+                        candidate: finding.question.isEmpty ? question : finding.question,
+                        a: a.chunk.text, b: b.chunk.text),
                     a: ConflictSide(text: a.chunk.text, provenance: a.provenance),
                     b: ConflictSide(text: b.chunk.text, provenance: b.provenance),
                     scope: scope))

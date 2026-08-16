@@ -227,4 +227,14 @@ public struct StoredConflict: Sendable, Equatable, Identifiable {
     public let decision: ConflictDecision?
 
     public var isOpen: Bool { decision == nil }
+
+    /// What to put at the top of the card (U12).
+    ///
+    /// Computed rather than stored so rows filed before the rule existed are
+    /// repaired on the way to the screen: a stored title that turned out to be
+    /// the user's prompt does not become permanent because it was written down
+    /// once.
+    public var headline: String {
+        ConflictHeadline.headline(candidate: question, a: a.text, b: b.text)
+    }
 }

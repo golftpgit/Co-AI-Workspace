@@ -103,7 +103,7 @@ private struct ConflictCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(conflict.question).font(.title3.weight(.semibold))
+                Text(conflict.headline).font(.title3.weight(.semibold))
                 Spacer()
                 if let decision = conflict.decision {
                     Label(decision.decidedByHuman ? "คุณตัดสินแล้ว" : "ระบบตัดสินให้",
@@ -134,7 +134,7 @@ private struct ConflictCard: View {
 
                 Button("ตัดสินข้อขัดแย้งนี้", action: decide)
                     .buttonStyle(.borderedProminent)
-                    .accessibilityLabel("เปิดหน้าต่างตัดสินข้อขัดแย้ง \(conflict.question)")
+                    .accessibilityLabel("เปิดหน้าต่างตัดสินข้อขัดแย้ง \(conflict.headline)")
             }
         }
         .padding(16)
