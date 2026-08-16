@@ -79,6 +79,11 @@ public struct DefaultRiskScorer: RiskScoring {
         "pull_db_table": .medium,
         "ingest_url": .medium,
         "write_skill": .medium,
+        // Writes to the project's permanent record (§19.11). A wrong entry is
+        // editable, so not high — but a register full of noise is a register
+        // nobody reads, so not low either.
+        "raise_risk": .medium,
+        "propose_change": .medium,
 
         "run_shell": .high,
         "install_package": .high,

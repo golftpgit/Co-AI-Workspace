@@ -181,16 +181,19 @@ public enum SpecialistTools {
         // `ingest_url` belongs to the role that finds sources: a page worth
         // citing later has to be *in* the knowledge base, and `fetch_page`
         // only reads it once.
-        .researcher: ["kb_search", "web_search", "fetch_page", "ingest_url"],
+        // `raise_risk` is on every role's list on purpose: whoever notices is
+        // whoever files it, and a register only a project manager can write to
+        // is a register that fills up after the fact (§19.11).
+        .researcher: ["kb_search", "web_search", "fetch_page", "ingest_url", "raise_risk"],
         // The three analysis tools were missing here until 2026-08-12, which
         // meant the specialist whose entire job is analysis had to reach the
         // store through `run_shell` or not at all.
         .analyst: ["kb_search", "run_shell", "run_stat_test",
-                   "analysis_query", "analysis_execute", "pull_db_table"],
-        .engineer: ["run_shell", "kb_search"],
+                   "analysis_query", "analysis_execute", "pull_db_table", "raise_risk"],
+        .engineer: ["run_shell", "kb_search", "raise_risk"],
         // A Writer that cannot write a file is a Writer that hands back prose
         // for somebody else to paste (§14.1).
-        .writer: ["kb_search", "save_document"],
+        .writer: ["kb_search", "save_document", "raise_risk"],
     ]
 
     static func forRole(_ role: Role) -> Set<String> { byRole[role] ?? [] }

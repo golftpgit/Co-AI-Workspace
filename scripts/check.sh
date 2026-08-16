@@ -1024,6 +1024,28 @@ else
   fail "r_eval can install packages without the always-ask tool (§5.5, P14.4)"
 fi
 
+# P10.8 — an agent proposes; a person decides.
+#
+# Comments are stripped before the second half: the file explains at length
+# why it cannot decide a change, and a rule that cannot tell the explanation
+# from the call would punish writing the explanation.
+#
+# The rule is kept by there being no way to say otherwise: origin comes from
+# the tool context, and no tool reaches `decided(approve:by:)`. Both halves are
+# one edit away from being lost.
+DECIDES=$(grep -vE "^\s*(//|\*)" Sources/ToolBelt/RegisterTools.swift \
+  | grep -c "decided(approve" || true)
+if grep -q "\.agent(context.role" Sources/ToolBelt/RegisterTools.swift && [ "$DECIDES" = "0" ]; then
+  ok "the register tools file entries as the agent, and cannot decide one"
+else
+  fail "a tool can decide a change request, or claim to be a person (§19.11, P10.8)"
+fi
+if grep -q "status: .proposed" Sources/ToolBelt/RegisterTools.swift; then
+  ok "a change an agent asks for waits for a person"
+else
+  fail "propose_change no longer files its request as proposed (P10.8)"
+fi
+
 # P10.9 / R9 — a projection never invents a date.
 #
 # The failure is a default: one `?? 3600` in the forward pass and every leaf

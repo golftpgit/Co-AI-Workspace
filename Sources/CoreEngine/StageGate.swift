@@ -49,6 +49,11 @@ public struct StageGate: Sendable {
         "write_skill": .authoring,
 
         "write_file": .mutating,
+        // §19.4 — a risk or a change request is a thing the project records
+        // about itself, and it is filed in every stage: noticing a risk during
+        // closing is exactly when it matters most.
+        "raise_risk": .authoring,
+        "propose_change": .authoring,
         "analysis_execute": .mutating,
         "pull_db_table": .mutating,
         "run_shell": .mutating,
