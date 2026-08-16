@@ -74,12 +74,23 @@ public actor DiscordChannel: RunnableChannel {
     private let transport: any HTTPTransport
     private let answering: (any ApprovalAnswering)?
     private let gatewayURL: URL
+    /// How long to wait before the first reconnect. A second in the app;
+    /// injected so a test can prove the loop reconnects without waiting a
+    /// second for it, which is the sort of sleep that turns a suite flaky on a
+    /// busy machine.
+    private let firstReconnectDelay: Duration
 
     private var handler: (any InboundHandling)?
     private var readTask: Task<Void, Never>?
     private var heartbeatTask: Task<Void, Never>?
-    /// Discord's message sequence, echoed back with every heartbeat.
+    /// Discord's message sequence, echoed back with every heartbeat **and**
+    /// with a resume — it is how the gateway knows what we already saw.
     private var sequence: Int?
+    /// What a resume needs: the session Discord opened and where it says to
+    /// reconnect. Both arrive in READY and both are gone once the gateway
+    /// invalidates the session (op 9).
+    private var sessionID: String?
+    private var resumeURL: String?
     /// Our own application id, learned from READY. Until it arrives, messages
     /// are matched against the bot flag alone.
     private var selfID: String?
@@ -93,7 +104,9 @@ public actor DiscordChannel: RunnableChannel {
                 socket: any GatewaySocket = URLSessionGatewaySocket(),
                 transport: any HTTPTransport = URLSessionTransport(),
                 answering: (any ApprovalAnswering)? = nil,
-                gatewayURL: URL = URL(string: "wss://gateway.discord.gg/?v=10&encoding=json")!) {
+                gatewayURL: URL = URL(string: "wss://gateway.discord.gg/?v=10&encoding=json")!,
+                firstReconnectDelay: Duration = .seconds(1)) {
+        self.firstReconnectDelay = firstReconnectDelay
         self.id = ChannelID("discord:\(account.id)")
         self.account = account
         self.socket = socket
@@ -111,16 +124,51 @@ public actor DiscordChannel: RunnableChannel {
             return
         }
         self.handler = handler
-        do {
-            try await socket.connect(to: gatewayURL)
-        } catch {
-            log.error("discord gateway: \(error)")
-            return
+        readTask = Task { [weak self] in await self?.stayConnected() }
+    }
+
+    /// Reconnects until somebody stops it.
+    ///
+    /// The socket dropping is ordinary — a laptop lid, a router, Discord
+    /// moving us (op 7). What was not ordinary is what happened next: the read
+    /// loop ended and nothing reconnected, so a bot went quiet until the app
+    /// was restarted, and the person on the other end saw a bot that had
+    /// stopped answering rather than a bot that was gone.
+    ///
+    /// Backoff, because a gateway that is refusing us is a gateway a tight
+    /// loop makes angrier: Discord rate-limits identifies, and the punishment
+    /// for hammering is a longer ban than the outage.
+    private func stayConnected() async {
+        var delay = firstReconnectDelay
+        let ceiling = Duration.seconds(60)
+
+        while !Task.isCancelled {
+            // A resume goes to the URL Discord handed out for this session;
+            // a fresh start goes to the front door.
+            let url = reconnectURL.flatMap(URL.init(string:)) ?? gatewayURL
+            do {
+                try await socket.connect(to: url)
+                delay = firstReconnectDelay
+            } catch {
+                log.error("discord gateway: \(redacted("\(error)", token: self.account.token), privacy: .public)")
+                try? await Task.sleep(for: delay)
+                delay = min(delay * 2, ceiling)
+                continue
+            }
+
+            await readLoop()
+            guard !Task.isCancelled else { return }
+            // The read loop only ends when the socket does. Sleep before
+            // trying again so a gateway that is rejecting us is not asked
+            // sixty times a second.
+            try? await Task.sleep(for: delay)
+            delay = min(delay * 2, ceiling)
         }
-        readTask = Task { [weak self] in await self?.readLoop() }
     }
 
     public func stop() async {
+        // Cancelled first, so the reconnect loop sees the cancellation rather
+        // than the closed socket and tries to come back.
         readTask?.cancel(); readTask = nil
         heartbeatTask?.cancel(); heartbeatTask = nil
         await socket.close()
@@ -158,13 +206,32 @@ public actor DiscordChannel: RunnableChannel {
         case 10:                                        // Hello
             let interval = ((payload["d"] as? [String: Any])?["heartbeat_interval"] as? NSNumber)?
                 .doubleValue ?? 45_000
-            await identify()
+            // Resume when there is a session to resume, identify when there is
+            // not. A fresh identify after a dropped socket is not a slower
+            // reconnect — it is a reconnect that **loses the messages sent
+            // while we were away**, because only a resume makes the gateway
+            // replay them.
+            if sessionID != nil {
+                await resume()
+            } else {
+                await identify()
+            }
             startHeartbeat(milliseconds: interval)
         case 1:                                         // Discord asked for one now
             await beat()
         case 0:                                         // Dispatch
             await dispatch(payload)
+        case 7:                                         // Reconnect, please
+            // Discord asking us to move. The session stays valid, so the next
+            // Hello resumes rather than starting again.
+            log.info("discord asked for a reconnect — will resume")
         case 9:                                         // Invalid session
+            // The session cannot be resumed, whatever we have stored. Keeping
+            // it would mean resuming onto a session Discord has thrown away,
+            // which is answered with another op 9 — a loop that never reaches
+            // an identify.
+            sessionID = nil
+            resumeURL = nil
             log.error("discord rejected the session — check the bot token and its intents")
         default:
             break
@@ -184,6 +251,29 @@ public actor DiscordChannel: RunnableChannel {
         ]
         try? await socket.send(String(decoding: JSONHelp.encode(payload), as: UTF8.self))
     }
+
+    /// Picks the session back up (op 6) instead of starting a new one.
+    ///
+    /// The sequence number is the whole point: it tells the gateway the last
+    /// event we actually saw, and everything after it is replayed. Sending
+    /// this with a stale or missing sequence would ask for a replay from the
+    /// wrong place, so it is only sent when there is a session *and* a
+    /// sequence to go with it.
+    private func resume() async {
+        guard let token = account.token, let sessionID, let sequence else {
+            await identify()
+            return
+        }
+        let payload: [String: Any] = [
+            "op": 6,
+            "d": ["token": token, "session_id": sessionID, "seq": sequence],
+        ]
+        try? await socket.send(String(decoding: JSONHelp.encode(payload), as: UTF8.self))
+    }
+
+    /// Where to reconnect. Discord hands out a per-session URL in READY and
+    /// asks that a resume goes there rather than to the front door.
+    var reconnectURL: String? { sessionID == nil ? nil : resumeURL }
 
     private func startHeartbeat(milliseconds: Double) {
         heartbeatTask?.cancel()
@@ -208,6 +298,13 @@ public actor DiscordChannel: RunnableChannel {
         switch event {
         case "READY":
             selfID = ((data["user"] as? [String: Any])?["id"] as? String)
+            sessionID = data["session_id"] as? String
+            resumeURL = data["resume_gateway_url"] as? String
+        case "RESUMED":
+            // Everything sent while the socket was down has just been
+            // replayed. Said out loud because a silent resume and a silent
+            // reconnect-that-lost-messages look identical from outside.
+            log.info("discord session resumed — missed messages replayed")
         case "MESSAGE_CREATE":
             await handleMessage(data)
         case "INTERACTION_CREATE":

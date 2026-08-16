@@ -18,10 +18,27 @@ private actor FakeSocket: GatewaySocket {
     private(set) var sent: [String] = []
     private var inbox: [String]
     private var connected = false
+    /// What the reconnect loop asked for, in order. A resume is supposed to go
+    /// to the URL Discord handed out for the session rather than the front
+    /// door, and that is only checkable here.
+    private(set) var connections: [URL] = []
+    /// Frames to hand out after the socket has been reconnected — how a
+    /// dropped connection is written down in a test.
+    private var afterReconnect: [String]
 
-    init(frames: [String] = []) { self.inbox = frames }
+    init(frames: [String] = [], afterReconnect: [String] = []) {
+        self.inbox = frames
+        self.afterReconnect = afterReconnect
+    }
 
-    func connect(to url: URL) async throws { connected = true }
+    func connect(to url: URL) async throws {
+        connected = true
+        connections.append(url)
+        if connections.count > 1 {
+            inbox = afterReconnect
+            afterReconnect = []
+        }
+    }
     func send(_ text: String) async throws { sent.append(text) }
 
     func receive() async throws -> String? {
@@ -34,6 +51,8 @@ private actor FakeSocket: GatewaySocket {
     }
 
     func close() { connected = false }
+
+    func sentFrames() -> [String] { sent }
 
     /// Returned as bytes, not as a dictionary: `[String: Any]` is not
     /// `Sendable` and cannot leave an actor (App. C).
@@ -331,5 +350,87 @@ struct LINEChannelTests {
         """
         #expect(await line.handle(body: Data(body.utf8), signature: signed(body)) == 200)
         #expect(await sink.messages.first?.chat == "G-team")
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// P7.4's outstanding item — the socket dropping ended the bot.
+//
+// The read loop stopped when the socket did and nothing reconnected, so a
+// laptop lid or a router meant a bot that had quietly stopped answering until
+// somebody restarted the app. And reconnecting is not enough on its own: only
+// a resume makes the gateway replay what was sent while we were away.
+// ─────────────────────────────────────────────────────────────
+@Suite("Discord reconnects and resumes", .serialized)
+struct DiscordResumeTests {
+
+    @Test("a dropped socket is reconnected rather than ending the bot")
+    func reconnects() async throws {
+        let socket = FakeSocket(frames: [#"{"op":10,"d":{"heartbeat_interval":41250}}"#],
+                                afterReconnect: [#"{"op":10,"d":{"heartbeat_interval":41250}}"#])
+        let channel = DiscordChannel(account: discordAccount(), socket: socket,
+                                     firstReconnectDelay: .milliseconds(20))
+        await channel.start(handler: Sink())
+        try await Task.sleep(for: .milliseconds(400))
+        await channel.stop()
+
+        #expect(await socket.connections.count >= 2, "the bot went quiet when the socket dropped")
+    }
+
+    /// The half that matters: identify starts a new session and loses whatever
+    /// arrived while the socket was down; resume replays it.
+    @Test("after a session exists, the gateway is resumed and not re-identified")
+    func resumesWithTheSequence() async throws {
+        let socket = FakeSocket(
+            frames: [
+                #"{"op":10,"d":{"heartbeat_interval":41250}}"#,
+                #"{"op":0,"s":7,"t":"READY","d":{"user":{"id":"BOT"},"session_id":"S1","resume_gateway_url":"wss://resume.discord.gg"}}"#,
+            ],
+            afterReconnect: [#"{"op":10,"d":{"heartbeat_interval":41250}}"#])
+        let channel = DiscordChannel(account: discordAccount(), socket: socket,
+                                     firstReconnectDelay: .milliseconds(20))
+        await channel.start(handler: Sink())
+        try await Task.sleep(for: .milliseconds(400))
+        await channel.stop()
+
+        let frames = await socket.sentFrames()
+        let resume = frames.compactMap { decoded(Data($0.utf8)) }
+            .first { ($0["op"] as? NSNumber)?.intValue == 6 }
+        let payload = try #require(resume?["d"] as? [String: Any])
+        #expect(payload["session_id"] as? String == "S1")
+        // The sequence is the whole point: it says what we already saw, and
+        // everything after it is replayed.
+        #expect((payload["seq"] as? NSNumber)?.intValue == 7)
+
+        // And a resume goes to the URL the session was given, not the front door.
+        let second = await socket.connections
+        #expect(second.count >= 2)
+        #expect(second[1].absoluteString.contains("resume.discord.gg"))
+    }
+
+    /// Op 9 means the session cannot be resumed. Keeping it would mean
+    /// resuming onto a session Discord has thrown away, which is answered with
+    /// another op 9 — a loop that never reaches an identify.
+    @Test("an invalidated session goes back to identifying")
+    func invalidSessionForgetsIt() async throws {
+        let socket = FakeSocket(
+            frames: [
+                #"{"op":10,"d":{"heartbeat_interval":41250}}"#,
+                #"{"op":0,"s":3,"t":"READY","d":{"user":{"id":"BOT"},"session_id":"S1"}}"#,
+                #"{"op":9,"d":false}"#,
+            ],
+            afterReconnect: [#"{"op":10,"d":{"heartbeat_interval":41250}}"#])
+        let channel = DiscordChannel(account: discordAccount(), socket: socket,
+                                     firstReconnectDelay: .milliseconds(20))
+        await channel.start(handler: Sink())
+        try await Task.sleep(for: .milliseconds(400))
+        await channel.stop()
+
+        let ops = await socket.sentFrames().compactMap { decoded(Data($0.utf8))["op"] as? NSNumber }
+            .map(\.intValue)
+        // Two identifies, no resume: the first for the session that was
+        // rejected, the second after reconnecting.
+        #expect(ops.filter { $0 == 2 }.count >= 2)
+        #expect(ops.contains(6) == false)
     }
 }
