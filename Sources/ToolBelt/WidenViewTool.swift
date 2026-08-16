@@ -1,5 +1,6 @@
 import Foundation
 import AgentKit
+import Observability
 import Knowledge
 
 // ─────────────────────────────────────────────────────────────
@@ -57,11 +58,17 @@ public struct WidenViewTool: AgentTool {
     """
 
     private let widenings: ViewWidenings
+    /// Where the record of a widening goes. Optional like every other sink in
+    /// this project: the tool works without observability, it just cannot be
+    /// asked afterwards what anybody was allowed to see.
+    private let spans: (any SpanSink)?
     private let baseView: @Sendable (Role) -> KnowledgeView
 
     public init(widenings: ViewWidenings,
+                spans: (any SpanSink)? = nil,
                 baseView: @escaping @Sendable (Role) -> KnowledgeView = KnowledgeView.standard(for:)) {
         self.widenings = widenings
+        self.spans = spans
         self.baseView = baseView
     }
 
@@ -99,6 +106,19 @@ public struct WidenViewTool: AgentTool {
 
         await widenings.grant(ViewWidenings.Grant(role: role, reason: reason, view: widened),
                               conversation: conversation)
+
+        // §21.2 / P12.6 — the record a reviewer reads. It goes on a span
+        // rather than into `Evidence`, which is where it was heading and where
+        // it does not fit: `Evidence` requires `passed: Bool`, and "what this
+        // role could see" is not a pass or a fail. Forcing it into one would
+        // produce a flag nobody can read the meaning of.
+        if let spans {
+            var span = Span(name: "view:widened", role: role, scope: context.scope,
+                            status: .succeeded)
+            span.endedAt = Date()
+            span.detail = "\(reason) · \(widened.describedForReview)"
+            await spans.record(span)
+        }
 
         return ToolOutput(text: """
             ขยายมุมมองของบทบาท \(role.rawValue) แล้วสำหรับบทสนทนานี้เท่านั้น

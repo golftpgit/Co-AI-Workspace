@@ -372,7 +372,7 @@ struct Engine: Sendable {
                 // closure above follows.
                 views: { [declaredViews] role in declaredViews.view(for: role) },
                 widenings: viewWidenings),
-            WidenViewTool(widenings: viewWidenings,
+            WidenViewTool(widenings: viewWidenings, spans: spans,
                           baseView: { [declaredViews] role in
                               declaredViews.view(for: role) ?? .standard(for: role)
                           }),
