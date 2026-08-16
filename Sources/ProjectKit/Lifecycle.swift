@@ -137,6 +137,32 @@ public struct ClosingFacts: Sendable, Equatable {
     }
 }
 
+/// What G2 needs to know about a study before its plan is agreed (§12.6.1,
+/// P19.6).
+///
+/// Its own type rather than two more arguments, and defaulting to "not a study
+/// that collects from people": the gate must be vacuous for the projects it
+/// does not apply to, or it becomes a field people fill in with anything.
+public struct StudyFacts: Sendable, Equatable {
+    public var collectsPrimaryData: Bool
+    /// The size and what it assumed. Both together — a size with no assumption
+    /// is a number nobody, least of all an ethics committee, can check.
+    public var plannedSampleSize: Int?
+    public var sampleSizeAssumption: String
+
+    public var hasPlannedSampleSize: Bool {
+        (plannedSampleSize ?? 0) > 0 && !sampleSizeAssumption.isEmpty
+    }
+
+    public init(collectsPrimaryData: Bool = false,
+                plannedSampleSize: Int? = nil,
+                sampleSizeAssumption: String = "") {
+        self.collectsPrimaryData = collectsPrimaryData
+        self.plannedSampleSize = plannedSampleSize
+        self.sampleSizeAssumption = sampleSizeAssumption
+    }
+}
+
 /// The two facts G4 needs from stores ProjectKit does not own (§19.12
 /// conditions 4 and 5).
 ///
@@ -176,7 +202,8 @@ public enum ProjectLifecycle {
                                 undecidedChanges: Int = 0,
                                 closing: ClosingFacts = ClosingFacts(),
                                 typeGates: [ProjectTypeGate] = [],
-                                typeFacts: TypeGateFacts = TypeGateFacts()) -> GateEvaluation? {
+                                typeFacts: TypeGateFacts = TypeGateFacts(),
+                                study: StudyFacts = StudyFacts()) -> GateEvaluation? {
         guard let to = next(after: project.stage), let gate = project.stage.exitGate else {
             return nil
         }
@@ -238,6 +265,21 @@ public enum ProjectLifecycle {
                 // caught above, scope that nothing covers is caught here.
                 GateCondition(text: "ทุกข้อในขอบเขต 'ทำ' มีใบงานรองรับ",
                               satisfied: uncovered.isEmpty),
+                // §12.6.1 / P19.6 — asked here because here is the last moment
+                // it can change anything. A study too small to see the effect
+                // it was designed around does not produce "no effect"; it
+                // produces nothing, at the same cost in people's time and
+                // consent. Vacuous for projects that collect no primary data:
+                // a gate that asks everybody produces a number everybody types
+                // past.
+                // Vacuous rather than satisfied for a project that collects
+                // nothing from people: it does not block, and it must not
+                // render as a green tick that means "checked and fine" — the
+                // distinction this type was given a third state for.
+                GateCondition(vacuousWhenEmpty: !study.collectsPrimaryData,
+                              text: "งานที่เก็บข้อมูลจากคน ระบุขนาดตัวอย่างพร้อมสมมติฐานที่ใช้คำนวณ",
+                              satisfied: !study.collectsPrimaryData
+                                  || study.hasPlannedSampleSize),
             ]
         case .execution:
             // The type's own gates are checked here, last, so the standard three

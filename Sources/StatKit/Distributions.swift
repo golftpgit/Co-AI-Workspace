@@ -62,6 +62,28 @@ public enum Distributions {
     }
 
     /// Upper-tail p-value for an F statistic.
+    /// The two-sided t quantile — the multiplier an interval is built from.
+    ///
+    /// By bisection on `tTestPValue`, which is already here and already
+    /// checked: a second series expansion for the inverse would be a second
+    /// place for the same distribution to be slightly wrong. Small studies are
+    /// exactly where this matters, and a normal quantile in their place gives
+    /// intervals that are too tight on the studies whose intervals matter most.
+    public static func tQuantile(_ p: Double, degreesOfFreedom: Double) -> Double {
+        guard p > 0.5, p < 1, degreesOfFreedom > 0 else { return normalQuantile(p) }
+        let target = 2 * (1 - p)          // the two-sided tail this t leaves
+        var low = 0.0, high = 200.0
+        for _ in 0..<200 {
+            let middle = (low + high) / 2
+            if tTestPValue(t: middle, degreesOfFreedom: degreesOfFreedom) > target {
+                low = middle
+            } else {
+                high = middle
+            }
+        }
+        return (low + high) / 2
+    }
+
     public static func fTestPValue(f: Double, d1: Double, d2: Double) -> Double {
         guard f > 0, d1 > 0, d2 > 0 else { return .nan }
         return regularizedIncompleteBeta(d2 / (d2 + d1 * f), d2 / 2, d1 / 2)
