@@ -216,6 +216,15 @@ public struct KnowledgeIndex: Sendable {
             .sorted { $0.title < $1.title }
     }
 
+    /// The passages of one document, in the order they were indexed.
+    ///
+    /// For anything that has to read a document rather than search it — the
+    /// classifier (§11.9) is the first such caller, and it needs the opening
+    /// passages because that is where a paper says what it is about.
+    public func chunks(of documentID: String) -> [IndexedChunk] {
+        chunks.filter { $0.provenance.documentID == documentID }
+    }
+
     /// Exact-duplicate check, scope-independent on purpose: the same passage
     /// filed under two scopes is two rows because they are answerable in
     /// different contexts, but the same passage arriving twice into the same

@@ -493,10 +493,68 @@ public final class KnowledgeViewModel {
         }
     }
 
+    // MARK: - the shelf (§11.9, P18.4)
+
+    /// How each document is classified. Keyed by document id, and held here
+    /// rather than on `DocumentSummary` because a person's correction has to
+    /// outlive a reload of the index.
+    public private(set) var classifications: [String: Classification] = [:]
+
+    /// Which class the list is filtered to, or nil for the whole shelf.
+    /// `unclassifiedFilter` is its own state rather than a magic code, because
+    /// "show me what nothing could be filed under" is exactly the question the
+    /// shelf exists to make askable.
+    public var shelfFilter: String?
+    public static let unclassifiedFilter = "—"
+
+    /// The proportions the shelf screen draws, unclassified documents included.
+    public var shelf: (byCode: [(code: String, label: String, count: Int)], unclassified: Int) {
+        Classifier.breakdown(documents.map { classification(of: $0) })
+    }
+
+    public func classification(of document: DocumentSummary) -> Classification {
+        classifications[document.documentID] ?? .unclassified
+    }
+
+    /// The documents the list should show, given the filter.
+    public var shelvedDocuments: [DocumentSummary] {
+        guard let shelfFilter else { return documents }
+        if shelfFilter == Self.unclassifiedFilter {
+            return documents.filter { !classification(of: $0).isClassified }
+        }
+        return documents.filter {
+            classification(of: $0).subjects.contains { $0.code == shelfFilter }
+        }
+    }
+
+    /// A person putting a document where it belongs. Marked as theirs, and the
+    /// classifier never overwrites it afterwards (§11.9).
+    public func reclassify(_ document: DocumentSummary, to codes: [String]) {
+        let subjects = codes.compactMap(LCSubject.init(code:))
+        classifications[document.documentID] = subjects.isEmpty
+            ? Classification(subjects: [], assignedBy: .user, reason: "")
+            : Classifier.assign(subjects)
+    }
+
     // MARK: -
 
     public func refresh() {
         documents = index.documents(in: scope)
+        classify()
+    }
+
+    /// Classifies anything that has no classification yet.
+    ///
+    /// Only what is missing: a document a person filed by hand keeps their
+    /// answer, because the whole point of recording *who* assigned a class is
+    /// that the machine's guess loses to a person's decision.
+    private func classify() {
+        for document in documents where classifications[document.documentID] == nil {
+            let text = (index.chunks(of: document.documentID).map(\.text).prefix(6))
+                .joined(separator: " ")
+            classifications[document.documentID] = Classifier.classify(text,
+                                                                       title: document.title)
+        }
     }
 
     public func changeScope(to scope: Scope) async {
