@@ -21,13 +21,13 @@ import ToolBelt
 private let known: Set<String> = ["kb_search", "web_search", "fetch_page",
                                   "run_shell", "run_stat_test", "ingest_url",
                                   "analysis_query", "analysis_execute",
-                                  "pull_db_table", "save_document"]
+                                  "pull_db_table", "save_document", "raise_risk"]
 
 private let risks: [String: RiskLevel] = [
     "kb_search": .low, "web_search": .low, "fetch_page": .low,
     "run_stat_test": .low, "analysis_query": .low, "run_shell": .high,
     "ingest_url": .medium, "analysis_execute": .medium,
-    "pull_db_table": .medium, "save_document": .medium,
+    "pull_db_table": .medium, "save_document": .medium, "raise_risk": .medium,
 ]
 
 private func parser() -> ManifestParser {
@@ -68,9 +68,11 @@ struct ManifestTests {
     func baseInheritance() throws {
         let manifest = try parser().parse(legalReview, kind: .agent)
         // `ingest_url` comes from the role, not from the file: a researcher may
-        // put a page into the knowledge base so it can be cited later.
+        // put a page into the knowledge base so it can be cited later. So does
+        // `raise_risk` (P10.8) — whoever notices a risk is who files it, and
+        // that is a property of the role rather than of any one persona.
         #expect(manifest.tools.sorted()
-                == ["fetch_page", "ingest_url", "kb_search", "web_search"])
+                == ["fetch_page", "ingest_url", "kb_search", "raise_risk", "web_search"])
         #expect(manifest.tools.count == Set(manifest.tools).count)
         // And what the persona is *not* allowed to touch stays out.
         #expect(!manifest.tools.contains("run_shell"))

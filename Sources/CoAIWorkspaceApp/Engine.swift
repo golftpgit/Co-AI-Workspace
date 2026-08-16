@@ -312,6 +312,14 @@ struct Engine: Sendable {
                                   approver: broker,
                                   spanSink: spans,
                                   modes: .default)
+        // §19.11 / P10.8 — the tools that let a specialist file what it
+        // noticed. The rule they exist to make testable is that an agent may
+        // *propose* and may not decide: `propose_change` writes `proposed` and
+        // there is no tool that can approve one.
+        await gateway.register([
+            RaiseRiskTool(service: { projects }),
+            ProposeChangeTool(service: { projects }),
+        ])
         // Everything P2 and P3 built is only a feature once it is on the tool
         // list — v1 shipped an MCP client that no session could reach (D6).
         let embedder = MLXEmbedder()

@@ -110,11 +110,14 @@ public enum ManifestError: Error, CustomStringConvertible, Equatable {
 public enum RoleTools {
     public static func tools(for role: Role) -> [String] {
         switch role {
-        case .researcher: ["kb_search", "web_search", "fetch_page", "ingest_url"]
+        // `raise_risk` on every working role (§19.11, P10.8): whoever notices
+        // is whoever files it. A register only one role can write to is a
+        // register that fills up after the fact.
+        case .researcher: ["kb_search", "web_search", "fetch_page", "ingest_url", "raise_risk"]
         case .analyst: ["kb_search", "run_shell", "run_stat_test",
-                        "analysis_query", "analysis_execute", "pull_db_table"]
-        case .engineer: ["run_shell", "kb_search"]
-        case .writer: ["kb_search", "save_document"]
+                        "analysis_query", "analysis_execute", "pull_db_table", "raise_risk"]
+        case .engineer: ["run_shell", "kb_search", "raise_risk"]
+        case .writer: ["kb_search", "save_document", "raise_risk"]
         case .reviewer, .teamLead: []
         }
     }

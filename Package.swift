@@ -176,7 +176,7 @@ let package = Package(
         .target(name: "ToolBelt",
                 dependencies: ["AgentKit", "Observability", "Execution",
                                "Knowledge", "WebSearch", "Analysis", "Roster", "DocGen",
-                               "RBridge"]),
+                               "RBridge", "ProjectKit"]),
 
         // M6/MCP — other people's tools (ARCHITECTURE §6.2, P8.3). Its own
         // target rather than part of ToolBelt so the SDK, its NIO and its
