@@ -1024,6 +1024,18 @@ else
   fail "r_eval can install packages without the always-ask tool (§5.5, P14.4)"
 fi
 
+# P3.7 — a decision history that can be gone back on, and not edited.
+#
+# The failure mode is an UPDATE: reversing a decision by overwriting the old
+# one leaves a card that says what we think now and cannot say what we thought
+# before, which is the whole reason §11.6 asks for a history at all.
+if grep -q "CREATE conflict_decision" Sources/Persistence/ConflictStore.swift \
+   && ! grep -qE "(DELETE|UPDATE) conflict_decision" Sources/Persistence/ConflictStore.swift; then
+  ok "the conflict history is append-only — a reversal adds an entry"
+else
+  fail "something edits or deletes conflict history instead of appending (§11.6, P3.7)"
+fi
+
 # P4.8 — a run that stops on budget says so.
 #
 # The failure mode is silence: a run that quietly returns fewer deliverables

@@ -60,14 +60,66 @@ public actor ConflictStore {
     /// save time replaces the record of that moment with today's arithmetic —
     /// and because weighing is relative to `now`, the same decision would read
     /// differently every year.
-    public func recordDecision(_ decision: ConflictDecision, for id: String) async throws {
+    public func recordDecision(_ decision: ConflictDecision, for id: String,
+                               note: String = "") async throws {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let json = String(decoding: try encoder.encode(decision), as: UTF8.self)
 
+        try await append(decisionJSON: json, note: note, for: id)
         try await client.exec(
             "UPDATE conflict SET decided = true, decision = $decision WHERE uid = type::string($uid)",
             vars: ["uid": id, "decision": json])
+    }
+
+    /// Takes a decision back (§11.6, P3.7).
+    ///
+    /// **Nothing is deleted.** Reopening writes a row saying the card was
+    /// reopened and why, and the old decision stays in the history where it
+    /// can be read — "we used to say the opposite, and here is when that
+    /// changed" is the question a reversible history exists to answer. A
+    /// history somebody can edit is not a history; it is the current opinion
+    /// with a timestamp on it.
+    ///
+    /// The reason is required, and that is not politeness: a reversal with no
+    /// reason is indistinguishable from a mis-click when somebody meets it in
+    /// six months.
+    public func reopen(_ id: String, reason: String) async throws {
+        let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw ConflictHistoryError.reversalNeedsAReason }
+        try await append(decisionJSON: nil, note: trimmed, for: id)
+        try await client.exec(
+            "UPDATE conflict SET decided = false, decision = NONE WHERE uid = type::string($uid)",
+            vars: ["uid": id])
+    }
+
+    /// Everything ever decided about this conflict, oldest first.
+    public func history(of id: String) async throws -> [ConflictDecisionRecord] {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let rows = try await client.query("""
+            SELECT * FROM conflict_decision
+            WHERE conflict_uid = type::string($uid) ORDER BY recorded_at ASC
+            """, vars: ["uid": id]).first?.rows ?? []
+
+        return rows.map { row in
+            ConflictDecisionRecord(
+                decision: (row["decision"]?.stringValue)
+                    .flatMap { try? decoder.decode(ConflictDecision.self, from: Data($0.utf8)) },
+                note: row["note"]?.stringValue ?? "",
+                recordedAt: SurrealTime.date(from: row["recorded_at"]?.stringValue) ?? Date.distantPast)
+        }
+    }
+
+    private func append(decisionJSON: String?, note: String, for id: String) async throws {
+        var vars: [String: Any] = ["uid": id, "note": note]
+        var fields = "conflict_uid = type::string($uid), note = $note, recorded_at = time::now()"
+        if let decisionJSON {
+            fields += ", decision = $decision"
+            vars["decision"] = decisionJSON
+        }
+        try await client.exec("CREATE conflict_decision SET \(fields)", vars: vars)
     }
 
     /// Moves a decided conflict into `central`, so the next project meets the
@@ -137,6 +189,27 @@ public actor ConflictStore {
 /// weights are already-rendered reasons rather than a recomputed score, so
 /// reopening a card years later shows what was weighed *then* and not what the
 /// current rules would say.
+public enum ConflictHistoryError: Error, CustomStringConvertible, Equatable {
+    case reversalNeedsAReason
+
+    public var description: String {
+        "การกลับคำตัดสินต้องมีเหตุผล — คำตัดสินที่ถูกกลับโดยไม่มีเหตุผล "
+            + "แยกไม่ออกจากการกดผิดเมื่อมีคนมาอ่านในอีกหกเดือน"
+    }
+}
+
+/// One entry in a conflict's history. `decision == nil` is a reopening — the
+/// card went back to being an open question, and that is a decision too.
+public struct ConflictDecisionRecord: Sendable, Equatable {
+    public let decision: ConflictDecision?
+    /// Why. Required for a reversal, optional for the first decision (the
+    /// resolution already says what was chosen).
+    public let note: String
+    public let recordedAt: Date
+
+    public var isReopening: Bool { decision == nil }
+}
+
 public struct StoredConflict: Sendable, Equatable, Identifiable {
     public let id: String
     public let question: String

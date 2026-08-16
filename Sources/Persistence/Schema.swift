@@ -164,6 +164,17 @@ public enum Schema {
         "DEFINE INDEX IF NOT EXISTS conflict_open ON conflict FIELDS decided",
         "DEFINE FIELD IF NOT EXISTS created_at ON conflict TYPE datetime",
 
+        // §11.6 / P3.7 — every decision ever made about a conflict, in order.
+        // Append-only: reversing a decision writes a new row, because a
+        // history somebody can edit is not a history, and "why did we change
+        // our mind" is exactly the question this table exists to answer.
+        "DEFINE TABLE IF NOT EXISTS conflict_decision SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS conflict_uid ON conflict_decision TYPE string",
+        "DEFINE INDEX IF NOT EXISTS conflict_decision_uid ON conflict_decision FIELDS conflict_uid",
+        "DEFINE FIELD IF NOT EXISTS decision ON conflict_decision TYPE option<string>",
+        "DEFINE FIELD IF NOT EXISTS note ON conflict_decision TYPE string",
+        "DEFINE FIELD IF NOT EXISTS recorded_at ON conflict_decision TYPE datetime",
+
         // §12.4 — the pre-registration. The counts are denormalised so "which
         // plans are still waiting for me" is a query rather than a decode of
         // every row.

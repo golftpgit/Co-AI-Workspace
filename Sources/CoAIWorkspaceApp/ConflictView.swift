@@ -37,7 +37,9 @@ struct ConflictView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
                         ForEach(model.visible) { conflict in
-                            ConflictCard(conflict: conflict) { deciding = conflict }
+                            ConflictCard(conflict: conflict,
+                                         decide: { deciding = conflict },
+                                         model: model)
                         }
                     }
                     .padding(16)
@@ -91,6 +93,12 @@ struct ConflictView: View {
 private struct ConflictCard: View {
     let conflict: StoredConflict
     let decide: () -> Void
+    /// For the history (§11.6, P3.7) — read and reversed from the card, since
+    /// the card is where somebody is standing when they realise the decision
+    /// was wrong.
+    @Bindable var model: ConflictViewModel
+    @State private var reopening = false
+    @State private var reason = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -114,6 +122,7 @@ private struct ConflictCard: View {
 
             if let decision = conflict.decision {
                 DecisionSummary(decision: decision)
+                decisionHistory
             } else {
                 // Marked as a suggestion, in words, because §11.6 says the
                 // system proposes and the human decides — and it names the side
@@ -130,6 +139,65 @@ private struct ConflictCard: View {
         }
         .padding(16)
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// The history, and the way back out of a decision (P3.7).
+    ///
+    /// Reversing needs a reason and the button says so, because a reversal
+    /// with no reason is indistinguishable from a mis-click to whoever meets
+    /// it later. Nothing here deletes anything: reopening adds an entry.
+    @ViewBuilder
+    private var decisionHistory: some View {
+        DisclosureGroup(isExpanded: Binding(
+            get: { model.historyFor == conflict.id },
+            set: { expanded in
+                Task {
+                    if expanded { await model.loadHistory(of: conflict) }
+                    else { model.closeHistory() }
+                }
+            })) {
+            VStack(alignment: .leading, spacing: Space.row) {
+                ForEach(Array(model.history.enumerated()), id: \.offset) { _, record in
+                    HStack(alignment: .firstTextBaseline, spacing: Space.row) {
+                        Image(systemName: record.isReopening
+                              ? "arrow.uturn.backward" : "checkmark.seal")
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(record.isReopening
+                                 ? "กลับคำตัดสิน — \(record.note)"
+                                 : (record.note.isEmpty ? "ตัดสิน" : record.note))
+                                .font(.callout)
+                            Text(record.recordedAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if reopening {
+                    HStack(spacing: Space.row) {
+                        TextField("ทำไมถึงกลับคำตัดสิน", text: $reason)
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel("เหตุผลที่กลับคำตัดสิน")
+                        Button("ยืนยัน") {
+                            Task {
+                                await model.reopen(conflict, reason: reason)
+                                reason = ""
+                                reopening = false
+                            }
+                        }
+                        .disabled(reason.trimmingCharacters(in: .whitespaces).isEmpty)
+                        Button("ยกเลิก") { reopening = false; reason = "" }
+                    }
+                } else {
+                    Button("กลับคำตัดสินนี้") { reopening = true }
+                        .accessibilityHint("คำตัดสินเดิมจะยังอยู่ในประวัติ และต้องบอกเหตุผล")
+                }
+            }
+            .padding(.top, Space.row)
+        } label: {
+            Text("ประวัติคำตัดสิน").font(.caption)
+        }
     }
 
     /// Always ends by saying it is a proposal. A conflict filed before the
