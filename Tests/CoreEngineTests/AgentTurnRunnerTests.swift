@@ -120,7 +120,7 @@ struct AgentTurnRunnerTests {
                                               conversationID: "cv_1", scope: .central))
 
         #expect(await ran.value == 1)
-        #expect(events.contains { if case .toolCallFinished(_, _, _, let executed) = $0 { return executed }; return false })
+        #expect(events.contains { if case .toolCallFinished(_, _, _, let executed, _) = $0 { return executed }; return false })
         #expect(events.contains { if case .finished = $0 { return true }; return false })
 
         // user → assistant(asking) → tool result → assistant(final)
@@ -152,7 +152,7 @@ struct AgentTurnRunnerTests {
         // The model is told why, so it can offer something else instead of
         // calling the same tool again.
         let toolEvent = events.compactMap { event -> String? in
-            if case .toolCallFinished(_, _, let text, _) = event { return text }
+            if case .toolCallFinished(_, _, let text, _, _) = event { return text }
             return nil
         }.first
         #expect(toolEvent?.contains("ยังไม่ต้อง") == true)
@@ -299,7 +299,7 @@ struct TurnRegressionTests {
         #expect(await ran.value == 0)
         // And the model is told why, in words it can act on.
         let text = events.compactMap { event -> String? in
-            if case .toolCallFinished(_, _, let text, _) = event { return text }
+            if case .toolCallFinished(_, _, let text, _, _) = event { return text }
             return nil
         }.first
         #expect(text?.contains("โฟลเดอร์") == true)
@@ -508,5 +508,84 @@ struct TranscriptFidelityTests {
         _ = await collect(runner.run(userText: "hi", conversationID: "cv_t3", scope: .central))
         #expect(await seen.last?.contains("kb_search") == true)
         #expect(await seen.last?.contains("ห้ามเรียกชื่ออื่น") == true)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// P20.5 — the screen can say why, and the why is what decided.
+//
+// Two questions a person asks about a turn they did not watch: why that model,
+// and why that tool call. Both have an answer already inside the system — the
+// router's selection pass and the risk scorer — and neither needs a model to
+// write a sentence about its own behaviour. These tests are the wire between
+// those answers and the screen; without them the wire can go missing and
+// everything still compiles.
+// ─────────────────────────────────────────────────────────────
+@Suite("A turn says why it did what it did (P20.5)")
+struct TurnRationaleTests {
+
+    @Test("the tier comes with the rule that chose it")
+    func routedCarriesTheRule() async {
+        let gateway = ToolGateway(modes: OperatingModes(autonomy: .fullAutonomous))
+        let runner = AgentTurnRunner(
+            router: ModelRouter(executors: [ScriptedExecutor(script: RoundScript([.text("ครับ")]))]),
+            gateway: gateway, transcript: MemoryTranscript())
+
+        let events = await collect(runner.run(userText: "สวัสดี", conversationID: "cv_w1",
+                                              scope: .central))
+        let why = events.compactMap { event -> [String]? in
+            if case .routed(_, _, let why) = event { return why }
+            return nil
+        }.first
+
+        #expect(why?.isEmpty == false)
+        // The default policy for a turn someone is sitting in front of.
+        #expect(why?.first?.contains("รออยู่") == true)
+    }
+
+    @Test("the tool card carries the risk score that let it run, not a summary of the output")
+    func toolCallCarriesTheScore() async {
+        let gateway = ToolGateway(modes: OperatingModes(autonomy: .fullAutonomous))
+        await gateway.register(EchoTool(ran: Counter()))
+        let script = RoundScript([.toolCall(name: "kb_search", argumentsJSON: #"{"q":"ปอด"}"#),
+                                  .text("เสร็จแล้ว")])
+        let runner = AgentTurnRunner(
+            router: ModelRouter(executors: [ScriptedExecutor(script: script)]),
+            gateway: gateway, transcript: MemoryTranscript())
+
+        let events = await collect(runner.run(userText: "ค้นให้หน่อย", conversationID: "cv_w2",
+                                              scope: .central))
+        let why = events.compactMap { event -> [String]? in
+            if case .toolCallFinished(_, _, _, _, let why) = event { return why }
+            return nil
+        }.first
+
+        #expect(why?.contains { $0.contains("ระดับความเสี่ยง") } == true)
+    }
+
+    /// A blocked call is where the question is asked most, so the reason has to
+    /// be the one the gate used rather than "ไม่ได้รัน" and nothing else.
+    @Test("a call the person refused says so, in the reason")
+    func refusalIsTheReason() async {
+        let gateway = ToolGateway(approver: Approver(decision: .rejected(reason: "ยังไม่ต้องเขียนไฟล์")),
+                                  modes: OperatingModes(autonomy: .approvalRequired))
+        var tool = EchoTool(ran: Counter())
+        tool.name = "write_file"
+        tool.riskLevel = .high
+        await gateway.register(tool)
+        let script = RoundScript([.toolCall(name: "write_file", argumentsJSON: #"{"q":"ปอด"}"#),
+                                  .text("ครับ")])
+        let runner = AgentTurnRunner(
+            router: ModelRouter(executors: [ScriptedExecutor(script: script)]),
+            gateway: gateway, transcript: MemoryTranscript())
+
+        let events = await collect(runner.run(userText: "เขียนไฟล์ให้หน่อย", conversationID: "cv_w3",
+                                              scope: .central))
+        let why = events.compactMap { event -> [String]? in
+            if case .toolCallFinished(_, _, _, _, let why) = event { return why }
+            return nil
+        }.first
+
+        #expect(why?.first?.contains("ยังไม่ต้องเขียนไฟล์") == true)
     }
 }

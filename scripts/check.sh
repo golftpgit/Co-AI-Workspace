@@ -1012,6 +1012,31 @@ else
   ok "numbers are drawn on solid layers, never on glass"
 fi
 
+# P20.5 — the reason shown is the decision, not a story about it.
+#
+# The failure this guards against is specific and easy to reach: a second
+# function (or a model) that describes the routing rules in prose. It reads
+# well, it passes review, and it goes stale the first time a filter changes —
+# leaving a screen that confidently explains a choice the router did not make.
+#
+# 1. One selection pass. If the capability filter appears twice in the router,
+#    one of them is an explanation pretending to be a decision.
+PASSES=$(grep -c "capabilities.supportsTools" Sources/LLMProviders/ModelRouter.swift)
+if [ "$PASSES" != "1" ]; then
+  fail "ModelRouter has $PASSES capability filters — the routing reason must come from the pass that routes (P20.5)"
+else
+  ok "the router explains itself from the same pass that chooses"
+fi
+
+# 2. The wire to the screen. `routed` carrying an empty `why` compiles fine and
+#    shows a tier with no reason beside it.
+if grep -q "why: routed.choice.lines" Sources/CoreEngine/AgentTurnRunner.swift \
+   && grep -q "why = outcome.rationale" Sources/CoreEngine/AgentTurnRunner.swift; then
+  ok "the tier's rule and the gate's risk score both reach the turn's events"
+else
+  fail "a turn reports what it did without why it did it (§24.3, P20.5)"
+fi
+
 # P20.2 — the design system is enforced, or it is another document.
 #
 # §24.1 names consistency as the worst of this app's four HIG problems, and the

@@ -28,6 +28,9 @@ final class ChatViewModel {
         /// Still waiting on the gate, a human, or the process itself.
         var running: Bool = false
         var blocked: Bool = false
+        /// Why this call went the way it did — the gate's own risk reasons
+        /// (P20.5). Empty when there is nothing to say, which is most calls.
+        var why: [String] = []
     }
 
     private(set) var conversations: [Conversation] = []
@@ -43,6 +46,10 @@ final class ChatViewModel {
     private(set) var bubbles: [Bubble] = []
     private(set) var isRunning = false
     private(set) var routedVia: String?
+    /// The routing rule that chose that tier, from the router's own selection
+    /// pass (P20.5) — shown next to the tier so "why is it using that model"
+    /// has an answer that is not a guess.
+    private(set) var routedWhy: [String] = []
     private(set) var loadError: String?
     /// The context meter. Kept in front of the user the whole time rather than
     /// appearing once as a note when compaction happens: by then the messages
@@ -308,6 +315,7 @@ final class ChatViewModel {
         input = ""
         isRunning = true
         routedVia = nil
+        routedWhy = []
         bubbles.append(Bubble(id: UUID().uuidString, kind: .user, text: text))
         // Named from the first thing asked, before the answer arrives — a list
         // of "บทสนทนาใหม่" is a list nobody can search by eye.
@@ -341,8 +349,9 @@ final class ChatViewModel {
         switch event {
         case .userMessageStored:
             break                                   // already on screen
-        case .routed(let executor, let tier):
+        case .routed(let executor, let tier, let why):
             routedVia = "\(executor) · tier \(tier.label)"
+            routedWhy = why
         case .usage(let prompt, let completion, let budget):
             // The prompt is what fills the window; the completion joins it on
             // the next turn.
@@ -357,9 +366,10 @@ final class ChatViewModel {
             streamingBubbleID = nil
             bubbles.append(Bubble(id: id, kind: .tool, text: arguments,
                                   toolName: name, running: true))
-        case .toolCallFinished(let id, let name, let text, let executed):
+        case .toolCallFinished(let id, let name, let text, let executed, let why):
             let updated = Bubble(id: id, kind: .tool, text: text,
-                                 toolName: name, running: false, blocked: !executed)
+                                 toolName: name, running: false, blocked: !executed,
+                                 why: why)
             if let index = bubbles.firstIndex(where: { $0.id == id }) {
                 bubbles[index] = updated
             } else {

@@ -291,8 +291,13 @@ private struct ChatScreen: View {
             .accessibilityLabel("เลือกโฟลเดอร์ที่ให้รันคำสั่ง")
 
             if let routed = model.routedVia {
+                // §24.3 / P20.5 — the tier, and why that tier. The reason is
+                // the router's own selection pass, so it is worth showing:
+                // a sentence a model wrote about its own choice would not be.
                 Text(routed).font(.caption).foregroundStyle(.secondary)
+                    .help(model.routedWhy.joined(separator: "\n"))
                     .accessibilityLabel("ตอบโดย \(routed)")
+                    .accessibilityHint(model.routedWhy.joined(separator: " · "))
             }
         }
         .toggleStyle(.switch)
@@ -479,11 +484,21 @@ private struct BubbleView: View {
     /// exactly this, because unsummarised tool output is long by design.
     private var toolCard: some View {
         DisclosureGroup {
-            Text(bubble.text)
-                .font(.system(.caption, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 4)
+            VStack(alignment: .leading, spacing: 6) {
+                // Why before what: the reason this ran at all is the part a
+                // person cannot reconstruct from the output.
+                if !bubble.why.isEmpty {
+                    Text(bubble.why.joined(separator: " · "))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Text(bubble.text)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.top, 4)
         } label: {
             HStack(spacing: 6) {
                 if bubble.running {
@@ -498,6 +513,7 @@ private struct BubbleView: View {
         .padding(10)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
         .accessibilityLabel("เครื่องมือ \(bubble.toolName ?? "") — \(status)")
+        .accessibilityHint(bubble.why.joined(separator: " · "))
     }
 
     private var status: String {

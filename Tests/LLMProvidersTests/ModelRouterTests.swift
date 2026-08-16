@@ -279,7 +279,7 @@ struct StreamingRoutingTests {
             StubExecutor("gx10", tier: .selfHosted, behaviour: .succeed("คำตอบ"), calls: calls),
         ])
 
-        let (executor, tier, events) = try await router.stream(ask())
+        let (executor, tier, events, _) = try await router.stream(ask())
         #expect(executor == "gx10")
         #expect(tier == .selfHosted)
 

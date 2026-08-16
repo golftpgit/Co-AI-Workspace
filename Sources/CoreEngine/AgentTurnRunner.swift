@@ -19,12 +19,19 @@ import Persistence
 /// What the chat view renders as a turn unfolds.
 public enum TurnEvent: Sendable {
     case userMessageStored(StoredMessage)
-    case routed(executor: String, tier: ModelTier)
+    /// `why` is the routing rule that produced this choice, from the router's
+    /// own selection pass (P20.5) — never a sentence a model wrote about a
+    /// decision it did not make.
+    case routed(executor: String, tier: ModelTier, why: [String])
     case assistantDelta(String)
     /// `id` is the model's own tool-call id, carried so the UI can update the
     /// card it already drew instead of appending a second one.
     case toolCallStarted(id: String, name: String, argumentsJSON: String)
-    case toolCallFinished(id: String, name: String, text: String, executed: Bool)
+    /// `why` is the risk assessment the gate actually used to decide (§5.3),
+    /// carried to the screen because "why did it do that" is answered by the
+    /// score that decided, not by asking the model to justify itself after.
+    case toolCallFinished(id: String, name: String, text: String, executed: Bool,
+                          why: [String] = [])
     /// What this turn cost so far, against the transcript budget. Reported as
     /// it happens rather than only on the span: a context window that fills
     /// silently is how a conversation gets compacted out from under someone
@@ -252,7 +259,8 @@ public actor AgentTurnRunner {
             let stream: AsyncThrowingStream<LLMEvent, Error>
             do {
                 let routed = try await router.stream(request, policy: policy)
-                emit(.routed(executor: routed.executor, tier: routed.tier))
+                emit(.routed(executor: routed.executor, tier: routed.tier,
+                             why: routed.choice.lines))
                 stream = routed.events
             } catch is RoutingError where !tools.isEmpty {
                 // Nothing available can call tools right now — on-device is the
@@ -330,7 +338,9 @@ public actor AgentTurnRunner {
                 let fingerprint = "\(call.name)\u{1}\(call.argumentsJSON)"
                 if denied.contains(fingerprint) {
                     let text = "ผู้ใช้ไม่อนุมัติคำสั่งนี้ไปแล้วในเทิร์นนี้ — ห้ามเรียกซ้ำ ให้เสนอวิธีอื่นหรือถามผู้ใช้"
-                    emit(.toolCallFinished(id: call.id, name: call.name, text: text, executed: false))
+                    emit(.toolCallFinished(id: call.id, name: call.name, text: text,
+                                           executed: false,
+                                           why: ["เคยถามเรื่องนี้แล้วและได้คำตอบว่าไม่"]))
                     messages.append(LLMMessage(.tool, text, toolCallID: call.id))
                     _ = try? await transcript.append(
                         conversationID: conversationID, role: .tool,
@@ -340,6 +350,7 @@ public actor AgentTurnRunner {
 
                 let resultText: String
                 var executed = false
+                var why: [String] = []
                 do {
                     // Every tool call in the system goes through here (§5.3).
                     let outcome = try await gateway.call(call.name,
@@ -348,13 +359,15 @@ public actor AgentTurnRunner {
                                                          parentSpan: turnSpan.id)
                     resultText = outcome.transcriptText
                     executed = outcome.didExecute
+                    why = outcome.rationale
                     if case .denied = outcome { denied.insert(fingerprint) }
                 } catch {
                     // The tool itself failed. The model gets the error verbatim,
                     // because that is usually what tells it what to do next.
                     resultText = "เครื่องมือ '\(call.name)' ล้มเหลว: \(error)"
                 }
-                emit(.toolCallFinished(id: call.id, name: call.name, text: resultText, executed: executed))
+                emit(.toolCallFinished(id: call.id, name: call.name, text: resultText,
+                                       executed: executed, why: why))
                 messages.append(LLMMessage(.tool, resultText, toolCallID: call.id))
                 _ = try? await transcript.append(
                     conversationID: conversationID, role: .tool,
