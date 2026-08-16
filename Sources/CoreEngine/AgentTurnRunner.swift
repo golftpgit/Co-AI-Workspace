@@ -263,8 +263,12 @@ public actor AgentTurnRunner {
             request.maxTokens = 1_024
 
             let stream: AsyncThrowingStream<LLMEvent, Error>
+            // Kept so a failure can name who was answering. "Nothing came
+            // back" without a name sends the reader nowhere.
+            var answeredBy = "โมเดลที่ใช้อยู่"
             do {
                 let routed = try await router.stream(request, policy: policy)
+                answeredBy = routed.executor
                 emit(.routed(executor: routed.executor, tier: routed.tier,
                              why: routed.choice.lines))
                 stream = routed.events
@@ -328,7 +332,32 @@ public actor AgentTurnRunner {
             }
 
             guard !calls.isEmpty else {
-                if !text.isEmpty { try? await store(text, in: conversationID, emit: emit) }
+                // Nothing said and nothing done is not a finished turn.
+                //
+                // A dropped connection does not always throw: the socket
+                // closes, the iteration ends, and an empty stream is
+                // indistinguishable here from one that simply ran out. Measured
+                // by cutting the link to a real endpoint mid-answer — the
+                // screen showed the question, a collapsed thinking disclosure,
+                // and nothing else (E.38). The catch above never ran because
+                // there was no error to catch.
+                //
+                // So the check is on the *result*, not on the transport, and it
+                // covers every way of arriving here: a truncated response, a
+                // model that returned only reasoning, a server that closed
+                // early. From where the person is sitting those are one thing —
+                // an empty reply — and reporting one as success is the system
+                // claiming it did something it did not do (§2.5).
+                guard !text.isEmpty else {
+                    let why = reasoning.isEmpty
+                        ? "\(answeredBy) จบการตอบโดยไม่ได้ส่งข้อความอะไรกลับมาเลย"
+                        : "\(answeredBy) คิดอยู่แล้วหยุดกลางคัน — ไม่มีคำตอบส่งกลับมา"
+                    emit(.failed(why + " · อาจเป็นการเชื่อมต่อที่ขาดโดยไม่แจ้ง "
+                                 + "ลองถามใหม่ หรือเลือกโมเดลอื่นที่ช่องเลือกข้างกล่องข้อความ"))
+                    await close(.failed, "empty answer from \(answeredBy)")
+                    return
+                }
+                try? await store(text, in: conversationID, emit: emit)
                 await close(.succeeded, "rounds: \(round + 1)")
                 emit(.finished)
                 return
