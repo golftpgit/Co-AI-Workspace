@@ -41,6 +41,10 @@ struct Engine: Sendable {
     let pageReader: HeadlessPageReader
 
     let conversations: ConversationStore
+    /// The one embedder, shared (§11.5). Exposed because conversation search
+    /// needs a query vector (P10.14) and a second instance would be a second
+    /// model loaded into the same memory.
+    let embedder: MLXEmbedder
     let spans: SurrealSpanSink
     /// Conflict cards, kept so a decision is made once (§11.6).
     let conflicts: ConflictStore
@@ -634,7 +638,7 @@ struct Engine: Sendable {
 
         return Engine(client: client, paths: paths,
                       webSource: webSource, pageReader: pageReader,
-                      conversations: conversations, spans: spans,
+                      conversations: conversations, embedder: embedder, spans: spans,
                       conflicts: ConflictStore(client: client),
                       conflictDetector: ConflictDetector(router: router),
                       relations: RelationStore(client: client),
