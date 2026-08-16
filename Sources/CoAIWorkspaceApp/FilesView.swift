@@ -64,6 +64,54 @@ final class FilesViewModel {
         }
     }
 
+    /// P8.6 — the three things the viewer could not do. Every one goes
+    /// through `WorkspaceFiles`, which holds them to the workspace root, so
+    /// this is a screen calling a rule rather than a screen with a rule of its
+    /// own.
+    func create(named name: String, directory: Bool) {
+        guard let files, let here = breadcrumb.last else { return }
+        do {
+            _ = directory ? try files.createDirectory(named: name, in: here)
+                          : try files.create(named: name, in: here)
+            reload()
+            problem = nil
+        } catch {
+            problem = ReadableFailure.message(for: error, doing: "สร้างไฟล์")
+        }
+    }
+
+    func rename(_ entry: FileEntry, to name: String) {
+        guard let files else { return }
+        do {
+            _ = try files.rename(entry.url, to: name)
+            // The open file may be the one that moved, and a save token
+            // pointing at a path that no longer exists would fail on the next
+            // save with a confusing error.
+            if selected?.url == entry.url { closeSelection() }
+            reload()
+        } catch {
+            problem = ReadableFailure.message(for: error, doing: "เปลี่ยนชื่อ")
+        }
+    }
+
+    func remove(_ entry: FileEntry) {
+        guard let files else { return }
+        do {
+            try files.remove(entry.url)
+            if selected?.url == entry.url { closeSelection() }
+            reload()
+        } catch {
+            problem = ReadableFailure.message(for: error, doing: "ลบ")
+        }
+    }
+
+    private func closeSelection() {
+        selected = nil
+        token = nil
+        draft = ""
+        loaded = ""
+    }
+
     func enter(_ entry: FileEntry) {
         guard entry.isDirectory else { return }
         breadcrumb.append(entry.url)
@@ -129,6 +177,11 @@ struct FilesView: View {
     @State private var model = FilesViewModel()
     let root: URL
     @State private var pendingSelection: FileEntry?
+    @State private var renaming: FileEntry?
+    @State private var deleting: FileEntry?
+    @State private var newName = ""
+    @State private var creating = false
+    @State private var createIsDirectory = false
 
     var body: some View {
         HSplitView {
@@ -145,6 +198,36 @@ struct FilesView: View {
             Button("กลับไปแก้ต่อ", role: .cancel) { pendingSelection = nil }
         } message: {
             Text("\(model.selected?.name ?? "ไฟล์นี้") มีการแก้ที่ยังไม่ได้บันทึก")
+        }
+        .alert(createIsDirectory ? "โฟลเดอร์ใหม่" : "ไฟล์ใหม่", isPresented: $creating) {
+            TextField("ชื่อ", text: $newName)
+            Button("สร้าง") { model.create(named: newName, directory: createIsDirectory) }
+                .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button("ยกเลิก", role: .cancel) {}
+        } message: {
+            Text("สร้างในโฟลเดอร์ที่เปิดอยู่ · ถ้ามีชื่อนี้แล้วจะไม่เขียนทับให้")
+        }
+        .alert("เปลี่ยนชื่อ", isPresented: .constant(renaming != nil)) {
+            TextField("ชื่อใหม่", text: $newName)
+            Button("เปลี่ยน") {
+                if let entry = renaming { model.rename(entry, to: newName) }
+                renaming = nil
+            }
+            .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button("ยกเลิก", role: .cancel) { renaming = nil }
+        } message: {
+            Text(renaming.map { "เปลี่ยนชื่อ \($0.name)" } ?? "")
+        }
+        .confirmationDialog("ลบ \(deleting?.name ?? "")", isPresented: .constant(deleting != nil)) {
+            Button("ย้ายไปถังขยะ", role: .destructive) {
+                if let entry = deleting { model.remove(entry) }
+                deleting = nil
+            }
+            Button("ยกเลิก", role: .cancel) { deleting = nil }
+        } message: {
+            // Said, because the difference between this and `rm` is the whole
+            // reason the button is allowed to exist.
+            Text("ย้ายไปถังขยะของเครื่อง — กู้คืนจาก Finder ได้ ไม่ได้ลบทิ้งถาวร")
         }
     }
 
@@ -165,6 +248,15 @@ struct FilesView: View {
                                              : "ขึ้นไปที่โฟลเดอร์ \(url.lastPathComponent)"))
                 }
                 Spacer()
+                Menu {
+                    Button("ไฟล์ใหม่…") { createIsDirectory = false; newName = ""; creating = true }
+                    Button("โฟลเดอร์ใหม่…") { createIsDirectory = true; newName = ""; creating = true }
+                } label: {
+                    Image(systemName: "plus")
+                        .accessibilityLabel("สร้างไฟล์หรือโฟลเดอร์ใหม่")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
                 Button {
                     model.reload()
                 } label: {
@@ -230,6 +322,15 @@ struct FilesView: View {
         }
         .contentShape(Rectangle())
         .padding(.vertical, 2)
+        // P8.6 — renaming and deleting live on the row, where the thing being
+        // renamed is. An `.accessibilityAction` for each, because a context
+        // menu is a gesture and a menu somebody cannot reach is not a feature.
+        .contextMenu {
+            Button("เปลี่ยนชื่อ…") { renaming = entry; newName = entry.name }
+            Button("ลบ", role: .destructive) { deleting = entry }
+        }
+        .accessibilityAction(named: "เปลี่ยนชื่อ") { renaming = entry; newName = entry.name }
+        .accessibilityAction(named: "ลบ") { deleting = entry }
     }
 
     private func icon(for entry: FileEntry) -> String {

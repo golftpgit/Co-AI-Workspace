@@ -94,6 +94,11 @@ public enum FileAccessError: Error, CustomStringConvertible, Equatable {
     case notEditable(String)
     case changedOnDisk(String)
     case unreadable(String)
+    /// Something is already there. Separate from every other failure because
+    /// the answer is different: pick another name, and nothing has been lost.
+    case alreadyExists(String)
+    /// A name that is not a name — empty, hidden, or carrying a path.
+    case badName(String)
 
     public var description: String {
         switch self {
@@ -116,6 +121,10 @@ public enum FileAccessError: Error, CustomStringConvertible, Equatable {
             """
         case .unreadable(let m):
             return "อ่านไม่ได้: \(m)"
+        case .alreadyExists(let name):
+            return "มี \(name) อยู่แล้ว — เลือกชื่ออื่น (ไม่เขียนทับให้ เพราะไฟล์ใหม่ที่ทับของเดิมคือการลบที่ไม่มีใครสั่ง)"
+        case .badName(let name):
+            return "ชื่อ '\(name)' ใช้ไม่ได้ — ต้องเป็นชื่อไฟล์ ไม่ใช่พาธ และห้ามขึ้นต้นด้วยจุด"
         }
     }
 }
@@ -132,6 +141,87 @@ public struct WorkspaceFiles: Sendable {
     public init(root: URL, reader: DocumentReader = DocumentReader()) {
         self.root = root.resolvingSymlinksInPath().standardizedFileURL
         self.reader = reader
+    }
+
+    // MARK: - Making, renaming, removing (§14.2, P8.6)
+    //
+    // The viewer could read and save and nothing else, so anything that needed
+    // a new file needed `run_shell` — which is a high-risk tool asked to do a
+    // thing a person should just be able to do, and it made "add a note" and
+    // "run arbitrary code" the same decision.
+    //
+    // Every one of these goes through `resolve`, so the root is the boundary
+    // for creating and deleting exactly as it is for reading. A name is a name
+    // and not a path: `../` in a filename is how a "new file" lands somewhere
+    // it was never allowed.
+
+    /// Creates an empty file. Refuses to overwrite: a "new file" that quietly
+    /// replaced an existing one would be a deletion nobody asked for.
+    @discardableResult
+    public func create(named name: String, in directory: URL? = nil) throws -> URL {
+        let target = try resolve(directory ?? root)
+        let url = try child(named: name, of: target)
+        guard !FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+            throw FileAccessError.alreadyExists(url.lastPathComponent)
+        }
+        try Data().write(to: url, options: .withoutOverwriting)
+        return url
+    }
+
+    /// Creates a directory, and says so when it is already there rather than
+    /// reporting a success that did nothing.
+    @discardableResult
+    public func createDirectory(named name: String, in directory: URL? = nil) throws -> URL {
+        let target = try resolve(directory ?? root)
+        let url = try child(named: name, of: target)
+        guard !FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+            throw FileAccessError.alreadyExists(url.lastPathComponent)
+        }
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+        return url
+    }
+
+    @discardableResult
+    public func rename(_ url: URL, to name: String) throws -> URL {
+        let source = try resolve(url)
+        guard FileManager.default.fileExists(atPath: source.path(percentEncoded: false)) else {
+            throw FileAccessError.notFound(source.lastPathComponent)
+        }
+        let destination = try child(named: name, of: source.deletingLastPathComponent())
+        guard !FileManager.default.fileExists(atPath: destination.path(percentEncoded: false)) else {
+            throw FileAccessError.alreadyExists(destination.lastPathComponent)
+        }
+        try FileManager.default.moveItem(at: source, to: destination)
+        return destination
+    }
+
+    /// Moves to the trash rather than unlinking.
+    ///
+    /// The difference is the whole point: a file removed from this screen is
+    /// recoverable from the Finder, and a `run_shell` `rm` is not. Deleting is
+    /// the one operation here that cannot be undone by retyping.
+    public func remove(_ url: URL) throws {
+        let target = try resolve(url)
+        guard FileManager.default.fileExists(atPath: target.path(percentEncoded: false)) else {
+            throw FileAccessError.notFound(target.lastPathComponent)
+        }
+        try FileManager.default.trashItem(at: target, resultingItemURL: nil)
+    }
+
+    /// A name, resolved against a directory — and checked twice.
+    ///
+    /// `lastPathComponent` strips any path a name was carrying, and `resolve`
+    /// then holds the result to the root anyway. Two checks because the first
+    /// is about what somebody typed and the second is about where it landed,
+    /// and a symlink makes those different questions.
+    private func child(named name: String, of directory: URL) throws -> URL {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix(".") else {
+            throw FileAccessError.badName(name)
+        }
+        let leaf = URL(filePath: trimmed).lastPathComponent
+        guard leaf == trimmed else { throw FileAccessError.badName(name) }
+        return try resolve(directory.appending(path: leaf))
     }
 
     // MARK: - Listing
