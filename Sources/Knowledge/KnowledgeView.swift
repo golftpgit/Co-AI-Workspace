@@ -113,7 +113,7 @@ public struct KnowledgeView: Sendable, Equatable {
             // A chunk with no tier is primary data (§11.3): not weak evidence,
             // not on the scale. A role that asked for "at least T3 published
             // sources" is not asking to be shown an interview transcript.
-            guard let tier = chunk.provenance.tier, tier <= minTier else { return false }
+            guard let tier = chunk.provenance.tier, tier >= minTier else { return false }
         }
         if requiresCompleteProvenance, !Self.hasCompleteProvenance(chunk) { return false }
         if evidenceOnly, !Self.isEvidence(chunk) { return false }
@@ -287,8 +287,11 @@ public extension KnowledgeView {
             // widens it, and a caller who wants everything clears it.
             entityTypes: extra.isEmpty ? entityTypes : entityTypes.union(extra),
             // The floor can only go down. `nil` removes it entirely, which is
-            // the widest thing this field can say.
-            minTier: newFloor.map { floor in minTier.map { max($0, floor) } ?? nil } ?? nil,
+            // the widest thing this field can say. `min` since the tiers
+            // became one type — `<` means "worth less", so the lower floor is
+            // the smaller value, and this said `max` while this module's `<`
+            // ran the other way.
+            minTier: newFloor.map { floor in minTier.map { min($0, floor) } ?? nil } ?? nil,
             hops: max(hops, newHops ?? hops),
             boost: boost,
             preferAfter: preferAfter,

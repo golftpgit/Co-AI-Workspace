@@ -1,4 +1,5 @@
 import Foundation
+import AgentKit
 
 // ─────────────────────────────────────────────────────────────
 // Which sources exist, how much each is worth, and what they cover
@@ -111,9 +112,12 @@ public struct SourceRegistry: Sendable, Codable {
         sources
             .filter { $0.isEnabled }
             .filter { $0.disciplines.contains(discipline) || $0.disciplines.contains(.general) }
-            .filter { $0.tier <= lowestTier }
+            // `>=` now, and the flip is the point of collapsing the two
+            // enums: this line used `<=` when `<` meant "more credible" in
+            // this module and the opposite one door away.
+            .filter { $0.tier >= lowestTier }
             .sorted { a, b in
-                a.tier == b.tier ? a.name < b.name : a.tier < b.tier
+                a.tier == b.tier ? a.name < b.name : a.tier > b.tier
             }
     }
 

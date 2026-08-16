@@ -68,7 +68,9 @@ struct SourceRegistryTests {
     func tierCeilingIsRespected() {
         let strict = SourceRegistry().sources(for: .medicine, upTo: .t2)
         #expect(!strict.isEmpty)
-        #expect(strict.allSatisfy { $0.tier <= .t2 })
+        // `>=` reads "at least as credible as T2" now that the two tier enums
+        // are one: `<` means "worth less", so a stronger source is greater.
+        #expect(strict.allSatisfy { $0.tier >= .t2 })
     }
 
     @Test("adding a source is adding a row")
@@ -166,16 +168,17 @@ struct ThaiSourceTests {
 @Suite("Tier parity")
 struct TierParityTests {
 
-    @Test("SourceTier and CredibilityTier are the same five tiers")
-    func enumsStayAligned() {
-        // Two enums for one idea is a duplication §0.2 rule 3 forbids, and it is
-        // still here because collapsing it touches every module. This test is what
-        // keeps it from drifting in the meantime: if either side grows a case, the
-        // counts stop matching and the mapping stops being total.
-        #expect(SourceTier.allCases.count == CredibilityTier.allCases.count)
-        #expect(SourceTier.allCases.map(\.credibility) == CredibilityTier.allCases)
-        // And the *order* matches, which is what makes `<` mean the same thing on
-        // both sides: more credible sorts first.
-        #expect(SourceTier.allCases.map(\.rawValue) == CredibilityTier.allCases.map { $0.label.lowercased() })
+    /// This suite used to guard a duplication: two enums for one idea, kept
+    /// from drifting while they waited to be collapsed. They are collapsed —
+    /// `SourceTier` is an alias — so what is left to check is that the alias
+    /// is really the same type, and that the comparison it was possible to get
+    /// backwards reads one way now (`TierCollapseTests` has the rest).
+    @Test("SourceTier is CredibilityTier, and orders one way")
+    func theTiersAreOneType() {
+        #expect(SourceTier.allCases == CredibilityTier.allCases)
+        #expect(SourceTier.t1.credibility == CredibilityTier.t1)
+        // The comparison that used to mean opposite things on either side.
+        #expect(SourceTier.t1 > SourceTier.t5)
+        #expect(CredibilityTier.t1 > CredibilityTier.t5)
     }
 }

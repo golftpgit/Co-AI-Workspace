@@ -15,31 +15,26 @@ import AgentKit
 /// Shared vocabulary with web search (§1.4): a document ingested from the web
 /// keeps the tier its source had, so the two halves of the system rank
 /// evidence the same way.
-public enum SourceTier: String, Sendable, Codable, CaseIterable, Comparable {
-    case t1, t2, t3, t4, t5
+/// The five tiers, as the knowledge base names them.
+///
+/// **One type now, not two.** This was its own enum with the same five cases
+/// and the *opposite* `<`: `t1 < t2` was true here and false in AgentKit, so
+/// "is this source at least as good as T3" read one way in one module and the
+/// other way next door. Nothing crashed; a filter just kept the wrong sources,
+/// which is the failure §0.2 rule 3 is about. `TierParityTests` held the line
+/// while the two waited to be collapsed, and this is the collapse.
+///
+/// The name stays as an alias because it is the word the knowledge base and
+/// §11.3 use for the same idea, and renaming every call site would be a large
+/// diff that changes nothing about what runs.
+public typealias SourceTier = CredibilityTier
 
-    public static func < (a: SourceTier, b: SourceTier) -> Bool {
-        a.rawValue < b.rawValue   // t1 is the most credible
-    }
+extension CredibilityTier {
+    /// Kept so the call sites that already say `.credibility` still read
+    /// naturally; it is now the identity.
+    public var credibility: CredibilityTier { self }
 
-    public var isMoreCredibleThan: (SourceTier) -> Bool { { self < $0 } }
-}
-extension SourceTier {
-    /// The same five tiers as `AgentKit.CredibilityTier`, which is the vocabulary
-    /// the rest of the system shares (§14.1's rule, the QA gate, conflict
-    /// weighting). Two enums for one idea is a duplication this project's own
-    /// §0.2 rule 3 forbids — the mapping is exhaustive and `TierParityTests`
-    /// fails if either side grows a case the other does not have, so the
-    /// duplication cannot drift while it waits to be collapsed.
-    public var credibility: CredibilityTier {
-        switch self {
-        case .t1: .t1
-        case .t2: .t2
-        case .t3: .t3
-        case .t4: .t4
-        case .t5: .t5
-        }
-    }
+    public var isMoreCredibleThan: (CredibilityTier) -> Bool { { self > $0 } }
 }
 
 

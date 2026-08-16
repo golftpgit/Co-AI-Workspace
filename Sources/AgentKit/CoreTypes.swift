@@ -145,24 +145,57 @@ public enum RiskLevel: Int, Sendable, Codable, Comparable, CaseIterable, CustomS
 
 /// Source credibility, shared by WebSearch (§1.4) and Knowledge (§11.3)
 /// so conflict resolution can compare a web page against an uploaded file.
-public enum CredibilityTier: Int, Sendable, Codable, Comparable, CaseIterable {
-    case t1 = 1   // authoritative: standards bodies, official guidance, law
-    case t2 = 2   // peer-reviewed
-    case t3 = 3   // preprint / semi-official
-    case t4 = 4   // curated community
-    case t5 = 5   // general web
+public enum CredibilityTier: String, Sendable, Codable, Comparable, CaseIterable {
+    case t1   // authoritative: standards bodies, official guidance, law
+    case t2   // peer-reviewed
+    case t3   // preprint / semi-official
+    case t4   // curated community
+    case t5   // general web
 
-    /// Lower tier number == more credible, so ordering is inverted on purpose.
+    /// The number people say out loud, and what rows written before the tiers
+    /// were one type are stored as.
+    public var number: Int { (CredibilityTier.allCases.firstIndex(of: self) ?? 0) + 1 }
+
+    /// Lower tier number == more credible, so ordering is inverted on purpose:
+    /// `t5 < t1` reads as "general web is worth less than a standards body".
+    ///
+    /// **This is the one meaning now.** `Knowledge.SourceTier` was a second
+    /// enum of the same five tiers whose `<` meant the opposite — `t1 < t2`
+    /// was true there — so the same comparison read one way in one module and
+    /// the other way next door. That is the kind of duplication §0.2 rule 3
+    /// forbids, and the kind that fails silently: nothing crashes, some
+    /// filter just keeps the wrong sources.
     public static func < (lhs: CredibilityTier, rhs: CredibilityTier) -> Bool {
-        lhs.rawValue > rhs.rawValue
+        lhs.number > rhs.number
     }
 
-    public var label: String { "T\(rawValue)" }
+    public var label: String { "T\(number)" }
 
-    /// Good enough to stand behind a claim on its own (§14.1). T4–T5 are not:
-    /// a curated wiki and a blog post can *point* at the truth, but the rule is
-    /// that something at T1–T3 has to be there too.
-    public var canCarryAClaim: Bool { self <= .t3 }
+    /// Accepts both shapes on the way in. Provenance rows have been written
+    /// as `"t3"` since P2 and evidence rows as `3` since P1; a decoder that
+    /// took only one would make half the stored knowledge base unreadable,
+    /// which is a migration nobody asked for (the same rule P9.2 settled).
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let text = try? container.decode(String.self),
+           let tier = CredibilityTier(rawValue: text) {
+            self = tier
+            return
+        }
+        let number = try container.decode(Int.self)
+        guard let tier = CredibilityTier.allCases.first(where: { $0.number == number }) else {
+            throw DecodingError.dataCorruptedError(in: container,
+                                                   debugDescription: "ไม่รู้จัก tier \(number)")
+        }
+        self = tier
+    }
+
+    /// Written as the string form from here on, which is what the larger of
+    /// the two populations already uses.
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 /// §14.1's rule for how confidently something may be written, as arithmetic.

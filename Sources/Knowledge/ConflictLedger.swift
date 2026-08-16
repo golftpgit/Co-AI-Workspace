@@ -216,10 +216,14 @@ public struct ConflictLedger: Sendable {
         guard var conflict = conflicts[id], let decision = conflict.decision else { return false }
         guard let newTier = source.tier else { return false }
 
+        // `max()` since the tiers became one type: `<` means "worth less", so
+        // the strongest source is the largest. It read `min()` while this
+        // module's `<` meant the opposite of AgentKit's — the sort of line
+        // that keeps working until somebody moves it.
         let bestSoFar = [conflict.a.provenance.tier, conflict.b.provenance.tier]
             .compactMap { $0 }
-            .min()   // t1 is the most credible, so the minimum is the strongest
-        guard let bestSoFar, newTier < bestSoFar else { return false }
+            .max()
+        guard let bestSoFar, newTier > bestSoFar else { return false }
 
         // Superseded rather than deleted: the card can show that a decision
         // was made and what displaced it.
