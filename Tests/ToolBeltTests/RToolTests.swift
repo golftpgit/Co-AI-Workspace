@@ -151,3 +151,69 @@ struct RFrameImportTests {
         #expect(back.columns.map(\.name) == ["id", "name"])
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// P14.4 — installing a package always stops for a person, and cannot be
+// smuggled past by calling it something else.
+// ─────────────────────────────────────────────────────────────
+@Suite("Installing an R package asks, every time (P14.4)")
+struct RInstallPackageToolTests {
+
+    /// The hole this closes: `AlwaysAsk` is keyed on the tool name, and
+    /// `install.packages("x")` inside a block of R is not a tool name.
+    @Test("r_eval refuses to install, and says which tool does")
+    func evalRefusesInstalls() {
+        for call in ["install.packages(\"dplyr\")",
+                     "remotes::install_github(\"tidyverse/dplyr\")",
+                     "BiocManager::install(\"limma\")",
+                     "pak::pkg_install(\"survival\")"] {
+            #expect(throws: ToolError.self) {
+                try REvalTool.refuseInstalls(in: "x <- 1\n\(call)\n")
+            }
+        }
+        do {
+            try REvalTool.refuseInstalls(in: "install.packages(\"dplyr\")")
+            Issue.record("an install slipped through r_eval")
+        } catch let error as ToolError {
+            #expect("\(error)".contains("r_install_package"))
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+        // Ordinary code is not caught by the crude match.
+        #expect(throws: Never.self) {
+            try REvalTool.refuseInstalls(in: "library(dplyr); summary(df)")
+        }
+    }
+
+    /// The argument is a package name, not R. Anything else is a way to run
+    /// arbitrary code through a tool whose approval sheet says "install".
+    @Test("the package name is a name, not an expression")
+    func nameIsANotAnExpression() {
+        #expect(throws: ToolError.self) {
+            _ = try RInstallPackageTool.arguments(#"{"package":"dplyr\"); system(\"rm -rf ~"}"#)
+        }
+        #expect(throws: ToolError.self) {
+            _ = try RInstallPackageTool.arguments(#"{"package":""}"#)
+        }
+        #expect(throws: ToolError.self) {
+            _ = try RInstallPackageTool.arguments(#"{"package":"dplyr","repository":"http://x"}"#)
+        }
+        let ok = try? RInstallPackageTool.arguments(#"{"package":"data.table"}"#)
+        #expect(ok?.repository == "https://cloud.r-project.org")
+    }
+
+    @Test("a closed bridge still says how to open it")
+    func closedBridgeMessage() async {
+        let tool = RInstallPackageTool(bridge: {
+            RBridgeClient(port: 8797, scriptPath: "/Users/me/r-bridge.R")
+        })
+        do {
+            _ = try await tool.call(argumentsJSON: #"{"package":"dplyr"}"#, context: context())
+            Issue.record("installed against a bridge that is not there")
+        } catch let error as ToolError {
+            #expect("\(error)".contains("Rscript /Users/me/r-bridge.R"))
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+}

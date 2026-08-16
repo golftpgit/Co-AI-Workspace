@@ -52,6 +52,26 @@ struct AlwaysAskTests {
         }
     }
 
+    @Test("r_install_package does not run under full autonomy either")
+    func rInstallStopsUnderFullAutonomy() async throws {
+        // Same rule, second entry. The list is what makes it reachable at all:
+        // an install written inside `r_eval` would be a high-risk call that
+        // full autonomy waves through, which is why `r_eval` refuses those
+        // calls and points here (P14.4).
+        let ran = CallCounter()
+        let gateway = ToolGateway(chain: HookChain(),
+                                  modes: OperatingModes(autonomy: .fullAutonomous))
+        await gateway.register(CountingTool(name: "r_install_package", riskLevel: .high, ran: ran))
+
+        let outcome = try await gateway.call("r_install_package", argumentsJSON: "{}",
+                                             context: ToolContext(scope: .central))
+        #expect(await ran.value == 0, "an R package was installed without anybody being asked")
+        guard case .denied = outcome else {
+            Issue.record("expected a denial with no approver, got \(outcome)")
+            return
+        }
+    }
+
     // The comparison that makes the previous test mean something: an ordinary
     // high-risk tool *is* waved through by full autonomy, which is what the
     // setting is for.

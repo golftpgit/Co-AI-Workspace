@@ -31,7 +31,12 @@ public enum AlwaysAsk {
     /// executes its own `setup.py` during installation. Whatever it did then
     /// is not in the tool's output, not in the transcript, and not visible in
     /// whatever the package is later used for.
-    public static let toolNames: Set<String> = ["install_package"]
+    ///
+    /// `r_install_package` is here for the same reason, and `r_eval` refuses
+    /// the install calls it could otherwise smuggle: this list is keyed on the
+    /// tool name, so an install hidden inside a block of R would be exactly the
+    /// hole the list exists to close (P14.4).
+    public static let toolNames: Set<String> = ["install_package", "r_install_package"]
 
     public static func requiresHuman(_ toolName: String) -> Bool {
         toolNames.contains(toolName)
@@ -80,6 +85,7 @@ public struct DefaultRiskScorer: RiskScoring {
         // Arbitrary R on the person's machine, with their libraries and their
         // files (§12.7). "It is only statistics" does not lower it.
         "r_eval": .high,
+        "r_install_package": .high,
     ]
 
     /// Names classified above for tools that **do not exist yet**, each with
