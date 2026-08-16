@@ -169,6 +169,10 @@ struct ProjectsView: View {
             Divider()
             VStack(alignment: .leading, spacing: 6) {
                 TextField("ชื่อโปรเจกต์ใหม่", text: $newName)
+                    // A placeholder is not a label: it disappears the moment
+                    // somebody types, and VoiceOver announced this as an
+                    // unnamed text field (measured with the driver, E.30).
+                    .accessibilityLabel("ชื่อโปรเจกต์ใหม่")
                     .textFieldStyle(.roundedBorder)
                 HStack {
                     Picker("ชนิด", selection: $newType) {

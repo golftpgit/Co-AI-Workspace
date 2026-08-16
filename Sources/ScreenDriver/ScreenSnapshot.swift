@@ -24,6 +24,11 @@ public struct ScreenElement: Sendable, Equatable, Codable {
     public let label: String
     /// The control's current value, where it has one.
     public let value: String?
+    /// AppKit's finer answer — `AXCloseButton`, `AXMinimizeButton`. Carried
+    /// because it is what separates the window's own furniture from a control
+    /// this app drew, and a driver that cannot tell them apart reports the
+    /// traffic lights as unlabelled buttons forever (measured, E.30).
+    public let subrole: String?
     /// Centre of the element in screen coordinates, for the cases where a click
     /// has to be synthesised. Optional because an element found in a stored
     /// snapshot has no position on today's screen.
@@ -38,8 +43,10 @@ public struct ScreenElement: Sendable, Equatable, Codable {
     }
 
     public init(role: String, label: String, value: String? = nil,
+                subrole: String? = nil,
                 centre: Point? = nil, enabled: Bool = true,
                 children: [ScreenElement] = []) {
+        self.subrole = subrole
         self.role = role
         self.label = label
         self.value = value

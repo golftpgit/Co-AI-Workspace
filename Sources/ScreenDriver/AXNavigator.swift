@@ -192,6 +192,7 @@ public actor AXNavigator {
         ScreenElement(role: string(element, kAXRoleAttribute) ?? "AXUnknown",
                       label: label(of: element),
                       value: string(element, kAXValueAttribute),
+                      subrole: string(element, kAXSubroleAttribute),
                       centre: centre(of: element),
                       enabled: boolean(element, kAXEnabledAttribute) ?? true,
                       children: children)

@@ -171,9 +171,11 @@ private struct ChatScreen: View {
                     .onSubmit { Task { await model.search() } }
                     .accessibilityLabel("ค้นข้อความในบทสนทนาเก่า")
                 if !model.query.isEmpty {
-                    Button { model.clearSearch() } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("ล้างคำค้น")
+                    Button { model.clearSearch() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .accessibilityLabel("ล้างคำค้น")
+                    }
+                    .buttonStyle(.borderless)
                 }
             }
             // A different question, not a wider default: inside a project the

@@ -147,9 +147,11 @@ private struct NotebookPane: View {
             HStack {
                 Text("สมุดงาน").font(.subheadline).bold()
                 Spacer()
-                Button { model.newNotebook() } label: { Image(systemName: "plus") }
+                Button { model.newNotebook() } label: {
+                        Image(systemName: "plus")
+                            .accessibilityLabel("สร้างสมุดงานใหม่")
+                    }
                     .buttonStyle(.borderless)
-                    .accessibilityLabel("สร้างสมุดงานใหม่")
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
             Divider()
@@ -559,9 +561,11 @@ private struct ExplorerPane: View {
                     HStack {
                         Text("แหล่งข้อมูลภายนอก")
                         Spacer()
-                        Button { addingConnector = true } label: { Image(systemName: "plus") }
+                        Button { addingConnector = true } label: {
+                                Image(systemName: "plus")
+                                    .accessibilityLabel("เพิ่มแหล่งข้อมูลภายนอก")
+                            }
                             .buttonStyle(.borderless)
-                            .accessibilityLabel("เพิ่มแหล่งข้อมูลภายนอก")
                     }
                 }
                 }
@@ -764,9 +768,11 @@ private struct PlanPane: View {
             HStack {
                 Text("แผนวิเคราะห์").font(.subheadline).bold()
                 Spacer()
-                Button { model.open(plan: nil) } label: { Image(systemName: "plus") }
+                Button { model.open(plan: nil) } label: {
+                        Image(systemName: "plus")
+                            .accessibilityLabel("อ่านโครงร่างใหม่")
+                    }
                     .buttonStyle(.borderless)
-                    .accessibilityLabel("อ่านโครงร่างใหม่")
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
             Divider()

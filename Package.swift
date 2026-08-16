@@ -163,6 +163,9 @@ let package = Package(
         // than an assertion to run in CI.
         .executableTarget(name: "UIResponsivenessCheck"),
 
+        // Driving a real screen, with a real permission granted (§23.2, P8.7).
+        .executableTarget(name: "ScreenCheck", dependencies: ["ScreenDriver"]),
+
         // M6 — the tools themselves. Depends on Execution, never the reverse,
         // and CoreEngine never depends on this: tools plug in via AgentTool.
         // Analysis is here for `run_stat_test` (P6.6): the Statistical

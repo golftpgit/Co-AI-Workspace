@@ -97,8 +97,8 @@ DUP_SCOPE=$(grep -rlE "enum Scope[[:space:]]*[:{]" Sources --include=*.swift | w
 
 # The rule is about *library* targets: a library that prints has no way to be
 # quiet. Executables are where output is the product — the app writes through
-# AppLog, and EmbeddingCheck, MLXCheck, TierOneCheck and UIResponsivenessCheck
-# exist to print what they
+# AppLog, and EmbeddingCheck, MLXCheck, TierOneCheck, UIResponsivenessCheck and
+# ScreenCheck exist to print what they
 # measured. The list is spelled out rather than derived from Package.swift: an
 # executable added here is a deliberate act, and having to name it is the point
 # at which somebody asks whether the printing belongs in a library.
@@ -115,7 +115,8 @@ if grep -rnE "(^|[^A-Za-z0-9_.])print\(" Sources --include=*.swift \
    | grep -vE ":[0-9]+:[[:space:]]*(///?|\*)" \
    | grep -v "^Sources/CoAIWorkspaceApp" | grep -v "^Sources/EmbeddingCheck" \
    | grep -v "^Sources/MLXCheck" | grep -v "^Sources/TierOneCheck" \
-   | grep -v "^Sources/UIResponsivenessCheck" | grep -q .; then
+   | grep -v "^Sources/UIResponsivenessCheck" | grep -v "^Sources/ScreenCheck" \
+   | grep -q .; then
   fail "print() outside the app target — use AppLog/os.Logger"
 else
   ok "no stray print() in library targets"
