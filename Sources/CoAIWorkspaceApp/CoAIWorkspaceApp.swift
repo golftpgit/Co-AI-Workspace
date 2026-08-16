@@ -44,7 +44,7 @@ private struct RootView: View {
     /// business knowing the app's screen areas — and held by tab *id* rather
     /// than by `Tab`, so a closed and reopened project starts fresh rather than
     /// resuming a place from before it was closed.
-    @State private var areaByTab: [String: Area] = [:]
+    @State private var areaByTab = TabAreaMemory<Area>()
     /// What the Workbench's tab bar last selected. Read through `workbenchTab`,
     /// never directly: which tabs exist depends on the scope, and this can name
     /// one the current scope does not have.
@@ -334,6 +334,8 @@ private struct RootView: View {
     /// would then show an idle screen over live work.
     private func close(_ tab: OpenWorkspaces.Tab, _ engine: Engine) async {
         await projects.closeTab(tab)
+        // A reopened project is a fresh window onto it, not a resumption.
+        areaByTab.closed(tab.id)
         if workspaces.release(tab.scope) {
             await engine.teams.release(tab.scope)
         }
@@ -356,17 +358,23 @@ private struct RootView: View {
                     // way back. Switching to the project you were planning and
                     // landing on Chat is the small daily cost of treating a
                     // workspace as a mode rather than a place.
-                    .onChange(of: area) { _, now in
-                        areaByTab[projects.workspaces.active.id] = now
-                    }
-                    .onChange(of: projects.workspaces.active) { _, now in
+                    // One observer, not two, and it uses the `previous` value
+                    // SwiftUI hands it. The pair this replaces both discarded
+                    // that and read `active` for the id to file under — which
+                    // during a switch has already moved, so the tab being left
+                    // was filed under the tab being arrived at. Measured: three
+                    // tabs set to three areas all read back as the last one
+                    // (E.34).
+                    .onChange(of: projects.workspaces.active) { previous, now in
                         // Where you left it wins over what the type suggests:
                         // the project type is an opinion about a workspace
                         // nobody has been in yet, not a correction of where
                         // somebody chose to be (§24.3, P20.6).
-                        if let remembered = areaByTab[now.id] {
+                        switch areaByTab.moved(leaving: previous.id, showing: area,
+                                               arriving: now.id) {
+                        case .restore(let remembered):
                             area = remembered
-                        } else {
+                        case .fresh:
                             area = .chat
                             openEmphasisedPanel()
                         }

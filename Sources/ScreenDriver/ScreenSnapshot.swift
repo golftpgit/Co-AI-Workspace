@@ -191,7 +191,21 @@ public enum ElementFinder {
     public static func find(_ query: ElementQuery,
                             in snapshot: ScreenSnapshot) throws -> ScreenElement {
         let all = snapshot.root.flattened
-        let matches = all.filter { query.matches($0) }
+        // A control whose name *begins* with what was asked for is the control
+        // that was named; one that merely mentions it is a different control
+        // talking about the same thing. Every tab in the app is a pair like
+        // that by construction — "แท็บ X" and "ปิดแท็บ X" — so without this,
+        // naming a tab is ambiguous with its own close button and a
+        // well-written label poisons the control it belongs to.
+        //
+        // Narrowing only: if nothing starts with the query the full set stands,
+        // and a genuine tie (three buttons called "บันทึก", two tabs whose
+        // names both start the same way) is still refused. Preferring the
+        // closer match resolves overlap; it must never turn ambiguity into a
+        // coin flip, which is the rule this whole function exists for.
+        let matched = all.filter { query.matches($0) }
+        let closest = matched.filter { Self.startsWithQuery(query, $0) }
+        let matches = closest.isEmpty ? matched : closest
         switch matches.count {
         case 1: return matches[0]
         case 0:
@@ -207,6 +221,22 @@ public enum ElementFinder {
                                                  .map(\.label))
         default:
             throw ScreenDriverError.ambiguous(query: describe(query), count: matches.count)
+        }
+    }
+
+    /// Whether the element's name (or value) *starts* with what was asked for,
+    /// rather than containing it somewhere. Exact queries are already as close
+    /// as a match can be.
+    public static func startsWithQuery(_ query: ElementQuery, _ element: ScreenElement) -> Bool {
+        switch query.label {
+        case .exact:
+            return true
+        case .contains(let text):
+            let head = element.label.prefix(text.count)
+            if head.compare(text, options: [.caseInsensitive]) == .orderedSame { return true }
+            guard let value = element.value else { return false }
+            return value.prefix(text.count).compare(text, options: [.caseInsensitive])
+                == .orderedSame
         }
     }
 

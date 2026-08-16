@@ -155,10 +155,21 @@ public actor AXNavigator {
                 ?? Self.copyFirst(application, kAXWindowsAttribute) else {
             throw ScreenDriverError.notFound(query: "หน้าต่างของแอป", sawInstead: [])
         }
+        // The same narrowing `ElementFinder` does, from the same helper: this
+        // walk cannot call it (it needs the live `AXUIElement`, not a value),
+        // and two implementations of "which control does this name mean" is
+        // exactly how one of them ends up with a rule the other lacks — which
+        // is what happened here, and cost a session's worth of wrong
+        // conclusions before it was noticed (E.34).
         var found: [AXUIElement] = []
+        var closest: [AXUIElement] = []
         Self.walk(window, depth: 0) { element in
-            if query.matches(Self.describe(element)) { found.append(element) }
+            let described = Self.describe(element)
+            guard query.matches(described) else { return }
+            found.append(element)
+            if ElementFinder.startsWithQuery(query, described) { closest.append(element) }
         }
+        if !closest.isEmpty { found = closest }
         switch found.count {
         case 1: return found[0]
         case 0: throw ScreenDriverError.notFound(query: ElementFinder.describe(query),
