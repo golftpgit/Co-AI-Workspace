@@ -20,6 +20,7 @@ struct ModelsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     installedSection
+                    leftoverSection
                     recommendedSection
                 }
                 .padding(16)
@@ -72,6 +73,47 @@ struct ModelsView: View {
         } else {
             ForEach(model.installed, id: \.name) { installed in
                 InstalledRow(model: model, installed: installed)
+            }
+        }
+    }
+
+    // MARK: - leftovers (§9.4, P5.2)
+
+    /// Downloads that stopped halfway. Separate from the installed list on
+    /// purpose — they are not models, they cannot be loaded, and putting them
+    /// in the same list is how a broken 17 GB directory gets chosen as the
+    /// local tier. What they are is disk space with no way to reclaim it
+    /// except a terminal, which this screen exists to replace.
+    @ViewBuilder
+    private var leftoverSection: some View {
+        if !model.leftovers.isEmpty {
+            Text("ดาวน์โหลดที่ค้างอยู่").font(.subheadline).bold()
+            Text("ไฟล์พวกนี้โหลดไม่จบ จึงโหลดเป็นโมเดลไม่ได้ แต่ยังกินพื้นที่และถูกนับในโควตา")
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(model.leftovers) { leftover in
+                HStack(spacing: Space.row) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(leftover.directory.lastPathComponent).font(.callout)
+                        Text("\(leftover.missing) · "
+                             + ByteCountFormatter.string(fromByteCount: leftover.bytes,
+                                                         countStyle: .file))
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if leftover.isOurs {
+                        Button("ลบไฟล์ที่ค้าง", role: .destructive) {
+                            Task { await model.remove(leftover) }
+                        }
+                        .accessibilityLabel("ลบไฟล์ที่ค้างของ \(leftover.directory.lastPathComponent)")
+                    } else {
+                        // Somebody else's library is somebody else's to tidy,
+                        // and the path is what somebody needs to go and do it.
+                        Text("อยู่ในคลังของโปรแกรมอื่น")
+                            .font(.caption2).foregroundStyle(.secondary)
+                            .help(leftover.directory.path(percentEncoded: false))
+                    }
+                }
+                .padding(.vertical, 2)
             }
         }
     }
