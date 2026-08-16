@@ -166,6 +166,9 @@ let package = Package(
         // Driving a real screen, with a real permission granted (§23.2, P8.7).
         .executableTarget(name: "ScreenCheck", dependencies: ["ScreenDriver"]),
 
+        // P6.3 — the DB connectors against real servers (§12.2).
+        .executableTarget(name: "ConnectorCheck", dependencies: ["Analysis", "AgentKit"]),
+
         // M6 — the tools themselves. Depends on Execution, never the reverse,
         // and CoreEngine never depends on this: tools plug in via AgentTool.
         // Analysis is here for `run_stat_test` (P6.6): the Statistical
