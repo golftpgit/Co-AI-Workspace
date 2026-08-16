@@ -212,11 +212,19 @@ public struct ChannelAccountStore: Sendable {
 
     public func load() -> [ChannelAccount] {
         guard let data = try? Data(contentsOf: file) else { return [] }
-        guard let accounts = try? JSONDecoder().decode([ChannelAccount].self, from: data) else {
+        // P9.2 — both shapes: the envelope this build writes, and the bare
+        // array every file written before it is. A newer file is left alone
+        // and reported rather than read as though we understood it.
+        switch VersionedList.decode(data, as: ChannelAccount.self) {
+        case .list(let accounts, _):
+            return accounts
+        case .fromNewerBuild(let version):
+            FileStoreIncidents.shared.record(.newerSchema(doing: "channel account", version: version))
+            return []
+        case .unreadable:
             reportUnreadable(file, kind: "channel account", log: log)
             return []
         }
-        return accounts
     }
 
     public func load(platform: ChannelPlatform) -> [ChannelAccount] {
@@ -224,11 +232,15 @@ public struct ChannelAccountStore: Sendable {
     }
 
     public func save(_ accounts: [ChannelAccount]) throws {
+        // P9.2 — a file from a newer build is not written over. Running on
+        // defaults for one session is recoverable; overwriting is not, and the
+        // build somebody would go back to is the one that lost their settings.
+        guard VersionedList.mayOverwrite(file, of: ChannelAccount.self) else {
+            throw FileStoreError.fileFromNewerBuild
+        }
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(accounts).write(to: file, options: .atomic)
+        try VersionedList.encode(accounts).write(to: file, options: .atomic)
     }
 
     @discardableResult
