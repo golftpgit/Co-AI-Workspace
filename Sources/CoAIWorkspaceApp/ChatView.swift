@@ -470,6 +470,8 @@ private struct BubbleView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .tool:
             toolCard
+        case .reasoning:
+            reasoningCard
         case .note:
             Label(bubble.text, systemImage: "info.circle")
                 .font(.callout).foregroundStyle(.secondary)
@@ -478,6 +480,30 @@ private struct BubbleView: View {
                 .font(.callout).foregroundStyle(.red)
                 .textSelection(.enabled)
         }
+    }
+
+    /// The model's thinking, collapsed (§14.2, U18).
+    ///
+    /// Streamed and shown rather than dropped, and kept out of the answer:
+    /// this is a separate bubble because the moment thinking joins the reply it
+    /// gets stored as the reply. It says how long rather than how much, since
+    /// "12 วินาที" is the thing somebody watching a spinner wants to know.
+    private var reasoningCard: some View {
+        DisclosureGroup {
+            Text(bubble.text)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, Space.tight)
+        } label: {
+            Label(String(format: "คิดอยู่ %.0f วินาที", bubble.seconds),
+                  systemImage: "brain")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(Space.row)
+        .accessibilityLabel(String(format: "ความคิดของโมเดล %.0f วินาที", bubble.seconds))
+        .accessibilityHint("กางเพื่ออ่าน — ส่วนนี้ไม่ใช่คำตอบ และไม่ถูกบันทึกไว้ในบทสนทนา")
     }
 
     /// Collapsed by default with the raw output one click away — §14.2 asks for

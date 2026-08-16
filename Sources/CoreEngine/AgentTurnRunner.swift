@@ -37,6 +37,12 @@ public enum TurnEvent: Sendable {
     /// silently is how a conversation gets compacted out from under someone
     /// who was reading it.
     case usage(promptTokens: Int, completionTokens: Int, budget: Int)
+    /// The model's thinking, as it arrives (§14.2, U18). **Not the answer**:
+    /// it is never stored as the reply and never parsed as structured output,
+    /// which is why it travels as its own event rather than as text. `seconds`
+    /// is how long the model has been at it, so the card can say "คิดอยู่ 12
+    /// วินาที" without the screen timing anything itself.
+    case reasoning(id: String, text: String, seconds: Double)
     /// Something the user should know that is not part of the answer.
     case note(String)
     case assistantMessageStored(StoredMessage)
@@ -281,18 +287,24 @@ public actor AgentTurnRunner {
 
             var text = ""
             var calls: [LLMToolCall] = []
+            // U18 — the thinking, kept apart from the answer. Its own string
+            // and its own event: the moment it joins `text` it becomes the
+            // stored reply and gets parsed as structured output, which is the
+            // reason it was being thrown away rather than shown.
+            var reasoning = ""
+            let reasoningID = "think_\(round)_\(conversationID)"
+            let thinkingStarted = ContinuousClock.now
             do {
                 for try await event in stream {
                     switch event {
                     case .textDelta(let chunk):
                         text += chunk
                         emit(.assistantDelta(chunk))
-                    case .reasoningDelta:
-                        // Deliberately not part of the answer: it must never be
-                        // stored as the reply or parsed as structured output.
-                        // Showing it belongs to the Live Monitor's collapsed
-                        // step card (§14.2), which does not exist yet.
-                        break
+                    case .reasoningDelta(let chunk):
+                        reasoning += chunk
+                        emit(.reasoning(
+                            id: reasoningID, text: reasoning,
+                            seconds: Self.seconds(since: thinkingStarted)))
                     case .toolCall(let call):
                         calls.append(call)
                     case .usage(let usage):
@@ -420,6 +432,12 @@ public actor AgentTurnRunner {
     /// `tool_calls` that produced it, and those ids do not outlive the turn.
     /// Replaying them as prose keeps a reloaded conversation valid for every
     /// tier, including the ones with no tool support at all.
+    private static func seconds(since start: ContinuousClock.Instant) -> Double {
+        let elapsed = start.duration(to: .now)
+        return Double(elapsed.components.seconds)
+            + Double(elapsed.components.attoseconds) / 1e18
+    }
+
     private static func llmMessage(from stored: StoredMessage) -> LLMMessage {
         switch stored.role {
         case .system: return LLMMessage(.system, stored.content)

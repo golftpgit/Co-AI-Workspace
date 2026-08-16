@@ -1024,6 +1024,25 @@ else
   fail "r_eval can install packages without the always-ask tool (§5.5, P14.4)"
 fi
 
+# U18 — the model's thinking is shown, and is not the answer.
+#
+# Two failure modes, opposite directions. It was dropped on the floor for
+# months with a comment saying the place to show it did not exist yet; and the
+# obvious way to show it — appending to the reply — makes it the stored answer
+# and feeds it to the structured-output parser.
+if grep -q "case .reasoningDelta(let chunk)" Sources/CoreEngine/AgentTurnRunner.swift \
+   && grep -q "emit(.reasoning(" Sources/CoreEngine/AgentTurnRunner.swift; then
+  ok "the model's thinking reaches the screen"
+else
+  fail "reasoning deltas are dropped again (§14.2, U18)"
+fi
+if grep -A 3 "case .reasoningDelta(let chunk)" Sources/CoreEngine/AgentTurnRunner.swift \
+   | grep -q "text +="; then
+  fail "thinking is being appended to the answer — it would be stored as the reply (U18)"
+else
+  ok "thinking is kept out of the stored reply"
+fi
+
 # P3.7 — a decision history that can be gone back on, and not edited.
 #
 # The failure mode is an UPDATE: reversing a decision by overwriting the old
