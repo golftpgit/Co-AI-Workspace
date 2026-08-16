@@ -34,7 +34,16 @@ import sys
 from pathlib import Path
 
 # How far after a `Button {` to look for the end of its label and for a label.
-WINDOW = 10
+# How far past a `Button` to read. The depth counter below is what actually
+# ends the block; this is only a cap so a malformed file cannot make the
+# audit read to the end of the world.
+#
+# It was 10, and that made comment length part of the rule: a button whose
+# label carried six lines explaining *why* the label sits where it does was
+# reported as having no label at all, because the modifier fell outside the
+# window. A rule that punishes writing the reason down teaches people not to
+# write it down (found 2026-08-16 while fixing what E.30 measured).
+WINDOW = 24
 
 ALLOWED_TAP = re.compile(r"//\s*a11y-ok:")
 
@@ -49,11 +58,11 @@ def button_blocks(lines):
 def icon_only_without_label(path, lines):
     problems = []
     for number, block in button_blocks(lines):
-        if "Image(systemName:" not in block:
-            continue
-        # Where the button's own text would be. Cut the block at the first
-        # line that closes the label closure at column 0-ish, to avoid reading
-        # the *next* view's Text as this button's.
+        # The button's own block first, then the questions. Asking "is there an
+        # `Image(systemName:)` anywhere in the next 24 lines" makes every
+        # button near an icon look like an icon button — which is what happened
+        # the moment the window was widened, and it produced four false alarms
+        # in one run.
         head = block.split("\n")
         cut = []
         depth = 0
@@ -63,6 +72,9 @@ def icon_only_without_label(path, lines):
             if depth <= 0 and len(cut) > 1:
                 break
         text = "\n".join(cut)
+
+        if "Image(systemName:" not in text:
+            continue
         # A button that shows words is already announced as those words.
         if re.search(r"\bText\(|\bLabel\(", text):
             continue

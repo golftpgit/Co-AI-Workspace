@@ -953,11 +953,17 @@ struct WorkspaceTabBar: View {
                 Button {
                     Task { await close(entry.tab) }
                 } label: {
+                    // The label goes on the `Image`, not on the `Button`.
+                    // Measured with the screen driver (E.30): with it on the
+                    // button, AppKit still exposes the image's own element and
+                    // VoiceOver reads "button" — the same convention
+                    // `FilesView` documents and `accessibility-audit.py`
+                    // checks for.
                     Image(systemName: "xmark").font(.system(size: 8))
+                        .accessibilityLabel("ปิดแท็บ \(entry.title) — ปิดแค่หน้าต่าง ไม่ใช่ปิดโครงการ")
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .accessibilityLabel("ปิดแท็บ \(entry.title) — ปิดแค่หน้าต่าง ไม่ใช่ปิดโครงการ")
             }
         }
         .padding(.horizontal, 8)
