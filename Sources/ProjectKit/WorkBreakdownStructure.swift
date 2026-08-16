@@ -107,6 +107,45 @@ public struct WorkBreakdown: Sendable, Equatable {
         return result
     }
 
+    /// Moves one package to sit where another one is, among its own siblings
+    /// (§19.6, P10.11).
+    ///
+    /// Order in a WBS is the order somebody reads the plan in, and until now it
+    /// could only be changed by deleting a package and adding it again at the
+    /// end — so a plan written slightly out of sequence stayed that way.
+    ///
+    /// Two refusals, both about not silently doing something else:
+    ///
+    ///  • **Only between siblings.** Dropping a package on one with a different
+    ///    parent would be a re-parenting, which changes what the plan *says*
+    ///    rather than the order it says it in. That is a different act and it
+    ///    is not this one.
+    ///  • **The whole run is renumbered.** Returning one changed row leaves the
+    ///    others holding numbers that no longer describe the sequence, and the
+    ///    next insert lands in the wrong place.
+    ///
+    /// Returns the packages whose order changed, or an empty array when the
+    /// move was refused or would change nothing.
+    public func reordering(_ moved: String, toPositionOf target: String) -> [WorkPackage] {
+        guard moved != target,
+              let source = byID[moved], let destination = byID[target],
+              source.parent == destination.parent else { return [] }
+
+        var siblings = children(of: source.parent)
+        guard let from = siblings.firstIndex(where: { $0.id == moved }),
+              let to = siblings.firstIndex(where: { $0.id == target }) else { return [] }
+
+        let package = siblings.remove(at: from)
+        siblings.insert(package, at: to)
+
+        return siblings.enumerated().compactMap { index, sibling in
+            guard sibling.order != index else { return nil }
+            var next = sibling
+            next.order = index
+            return next
+        }
+    }
+
     public func depth(of package: WorkPackage) -> Int {
         var depth = 0
         var current = package
