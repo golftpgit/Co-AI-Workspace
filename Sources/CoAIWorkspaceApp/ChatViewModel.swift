@@ -20,7 +20,7 @@ import MLXRuntime
 @Observable
 final class ChatViewModel {
     struct Bubble: Identifiable {
-        enum Kind: Sendable { case user, assistant, tool, note, failure }
+        enum Kind: Sendable { case user, assistant, tool, note, failure, reasoning }
         let id: String
         let kind: Kind
         var text: String
@@ -31,6 +31,8 @@ final class ChatViewModel {
         /// Why this call went the way it did — the gate's own risk reasons
         /// (P20.5). Empty when there is nothing to say, which is most calls.
         var why: [String] = []
+        /// How long the model thought, for the collapsed card (U18).
+        var seconds: Double = 0
     }
 
     private(set) var conversations: [Conversation] = []
@@ -125,7 +127,10 @@ final class ChatViewModel {
             switch bubble.kind {
             case .user: TranscriptTurn(fromUser: true, text: bubble.text)
             case .assistant: TranscriptTurn(fromUser: false, text: bubble.text)
-            case .tool, .note, .failure: nil
+            // Thinking is not a turn: it was never said to anybody, and a
+            // brief built out of it would quote the model's second thoughts
+            // back at the user as if they were the answer (U18).
+            case .tool, .note, .failure, .reasoning: nil
             }
         }
     }
@@ -374,6 +379,16 @@ final class ChatViewModel {
                 bubbles[index] = updated
             } else {
                 bubbles.append(updated)
+            }
+        case .reasoning(let id, let text, let seconds):
+            // Its own bubble, above the answer it produced. Collapsed by
+            // default: thinking is long, and the answer is what somebody came
+            // for (§14.2).
+            let bubble = Bubble(id: id, kind: .reasoning, text: text, seconds: seconds)
+            if let index = bubbles.firstIndex(where: { $0.id == id }) {
+                bubbles[index] = bubble
+            } else {
+                bubbles.append(bubble)
             }
         case .note(let text):
             bubbles.append(Bubble(id: UUID().uuidString, kind: .note, text: text))

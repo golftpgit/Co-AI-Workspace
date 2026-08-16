@@ -589,3 +589,76 @@ struct TurnRationaleTests {
         #expect(why?.first?.contains("ยังไม่ต้องเขียนไฟล์") == true)
     }
 }
+
+
+// ─────────────────────────────────────────────────────────────
+// U18 — the thinking was being thrown away.
+//
+// The runner dropped every `reasoningDelta` with a comment saying the place to
+// show it did not exist yet. It exists now, and the rule that made dropping
+// safe has to survive the change: **thinking is not the answer.** The moment
+// it joins the reply it gets stored as the reply and parsed as structured
+// output.
+// ─────────────────────────────────────────────────────────────
+@Suite("Thinking is shown, and is not the answer (U18)")
+struct ReasoningEventTests {
+
+    /// An executor that thinks out loud before answering, the way a
+    /// reasoning-parser endpoint does.
+    private struct Thinker: LLMExecutor {
+        let identifier = "thinker"
+        let tier = ModelTier.selfHosted
+        let capabilities = LLMCapabilities(contextWindow: 32_000, supportsTools: true,
+                                           supportsStructuredOutput: true,
+                                           supportsStreaming: true, supportsVision: false)
+        func isAvailable() async -> Bool { true }
+        func respond(to request: LLMRequest) -> AsyncThrowingStream<LLMEvent, Error> {
+            AsyncThrowingStream { continuation in
+                continuation.yield(.reasoningDelta("ผู้ใช้ถามเรื่องยา "))
+                continuation.yield(.reasoningDelta("ต้องเช็คขนาดก่อน"))
+                continuation.yield(.textDelta("ขนาดยาคือ 500 มก."))
+                continuation.yield(.finished(reason: "stop"))
+                continuation.finish()
+            }
+        }
+    }
+
+    @Test("the thinking reaches the screen instead of being dropped")
+    func reasoningIsEmitted() async {
+        let runner = AgentTurnRunner(router: ModelRouter(executors: [Thinker()]),
+                                     gateway: ToolGateway(), transcript: MemoryTranscript())
+        let events = await collect(runner.run(userText: "ขนาดยาเท่าไร",
+                                              conversationID: "cv_r1", scope: .central))
+        let thoughts = events.compactMap { event -> (String, Double)? in
+            if case .reasoning(_, let text, let seconds) = event { return (text, seconds) }
+            return nil
+        }
+
+        #expect(thoughts.isEmpty == false, "the model's thinking was thrown away again")
+        // Accumulated rather than sent in pieces: the card shows one thought,
+        // not a list of fragments.
+        #expect(thoughts.last?.0 == "ผู้ใช้ถามเรื่องยา ต้องเช็คขนาดก่อน")
+        #expect(thoughts.last?.1 ?? -1 >= 0)
+        // One card, updated, rather than a new bubble per delta.
+        let ids = Set(events.compactMap { event -> String? in
+            if case .reasoning(let id, _, _) = event { return id }
+            return nil
+        })
+        #expect(ids.count == 1)
+    }
+
+    /// The rule that made dropping it safe in the first place.
+    @Test("thinking is never stored as the reply")
+    func reasoningIsNotTheAnswer() async {
+        let transcript = MemoryTranscript()
+        let runner = AgentTurnRunner(router: ModelRouter(executors: [Thinker()]),
+                                     gateway: ToolGateway(), transcript: transcript)
+        _ = await collect(runner.run(userText: "ขนาดยาเท่าไร",
+                                     conversationID: "cv_r2", scope: .central))
+
+        let stored = await transcript.content(at: 1)
+        #expect(stored == "ขนาดยาคือ 500 มก.")
+        #expect(stored.contains("ต้องเช็ค") == false,
+                "the model's thinking was stored as its answer")
+    }
+}
