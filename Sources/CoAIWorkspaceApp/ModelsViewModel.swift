@@ -29,6 +29,10 @@ public final class ModelsViewModel {
     }
 
     public private(set) var installed: [LocalModel] = []
+    /// Downloads that stopped halfway (§9.4, P5.2). They are not models — they
+    /// cannot be loaded — but they are on the disk and in the quota, and until
+    /// now the only way to remove them was a terminal.
+    public private(set) var leftovers: [IncompleteDownload] = []
     public private(set) var storage: StorageReport?
     public private(set) var downloads: [String: Download] = [:]
     public private(set) var status: Status?
@@ -84,6 +88,7 @@ public final class ModelsViewModel {
         guard let catalog, let installer else { return }
         memory = MachineMemory.current()
         installed = await catalog.installed()
+        leftovers = catalog.incompleteDownloads(ownRoot: await installer.destination)
         storage = await installer.storage()
         if let selectedName, !installed.contains(where: { $0.name == selectedName }) {
             // The selected model was deleted from under us.
@@ -184,6 +189,21 @@ public final class ModelsViewModel {
     public func isRemovable(_ model: LocalModel) async -> Bool {
         guard let installer else { return false }
         return await ModelInstaller.contains(installer.destination, model.directory)
+    }
+
+    /// Removes a half-finished download. Only the app's own — the rule lives
+    /// in the catalog, and this reports whatever it says.
+    public func remove(_ leftover: IncompleteDownload) async {
+        guard let catalog else { return }
+        do {
+            try catalog.remove(leftover)
+            await refresh()
+            status = Status(message: "ลบไฟล์ที่ค้างจากดาวน์โหลดแล้ว "
+                            + "(\(ByteCountFormatter.string(fromByteCount: leftover.bytes, countStyle: .file)))",
+                            isError: false)
+        } catch {
+            status = Status(message: "\(error)", isError: true)
+        }
     }
 
     public func delete(_ model: LocalModel) async {

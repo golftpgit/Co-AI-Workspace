@@ -374,3 +374,141 @@ public struct LocalModelCatalog: Sendable {
         }
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// Downloads that stopped halfway (§9.4, P5.2).
+//
+// `installed()` only lists models that are complete, which is right — a
+// half-downloaded 17 GB checkpoint that reads as ready is a crash at load
+// time, and P5.2 already fixed that. But the files are still on the disk. They
+// count against the quota the screen shows and appear in no list, so the only
+// way to get rid of them is a terminal, which is the thing this app exists not
+// to need.
+//
+// Two rules, both about not deleting somebody's work:
+//
+//  • **A leftover is only a leftover if it is plainly a model download.** A
+//    directory with `config.json` or a `.safetensors` in it, and no chat
+//    template or missing shards. Anything else is a folder that happens to be
+//    in the search path.
+//  • **Only what this app downloaded may be deleted.** Leftovers inside LM
+//    Studio's library or the Hugging Face cache are listed with their path and
+//    no delete button: those are managed by another program, and a tidy-up
+//    that reaches into them is a tidy-up that eventually removes something
+//    somebody else was using.
+// ─────────────────────────────────────────────────────────────
+
+/// A directory that looks like a model download and cannot be loaded.
+public struct IncompleteDownload: Sendable, Equatable, Identifiable {
+    public let directory: URL
+    public let bytes: Int64
+    /// What it is short of, in words — "ไม่มี chat template", "ขาด 3 shard".
+    public let missing: String
+    /// Whether it is inside the directory this app downloads into. Only those
+    /// are offered for deletion.
+    public let isOurs: Bool
+
+    public var id: String { directory.path(percentEncoded: false) }
+}
+
+extension LocalModelCatalog {
+
+    /// Half-finished downloads under the search paths.
+    ///
+    /// - Parameter ownRoot: the directory this app downloads into. Leftovers
+    ///   outside it are reported and not offered for deletion.
+    public func incompleteDownloads(ownRoot: URL?) -> [IncompleteDownload] {
+        var found: [IncompleteDownload] = []
+        var seen: Set<String> = []
+
+        for root in searchPaths {
+            for directory in partialDirectories(under: root) {
+                let path = directory.standardizedFileURL.path(percentEncoded: false)
+                guard seen.insert(path).inserted else { continue }
+                let ourRoot = ownRoot?.standardizedFileURL.path(percentEncoded: false)
+                found.append(IncompleteDownload(
+                    directory: directory,
+                    bytes: Self.size(of: directory),
+                    missing: missingParts(in: directory),
+                    isOurs: ourRoot.map { path.hasPrefix($0) } ?? false))
+            }
+        }
+        return found.sorted { $0.bytes > $1.bytes }
+    }
+
+    /// Removes one. Refuses anything this app did not download — the guard is
+    /// here rather than only in the view, because a screen is not the place a
+    /// deletion rule should live.
+    public func remove(_ leftover: IncompleteDownload) throws {
+        guard leftover.isOurs else {
+            throw IncompleteDownloadError.notOurs(leftover.directory.lastPathComponent)
+        }
+        try FileManager.default.removeItem(at: leftover.directory)
+    }
+
+    /// Directories that hold model files and are not loadable models.
+    private func partialDirectories(under root: URL) -> [URL] {
+        let manager = FileManager.default
+        guard manager.fileExists(atPath: root.path(percentEncoded: false)) else { return [] }
+        var results: [URL] = []
+        var frontier = [(url: root, depth: 0)]
+
+        while let entry = frontier.popLast() {
+            let files = Set((try? manager.contentsOfDirectory(atPath: entry.url.path(percentEncoded: false))) ?? [])
+            let looksLikeAModel = files.contains("config.json")
+                || files.contains { $0.hasSuffix(".safetensors") }
+            if looksLikeAModel {
+                // `hasChatModelFiles` is the same completeness check
+                // `installed()` uses, so this list and that one can never both
+                // contain the same directory.
+                if !hasChatModelFiles(entry.url) { results.append(entry.url) }
+                continue
+            }
+            guard entry.depth < 4 else { continue }
+            let children = (try? manager.contentsOfDirectory(
+                at: entry.url, includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles])) ?? []
+            for child in children
+            where (try? child.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+                frontier.append((child, entry.depth + 1))
+            }
+        }
+        return results
+    }
+
+    func missingParts(in directory: URL) -> String {
+        let files = Set((try? FileManager.default.contentsOfDirectory(
+            atPath: directory.path(percentEncoded: false))) ?? [])
+        if !files.contains("config.json") { return "ไม่มี config.json" }
+        if chatTemplate(in: directory) == nil { return "ไม่มี chat template" }
+        let missingShards = Self.shards(in: directory).subtracting(files)
+        if !missingShards.isEmpty { return "ขาดไฟล์น้ำหนัก \(missingShards.count) ชิ้น" }
+        if !files.contains(where: { $0.hasSuffix(".safetensors") }) { return "ไม่มีไฟล์น้ำหนักเลย" }
+        return "ยังโหลดไม่ได้"
+    }
+
+    static func size(of directory: URL) -> Int64 {
+        let manager = FileManager.default
+        guard let walker = manager.enumerator(at: directory,
+                                              includingPropertiesForKeys: [.fileSizeKey]) else {
+            return 0
+        }
+        var total: Int64 = 0
+        for case let url as URL in walker {
+            total += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
+        return total
+    }
+}
+
+public enum IncompleteDownloadError: Error, CustomStringConvertible, Equatable {
+    case notOurs(String)
+
+    public var description: String {
+        switch self {
+        case .notOurs(let name):
+            "'\(name)' อยู่ในคลังของโปรแกรมอื่น (เช่น LM Studio หรือ Hugging Face cache) — "
+                + "แอปนี้ไม่ลบให้ เพราะของที่โปรแกรมอื่นดูแลอยู่ อาจมีอย่างอื่นใช้อยู่"
+        }
+    }
+}
