@@ -848,7 +848,9 @@ struct WorkspaceTabBar: View {
             .padding(.vertical, 4)
         }
         .frame(height: 30)
-        .background(.bar)
+        // Glass is right here and wrong one file over: this is chrome floating
+        // above the content, carrying names rather than numbers (§24.2).
+        .surface(.floating, radius: 0)
     }
 
     private func tab(_ entry: OpenWorkspaces.Entry) -> some View {

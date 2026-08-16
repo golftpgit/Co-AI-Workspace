@@ -64,9 +64,15 @@ struct StatusBarView: View {
                 Spacer()
             }
             .font(.caption)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(.bar)
+            .padding(.horizontal, Space.box)
+            .padding(.vertical, Space.tight)
+            // **Solid, not `.bar`** (§24.2, P20.3). This strip carries money,
+            // elapsed time and a rework count, and it sits at the bottom of a
+            // scrolling screen — on a translucent background the content
+            // passing underneath runs straight through the digits. A figure
+            // misread here is not a cosmetic problem: it is what somebody
+            // decides with.
+            .surface(.solid, radius: 0)
             .overlay(alignment: .top) { Divider() }
         }
     }

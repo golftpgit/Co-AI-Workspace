@@ -138,18 +138,39 @@ public struct HookChain: Sendable {
     public let scorer: any RiskScoring
     public let policyGate: any PolicyGate
     public let postHooks: [any PostToolHook]
+    /// How well this role has done with this tool before (§21, P12.8 · P20.4).
+    ///
+    /// Read at decision time rather than held, because it changes with every
+    /// call. `nil` means nothing is wired to answer — which is treated as "no
+    /// reason to doubt", not as "known to be bad": a build with no proficiency
+    /// store must not become a build that asks about everything.
+    public let proficiency: (@Sendable (Role?, String) async -> ToolProficiency?)?
 
     public init(critics: [any ToolCritic] = [SchemaCritic()],
                 stageGate: StageGate = .disabled,
                 scorer: any RiskScoring = DefaultRiskScorer(),
                 policyGate: any PolicyGate = NoPolicyGate(),
-                postHooks: [any PostToolHook] = []) {
+                postHooks: [any PostToolHook] = [],
+                proficiency: (@Sendable (Role?, String) async -> ToolProficiency?)? = nil) {
         self.critics = critics
         self.stageGate = stageGate
         self.scorer = scorer
         self.policyGate = policyGate
         self.postHooks = postHooks
+        self.proficiency = proficiency
     }
+
+    /// The success rate below which a tool call stops being automatic
+    /// (§24.3, P20.4).
+    ///
+    /// **Low confidence closes the automatic path — it is not a number on a
+    /// badge.** A role that has failed this tool half the time is a role whose
+    /// next call is a coin flip, and showing "50%" next to an approve button
+    /// that was never going to appear is decoration. Two-thirds because that is
+    /// where "usually works" stops being a fair description; the sample floor
+    /// in `ToolProficiency` (five attempts) is what keeps one bad morning from
+    /// triggering it.
+    public static let confidenceFloor = 0.67
 
     /// The whole pre-execution gate, in the order §5.3 specifies. Nothing here
     /// executes the tool; the caller only ever gets a verdict back.
@@ -208,7 +229,18 @@ public struct HookChain: Sendable {
         // installation, and nothing it did appears in the tool's output or in
         // anything the package is later used for. See `AlwaysAsk`.
         let mustAsk = AlwaysAsk.requiresHuman(call.toolName)
-        guard mustAsk || modes.autonomy.requiresApproval(for: risk.level) else {
+        // §24.3 / P20.4 — what the system knows about its own reliability
+        // reaches the decision, not just the screen. A role that keeps failing
+        // this tool gets a person, whatever the autonomy slider says.
+        var lowConfidence: ToolProficiency?
+        if let proficiency,
+           let record = await proficiency(call.context.role, call.toolName),
+           let rate = record.successRate, rate < Self.confidenceFloor {
+            lowConfidence = record
+            notes.append("ความมั่นใจต่ำ — \(record.summary)")
+        }
+        guard mustAsk || lowConfidence != nil
+                || modes.autonomy.requiresApproval(for: risk.level) else {
             return .allow(argumentsJSON: call.argumentsJSON, risk: risk, notes: notes)
         }
         guard let approver else {
@@ -217,10 +249,17 @@ public struct HookChain: Sendable {
             return .denied(reason: "ไม่มีช่องทางสำหรับขออนุมัติ", risk: risk)
         }
 
+        var detail = Self.detail(for: call, risk: risk)
+        if let lowConfidence {
+            // The number goes in front of the person *deciding*, which is the
+            // only place it changes anything (§24.3).
+            detail += "\n\nบทบาทนี้เคยใช้เครื่องมือนี้แล้ว \(lowConfidence.summary) "
+                + "— ต่ำกว่าเกณฑ์ที่ระบบยอมให้ทำเองโดยไม่ถาม"
+        }
         let request = ApprovalRequest(
             toolName: call.toolName,
             risk: risk.level,
-            detail: Self.detail(for: call, risk: risk))
+            detail: detail)
         switch await approver.requestApproval(request) {
         case .approved:
             return .allow(argumentsJSON: call.argumentsJSON, risk: risk, notes: notes)

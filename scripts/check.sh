@@ -975,6 +975,43 @@ else
   ok "every project write goes past the archive guard, or is a documented exception"
 fi
 
+# P20.3 — the layer a number is read off is never translucent.
+#
+# §24.2's honest materiality, and in this app it is not a matter of taste: the
+# screens show p-values, confidence intervals, money and elapsed time, and a
+# figure misread because content scrolled under it is what somebody then
+# decides with. Glass is for chrome that floats above content; anything
+# carrying a number sits on a solid layer.
+#
+# Enforced in two halves, because "is this on glass" has to be answerable:
+#
+# 1. Translucency is declared through `Surface`, never applied raw — so one
+#    grep answers the question for the whole app.
+RAW_GLASS=$(grep -rnE "\.background\(\.(bar|ultraThinMaterial|regularMaterial|thinMaterial|thickMaterial)\)|\.glassEffect\(" \
+  Sources/CoAIWorkspaceApp/*.swift | grep -v "DesignTokens.swift" || true)
+if [ -n "$RAW_GLASS" ]; then
+  echo "$RAW_GLASS" | sed 's/^/   /' | head -4
+  fail "a view applies a translucent background directly instead of declaring its layer (§24.2, P20.3)"
+else
+  ok "every translucent background is declared through Surface, so the layer is greppable"
+fi
+
+# 2. A file that formats a number does not float. The heuristic is deliberately
+#    blunt — any `%.Nf` in the same file as `Surface.floating` — because the
+#    cost of a false alarm here is a comment and the cost of a miss is a
+#    misread p-value.
+FLOATING_NUMBERS=""
+for file in Sources/CoAIWorkspaceApp/*.swift; do
+  grep -q "surface(.floating" "$file" 2>/dev/null || continue
+  grep -qE "%\.[0-9]+f" "$file" 2>/dev/null && FLOATING_NUMBERS="$FLOATING_NUMBERS $(basename "$file")"
+done
+if [ -n "$FLOATING_NUMBERS" ]; then
+  echo "  $FLOATING_NUMBERS" | sed 's/^/  /'
+  fail "a view puts formatted numbers on a floating (glass) layer (§24.2, P20.3)"
+else
+  ok "numbers are drawn on solid layers, never on glass"
+fi
+
 # P20.2 — the design system is enforced, or it is another document.
 #
 # §24.1 names consistency as the worst of this app's four HIG problems, and the
