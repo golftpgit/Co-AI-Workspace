@@ -337,6 +337,9 @@ let package = Package(
         // is MLXCheck.
         .testTarget(name: "MLXRuntimeTests", dependencies: ["MLXRuntime", "LLMProviders"]),
         .testTarget(name: "CoreEngineTests", dependencies: ["CoreEngine", "Knowledge"]),
+        // The regression net over decisions no model is involved in (P9.1).
+        .testTarget(name: "GoldenTaskTests",
+                    dependencies: ["CoreEngine", "LLMProviders", "ToolBelt", "Analysis"]),
         .testTarget(name: "KnowledgeTests", dependencies: ["Knowledge"]),
         .testTarget(name: "WebSearchTests", dependencies: ["WebSearch", "Knowledge"]),
         .testTarget(name: "InstrumentsTests", dependencies: ["Instruments", "StatKit"]),
