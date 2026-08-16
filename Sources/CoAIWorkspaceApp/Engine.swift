@@ -8,6 +8,7 @@ import LLMProviders
 import CoreEngine
 import Execution
 import ToolBelt
+import RBridge
 import Knowledge
 import EmbeddingRuntime
 import MLXRuntime
@@ -494,6 +495,15 @@ struct Engine: Sendable {
             AnalysisExecuteTool(store: { analysis }),
             PullDBTableTool(store: { analysis }, connectors: { connectors.load() }),
         ])
+        // §12.7 — R, if the person has started the bridge. Registered whether
+        // or not it is running: a tool that only appears once the bridge is up
+        // is a tool the model never learns exists, and the refusal it gets
+        // when the bridge is down is the sentence that tells somebody how to
+        // start it (P14.2).
+        let rBridgeScript = paths.analysisDirectory.appending(path: BridgeScript.fileName)
+        await gateway.register(REvalTool(
+            bridge: { RBridgeClient(scriptPath: rBridgeScript.path(percentEncoded: false)) },
+            store: { analysis }))
         // Nil on a machine with no Python: the notebook's SQL cells still work,
         // and the screen says which half is missing rather than failing at the
         // first Python cell.

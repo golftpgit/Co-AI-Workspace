@@ -52,6 +52,7 @@ public struct StageGate: Sendable {
         "analysis_execute": .mutating,
         "pull_db_table": .mutating,
         "run_shell": .mutating,
+        "r_eval": .mutating,
         "install_package": .mutating,
     ]
 

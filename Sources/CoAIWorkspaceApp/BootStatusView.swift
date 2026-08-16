@@ -12,6 +12,7 @@ struct BootStatusView: View {
     /// every other view model on this project is owned by its screen.
     @State private var plugins = PluginsViewModel()
     @State private var mcpServers = MCPServersViewModel()
+    @State private var rBridge: RBridgeViewModel?
     @ScaledMetric private var labelColumn: CGFloat = 150
 
     var body: some View {
@@ -32,6 +33,13 @@ struct BootStatusView: View {
                     MCPServersView(model: mcpServers)
                         .task { mcpServers.attach(store: engine.mcpServers) }
                     Divider()
+                    // §12.7 — R is the one dependency the app cannot install
+                    // and must not pretend to manage, so its section is a
+                    // status and two instructions (P14.1).
+                    if let rBridge {
+                        RBridgeSection(model: rBridge)
+                    }
+                    Divider()
                     PluginsSection(model: plugins)
                         .task {
                             await plugins.attach(registry: engine.plugins,
@@ -45,6 +53,14 @@ struct BootStatusView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .accessibilityLabel("สถานะการเริ่มระบบ")
+        .task {
+            // Built once the paths exist rather than at construction: the
+            // bridge script goes beside the analysis store, and where that is
+            // is a boot-time answer.
+            if rBridge == nil, let paths = environment.paths {
+                rBridge = RBridgeViewModel(directory: paths.analysisDirectory)
+            }
+        }
     }
 
     private var header: some View {
