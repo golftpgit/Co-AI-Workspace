@@ -177,7 +177,7 @@ struct KnowledgeBaseView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .padding(12)
+        .padding(Space.box)
         .disabled(model.isWorking)
     }
 
@@ -193,7 +193,7 @@ struct KnowledgeBaseView: View {
                 Button("ค้น") { Task { await model.search() } }
                     .keyboardShortcut(.return, modifiers: [])
             }
-            .padding(12)
+            .padding(Space.box)
 
             if let status = model.status {
                 Label(status.message, systemImage: status.isError
@@ -419,7 +419,7 @@ private struct EntityEditor: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(16)
+        .padding(Space.section)
         .frame(width: 460)
     }
 }
@@ -525,7 +525,7 @@ private struct ShelfBadge: View {
         if classification.isClassified {
             Text(classification.subjects.map(\.code).joined(separator: "/"))
                 .padding(.horizontal, 5).padding(.vertical, 1)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: Radius.control))
                 // §11.9: a guess that cannot be told from a decision is a guess
                 // nobody will ever correct.
                 .help(classification.assignedBy == .user

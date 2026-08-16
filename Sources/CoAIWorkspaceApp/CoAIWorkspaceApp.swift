@@ -956,7 +956,7 @@ struct WorkspaceTabBar: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
         .background(isActive ? AnyShapeStyle(.selection) : AnyShapeStyle(.clear),
-                    in: RoundedRectangle(cornerRadius: 5))
+                    in: RoundedRectangle(cornerRadius: Radius.control))
         .accessibilityElement(children: .contain)
     }
 

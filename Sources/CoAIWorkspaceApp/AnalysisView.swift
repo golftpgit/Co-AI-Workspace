@@ -110,7 +110,7 @@ struct AnalysisView: View {
                 .accessibilityHint("ปิดข้อความนี้")
             }
         }
-        .padding(12)
+        .padding(Space.box)
     }
 }
 
@@ -202,7 +202,7 @@ private struct NotebookPane: View {
                     .buttonStyle(.borderless)
                     .font(.callout)
                 }
-                .padding(14)
+                .padding(Space.box)
             }
         }
     }
@@ -323,13 +323,13 @@ private struct CellView: View {
                 .font(.system(.body, design: .monospaced))
                 .frame(minHeight: 60, maxHeight: 220)
                 .scrollContentBackground(.hidden)
-                .padding(6)
-                .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 6))
+                .padding(Space.row)
+                .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: Radius.box))
 
             CellOutputView(state: model.state(for: cell.id))
         }
-        .padding(12)
-        .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 8))
+        .padding(Space.box)
+        .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: Radius.box))
     }
 }
 
@@ -422,7 +422,7 @@ private struct ExplorerPane: View {
                     .font(.system(.body, design: .monospaced))
                     .frame(minHeight: 90, maxHeight: 200)
                     .scrollContentBackground(.hidden)
-                    .padding(8)
+                    .padding(Space.row)
                     .background(.quaternary.opacity(0.25))
 
                 HStack(spacing: 10) {
@@ -446,7 +446,7 @@ private struct ExplorerPane: View {
                         Label("นำเข้า CSV/Parquet", systemImage: "square.and.arrow.down")
                     }
                 }
-                .padding(10)
+                .padding(Space.box)
 
                 Divider()
                 ScrollView {
@@ -466,7 +466,7 @@ private struct ExplorerPane: View {
                             ResultTable(result: entry.result)
                         }
                     }
-                    .padding(10)
+                    .padding(Space.box)
                 }
             }
         }
@@ -707,7 +707,7 @@ private struct ConnectorSheet: View {
             }
         }
         .textFieldStyle(.roundedBorder)
-        .padding(18)
+        .padding(Space.section)
         .frame(width: 460)
     }
 }
@@ -828,8 +828,8 @@ private struct PlanPane: View {
             TextEditor(text: $model.proposalText)
                 .font(.system(.body, design: .default))
                 .frame(minHeight: 180)
-                .padding(6)
-                .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 6))
+                .padding(Space.row)
+                .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: Radius.box))
             HStack {
                 Button { Task { await model.readProposal() } } label: {
                     Label("อ่านและหาช่องว่าง", systemImage: "text.magnifyingglass")
@@ -841,7 +841,7 @@ private struct PlanPane: View {
             }
             Spacer()
         }
-        .padding(16)
+        .padding(Space.section)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -870,10 +870,10 @@ private struct PlanPane: View {
                         Label(item.text, systemImage: "text.append")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .padding(8)
+                            .padding(Space.row)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(.quaternary.opacity(0.2),
-                                        in: RoundedRectangle(cornerRadius: 6))
+                                        in: RoundedRectangle(cornerRadius: Radius.box))
                     }
                 }
                 if !plan.revisions.isEmpty {
@@ -884,7 +884,7 @@ private struct PlanPane: View {
                     }
                 }
             }
-            .padding(16)
+            .padding(Space.section)
         }
     }
 
@@ -979,9 +979,9 @@ private struct GapRow: View {
                 .font(.caption)
             }
         }
-        .padding(10)
+        .padding(Space.box)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: Radius.box))
     }
 }
 
@@ -1015,9 +1015,9 @@ private struct DecisionRow: View {
                 }
             }
         }
-        .padding(10)
+        .padding(Space.box)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
+        .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: Radius.box))
     }
 
     private var background: AnyShapeStyle {
@@ -1095,7 +1095,7 @@ private struct ResultTable: View {
                             }
                         }
                     }
-                    .padding(8)
+                    .padding(Space.row)
                 }
                 // A two-way `ScrollView` parks its content in the middle when it
                 // is smaller than the viewport, which put a three-column result
@@ -1103,7 +1103,7 @@ private struct ResultTable: View {
                 // the far left. Anchoring says which corner it starts in.
                 .defaultScrollAnchor(.topLeading)
                 .frame(maxHeight: 300)
-                .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+                .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: Radius.box))
             }
             Text(footer)
                 .font(.caption2).foregroundStyle(.tertiary)
@@ -1156,9 +1156,9 @@ private struct ConfirmSheet: View {
                                                      ? .red : .secondary)
                             }
                         }
-                        .padding(8)
+                        .padding(Space.row)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
+                        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
                     }
                 }
             }
@@ -1175,7 +1175,7 @@ private struct ConfirmSheet: View {
                 .tint(pending.assessment.effect == .destructive ? .red : .accentColor)
             }
         }
-        .padding(18)
+        .padding(Space.section)
         .frame(width: 520)
     }
 }

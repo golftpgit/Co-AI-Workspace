@@ -133,7 +133,7 @@ struct InstrumentsView: View {
                             .font(.callout).foregroundStyle(.secondary)
                     }
                 }
-                .padding(14)
+                .padding(Space.box)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -185,7 +185,7 @@ struct InstrumentsView: View {
                 .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             .controlSize(.small)
-            .padding(10)
+            .padding(Space.box)
         }
     }
 

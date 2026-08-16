@@ -106,7 +106,7 @@ struct ChannelsView: View {
                 }
                 footnote
             }
-            .padding(20)
+            .padding(Space.section)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .sheet(isPresented: $model.isEditing) { ChannelEditor(model: model) }
@@ -150,8 +150,8 @@ struct ChannelsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(10)
-        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+        .padding(Space.box)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(account.name) · \(account.platform.label) · "
                             + (account.isReady ? "พร้อมทำงาน" : "ยังไม่พร้อม"))
@@ -228,7 +228,7 @@ private struct ChannelEditor: View {
                         .disabled(!draft.wrappedValue.canSave)
                 }
             }
-            .padding(20)
+            .padding(Space.section)
             .frame(width: 540)
     }
 }

@@ -50,7 +50,7 @@ struct CodingView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                .padding(14)
+                .padding(Space.box)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -102,7 +102,7 @@ struct CodingView: View {
                 .disabled(newBook.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             .controlSize(.small)
-            .padding(10)
+            .padding(Space.box)
         }
     }
 
@@ -336,7 +336,7 @@ struct CodingView: View {
                     TextEditor(text: $newTranscriptText)
                         .font(.callout)
                         .frame(height: 90)
-                        .overlay(RoundedRectangle(cornerRadius: 4)
+                        .overlay(RoundedRectangle(cornerRadius: Radius.control)
                             .stroke(Color.secondary.opacity(0.3)))
                         .accessibilityLabel("ข้อความบทถอดเทป")
                     HStack {

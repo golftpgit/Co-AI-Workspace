@@ -55,7 +55,7 @@ struct EntityGraphView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(16)
+        .padding(Space.section)
         .task(id: model.relations.count) {
             if focus == nil { focus = EntityGraph.busiestEntities(in: relations).first }
         }
@@ -260,7 +260,7 @@ private struct EdgeSourceSheet: View {
                 Button("ปิด") { dismiss() }
             }
         }
-        .padding(20)
+        .padding(Space.section)
         .frame(width: 520)
     }
 }

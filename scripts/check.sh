@@ -1024,6 +1024,20 @@ else
   fail "r_eval can install packages without the always-ask tool (§5.5, P14.4)"
 fi
 
+# P10.9 — dragging a card is not a way around the evidence rule.
+#
+# §19.15's invariant 4: "เสร็จ" needs evidence, and the menu has always gone
+# through `move` to get the refusal. A drop handler that set the status
+# directly would be a second door into the same state with no lock on it — and
+# it is the natural way to write one.
+DROP=$(awk '/dropDestination/,/^        }/' Sources/CoAIWorkspaceApp/ProjectsView.swift)
+if echo "$DROP" | grep -q "move(package, to: status)" \
+   && ! echo "$DROP" | grep -q "status = "; then
+  ok "a dropped card goes through the same refusal a menu move does"
+else
+  fail "the board can set a card's status without the evidence check (§19.15, P10.9)"
+fi
+
 # P10.4 — a leaf can be started, and the plan says which promise it is for.
 #
 # The field existed for four phases with nothing that could act on it, which is
@@ -1275,12 +1289,17 @@ fi
 # spacings of 4, 6, 8, 10 and 12 are all present and none of them was chosen.
 # `DesignTokens.swift` is where the numbers live now.
 #
-# The list below is the debt, spelled out: every view file that predates the
-# system and still writes its own numbers. **It may only shrink.** A file not on
-# it that hardcodes a padding, a corner radius or a raw colour fails — which is
-# what stops the token file from becoming one more good intention (P20.2's
-# Done-when).
-LEGACY_VIEWS="AnalysisView.swift ApprovalBanner.swift BootStatusView.swift ChannelsView.swift ChatView.swift CoAIWorkspaceApp.swift CodingView.swift ConflictView.swift EndpointsView.swift EntityGraphView.swift FilesView.swift IAInventory.swift InstrumentsView.swift KnowledgeBaseView.swift MCPServersView.swift ManuscriptView.swift ModelsView.swift ParticipantsBox.swift ProjectsView.swift ResponsesBox.swift SourcesView.swift StatusBarView.swift TeamView.swift WorkflowView.swift"
+# The legacy list is **empty** as of 2026-08-16: every view file in the app now
+# takes its spacing and corners from `DesignTokens`. The variable stays because
+# the shape of the rule is what matters — a file may be added back to it only
+# by somebody willing to write down why, and an empty list is the strongest
+# version of "it may only shrink" (P20.2's Done-when).
+#
+# What this migration is and is not: the numbers now come from one place, and
+# the four spacings replaced five ad-hoc ones, so a few boxes moved by 2pt.
+# Nobody has walked every screen since. That is written in the plan rather than
+# implied by a green check.
+LEGACY_VIEWS=""
 UNTOKENISED=""
 for file in Sources/CoAIWorkspaceApp/*.swift; do
   name="$(basename "$file")"

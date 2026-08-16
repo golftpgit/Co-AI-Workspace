@@ -147,7 +147,7 @@ struct ParticipantsBox: View {
                           || who.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
-        .padding(16)
+        .padding(Space.section)
         .frame(width: 420)
     }
 }

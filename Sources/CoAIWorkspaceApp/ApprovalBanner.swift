@@ -74,7 +74,7 @@ struct ApprovalBanner: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .padding(16)
+        .padding(Space.section)
         .background(.orange.opacity(0.08))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("คำขออนุมัติสำหรับเครื่องมือ \(request.toolName)")

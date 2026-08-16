@@ -200,7 +200,7 @@ struct ProjectsView: View {
                         .font(.caption2).foregroundStyle(.orange)
                 }
             }
-            .padding(12)
+            .padding(Space.box)
             .task(id: types.count) {
                 if newType == nil { newType = types.first?.type }
             }
@@ -226,7 +226,7 @@ struct ProjectsView: View {
                     generalDetail
                 }
             }
-            .padding(16)
+            .padding(Space.section)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -723,7 +723,7 @@ struct ProjectsView: View {
                             // The bar is position in the order, not duration.
                             // Drawing a length here would be drawing a number
                             // nobody measured.
-                            RoundedRectangle(cornerRadius: 3)
+                            RoundedRectangle(cornerRadius: Radius.control)
                                 .fill(critical.contains(package.id)
                                       ? Color.accentColor : Color.secondary.opacity(0.35))
                                 .frame(width: 26, height: 12)
@@ -882,7 +882,7 @@ struct ProjectsView: View {
                         // pixels, and in the model every number computed
                         // downstream would inherit it.
                         let width = max(3, (segment.to - segment.from) * geometry.size.width)
-                        RoundedRectangle(cornerRadius: 2)
+                        RoundedRectangle(cornerRadius: Radius.control)
                             .fill(segment.succeeded
                                   ? Color.accentColor
                                   : Color.secondary.opacity(0.45))
@@ -968,9 +968,30 @@ struct ProjectsView: View {
                             }
                             ForEach(model.wbs.leaves.filter { $0.status == status }) { package in
                                 cardView(package)
+                                    // The id travels, not the card: a drop has
+                                    // to go through `move`, which is where the
+                                    // evidence rule lives (§19.15 invariant 4).
+                                    .draggable(package.id)
                             }
+                            // The whole column is the target, including the
+                            // empty space under the last card — a column you
+                            // can only drop *onto a card* is a column you
+                            // cannot move the first card into.
+                            Color.clear.frame(height: 24)
                         }
                         .frame(width: 190, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .dropDestination(for: String.self) { ids, _ in
+                            guard let id = ids.first,
+                                  let package = model.wbs.leaves.first(where: { $0.id == id })
+                            else { return false }
+                            // Same call the menu makes. A drop that took a
+                            // shortcut past it would be a way to mark work done
+                            // without the evidence, which is the one thing this
+                            // board must not become.
+                            move(package, to: status)
+                            return true
+                        }
                     }
                 }
                 .padding(.vertical, 4)
@@ -1001,10 +1022,10 @@ struct ProjectsView: View {
             .font(.caption2)
             .accessibilityLabel("ย้ายใบงาน \(package.title)")
         }
-        .padding(6)
+        .padding(Space.row)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background, in: RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+        .background(.background, in: RoundedRectangle(cornerRadius: Radius.box))
+        .overlay(RoundedRectangle(cornerRadius: Radius.box).stroke(.quaternary))
     }
 
     /// Moving a card is not a way around the evidence rule (§19.15 invariant
@@ -1685,7 +1706,7 @@ struct ProjectsView: View {
                     .padding(.horizontal, 8).padding(.vertical, 4)
                     .frame(maxWidth: .infinity)
                     .background(stage == current ? Color.accentColor.opacity(0.18) : Color.clear,
-                                in: RoundedRectangle(cornerRadius: 5))
+                                in: RoundedRectangle(cornerRadius: Radius.control))
                     .foregroundStyle(stage <= current ? Color.primary : Color.secondary)
             }
         }
