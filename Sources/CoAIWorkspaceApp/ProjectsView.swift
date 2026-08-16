@@ -331,6 +331,7 @@ struct ProjectsView: View {
             wbsBox(project)
             scheduleBox()
             timelineBox()
+            projectionBox()
         }
 
         if tab == .board {
@@ -754,6 +755,64 @@ struct ProjectsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// Where the work that has not started would land (§19.7, P10.9's third
+    /// axis).
+    ///
+    /// Kept out of the calendar chart above rather than drawn onto it, and
+    /// that is the point: what happened and what might happen are different
+    /// kinds of claim, and a picture that puts them on one axis in one style
+    /// invites somebody to read a forecast as a record. Every row here is a
+    /// range, never a date.
+    @ViewBuilder
+    private func projectionBox() -> some View {
+        if let projection = model.projection,
+           !(projection.leaves.isEmpty && projection.unforecastable.isEmpty) {
+            GroupBox("งานที่ยังไม่เริ่ม — ถ้าเริ่มตอนนี้") {
+                VStack(alignment: .leading, spacing: Space.row) {
+                    Text("ช่วง p50–p90 จากงานจริงที่เคยเสร็จในระบบนี้ ไม่ใช่วันที่ตั้งไว้ · "
+                         + "งานที่เริ่มไปแล้วไม่อยู่ในนี้ เพราะของจริงวัดได้แล้วจากแกนเวลาด้านบน")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    ForEach(projection.leaves) { row in
+                        HStack(alignment: .firstTextBaseline, spacing: Space.row) {
+                            Text(row.title).font(.callout).lineLimit(1)
+                            Spacer(minLength: Space.row)
+                            Text(dayRange(row.p50Finish, row.p90Finish))
+                                .font(.system(.caption, design: .monospaced))
+                            Text("จาก \(row.sampleCount) งาน")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("\(row.title) น่าจะเสร็จระหว่าง "
+                                            + dayRange(row.p50Finish, row.p90Finish))
+                    }
+
+                    if let finish = projection.p90Finish, !projection.leaves.isEmpty {
+                        Text("ถ้าทุกอย่างเดินตามลำดับนี้ งานที่ประมาณได้จะจบราว "
+                             + finish.formatted(date: .abbreviated, time: .omitted)
+                             + " (ขอบบน p90)")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+
+                    // Named, not omitted: a list that quietly drops what it
+                    // cannot forecast reads as a list of all the work.
+                    ForEach(projection.unforecastable, id: \.packageID) { row in
+                        Label("\(row.title) — \(row.reason)", systemImage: "questionmark.circle")
+                            .font(.caption2).foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private func dayRange(_ p50: Date, _ p90: Date) -> String {
+        let format = Date.FormatStyle(date: .abbreviated, time: .shortened)
+        return "\(p50.formatted(format)) – \(p90.formatted(format))"
     }
 
     /// The schedule on a calendar axis (§19.7, P10.9) — the thing four plan

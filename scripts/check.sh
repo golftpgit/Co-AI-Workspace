@@ -1024,6 +1024,19 @@ else
   fail "r_eval can install packages without the always-ask tool (§5.5, P14.4)"
 fi
 
+# P10.9 / R9 — a projection never invents a date.
+#
+# The failure is a default: one `?? 3600` in the forward pass and every leaf
+# with no history gets a confident finish date. The rule is that the estimate
+# comes from the caller as an optional and the absence is handled by refusing,
+# so a default constant in that file is the smell to catch.
+if grep -qE "\?\? *[0-9]" Sources/ProjectKit/ScheduleProjection.swift; then
+  grep -nE "\?\? *[0-9]" Sources/ProjectKit/ScheduleProjection.swift | sed 's/^/   /' | head -3
+  fail "the schedule projection falls back to a made-up duration (R9, P10.9)"
+else
+  ok "work with no comparable history gets no projected date"
+fi
+
 # U18 — the model's thinking is shown, and is not the answer.
 #
 # Two failure modes, opposite directions. It was dropped on the floor for
