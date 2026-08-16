@@ -39,7 +39,7 @@ public struct StatTestTool: AgentTool {
                    "mann_whitney", "wilcoxon", "kruskal_wallis", "fisher_exact",
                    "linear_regression", "logistic_regression",
                    "risk_ratio", "odds_ratio", "risk_difference", "nnt",
-                   "diagnostic_accuracy", "survival", "count_regression"],
+                   "diagnostic_accuracy", "survival", "count_regression", "clustered"],
           "description": "ชนิดการทดสอบ"
         },
         "groups": {
@@ -155,6 +155,11 @@ public struct StatTestTool: AgentTool {
             // would invent a p-value for a thing that does not have one.
             case "risk_ratio", "odds_ratio", "risk_difference", "nnt":
                 return ToolOutput(text: try Self.epidemiology(test, table: try table()))
+            case "clustered":
+                // `groups` is already "one array per group", which is what a
+                // cluster is — so the shape needs no new argument, only the
+                // question being asked of it.
+                result = try StatGate.clustered(try groups())
             case "count_regression":
                 // Counts go in `y` like any other outcome; what makes this its
                 // own test is the assumption it checks, not its arguments.
