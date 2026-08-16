@@ -53,11 +53,27 @@ public actor SurrealSpanSink: SpanSink {
 
     // MARK: - reads (the Live Monitor / audit queries)
 
-    /// Most recent spans, newest first. `parent` filters to one run's subtree.
-    public func recent(limit: Int = 200) async throws -> [Span] {
-        let results = try await client.query(
-            "SELECT * FROM span ORDER BY started_at DESC LIMIT $limit",
-            vars: ["limit": limit])
+    /// Most recent spans, newest first.
+    ///
+    /// `scope` narrows them to one workspace (§19.1.1). Spans have carried a
+    /// scope since P10.15 and nothing could ask for one workspace's — so the
+    /// command tree, which is lit entirely from these rows, showed every
+    /// project's work at once and called it this project's. `nil` is every
+    /// scope, which is a real question too: "what has this machine been doing".
+    public func recent(limit: Int = 200, scope: Scope? = nil) async throws -> [Span] {
+        var sql = "SELECT * FROM span"
+        var vars: [String: Any] = ["limit": limit]
+        if let scope {
+            sql += " WHERE scope_kind = $kind"
+            vars["kind"] = ScopeColumns.kind(scope)
+            if let projectID = ScopeColumns.projectID(scope) {
+                sql += " AND project_id = $pid"
+                vars["pid"] = projectID
+            }
+        }
+        sql += " ORDER BY started_at DESC LIMIT $limit"
+
+        let results = try await client.query(sql, vars: vars)
         return (results.first?.rows ?? []).compactMap(Self.span(from:))
     }
 

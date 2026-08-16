@@ -748,7 +748,13 @@ private struct RootView: View {
             CommandTreeScreen(model: commandTree)
                 .task {
                     commandTree.attach(
-                        spans: { (try? await engine.spans.recent(limit: 300)) ?? [] },
+                        // This workspace's work, not the machine's. The rows
+                        // have carried a scope since P10.15 and this screen
+                        // asked for all of them, so a project's command tree
+                        // was lit by every project at once.
+                        spans: { [scope = projects.scope] in
+                            (try? await engine.spans.recent(limit: 300, scope: scope)) ?? []
+                        },
                         // The server's own queue beside our count of lit boxes
                         // (P15.6). Nil when no endpoint is configured, and the
                         // screen says so rather than showing a confident zero.

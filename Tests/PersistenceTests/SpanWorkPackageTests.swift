@@ -129,6 +129,34 @@ struct SpanWorkPackageTests {
         #expect(durations.max() == 40)
         #expect(try await sink.durations(forRole: .writer).isEmpty)
     }
+    /// §19.1.1 — the command tree is lit entirely from `recent`, and it asked
+    /// for every span on the machine. So one project's screen showed another
+    /// project's work and called it its own.
+    @Test("recent spans can be asked for one workspace", .timeLimit(.minutes(2)))
+    func recentIsScoped() async throws {
+        guard let server = try await makeServer(port: 18_684) else { return }
+        defer { Task { await server.shutdown() } }
+        let sink = SurrealSpanSink(client: await server.client)
+
+        await sink.record(span("wp1", role: .analyst, project: ProjectID("alpha"), seconds: 5))
+        await sink.record(span("wp2", role: .writer, project: ProjectID("beta"), seconds: 5))
+        var central = Span(name: "turn", role: .researcher, scope: .central,
+                           status: .succeeded, startedAt: Date())
+        central.endedAt = Date()
+        await sink.record(central)
+
+        let alpha = try await sink.recent(limit: 50, scope: .project(ProjectID("alpha")))
+        #expect(alpha.count == 1)
+        #expect(alpha.first?.role == .analyst)
+
+        let general = try await sink.recent(limit: 50, scope: .central)
+        #expect(general.count == 1)
+        #expect(general.first?.name == "turn")
+
+        // No scope is still a real question — "what has this machine been
+        // doing" — and it must not have quietly become one project's answer.
+        #expect(try await sink.recent(limit: 50).count == 3)
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
