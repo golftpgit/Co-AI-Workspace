@@ -45,6 +45,11 @@ public enum StatisticalTest: String, Sendable, Codable, CaseIterable {
     case wilcoxonSignedRank
     case kruskalWallis
     case fisherExact
+    /// §12.6.1's count models (P19.4). The negative binomial is listed as its
+    /// own test rather than a mode of the Poisson because the gate proposes it
+    /// *by name* when dispersion fails, and a proposal has to be runnable.
+    case poissonRegression
+    case negativeBinomialRegression
 
     public var label: String {
         switch self {
@@ -56,6 +61,8 @@ public enum StatisticalTest: String, Sendable, Codable, CaseIterable {
         case .linearRegression: "การถดถอยเชิงเส้น"
         case .logisticRegression: "การถดถอยโลจิสติก"
         case .survival: "การวิเคราะห์การรอดชีพ"
+        case .poissonRegression: "การถดถอยปัวซง (ข้อมูลนับ)"
+        case .negativeBinomialRegression: "การถดถอย negative binomial (ข้อมูลนับที่กระจายเกิน)"
         case .mannWhitney: "Mann–Whitney U"
         case .wilcoxonSignedRank: "Wilcoxon signed-rank"
         case .kruskalWallis: "Kruskal–Wallis"
@@ -529,6 +536,44 @@ public enum StatGate {
             summary: terms,
             assumptions: assumptions,
             alternatives: [])
+    }
+
+    /// Counts against predictors, with the assumption Poisson makes checked
+    /// and the alternative offered by name (P19.4).
+    ///
+    /// The failure this exists for is quiet: overdispersed counts still produce
+    /// a believable coefficient, and only the standard error is wrong — too
+    /// small, which turns a null effect into a finding. So the check runs every
+    /// time, and when it fails the gate proposes a model it can actually run
+    /// rather than a suggestion the user has to take elsewhere (§12.3).
+    public static func countRegression(_ counts: [Double],
+                                       predictors: [[Double]],
+                                       names: [String] = []) throws -> StatResult {
+        let fit = try CountModels.poisson(counts: counts, predictors: predictors)
+        let dispersion = CountModels.overdispersion(counts: counts, predictors: predictors,
+                                                    fit: fit)
+        let terms = zip(fit.coefficients.dropFirst(), fit.standardErrors.dropFirst())
+            .enumerated()
+            .map { index, pair in
+                let name = index < names.count ? names[index] : "x\(index + 1)"
+                return String(format: "%@: rate ratio %.4f (SE ของ log = %.4f)",
+                              name, exp(pair.0), pair.1)
+            }
+            .joined(separator: " · ")
+
+        let leading = Array(zip(fit.coefficients.dropFirst(),
+                                fit.standardErrors.dropFirst())).first
+        let z = leading.flatMap { $1 > 0 ? $0 / $1 : nil }
+        return StatResult(
+            test: .poissonRegression,
+            statistic: fit.coefficients.dropFirst().first ?? .nan,
+            pValue: z.map { 2 * (1 - Statistics.normalCDF(abs($0))) } ?? .nan,
+            degreesOfFreedom: nil,
+            summary: terms,
+            assumptions: [dispersion],
+            // Named only when it is the answer: a gate that always lists every
+            // other test teaches people to ignore the list.
+            alternatives: dispersion.passed ? [] : [.negativeBinomialRegression])
     }
 
     /// Two survival curves compared, with the assumption the comparison rests

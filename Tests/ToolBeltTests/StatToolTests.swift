@@ -94,6 +94,24 @@ struct StatToolTests {
         }
     }
 
+    /// P19.4 — the warning has to survive the trip to the Analyst, because the
+    /// Poisson result on its own looks entirely reasonable.
+    @Test("overdispersed counts come back with the warning and the alternative")
+    func overdispersionReachesTheAnalyst() async throws {
+        let text = try await run("""
+        {"test": "count_regression",
+         "y": [0,0,1,4,8,11,1,2,4,18,26,31,3,5,9,44,60,75],
+         "predictors": [[0,0,0,0,0,0,1,1,1,1,1,1,2,2,2,2,2,2]],
+         "names": ["กลุ่ม"]}
+        """)
+        #expect(text.contains("rate ratio"))
+        #expect(text.contains("กระจายเกิน"))
+        #expect(text.contains("negative binomial"))
+        // And the standard "this result is not usable as it stands" line, which
+        // is what stops a model quoting the number anyway.
+        #expect(text.contains("ผลนี้ยังใช้สรุปไม่ได้ตามที่เป็นอยู่"))
+    }
+
     @Test("a predictive value arrives with the prevalence it depends on")
     func predictiveValuesCarryPrevalence() async throws {
         let text = try await run("""
