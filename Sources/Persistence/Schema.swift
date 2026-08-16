@@ -376,6 +376,41 @@ public enum Schema {
 
         "DEFINE TABLE IF NOT EXISTS schema_meta SCHEMALESS",
     ]
+
+    // ── the other half of adding a field ──
+    //
+    // `DEFINE FIELD … TYPE bool DEFAULT false` reads as though it covers rows
+    // that are already there, and does not: **`DEFAULT` fills a value in when a
+    // row is created, and an old row was created already.** The field stays
+    // `NONE`, and the type is checked on that row's *next update* — any update,
+    // not one that touches the field. So the failure arrives months later, on a
+    // machine that has been in use, and never on a fresh install or in CI.
+    //
+    // It reached a user as `บันทึกข้อความไม่สำเร็จ: Couldn't coerce value for
+    // field 'pinned' … Expected 'bool' but found 'NONE'` — every message typed
+    // into a conversation older than the field failed to save.
+    //
+    // These are **derived from the field definitions above rather than written
+    // out**, because a hand-kept list of backfills is a list that goes stale the
+    // first time somebody adds a field and does not think about this file's
+    // other half — which is precisely the mistake being fixed.
+
+    /// One `UPDATE` per non-optional field that declares a default, filling it
+    /// in wherever it is missing. `option<…>` fields are skipped: being absent
+    /// is what they mean.
+    public static var backfills: [String] { statements.compactMap(backfill(for:)) }
+
+    static func backfill(for statement: String) -> String? {
+        guard statement.hasPrefix("DEFINE FIELD"),
+              let defaults = statement.range(of: " DEFAULT ") else { return nil }
+        let head = String(statement[..<defaults.lowerBound])
+        guard !head.contains("TYPE option<") else { return nil }
+        let value = statement[defaults.upperBound...].trimmingCharacters(in: .whitespaces)
+        let words = head.split(separator: " ").map(String.init)
+        guard let on = words.firstIndex(of: "ON"), on > 0, on + 1 < words.count else { return nil }
+        return "UPDATE \(words[on + 1]) SET \(words[on - 1]) = \(value) "
+            + "WHERE \(words[on - 1]) IS NONE"
+    }
 }
 
 extension SurrealClient {
@@ -389,6 +424,19 @@ extension SurrealClient {
                 try await exec(statement)
             } catch {
                 throw SurrealError.server(code: -1, message: "schema statement failed: \(statement) — \(error)")
+            }
+        }
+        // After the definitions, never before: the backfill has to be able to
+        // see the field it is filling in. Run on every launch rather than once
+        // at a version boundary — it is a scan over rows that are already
+        // wrong, and a repair that only fires if somebody remembered to bump a
+        // number is a repair that will be skipped exactly once, in the case
+        // that mattered.
+        for statement in Schema.backfills {
+            do {
+                try await exec(statement)
+            } catch {
+                throw SurrealError.server(code: -1, message: "backfill failed: \(statement) — \(error)")
             }
         }
         // UPSERT, not UPDATE: v3 refuses to UPDATE a record that does not exist.

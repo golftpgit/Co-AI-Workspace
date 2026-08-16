@@ -69,10 +69,26 @@ public enum SecretSource: String, Sendable, Equatable {
 /// that changes the computer it runs on (`LinkageKeySource`'s reason, unchanged).
 public protocol SecretVault: Sendable {
     func read(_ name: String) throws -> String?
+    /// Whether a secret of this name is stored — **without** fetching its
+    /// value. Separate from `read` because on macOS the two are different
+    /// questions to the Keychain: returning the bytes is what an item's access
+    /// control guards, so `read` can stop and wait for a person to approve it,
+    /// and asking for attributes cannot. Anything that only needs to know
+    /// "is this configured" must ask this one; boot hung on the difference
+    /// (Tests/ChannelsTests/BootDoesNotReadSecretsTests.swift).
+    func exists(_ name: String) throws -> Bool
     /// `nil` deletes.
     func write(_ value: String?, for name: String) throws
     /// The names in the vault. Names only, never values.
     func names() throws -> [String]
+}
+
+extension SecretVault {
+    /// Vaults with nothing to guard — the in-memory one tests use — answer by
+    /// reading, which for them costs nothing and cannot prompt.
+    public func exists(_ name: String) throws -> Bool {
+        try read(name).map { !$0.isEmpty } ?? false
+    }
 }
 
 public enum SecretVaultError: Error, CustomStringConvertible, Equatable {
@@ -112,6 +128,20 @@ public struct KeychainVault: SecretVault {
             return nil
         default:
             throw SecretVaultError.keychain(status)
+        }
+    }
+
+    /// Attributes, never data. This is the call that does not prompt.
+    public func exists(_ name: String) throws -> Bool {
+        var query = baseQuery(name)
+        query[kSecReturnAttributes as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        switch status {
+        case errSecSuccess: return true
+        case errSecItemNotFound: return false
+        default: throw SecretVaultError.keychain(status)
         }
     }
 
@@ -217,12 +247,36 @@ public enum SecretStore {
 
     /// What is known about this secret, including the case where the answer is
     /// "we could not find out".
-    public static func status(_ name: String) -> SecretStatus { look(name).status }
+    public static func status(_ name: String) -> SecretStatus {
+        let (override, vault) = lock.withLock { (overrides[name], Self.vault) }
+        return presence(name, override: override, vault: vault,
+                        environment: ProcessInfo.processInfo.environment)
+    }
 
     private static func look(_ name: String) -> (value: String?, status: SecretStatus) {
         let (override, vault) = lock.withLock { (overrides[name], Self.vault) }
         return resolve(name, override: override, vault: vault,
                        environment: ProcessInfo.processInfo.environment)
+    }
+
+    /// The same walk as `resolve`, asking only whether each layer *has* the
+    /// secret. It returns no value and has no way to produce one, so the
+    /// invariant `resolve`'s note is about — a status that disagrees with the
+    /// value a caller is about to use — cannot be reached from here: there is
+    /// nothing to disagree with.
+    static func presence(_ name: String,
+                         override: String?,
+                         vault: (any SecretVault)?,
+                         environment: [String: String]) -> SecretStatus {
+        if let override { return override.isEmpty ? .absent : .present(source: .override) }
+        if let vault {
+            do {
+                if try vault.exists(name) { return .present(source: .keychain) }
+            } catch {
+                return .unreadable("\(error)")
+            }
+        }
+        return (environment[name] ?? "").isEmpty ? .absent : .present(source: .environment)
     }
 
     /// One lookup, one pass, and no global state.

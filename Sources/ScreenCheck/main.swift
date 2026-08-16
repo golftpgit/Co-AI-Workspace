@@ -28,7 +28,7 @@ struct ScreenCheck {
         // Which app to read: an argument, or this process. Never guessed —
         // a driver that silently drove the wrong app is worse than one that
         // refused (§23.2).
-        let name = CommandLine.arguments.dropFirst().first
+        let name = CommandLine.arguments.dropFirst().first { !$0.hasPrefix("--") }
         let pid: pid_t
         if let name {
             guard let app = NSWorkspace.shared.runningApplications
@@ -44,9 +44,51 @@ struct ScreenCheck {
         }
 
         let navigator = AXNavigator(pid: pid)
+
+        // Driving, not just reading (§23.1, P15.1/P17.1). By **label**, never
+        // by coordinates: a click at 412,308 lands wherever the layout moved
+        // to and reports success either way, while a press by name either
+        // finds the control or says which one it could not find.
+        if let label = value(of: "--press") {
+            // A button first, because that is what most things are, then
+            // anything with the name: tabs, radio buttons and disclosure rows
+            // are all "press the thing called X" to the person asking.
+            do {
+                let action: ScreenAction
+                if let hit = try? await navigator.press(.button(label)) {
+                    action = hit
+                } else {
+                    action = try await navigator.press(
+                        ElementQuery(label: .contains(label), role: value(of: "--role")))
+                }
+                print("pressed — \(action.evidence.summary)")
+            } catch { print("could not press ‘\(label)’: \(error)") }
+            if !CommandLine.arguments.contains("--then-read") { return }
+        }
+        if let text = value(of: "--type"), let field = value(of: "--into") {
+            do {
+                let action = try await navigator.type(text, into: .field(field))
+                print("typed — \(action.evidence.summary)")
+            } catch { print("could not type into ‘\(field)’: \(error)") }
+            if !CommandLine.arguments.contains("--then-read") { return }
+        }
+
         do {
             let snapshot = try await navigator.snapshot()
             print("window: \(snapshot.windowTitle)")
+
+            // What the screen says about one thing, for watching a value
+            // change while something runs. `--grep` because the whole screen
+            // is 200 lines and the answer is usually one of them.
+            if let needle = value(of: "--grep") {
+                for line in snapshot.root.flattened.compactMap({ element -> String? in
+                    let text = [element.label, element.value ?? ""].joined(separator: " ")
+                    guard text.localizedCaseInsensitiveContains(needle) else { return nil }
+                    return "  \(element.role): \(text.trimmingCharacters(in: .whitespaces))"
+                }).prefix(20) { print(line) }
+                return
+            }
+
             let spoken = snapshot.spokenLines
             print("what a screen reader would announce — \(spoken.count) lines")
             for line in spoken.prefix(30) { print("  \(line)") }
@@ -143,6 +185,14 @@ struct ScreenCheck {
         } catch {
             print("could not read the screen: \(error)")
         }
+    }
+
+    /// The argument after a flag, or nil.
+    static func value(of flag: String) -> String? {
+        guard let index = CommandLine.arguments.firstIndex(of: flag),
+              index + 1 < CommandLine.arguments.count else { return nil }
+        let next = CommandLine.arguments[index + 1]
+        return next.hasPrefix("--") ? nil : next
     }
 
     /// One Tab, through the same event path a person's keyboard uses.
