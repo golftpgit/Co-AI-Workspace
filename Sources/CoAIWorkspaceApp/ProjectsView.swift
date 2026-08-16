@@ -83,6 +83,11 @@ struct ProjectsView: View {
     /// Sends an exception report out through every running channel. Passed in
     /// rather than reached for: this screen does not know what a channel is.
     let announce: (String) async -> Void
+    /// Hands a leaf to the team screen as a draft assignment (§19.6, P10.4).
+    /// A closure rather than the team model itself: the plan screen has no
+    /// business knowing how a run is started, and which team lead belongs to
+    /// this workspace is the shell's question (§19.1.1).
+    var startWork: ((WorkPackage) -> Bool)?
 
     var body: some View {
         HSplitView {
@@ -1511,6 +1516,19 @@ struct ProjectsView: View {
                         .font(.caption2)
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(.quaternary, in: Capsule())
+                }
+                if leaf, let startWork {
+                    // P10.4's missing half: the leaf could describe itself as
+                    // an assignment and nothing could start one, so the plan
+                    // and the team were joined by a field nobody could act on.
+                    Button("เปิดงานใบนี้") { _ = startWork(package) }
+                        .buttonStyle(.borderless)
+                        .font(.caption)
+                        .disabled(package.acceptanceCriteria.isEmpty)
+                        .help(package.acceptanceCriteria.isEmpty
+                              ? "ใบที่ไม่มีเกณฑ์ตรวจรับ ส่งให้ใครทำไม่ได้ — ไม่มีอะไรให้ตรวจว่าเสร็จ"
+                              : "เอาใบนี้ไปเป็นงานของทีม แล้วตรวจเกณฑ์ก่อนสั่งเริ่ม")
+                        .accessibilityLabel("เปิดงาน \(package.title) กับทีม")
                 }
                 Button {
                     Task { await model.removePackage(package.id) }

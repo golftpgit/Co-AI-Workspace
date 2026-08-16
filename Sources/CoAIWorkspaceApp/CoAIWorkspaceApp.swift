@@ -220,6 +220,15 @@ private struct RootView: View {
                                  types: engine.projectTypes,
                                  announce: { message in
                                      await engine.channelRouter.broadcast(message)
+                                 },
+                                 // §19.6 / P10.4 — the leaf goes to *this*
+                                 // workspace's team lead, which is a fact the
+                                 // shell holds and the plan screen does not.
+                                 startWork: { package in
+                                     let started = workspace.team.draft(
+                                         from: package, role: package.role ?? .researcher)
+                                     if started { area = .chat }
+                                     return started
                                  })
                         .task {
                             await projects.attach(service: engine.projects)

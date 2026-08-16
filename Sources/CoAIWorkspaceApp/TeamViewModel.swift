@@ -238,6 +238,31 @@ public final class TeamViewModel {
         status = Status(message: "ข้ามหัวหน้าทีม — เขียนงานและเกณฑ์ตรวจรับเอง", isError: false)
     }
 
+    /// Starts work on one leaf of the plan (§19.6, P10.4).
+    ///
+    /// The WBS has been able to *describe* a leaf as an assignment since P10.4
+    /// — `WorkPackage.assignment()` — and nothing could start one. So the plan
+    /// and the team were joined by a field nobody could act on.
+    ///
+    /// It fills the draft rather than running: §2.6's rule is that nothing
+    /// starts before a person has seen what will be done, and this is a leaf
+    /// somebody wrote weeks ago. The leaf rides along as the work package, so
+    /// the hours land on the promise they were spent on rather than nowhere.
+    @discardableResult
+    public func draft(from package: WorkPackage, role: Role) -> Bool {
+        guard !isRunning, let assignment = package.assignment(for: role) else { return false }
+        goal = package.title
+        workPackage = package.id
+        draft = [Draft(role: role, goal: assignment.goal,
+                       deliverableType: assignment.deliverableType,
+                       criteria: assignment.acceptanceCriteria
+                           .map { "\($0.text) | \($0.evidenceRequired)" }
+                           .joined(separator: "\n"))]
+        status = Status(message: "เอาใบงาน “\(package.title)” มาเป็นงานของทีมแล้ว — "
+                        + "ตรวจเกณฑ์ตรวจรับก่อนสั่งเริ่ม", isError: false)
+        return true
+    }
+
     public func addDraftAssignment() {
         guard !isRunning else { return }
         draft.append(Draft())

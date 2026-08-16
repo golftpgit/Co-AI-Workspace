@@ -1024,6 +1024,19 @@ else
   fail "r_eval can install packages without the always-ask tool (§5.5, P14.4)"
 fi
 
+# P10.4 — a leaf can be started, and the plan says which promise it is for.
+#
+# The field existed for four phases with nothing that could act on it, which is
+# the failure D6 names: a capability nothing reaches is not a capability. The
+# button hands the leaf to the team *and* carries its id as the work package,
+# because hours that land on no promise are hours the plan cannot see.
+if grep -q "startWork" Sources/CoAIWorkspaceApp/ProjectsView.swift \
+   && grep -q "workPackage = package.id" Sources/CoAIWorkspaceApp/TeamViewModel.swift; then
+  ok "a leaf of the plan can be started, and its hours land on it"
+else
+  fail "the WBS can describe an assignment and not start one (§19.6, P10.4)"
+fi
+
 # §11.4 — a correction to the graph survives the next ingest.
 #
 # Deleting an edge without recording the rejection works perfectly until the
