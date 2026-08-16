@@ -1483,6 +1483,19 @@ struct ProjectsView: View {
                 } else {
                     ForEach(model.wbs.ordered) { package in
                         packageRow(package, project: project)
+                            // P10.11 — order is the order somebody reads the
+                            // plan in, and it could only be changed by
+                            // deleting a package and adding it again at the
+                            // end. Dropping onto a package with a different
+                            // parent is refused in the model, not here: a drop
+                            // that re-parented by accident would change what
+                            // the plan says rather than the order it says it.
+                            .draggable(package.id)
+                            .dropDestination(for: String.self) { ids, _ in
+                                guard let moved = ids.first else { return false }
+                                Task { await model.reorder(moved, toPositionOf: package.id) }
+                                return true
+                            }
                     }
                 }
 

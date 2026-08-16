@@ -523,6 +523,19 @@ public final class ProjectsViewModel {
         await edit(.savePackage(package))
     }
 
+    /// Moves a package to where another sits among its siblings (§19.6, P10.11).
+    ///
+    /// Every renumbered sibling is written, because a sequence half-written is
+    /// a sequence that reads wrong and inserts wrong. Refusals — a different
+    /// parent, a drop on itself — come back as nothing changed rather than as
+    /// an error: a drag that lands somewhere meaningless is not a mistake
+    /// somebody needs telling about.
+    public func reorder(_ moved: String, toPositionOf target: String) async {
+        let changed = wbs.reordering(moved, toPositionOf: target)
+        guard !changed.isEmpty else { return }
+        for package in changed { await edit(.savePackage(package)) }
+    }
+
     public func removePackage(_ packageID: String) async {
         let title = wbs.packages.first { $0.id == packageID }?.title ?? packageID
         await edit(.removePackage(id: packageID, title: title))
