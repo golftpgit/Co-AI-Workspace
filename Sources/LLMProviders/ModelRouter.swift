@@ -24,13 +24,37 @@ public struct RoutingPolicy: Sendable {
     public let latencySensitive: Bool
     /// Refuse to spend money for this piece of work even if a paid tier exists.
     public let allowMetered: Bool
+    /// The endpoint a person asked for by name (§9.2, P15.1).
+    ///
+    /// **An order, not a filter.** It moves that executor to the front and
+    /// leaves the rest of the chain behind it, so a chosen endpoint going down
+    /// mid-question costs a slower answer rather than no answer. It cannot make
+    /// an ineligible tier eligible and it does not authorise spending — both of
+    /// those are refused by name in `excluded`, because a preference that is
+    /// silently ignored is worse than one that is refused.
+    ///
+    /// It exists because the chain was right and unreachable: routing correctly
+    /// sent every chat turn to the cheapest tier that could serve it, and
+    /// nothing let a person say that *this* question deserves the large model —
+    /// which is what somebody wants in exactly the minute the small one answers
+    /// badly (measured, E.36).
+    public let preferred: String?
 
     public init(impact: RiskLevel = .low,
                 latencySensitive: Bool = false,
-                allowMetered: Bool = false) {
+                allowMetered: Bool = false,
+                preferred: String? = nil) {
         self.impact = impact
         self.latencySensitive = latencySensitive
         self.allowMetered = allowMetered
+        self.preferred = preferred
+    }
+
+    /// The same policy with a different choice of endpoint, for the screen that
+    /// offers one.
+    public func asking(for identifier: String?) -> RoutingPolicy {
+        RoutingPolicy(impact: impact, latencySensitive: latencySensitive,
+                      allowMetered: allowMetered, preferred: identifier)
     }
 
     /// Cheap, throwaway work: labels, groupings, short extractions.
@@ -130,6 +154,14 @@ public actor ModelRouter {
         self.executors = executors.sorted { $0.tier < $1.tier }
         self.sink = spanSink
         self.availabilityTTL = availabilityTTL
+    }
+
+    /// What a person may choose between, in the order the chain would try them
+    /// anyway. Names only — the screen offering the choice has no business
+    /// holding executors, and a list built from anything but the router's own
+    /// would offer an endpoint that is not there.
+    public var offered: [(identifier: String, tier: ModelTier)] {
+        executors.map { ($0.identifier, $0.tier) }
     }
 
     /// Runs the request on the first tier that can serve it, escalating past
@@ -272,7 +304,12 @@ public actor ModelRouter {
                 reason = "ต้องใช้ราว \(needed) โทเคน เกิน context window "
                     + "\(executor.capabilities.contextWindow) ของโมเดลนี้"
             } else if executor.tier.isMetered && !policy.allowMetered {
-                reason = "เป็น tier ที่คิดเงิน และงานชิ้นนี้ไม่ได้อนุญาตให้ใช้เงิน"
+                // Both halves. "Not allowed" alone reads as a bug to somebody
+                // who just picked this endpoint; "you picked it" alone does not
+                // say what to change.
+                reason = policy.preferred == executor.identifier
+                    ? "คุณเลือกไว้ แต่เป็น tier ที่คิดเงิน และงานชิ้นนี้ไม่ได้อนุญาตให้ใช้เงิน"
+                    : "เป็น tier ที่คิดเงิน และงานชิ้นนี้ไม่ได้อนุญาตให้ใช้เงิน"
             } else if policy.impact == .high && executor.tier == .onDevice {
                 // High-impact work skips the on-device model: its answers are
                 // not stable enough to make decisions on (ARCHITECTURE E.7).
@@ -312,8 +349,25 @@ public actor ModelRouter {
             orderReason = "งานทั่วไปที่ไม่ได้รีบ — เอาคุณภาพก่อน on-device"
         }
 
+        // The person's choice goes last, on top of whatever the policy ordered,
+        // because a preference is about *this* question and the policy is about
+        // the kind of work. Moved, never filtered: everything else stays behind
+        // it, so a chosen endpoint that has gone down costs a slower answer
+        // rather than none.
+        //
+        // A name that matches nothing changes nothing. An endpoint can be
+        // deleted while a conversation still remembers it, and stranding that
+        // conversation would be a worse answer than quietly routing normally.
+        var reason = orderReason
+        if let wanted = policy.preferred,
+           let index = eligible.firstIndex(where: { $0.identifier == wanted }) {
+            let chosen = eligible.remove(at: index)
+            eligible.insert(chosen, at: 0)
+            reason = "คุณเลือก \(wanted) ไว้สำหรับคำถามนี้ — ถ้าเรียกไม่ได้จะไล่ต่อตามลำดับเดิม"
+        }
+
         return (eligible, RoutingChoice(order: eligible.map(\.identifier),
-                                        orderReason: orderReason,
+                                        orderReason: reason,
                                         excluded: excluded))
     }
 

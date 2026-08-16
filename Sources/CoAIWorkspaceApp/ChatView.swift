@@ -370,6 +370,22 @@ private struct ChatScreen: View {
                     .onSubmit { Task { await model.send() } }
                     .accessibilityLabel("ข้อความถึงผู้ช่วย")
 
+                // "Run this one on something bigger", which is what the
+                // routing chain was correct about and unreachable for: it sends
+                // every chat turn to the cheapest tier that can serve it, and
+                // until now nothing let a person overrule that for one question
+                // (E.36). Beside the text because it is a fact about this turn.
+                Picker("โมเดล", selection: $model.chosenModel) {
+                    Text("อัตโนมัติ").tag(String?.none)
+                    ForEach(model.offeredModels, id: \.identifier) { entry in
+                        Text(entry.label).tag(String?.some(entry.identifier))
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 210)
+                .accessibilityLabel("โมเดลที่จะตอบคำถามนี้")
+                .accessibilityHint("เลือกไว้เฉพาะคำถามนี้ — ถ้าเรียกไม่ได้ ระบบจะไล่ต่อตามลำดับเดิม")
+
                 if model.isRunning {
                     Button(role: .destructive) { model.stop() } label: {
                         Label("หยุด", systemImage: "stop.fill")
@@ -387,7 +403,10 @@ private struct ChatScreen: View {
             composerFooter
         }
         .padding(Space.section)
-        .task { await model.refreshLocalModels() }
+        .task {
+            await model.refreshLocalModels()
+            await model.refreshOfferedModels()
+        }
     }
 
     private var composerFooter: some View {
