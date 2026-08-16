@@ -69,6 +69,11 @@ public enum Statistics {
         Distributions.tTestPValue(t: t, degreesOfFreedom: degreesOfFreedom)
     }
 
+    /// The two-sided t multiplier for an interval.
+    public static func tQuantile(_ p: Double, degreesOfFreedom: Double) -> Double {
+        Distributions.tQuantile(p, degreesOfFreedom: degreesOfFreedom)
+    }
+
     /// Upper-tail p-value for an F statistic.
     public static func fTestPValue(f: Double, d1: Double, d2: Double) -> Double {
         Distributions.fTestPValue(f: f, d1: d1, d2: d2)

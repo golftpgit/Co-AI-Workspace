@@ -43,6 +43,9 @@ public actor ProjectService {
     /// the answer — the cost of being wrong here is work that should have
     /// stopped carrying on.
     private var blocked: Set<ProjectID> = []
+    /// Per project, because two projects in planning at once is the ordinary
+    /// case since P21.1 and one shared value would answer for both.
+    private var study: [ProjectID: StudyFacts] = [:]
     private var byID: [ProjectID: Project] = [:]
     private var loaded = false
 
@@ -574,7 +577,20 @@ public actor ProjectService {
             typeGates: project.stage == .execution
                 ? await (typeGates?.declaredGates(forType: project.typeName) ?? []) : [],
             typeFacts: project.stage == .execution
-                ? await (typeGates?.gateFacts(for: id) ?? TypeGateFacts()) : TypeGateFacts())
+                ? await (typeGates?.gateFacts(for: id) ?? TypeGateFacts()) : TypeGateFacts(),
+            // Only at the boundary that asks (§12.6.1, P19.6), for the same
+            // reason as the type gates above.
+            study: project.stage == .planning ? study[id] ?? StudyFacts() : StudyFacts())
+    }
+
+    /// What the app knows about a study's design, for G2.
+    ///
+    /// Told rather than read: the sample size lives on the analysis plan
+    /// (§12.4) and whether a project collects from people is M15's business,
+    /// and ProjectKit may reach neither — the same arrangement as every other
+    /// fact it is handed.
+    public func observe(study facts: StudyFacts, for id: ProjectID) {
+        study[id] = facts
     }
 
     /// The only way a stage changes. Refuses rather than reports: a gate that

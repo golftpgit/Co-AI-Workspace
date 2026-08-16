@@ -226,7 +226,6 @@ public struct ObservedFacts: Sendable, Equatable {
     public var measured: Set<ToleranceDimension>
     public var measuredSeconds: TimeInterval
     public var messagesSent: Int
-
     public init(readings: ToleranceReadings = ToleranceReadings(),
                 measured: Set<ToleranceDimension> = [],
                 measuredSeconds: TimeInterval = 0,
