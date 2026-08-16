@@ -41,7 +41,7 @@ public struct RoutingPolicy: Sendable {
 
 /// Why a candidate was skipped — kept so the UI can explain a slow or
 /// surprising answer instead of leaving the user guessing.
-public struct RoutingAttempt: Sendable {
+public struct RoutingAttempt: Sendable, Equatable {
     public let executor: String
     public let tier: ModelTier
     public let outcome: String
@@ -55,6 +55,45 @@ public struct RoutingAttempt: Sendable {
         self.tier = tier
         self.outcome = outcome
         self.detail = detail
+    }
+}
+
+/// Why the router will try what it tries, in the order it tries it (§24.3,
+/// P20.5).
+///
+/// **Produced by the pass that decides, not by a second pass that explains.**
+/// The obvious way to answer "why this tier" is to ask a model to write a
+/// sentence about it afterwards, and that sentence would be a plausible story
+/// about a decision it did not make. Everything here is a by-product of
+/// `choose(from:for:policy:)` — the same filter that removes a tier writes the
+/// line saying why it is gone, so an explanation cannot drift from the
+/// behaviour it describes without the filter changing too.
+public struct RoutingChoice: Sendable, Equatable {
+    public struct Excluded: Sendable, Equatable {
+        public let executor: String
+        public let tier: ModelTier
+        public let reason: String
+    }
+
+    /// The order the tiers will be tried in.
+    public let order: [String]
+    /// The policy clause that produced that order — which rule, not a general
+    /// statement about routing.
+    public let orderReason: String
+    /// Ruled out before anything ran, each with the clause that ruled it out.
+    public let excluded: [Excluded]
+    /// Tried and stepped past while the request was in flight. Filled in by the
+    /// call, because "it was slow because the endpoint was down" is only known
+    /// once the endpoint has been asked.
+    public var escalatedPast: [RoutingAttempt] = []
+
+    /// The whole reason, in the order a person reads it: what was chosen, why
+    /// that order, what was skipped and why.
+    public var lines: [String] {
+        var lines = [orderReason]
+        lines += escalatedPast.map { "ข้าม \($0.executor) — \($0.detail ?? $0.outcome)" }
+        lines += excluded.map { "ไม่พิจารณา \($0.executor) — \($0.reason)" }
+        return lines
     }
 }
 
@@ -99,8 +138,9 @@ public actor ModelRouter {
     public func complete(_ request: LLMRequest,
                          policy: RoutingPolicy = .disposable) async throws -> LLMCompletion {
         var attempts: [RoutingAttempt] = []
+        let (candidates, _) = try candidates(for: request, policy: policy)
 
-        for executor in try candidates(for: request, policy: policy) {
+        for executor in candidates {
             guard await isAvailable(executor) else {
                 attempts.append(.init(executor: executor.identifier, tier: executor.tier,
                                       outcome: "unavailable"))
@@ -144,10 +184,12 @@ public actor ModelRouter {
     /// would produce a spliced, incoherent reply, so a late failure is surfaced.
     public func stream(_ request: LLMRequest,
                        policy: RoutingPolicy = .disposable) async throws
-        -> (executor: String, tier: ModelTier, events: AsyncThrowingStream<LLMEvent, Error>) {
+        -> (executor: String, tier: ModelTier, events: AsyncThrowingStream<LLMEvent, Error>,
+            choice: RoutingChoice) {
         var attempts: [RoutingAttempt] = []
+        var (candidates, choice) = try candidates(for: request, policy: policy)
 
-        for executor in try candidates(for: request, policy: policy) {
+        for executor in candidates {
             guard await isAvailable(executor) else {
                 attempts.append(.init(executor: executor.identifier, tier: executor.tier,
                                       outcome: "unavailable"))
@@ -169,7 +211,10 @@ public actor ModelRouter {
                 let stream = probe.rest(startingWith: first)
                 await record(executor: executor, request: request, outcome: "ok",
                              usage: nil, escalatedFrom: attempts)
-                return (executor.identifier, executor.tier, stream)
+                // The tiers walked past on the way here are part of the answer
+                // to "why this one", and only knowable now.
+                choice.escalatedPast = attempts
+                return (executor.identifier, executor.tier, stream, choice)
             } catch let error as LLMError where error.isEscalatable {
                 attempts.append(.init(executor: executor.identifier, tier: executor.tier,
                                       outcome: shortOutcome(error), detail: error.description))
@@ -187,50 +232,89 @@ public actor ModelRouter {
     /// Throws only when nothing could ever serve the request — a configuration
     /// problem, not a runtime one, and worth failing loudly.
     private func candidates(for request: LLMRequest,
-                            policy: RoutingPolicy) throws -> [any LLMExecutor] {
-        let needed = request.estimatedPromptTokens + request.maxTokens
-
-        var eligible = executors.filter { executor in
-            if !request.tools.isEmpty && !executor.capabilities.supportsTools { return false }
-            if request.responseSchema != nil && !executor.capabilities.supportsStructuredOutput { return false }
-            if executor.capabilities.contextWindow < needed { return false }
-            if executor.tier.isMetered && !policy.allowMetered { return false }
-            // High-impact work skips the on-device model: its answers are not
-            // stable enough to make decisions on (ARCHITECTURE E.7).
-            if policy.impact == .high && executor.tier == .onDevice { return false }
-            return true
-        }
-
-        if eligible.isEmpty {
-            throw RoutingError(attempts: executors.map {
-                .init(executor: $0.identifier, tier: $0.tier, outcome: "ineligible")
+                            policy: RoutingPolicy) throws -> ([any LLMExecutor], RoutingChoice) {
+        let (candidates, choice) = Self.choose(from: executors, for: request, policy: policy)
+        if candidates.isEmpty {
+            throw RoutingError(attempts: choice.excluded.map {
+                .init(executor: $0.executor, tier: $0.tier, outcome: "ineligible",
+                      detail: $0.reason)
             })
         }
+        return (candidates, choice)
+    }
 
-        // Latency-sensitive work prefers cheap-and-close, which is the order
-        // the list is already in.
-        if policy.latencySensitive { return eligible }
+    /// What the router would do with this request, without doing it — for the
+    /// screen that has to say why (P20.5). Deliberately the same call the
+    /// routing itself makes.
+    public func explain(_ request: LLMRequest,
+                        policy: RoutingPolicy = .disposable) -> RoutingChoice {
+        Self.choose(from: executors, for: request, policy: policy).choice
+    }
 
-        if policy.impact == .high {
+    /// The one selection pass. Every rule that removes or orders a tier writes
+    /// its own reason here; there is no second implementation to disagree with.
+    static func choose(from executors: [any LLMExecutor],
+                       for request: LLMRequest,
+                       policy: RoutingPolicy) -> (candidates: [any LLMExecutor],
+                                                  choice: RoutingChoice) {
+        let needed = request.estimatedPromptTokens + request.maxTokens
+        var eligible: [any LLMExecutor] = []
+        var excluded: [RoutingChoice.Excluded] = []
+
+        for executor in executors {
+            let reason: String?
+            if !request.tools.isEmpty && !executor.capabilities.supportsTools {
+                reason = "รอบนี้ต้องเรียกเครื่องมือ แต่โมเดลนี้เรียกไม่ได้"
+            } else if request.responseSchema != nil
+                        && !executor.capabilities.supportsStructuredOutput {
+                reason = "งานนี้ต้องได้คำตอบตามสคีมา แต่โมเดลนี้ไม่รองรับ"
+            } else if executor.capabilities.contextWindow < needed {
+                reason = "ต้องใช้ราว \(needed) โทเคน เกิน context window "
+                    + "\(executor.capabilities.contextWindow) ของโมเดลนี้"
+            } else if executor.tier.isMetered && !policy.allowMetered {
+                reason = "เป็น tier ที่คิดเงิน และงานชิ้นนี้ไม่ได้อนุญาตให้ใช้เงิน"
+            } else if policy.impact == .high && executor.tier == .onDevice {
+                // High-impact work skips the on-device model: its answers are
+                // not stable enough to make decisions on (ARCHITECTURE E.7).
+                reason = "งานนี้ผิดแล้วเสียหาย — on-device เลือกไม่เหมือนเดิมในแต่ละรอบ (E.7)"
+            } else {
+                reason = nil
+            }
+            if let reason {
+                excluded.append(.init(executor: executor.identifier,
+                                      tier: executor.tier, reason: reason))
+            } else {
+                eligible.append(executor)
+            }
+        }
+
+        let orderReason: String
+        if policy.latencySensitive {
+            // Latency-sensitive work prefers cheap-and-close, which is the
+            // order the list is already in.
+            orderReason = "มีคนนั่งรออยู่ — เรียงจาก tier ที่ใกล้และเร็วที่สุดขึ้นไป"
+        } else if policy.impact == .high {
             // §9.2's heavy chain: Tier 1a → 0.5 → 1b. Cheapest-first is the
             // wrong order here, and stopped being harmless the moment Tier 0.5
             // became something a user installs: with a 0.6B model on disk,
             // planning and delegation would go to it in preference to a 27B on
             // the endpoint. Tier 0.5 stays in the chain as the floor — it is
             // where this work lands when the endpoint is gone — just not first.
+            eligible.sort { Self.heavyWorkRank($0.tier) < Self.heavyWorkRank($1.tier) }
+            orderReason = "งานที่ผิดแล้วเสียหาย (§9.2) — self-hosted ก่อน แล้วค่อยลงมาที่ local"
+        } else {
             eligible.sort { lhs, rhs in
-                Self.heavyWorkRank(lhs.tier) < Self.heavyWorkRank(rhs.tier)
+                // Prefer a locally hosted model over on-device when quality
+                // matters more than speed, but never above self-hosted.
+                (lhs.tier == .onDevice ? 1 : 0, lhs.tier.rawValue)
+                    < (rhs.tier == .onDevice ? 1 : 0, rhs.tier.rawValue)
             }
-            return eligible
+            orderReason = "งานทั่วไปที่ไม่ได้รีบ — เอาคุณภาพก่อน on-device"
         }
 
-        eligible.sort { lhs, rhs in
-            // Prefer a locally hosted model over on-device when quality
-            // matters more than speed, but never above self-hosted.
-            (lhs.tier == .onDevice ? 1 : 0, lhs.tier.rawValue)
-                < (rhs.tier == .onDevice ? 1 : 0, rhs.tier.rawValue)
-        }
-        return eligible
+        return (eligible, RoutingChoice(order: eligible.map(\.identifier),
+                                        orderReason: orderReason,
+                                        excluded: excluded))
     }
 
     // MARK: - money

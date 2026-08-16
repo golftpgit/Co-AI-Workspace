@@ -68,7 +68,7 @@ actor ChannelRouter: InboundHandling {
             switch event {
             case .assistantDelta(let text):
                 answer += text
-            case .toolCallFinished(let id, let name, _, let executed):
+            case .toolCallFinished(let id, let name, _, let executed, _):
                 _ = id
                 // Said out loud: on a phone there is no card to look at, and a
                 // command that was refused must not read as one that ran.

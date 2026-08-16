@@ -63,6 +63,30 @@ public enum GateOutcome: Sendable {
         if case .executed = self { return true }
         return false
     }
+
+    /// Why the call went the way it went, for the screen (§24.3, P20.5).
+    ///
+    /// These are the scorer's own reasons — the strings the gate weighed while
+    /// deciding — not a summary written afterwards. An outcome with nothing to
+    /// say returns nothing rather than a filler sentence: "this was fine" on
+    /// every ordinary call is how a person learns to stop reading the line
+    /// that matters.
+    public var rationale: [String] {
+        switch self {
+        case .executed(_, let risk, _):
+            return ["ระดับความเสี่ยงที่ประเมินได้: \(risk.level)"] + risk.reasons
+        case .sentBack(let reason):
+            return ["ผู้ตรวจส่งกลับ — \(reason)"]
+        case .blockedByPolicy(let policy):
+            return ["ขัดนโยบาย — \(policy)"]
+        case .blockedByStage(let reason):
+            return ["ขั้นของโครงการยังไม่ถึงงานแบบนี้ — \(reason)"]
+        case .denied(let reason):
+            return ["คนตัดสินใจไม่อนุมัติ" + (reason.map { " — \($0)" } ?? "")]
+        case .planOnly, .unknownTool:
+            return []
+        }
+    }
 }
 
 public actor ToolGateway {

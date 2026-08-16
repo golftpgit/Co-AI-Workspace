@@ -220,7 +220,7 @@ func timeToFirstToken(_ messages: [LLMMessage]) async -> (ttft: Double, failed: 
 
     let startedAt = Date()
     do {
-        let (_, _, events) = try await router.stream(request)
+        let (_, _, events, _) = try await router.stream(request)
         for try await event in events {
             switch event {
             case .textDelta, .reasoningDelta:
