@@ -39,7 +39,7 @@ public struct StatTestTool: AgentTool {
                    "mann_whitney", "wilcoxon", "kruskal_wallis", "fisher_exact",
                    "linear_regression", "logistic_regression",
                    "risk_ratio", "odds_ratio", "risk_difference", "nnt",
-                   "diagnostic_accuracy", "survival", "count_regression", "clustered"],
+                   "diagnostic_accuracy", "survival", "count_regression", "clustered", "meta_analysis"],
           "description": "ชนิดการทดสอบ"
         },
         "groups": {
@@ -61,6 +61,16 @@ public struct StatTestTool: AgentTool {
         },
         "names": { "type": "array", "items": { "type": "string" },
                    "description": "ชื่อตัวแปรต้น ตามลำดับเดียวกับ predictors" },
+        "effects": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "ขนาดผลของแต่ละงาน บนสเกลที่ผลต่างสมมาตร (log OR, log HR, ผลต่างค่าเฉลี่ย) สำหรับ meta_analysis"
+        },
+        "standard_errors": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "standard error ของแต่ละงาน เรียงตรงกับ effects"
+        },
         "times": {
           "type": "array",
           "items": { "type": "array", "items": { "type": "number" } },
@@ -155,6 +165,17 @@ public struct StatTestTool: AgentTool {
             // would invent a p-value for a thing that does not have one.
             case "risk_ratio", "odds_ratio", "risk_difference", "nnt":
                 return ToolOutput(text: try Self.epidemiology(test, table: try table()))
+            case "meta_analysis":
+                let effects = try arguments.numbers("effects")
+                let errors = try arguments.numbers("standard_errors")
+                guard effects.count == errors.count else {
+                    throw ToolError.invalidArguments("effects กับ standard_errors ยาวไม่เท่ากัน")
+                }
+                let studies = zip(effects, errors).enumerated().map {
+                    StudyEffect(label: "งานที่ \($0.offset + 1)", effect: $0.element.0,
+                                standardError: $0.element.1)
+                }
+                return ToolOutput(text: try Self.meta(studies))
             case "clustered":
                 // `groups` is already "one array per group", which is what a
                 // cluster is — so the shape needs no new argument, only the
@@ -236,6 +257,34 @@ public struct StatTestTool: AgentTool {
         case "risk_difference": return line("RD", try Epidemiology.riskDifference(table))
         default: return line("NNT", try Epidemiology.numberNeededToTreat(table))
         }
+    }
+
+    /// A pooled estimate is never handed back on its own: heterogeneity and
+    /// funnel asymmetry are the two facts that decide whether it means
+    /// anything, and a model reading a bare number will quote the bare number
+    /// (§12.6.1, P19.7).
+    private static func meta(_ studies: [StudyEffect]) throws -> String {
+        let random = try MetaAnalysis.pool(studies, model: .random)
+        let fixed = try MetaAnalysis.pool(studies, model: .fixed)
+        let spread = try MetaAnalysis.heterogeneity(studies)
+        var lines = [
+            String(format: "random effects: %.4f (95%% CI %.4f–%.4f · p = %.4g)",
+                   random.effect, random.lower, random.upper, random.pValue),
+            String(format: "fixed effect: %.4f (95%% CI %.4f–%.4f)",
+                   fixed.effect, fixed.lower, fixed.upper),
+            String(format: "Q = %.3f (df = %d, p = %.4g) · I² = %.1f%% · τ² = %.4f",
+                   spread.q, spread.degreesOfFreedom, spread.pValue,
+                   spread.iSquared, spread.tauSquared),
+            spread.interpretation,
+        ]
+        // Fewer than three studies cannot be tested, and saying that is better
+        // than leaving the line out — an absent line reads as a clean result.
+        if let asymmetry = try? MetaAnalysis.funnelAsymmetry(studies) {
+            lines.append(asymmetry.summary)
+        } else {
+            lines.append("งานน้อยเกินกว่าจะทดสอบความไม่สมมาตรของ funnel ได้")
+        }
+        return lines.joined(separator: "\n")
     }
 
     private static func diagnostic(table rows: [[Int]], prevalence: Double) throws -> String {

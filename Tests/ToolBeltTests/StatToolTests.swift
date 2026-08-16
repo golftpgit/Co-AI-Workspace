@@ -125,6 +125,21 @@ struct StatToolTests {
         #expect(text.contains("ผลนี้ยังใช้สรุปไม่ได้ตามที่เป็นอยู่"))
     }
 
+    /// P19.7 — the pooled number never travels alone, because a model reading
+    /// a bare estimate quotes the bare estimate.
+    @Test("a pooled estimate arrives with heterogeneity and funnel asymmetry attached")
+    func metaAnalysisReachesTheAnalyst() async throws {
+        let text = try await run("""
+        {"test": "meta_analysis",
+         "effects": [-0.30,-0.45,-0.12,-1.40,-0.05,-1.30,-0.38],
+         "standard_errors": [0.12,0.20,0.15,0.30,0.10,0.25,0.18]}
+        """)
+        #expect(text.contains("random effects"))
+        #expect(text.contains("I²"))
+        #expect(text.contains("funnel ไม่สมมาตร"))
+        #expect(text.contains("publication bias"))
+    }
+
     @Test("a predictive value arrives with the prevalence it depends on")
     func predictiveValuesCarryPrevalence() async throws {
         let text = try await run("""
