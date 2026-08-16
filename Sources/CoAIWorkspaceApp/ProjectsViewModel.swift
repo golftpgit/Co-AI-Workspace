@@ -180,6 +180,10 @@ public final class ProjectsViewModel {
     public var openProjects: [Project] { projects.filter(\.isOpen) }
 
     public func attach(service: ProjectService) async {
+        if let saved = UserDefaults.standard.string(forKey: Self.cycleKey),
+           let cycle = ReportSchedule.Cycle(rawValue: saved) {
+            reportCycle = cycle
+        }
         self.service = service
         await reload()
     }
@@ -324,6 +328,9 @@ public final class ProjectsViewModel {
         workspaces.focus(tab)
         status = nil
         await refreshGate()
+        // Asked when a workspace comes to the front, which is the only moment
+        // this app can ask anything: it is not running when it is closed.
+        await refreshReportDue()
     }
 
     /// Closes a tab. **Closing a window, not closing a project** — the life
@@ -689,6 +696,9 @@ public final class ProjectsViewModel {
                 }
             }
             await refreshGate()
+            // The same call a person makes, so nothing arrives by a path that
+            // skips what manual issuing checks (§19.13, P10.13).
+            await refreshReportDue()
             status = Status(message: note, isError: false)
             return report.rendered
         } catch {
@@ -727,6 +737,30 @@ public final class ProjectsViewModel {
         } catch {
             status = Status(message: "\(error)", isError: true)
         }
+    }
+
+    /// The cycle for automatic highlight reports (§19.13, P10.13). Held on
+    /// the screen rather than on the project row: it is a preference about how
+    /// often somebody wants telling, not part of the agreement a baseline
+    /// holds.
+    public var reportCycle: ReportSchedule.Cycle = .off {
+        didSet { UserDefaults.standard.set(reportCycle.rawValue, forKey: Self.cycleKey) }
+    }
+    static let cycleKey = "co-ai.report-cycle"
+
+    /// Whether a highlight report is due, and for what period. Asked when a
+    /// project is opened — there is no daemon, and a scheduler that pretended
+    /// otherwise would report Tuesday on Thursday.
+    public private(set) var reportDue: ReportDue?
+
+    func refreshReportDue() async {
+        guard let project = selected, reportCycle != .off else { reportDue = nil; return }
+        let last = await service?.reportHistory(of: project.id)
+            .first { $0.kind == .highlight }?.generatedAt
+        reportDue = ReportCycle.due(ReportSchedule(cycle: reportCycle),
+                                    lastIssued: last,
+                                    projectStarted: project.createdAt,
+                                    now: Date())
     }
 
     // MARK: - registers (§19.11)
