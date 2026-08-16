@@ -296,8 +296,18 @@ struct Engine: Sendable {
         // work after it reopens, so the blocked set is read at boot rather
         // than starting empty and filling in when somebody opens the screen.
         await projects.refreshExceptions()
+        // §24.3 / P20.4 — how this role has done with this tool before, read
+        // at decision time from the spans that already record it. Cached for a
+        // minute: the gate is on the path of every call and this is a query
+        // over two thousand rows, but a stale answer here is a call judged by
+        // last week's record.
+        let proficiency = ProficiencyCache(spans: spans)
         let gateway = ToolGateway(chain: HookChain(stageGate: StageGate(reader: projects),
-                                                   policyGate: StoredPolicyGate(source: policySource)),
+                                                   policyGate: StoredPolicyGate(source: policySource),
+                                                   proficiency: { role, tool in
+                                                       await proficiency.record(role: role,
+                                                                                tool: tool)
+                                                   }),
                                   approver: broker,
                                   spanSink: spans,
                                   modes: .default)
@@ -666,6 +676,30 @@ extension Engine {
     /// reason: one per workspace, kept, never re-pointed.
     func team(for scope: Scope) async -> TeamOrchestrator {
         await teams.team(for: scope)
+    }
+}
+
+/// How well each role does with each tool, for the gate that stops trusting a
+/// role that keeps failing (§24.3, P20.4).
+///
+/// A cache in front of the span query because the hook chain asks on every
+/// call and the query reads two thousand rows. One minute, because the number
+/// only moves when calls happen and a call judged by last week's record is the
+/// failure this exists to prevent.
+actor ProficiencyCache {
+    private let spans: SurrealSpanSink
+    private var records: [ToolProficiency] = []
+    private var readAt: ContinuousClock.Instant?
+
+    init(spans: SurrealSpanSink) { self.spans = spans }
+
+    func record(role: Role?, tool: String) async -> ToolProficiency? {
+        guard let role else { return nil }
+        if readAt == nil || readAt!.duration(to: .now) > .seconds(60) {
+            records = (try? await spans.toolProficiency()) ?? []
+            readAt = .now
+        }
+        return records.first { $0.role == role && $0.tool == tool }
     }
 }
 
