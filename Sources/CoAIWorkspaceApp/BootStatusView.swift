@@ -49,7 +49,7 @@ struct BootStatusView: View {
                 }
                 if !environment.notes.isEmpty { notesSection }
             }
-            .padding(28)
+            .padding(Space.section)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .accessibilityLabel("สถานะการเริ่มระบบ")

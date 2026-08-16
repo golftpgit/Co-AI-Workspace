@@ -105,7 +105,7 @@ struct ManuscriptPane: View {
                     .textSelection(.enabled)
             }
         }
-        .padding(12)
+        .padding(Space.box)
     }
 
     // MARK: - the editor
@@ -120,7 +120,7 @@ struct ManuscriptPane: View {
                         chapterBlock(chapter, manuscript: manuscript)
                     }
                 }
-                .padding(16)
+                .padding(Space.section)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -161,8 +161,8 @@ struct ManuscriptPane: View {
                         .font(.caption2).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(10)
-                .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                .padding(Space.box)
+                .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: Radius.box))
             }
         }
     }
@@ -241,8 +241,8 @@ private struct SectionEditor: View {
             .buttonStyle(.borderless).font(.caption)
             .accessibilityLabel("เพิ่มประโยคที่มีตัวเลขใน\(section.heading)")
         }
-        .padding(10)
-        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+        .padding(Space.box)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
     }
 
     private func sentenceRow(_ position: Int, _ sentence: ReportedSentence) -> some View {
@@ -376,7 +376,7 @@ private struct ResultPicker: View {
                               || label.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
-        .padding(20)
+        .padding(Space.section)
         .frame(width: 460)
         .onChange(of: selectedRunID) { _, _ in
             column = selectedRun?.columns.first ?? ""

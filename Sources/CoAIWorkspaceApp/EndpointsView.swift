@@ -24,7 +24,7 @@ struct EndpointsView: View {
                     budgetSection
                     if model.hasMeteredEndpoint { spendSection }
                 }
-                .padding(16)
+                .padding(Space.section)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -46,7 +46,7 @@ struct EndpointsView: View {
                     .frame(maxWidth: 420, alignment: .trailing)
             }
         }
-        .padding(12)
+        .padding(Space.box)
     }
 
     @ViewBuilder
@@ -96,8 +96,8 @@ struct EndpointsView: View {
                      + "และเหตุผลถูกบันทึกลง span")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            .padding(12)
-            .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+            .padding(Space.box)
+            .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
         } else {
             Text("ยังไม่มี endpoint ที่คิดเงิน — เพดานจึงยังไม่มีผลกับอะไร")
                 .font(.caption).foregroundStyle(.secondary)
@@ -183,7 +183,7 @@ struct EndpointsView: View {
                  + "เซิร์ฟเวอร์ยอมรับชื่อโมเดลที่ไม่มีอยู่ แล้วไปพังตอนใช้")
                 .font(.caption).foregroundStyle(.secondary)
         }
-        .padding(20)
+        .padding(Space.section)
         .frame(width: 520)
     }
 }
@@ -236,8 +236,8 @@ private struct EndpointRow: View {
             .labelStyle(.iconOnly)
         }
         .buttonStyle(.link)
-        .padding(12)
-        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+        .padding(Space.box)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
     }
 
     /// What to show before anything has been asked of the server. "(ตามที่

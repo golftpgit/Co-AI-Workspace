@@ -104,7 +104,7 @@ struct StatusBarView: View {
         .popover(isPresented: Binding(get: { open == which },
                                       set: { if !$0 { open = nil } })) {
             popover(which)
-                .padding(14)
+                .padding(Space.box)
                 .frame(width: 380)
         }
     }

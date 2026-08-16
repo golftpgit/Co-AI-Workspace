@@ -56,7 +56,7 @@ struct SourcesView: View {
                 Spacer()
                 Text("\(shown.count) แหล่ง").font(.caption).foregroundStyle(.secondary)
             }
-            .padding(12)
+            .padding(Space.box)
             Divider()
 
             List {
@@ -79,7 +79,7 @@ struct SourcesView: View {
                  + "หน้าที่ไม่มีใครรับรองคือเว็บทั่วไป และการปล่อยให้มันไม่มี tier "
                  + "จะทำให้มันหลุดตัวกรองที่ตรวจ tier · แก้รายการยังทำไม่ได้ (P13)")
                 .font(.caption2).foregroundStyle(.secondary)
-                .padding(10)
+                .padding(Space.box)
         }
     }
 
@@ -167,7 +167,7 @@ struct SourcesView: View {
                  + "ระบบไม่แก้ CAPTCHA: เจอด่านแล้วจะบอกให้คนไปเปิดเอง")
                 .font(.caption2).foregroundStyle(.secondary)
         }
-        .padding(12)
+        .padding(Space.box)
     }
 
     private func run(_ source: any WebSearching) {

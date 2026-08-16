@@ -136,7 +136,7 @@ struct WorkflowView: View {
                 }
                 .buttonStyle(.borderless)
             }
-            .padding(10)
+            .padding(Space.box)
             Divider()
 
             if model.workflows.isEmpty {
@@ -190,7 +190,7 @@ struct WorkflowView: View {
                     }
                     .disabled(model.running || model.refusal != nil)
                 }
-                .padding(10)
+                .padding(Space.box)
 
                 // The objection while it is still fixable, not after pressing
                 // run — the same choice `TeamOrchestrator.refusal` makes (P4.6).
@@ -221,7 +221,7 @@ struct WorkflowView: View {
                                 stepCard(index: index, step: step)
                             }
                         }
-                        .padding(10)
+                        .padding(Space.box)
                     }
                 }
 
@@ -312,9 +312,9 @@ struct WorkflowView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .padding(10)
+        .padding(Space.box)
         .background(.quaternary.opacity(0.4))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.box))
     }
 
     // MARK: - What happened
@@ -343,14 +343,14 @@ struct WorkflowView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
+        .padding(Space.box)
     }
 
     // MARK: - Palette
 
     private var paletteColumn: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("ทูลที่ใช้ได้ตอนนี้").fontWeight(.semibold).padding(10)
+            Text("ทูลที่ใช้ได้ตอนนี้").fontWeight(.semibold).padding(Space.box)
             Divider()
             if model.palette.isEmpty {
                 ContentUnavailableView("ยังไม่มีทูล", systemImage: "wrench.and.screwdriver",

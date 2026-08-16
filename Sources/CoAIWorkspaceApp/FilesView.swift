@@ -177,7 +177,7 @@ struct FilesView: View {
                 .buttonStyle(.borderless)
                 .help("อ่านโฟลเดอร์นี้ใหม่")
             }
-            .padding(10)
+            .padding(Space.box)
 
             Divider()
 
@@ -269,7 +269,7 @@ struct FilesView: View {
                     Text(text)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
+                        .padding(Space.box)
                 }
             case .cannotShow(let why):
                 ContentUnavailableView("เปิดในหน้านี้ไม่ได้", systemImage: "doc.questionmark",
@@ -287,7 +287,7 @@ struct FilesView: View {
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
+                    .padding(Space.box)
             }
         }
     }
@@ -312,6 +312,6 @@ struct FilesView: View {
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!model.canSave)
         }
-        .padding(10)
+        .padding(Space.box)
     }
 }

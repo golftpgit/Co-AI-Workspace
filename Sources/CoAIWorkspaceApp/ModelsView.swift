@@ -23,7 +23,7 @@ struct ModelsView: View {
                     leftoverSection
                     recommendedSection
                 }
-                .padding(16)
+                .padding(Space.section)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -53,7 +53,7 @@ struct ModelsView: View {
                     .frame(maxWidth: 380, alignment: .trailing)
             }
         }
-        .padding(12)
+        .padding(Space.box)
     }
 
     // MARK: - installed
@@ -190,8 +190,8 @@ private struct InstalledRow: View {
                 .labelStyle(.iconOnly)
             }
         }
-        .padding(12)
-        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+        .padding(Space.box)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
         .task { removable = await model.isRemovable(installed) }
         .confirmationDialog("ลบ \(installed.name)?",
                             isPresented: $confirmingDelete, titleVisibility: .visible) {
@@ -242,7 +242,7 @@ private struct CatalogRow: View {
                     .buttonStyle(.borderedProminent)
             }
         }
-        .padding(12)
-        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+        .padding(Space.box)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
     }
 }

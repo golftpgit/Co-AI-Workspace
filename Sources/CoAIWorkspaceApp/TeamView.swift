@@ -45,7 +45,7 @@ struct TeamView: View {
                         if let plan = model.plan { PlanSummary(plan: plan) }
                         ForEach(model.rows) { AssignmentRow(model: model, row: $0) }
                     }
-                    .padding(16)
+                    .padding(Space.section)
                 }
             }
         }
@@ -124,7 +124,7 @@ struct TeamView: View {
                     .textSelection(.enabled)
             }
         }
-        .padding(12)
+        .padding(Space.box)
     }
 
     /// Which leaf of the plan this run is against (§19.6, P10.4).
@@ -196,7 +196,7 @@ private struct PlanEditor: View {
                         .accessibilityLabel("อนุมัติแผนนี้แล้วให้ทีมเริ่มทำงาน")
                 }
             }
-            .padding(16)
+            .padding(Space.section)
         }
         .task(id: model.draft) { refusal = await model.refusal() }
     }
@@ -238,7 +238,7 @@ private struct DraftCard: View {
                 TextEditor(text: $item.criteria)
                     .font(.callout)
                     .frame(minHeight: 54)
-                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(.quaternary))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.control).stroke(.quaternary))
                     .accessibilityLabel("เกณฑ์ตรวจรับของงานนี้ บรรทัดละหนึ่งข้อ")
                 if item.assignment == nil {
                     Text("ยังเริ่มไม่ได้ — ต้องมีทั้งรายละเอียดงานและเกณฑ์ตรวจรับอย่างน้อยหนึ่งข้อ")
@@ -247,9 +247,9 @@ private struct DraftCard: View {
                 }
             }
         }
-        .padding(14)
+        .padding(Space.box)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: Radius.sheet))
     }
 }
 
@@ -266,9 +266,9 @@ private struct PlanSummary: View {
                 .font(.callout)
                 .textSelection(.enabled)
         }
-        .padding(12)
+        .padding(Space.box)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
+        .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: Radius.box))
     }
 }
 
@@ -309,16 +309,16 @@ private struct AssignmentRow: View {
                             .textSelection(.enabled)
                     }
                 }
-                .padding(8)
+                .padding(Space.row)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.background, in: RoundedRectangle(cornerRadius: 6))
+                .background(.background, in: RoundedRectangle(cornerRadius: Radius.box))
             }
 
             actions
         }
-        .padding(14)
+        .padding(Space.box)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: Radius.sheet))
         .sheet(isPresented: $askingRework) { reworkSheet }
         .confirmationDialog("ยกเลิกงานนี้?", isPresented: $confirmingCancel,
                             titleVisibility: .visible) {
@@ -364,7 +364,7 @@ private struct AssignmentRow: View {
             TextEditor(text: $note)
                 .font(.body)
                 .frame(minHeight: 90)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+                .overlay(RoundedRectangle(cornerRadius: Radius.box).stroke(.quaternary))
             HStack {
                 Spacer()
                 Button("ปิด") { askingRework = false }
@@ -376,7 +376,7 @@ private struct AssignmentRow: View {
                 .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(20)
+        .padding(Space.section)
         .frame(width: 460)
     }
 }

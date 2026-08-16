@@ -148,8 +148,8 @@ struct MCPServersView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(10)
-        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+        .padding(Space.box)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(server.name) · ทูลขึ้นต้นด้วย mcp \(server.namespace) · "
                             + (server.isReady ? "พร้อมต่อ" : "ยังไม่พร้อม"))
@@ -190,7 +190,7 @@ private struct MCPServerEditor: View {
                     TextEditor(text: draft.environmentText)
                         .font(.caption.monospaced())
                         .frame(height: 60)
-                        .overlay(RoundedRectangle(cornerRadius: 4)
+                        .overlay(RoundedRectangle(cornerRadius: Radius.control)
                             .stroke(Color.secondary.opacity(0.3)))
                         .accessibilityLabel("ตัวแปรที่เซิร์ฟเวอร์ต้องการ")
                     Text("บรรทัดละหนึ่งคู่ `WEATHER_API_KEY = ชื่อที่เก็บไว้` — "
@@ -219,7 +219,7 @@ private struct MCPServerEditor: View {
                         .disabled(!draft.wrappedValue.canSave)
                 }
             }
-            .padding(20)
+            .padding(Space.section)
             .frame(width: 560)
     }
 }

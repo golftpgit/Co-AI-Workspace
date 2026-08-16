@@ -155,7 +155,7 @@ struct IAInventoryView: View {
                                         + "\(entry.state.label) \(entry.state.note ?? "")")
                 }
             }
-            .padding(16)
+            .padding(Space.section)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

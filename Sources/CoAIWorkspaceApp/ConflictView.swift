@@ -42,7 +42,7 @@ struct ConflictView: View {
                                          model: model)
                         }
                     }
-                    .padding(16)
+                    .padding(Space.section)
                 }
             }
         }
@@ -84,7 +84,7 @@ struct ConflictView: View {
                     .textSelection(.enabled)
             }
         }
-        .padding(12)
+        .padding(Space.box)
     }
 }
 
@@ -137,8 +137,8 @@ private struct ConflictCard: View {
                     .accessibilityLabel("เปิดหน้าต่างตัดสินข้อขัดแย้ง \(conflict.headline)")
             }
         }
-        .padding(16)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
+        .padding(Space.section)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: Radius.sheet))
     }
 
     /// The history, and the way back out of a decision (P3.7).
@@ -239,8 +239,8 @@ private struct SideColumn: View {
                 .font(.body)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
-                .background(.background, in: RoundedRectangle(cornerRadius: 6))
+                .padding(Space.box)
+                .background(.background, in: RoundedRectangle(cornerRadius: Radius.box))
 
             HStack(spacing: 6) {
                 TierChip(tier: side.provenance.tier)
@@ -288,9 +288,9 @@ private struct DecisionSummary: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .padding(10)
+        .padding(Space.box)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.green.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
+        .background(.green.opacity(0.10), in: RoundedRectangle(cornerRadius: Radius.box))
     }
 
     private var text: String {
@@ -404,7 +404,7 @@ private struct DecisionSheet: View {
                 .disabled(choice == .both && condition.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
-        .padding(18)
+        .padding(Space.section)
         .frame(width: 520)
     }
 

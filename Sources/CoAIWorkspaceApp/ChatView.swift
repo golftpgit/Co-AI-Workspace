@@ -185,7 +185,7 @@ private struct ChatScreen: View {
                     Task { await model.search() }
                 }
         }
-        .padding(10)
+        .padding(Space.box)
         // Searches as you type, debounced. Driving it showed why: with Enter as
         // the only trigger there is no button, no spinner and no message — a
         // box that looks broken until you guess the keystroke. (And the first
@@ -334,7 +334,7 @@ private struct ChatScreen: View {
                             .id(bubble.id)
                     }
                 }
-                .padding(20)
+                .padding(Space.section)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .onChange(of: model.bubbles.last?.text) {
@@ -357,8 +357,8 @@ private struct ChatScreen: View {
                 TextField("พิมพ์ข้อความ…", text: $model.input, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...8)
-                    .padding(10)
-                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+                    .padding(Space.box)
+                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: Radius.box))
                     .onSubmit { Task { await model.send() } }
                     .accessibilityLabel("ข้อความถึงผู้ช่วย")
 
@@ -378,7 +378,7 @@ private struct ChatScreen: View {
             }
             composerFooter
         }
-        .padding(16)
+        .padding(Space.section)
         .task { await model.refreshLocalModels() }
     }
 
@@ -460,8 +460,8 @@ private struct BubbleView: View {
             HStack {
                 Spacer(minLength: 60)
                 Text(bubble.text)
-                    .padding(10)
-                    .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                    .padding(Space.box)
+                    .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: Radius.sheet))
                     .textSelection(.enabled)
             }
         case .assistant:
@@ -536,8 +536,8 @@ private struct BubbleView: View {
                 Text(status).font(.caption).foregroundStyle(.secondary)
             }
         }
-        .padding(10)
-        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+        .padding(Space.box)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
         .accessibilityLabel("เครื่องมือ \(bubble.toolName ?? "") — \(status)")
         .accessibilityHint(bubble.why.joined(separator: " · "))
     }
@@ -615,7 +615,7 @@ private struct PromotionSheet: View {
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
-        .padding(18)
+        .padding(Space.section)
         .frame(width: 520)
     }
 

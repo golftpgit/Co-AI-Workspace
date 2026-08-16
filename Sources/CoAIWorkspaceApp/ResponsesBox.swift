@@ -239,7 +239,7 @@ struct ResponsesBox: View {
                           || draft == answer?.text)
             }
         }
-        .padding(14)
+        .padding(Space.box)
         .frame(width: 340)
     }
 }
