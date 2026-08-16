@@ -73,6 +73,54 @@ public struct Tolerances: Sendable, Codable, Equatable {
     public static let fullAutonomous = Tolerances(limits: [
         .time: 3.0, .cost: 2_000, .scope: 3, .quality: 5, .risk: 2, .benefit: 0,
     ])
+
+    // ── the slider and these numbers, connected (§5.5, P10.6) ──
+    //
+    // They have described the same thing since both were written and nothing
+    // joined them, so moving the slider left the frame where it was and the two
+    // halves of the screen disagreed about how much rope the team has.
+    //
+    // The hazard is the only reason this is a rule and not an assignment: a
+    // project may have hand-tuned limits, and a slider that overwrote them
+    // would discard numbers somebody chose — silently, because the slider is
+    // not where they are looking.
+
+    /// The slider's three positions, named for them. Spelled out here rather
+    /// than taken from `OperatingModes.Autonomy` because neither module can see
+    /// the other; the app converts, and the conversion is one `switch` over
+    /// cases that will not compile if either side gains a position.
+    public enum Preset: String, Sendable, Equatable, CaseIterable {
+        case approvalRequired, balanced, fullAutonomous
+    }
+
+    public static func preset(_ preset: Preset) -> Tolerances {
+        switch preset {
+        case .approvalRequired: approvalRequired
+        case .balanced: balanced
+        case .fullAutonomous: fullAutonomous
+        }
+    }
+
+    /// Which preset these limits *are*, or nil when somebody has tuned them.
+    ///
+    /// Exact equality on all six axes, not a stored "which preset was picked":
+    /// a stored answer goes stale the moment one number is edited, and would
+    /// then authorise overwriting the other five.
+    public var matchingPreset: Preset? {
+        Preset.allCases.first { Self.preset($0).limits == limits }
+    }
+
+    /// The frame after the slider moves to `preset`.
+    ///
+    /// A frame that is still a preset follows — nothing is lost, there was
+    /// nothing there but a preset. A frame somebody has edited is returned
+    /// unchanged, and `matchingPreset` going nil is how the screen says the
+    /// slider and the numbers no longer agree. Applying a preset over tuned
+    /// numbers stays possible and stays a deliberate act, which is different
+    /// from dragging a slider and worth being different.
+    public func following(_ preset: Preset) -> Tolerances {
+        matchingPreset == nil ? self : Self.preset(preset)
+    }
 }
 
 /// What is actually happening, as the app measures it. Every field names where
