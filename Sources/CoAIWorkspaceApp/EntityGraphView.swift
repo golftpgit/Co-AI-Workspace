@@ -59,6 +59,10 @@ struct EntityGraphView: View {
         .task(id: model.relations.count) {
             if focus == nil { focus = EntityGraph.busiestEntities(in: relations).first }
         }
+        // Proposed when the graph is opened rather than on every ingest: the
+        // list is read by a person, and embedding two hundred names is not
+        // something to do behind somebody's back on a background pass.
+        .task(id: model.chunkCount) { await model.proposeMerges() }
         .sheet(item: $selectedEdge) { edge in
             EdgeSourceSheet(edge: edge, model: model)
         }
@@ -95,6 +99,42 @@ struct EntityGraphView: View {
                 .pickerStyle(.segmented).frame(width: 240)
                 .accessibilityLabel("ระยะที่เดินจากจุดกึ่งกลาง")
             }
+            // §11.8 / P18.3 — names in two scripts that may be one concept.
+            // Every row is a suggestion and stays one: E.26 measured the
+            // highest-scoring pair in the fixture as a *wrong* merge, above
+            // every correct one, so nothing here joins two nodes on its own.
+            if !model.mergeSuggestions.isEmpty {
+                GroupBox("ชื่อที่อาจเป็นสิ่งเดียวกัน") {
+                    VStack(alignment: .leading, spacing: Space.row) {
+                        Text("ระบบเสนอเท่านั้น — คู่ที่คะแนนสูงที่สุดที่วัดได้เป็นคู่ที่ผิด (E.26) "
+                             + "การรวมจึงต้องมีคนกด")
+                            .font(.caption2).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        ForEach(model.mergeSuggestions) { suggestion in
+                            HStack(spacing: Space.row) {
+                                Text(suggestion.labels.map(\.text).joined(separator: "  ↔  "))
+                                    .font(.callout)
+                                Text(String(format: "%.3f", suggestion.similarity))
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Button("ใช่ คำเดียวกัน") {
+                                    Task { await model.decideMerge(suggestion, confirmed: true) }
+                                }
+                                Button("ไม่ใช่") {
+                                    Task { await model.decideMerge(suggestion, confirmed: false) }
+                                }
+                            }
+                            .controlSize(.small)
+                            .accessibilityElement(children: .contain)
+                            .accessibilityLabel("ข้อเสนอรวมชื่อ "
+                                + suggestion.labels.map(\.text).joined(separator: " กับ "))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
             if !model.relations.isEmpty {
                 ScrollView(.horizontal) {
                     HStack(spacing: 6) {

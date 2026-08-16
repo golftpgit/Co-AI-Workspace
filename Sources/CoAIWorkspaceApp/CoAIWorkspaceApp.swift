@@ -316,7 +316,8 @@ private struct RootView: View {
         await workspace.knowledge.attach(store: engine.knowledge)
         workspace.knowledge.attach(policySource: engine.policySource)
         await workspace.knowledge.attach(relations: engine.relations,
-                                         extractor: engine.relationExtractor)
+                                         extractor: engine.relationExtractor,
+                                         alignments: engine.alignments)
         workspace.knowledge.attach(conflicts: engine.conflicts,
                                    detector: engine.conflictDetector)
         // Without this the scope picker's "โปรเจกต์" option has no project to

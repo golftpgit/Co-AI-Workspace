@@ -49,6 +49,7 @@ public final class KnowledgeViewModel {
     private var store: KnowledgeStore?
     private var policySource: PolicyLibrarySource?
     private var relationStore: RelationStore?
+    private var alignmentStore: AlignmentStore?
     private var relationExtractor: RelationExtractor?
     public private(set) var relations: [StoredRelation] = []
     private var conflictStore: ConflictStore?
@@ -85,8 +86,10 @@ public final class KnowledgeViewModel {
     /// Relation extraction is optional: it needs a model, and a machine with
     /// none should still be able to keep a knowledge base — it just has no
     /// graph until one is available.
-    public func attach(relations: RelationStore, extractor: RelationExtractor) async {
+    public func attach(relations: RelationStore, extractor: RelationExtractor,
+                       alignments: AlignmentStore? = nil) async {
         self.relationStore = relations
+        self.alignmentStore = alignments
         self.relationExtractor = extractor
         await reloadRelations()
     }
@@ -401,6 +404,54 @@ public final class KnowledgeViewModel {
         relations.first { $0.chunkID == edge.chunkID
             && $0.subject == edge.subject && $0.object == edge.object
             && $0.predicate == edge.predicate }
+    }
+
+    // MARK: - merging names across languages (§11.8, P18.3)
+
+    /// Suggested merges nobody has answered yet.
+    public private(set) var mergeSuggestions: [EntityAlignment] = []
+    /// The merges a person confirmed, which is what keys the graph.
+    public private(set) var confirmedMerges: [EntityAlignment] = []
+
+    /// Proposes merges between entity names written in different scripts.
+    ///
+    /// Every suggestion is a suggestion: E.26 measured the highest-scoring pair
+    /// in the fixture as a *wrong* merge (`ความดัน` ↔ `pressure`, 0.919), higher
+    /// than every correct one — so nothing here changes a graph, and the list
+    /// exists to be answered rather than applied.
+    public func proposeMerges() async {
+        guard let alignments = alignmentStore else { return }
+        let names = Array(Set(index.allChunks.flatMap(\.entities))).sorted()
+        guard names.count > 1 else { mergeSuggestions = []; return }
+
+        var vectors: [String: [Float]] = [:]
+        for name in names.prefix(200) {
+            guard let vector = try? await embedder.embed(name) else { continue }
+            vectors[name] = vector
+        }
+        let proposals = EntityAligner.propose(names: names, vectors: vectors)
+        mergeSuggestions = (try? await alignments.unanswered(from: proposals)) ?? proposals
+        confirmedMerges = ((try? await alignments.decided()) ?? []).filter(\.confirmedByHuman)
+    }
+
+    /// Records what a person said about one suggestion, either way. A
+    /// rejection is kept for the same reason as a confirmation: a list that
+    /// keeps offering what somebody already refused is a list they stop
+    /// reading.
+    public func decideMerge(_ alignment: EntityAlignment, confirmed: Bool) async {
+        guard let alignmentStore else { return }
+        do {
+            try await alignmentStore.record(alignment, confirmed: confirmed)
+            mergeSuggestions.removeAll { AlignmentStore.key($0) == AlignmentStore.key(alignment) }
+            confirmedMerges = ((try? await alignmentStore.decided()) ?? []).filter(\.confirmedByHuman)
+            status = Status(message: confirmed
+                            ? "รวมเป็นชื่อเดียวกันแล้ว — กราฟจะใช้ชื่อเดียวสำหรับทั้งสองคำ"
+                            : "บันทึกว่าไม่ใช่คำเดียวกัน — จะไม่เสนออีก",
+                            isError: false)
+        } catch {
+            log.error("recording alignment: \(error)")
+            status = Status(message: "บันทึกคำตัดสินเรื่องชื่อไม่สำเร็จ: \(error)", isError: true)
+        }
     }
 
     /// Names the entities in documents `NLTagger` has no tagger for.
