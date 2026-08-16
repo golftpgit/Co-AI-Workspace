@@ -20,6 +20,11 @@ import Knowledge
 struct KnowledgeBaseView: View {
     @Bindable var model: KnowledgeViewModel
     @State private var selection: String?
+    /// What the next upload will be filed as (§12.4, P6.7). Beside the button
+    /// rather than in a sheet afterwards: the answer is known at the moment
+    /// somebody picks the file, and a question asked later is a question
+    /// answered "other" forever.
+    @State private var ingestKind: DocumentKind = .other
     @State private var editingChunk: IndexedChunk?
     /// Deleting takes the document, its chunks, its entities and its graph
     /// edges, and the file it came from is not kept — so the menu item asks
@@ -145,6 +150,16 @@ struct KnowledgeBaseView: View {
                 }
                 .accessibilityLabel("เพิ่มเอกสารเข้าคลัง")
 
+                Picker("ชนิดเอกสาร", selection: $ingestKind) {
+                    ForEach(DocumentKind.allCases, id: \.self) { kind in
+                        Text(kind.label).tag(kind)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+                .accessibilityLabel("ชนิดของเอกสารที่กำลังจะเพิ่ม")
+                .accessibilityHint("โครงร่างวิจัยคือชนิดที่หน้าวิเคราะห์ใช้ตั้งต้นแผนการวิเคราะห์")
+
                 Spacer()
 
                 Menu {
@@ -218,7 +233,10 @@ struct KnowledgeBaseView: View {
         let urls = panel.urls
         // T3 by default, editable afterwards — §11.3 says an upload must not
         // skip the credibility question, not that the user answers it twice.
-        Task { await model.ingest(urls, tier: .t3) }
+        // The kind is asked here rather than inferred later (§12.4): the
+        // person choosing the file is the only one who knows whether it is a
+        // proposal, and `อื่น ๆ` is a real answer.
+        Task { await model.ingest(urls, tier: .t3, kind: ingestKind) }
     }
 
     private func exportArchive() {

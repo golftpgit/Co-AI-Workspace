@@ -85,6 +85,11 @@ public struct IngestionPipeline: Sendable {
                        tier: SourceTier,
                        title: String? = nil,
                        documentID: String? = nil,
+                       // §12.4 / P6.7 — what kind of document this is, as
+                       // declared by whoever added it. Never inferred here: a
+                       // pipeline that guessed "proposal" would start turning
+                       // literature reviews into analysis plans.
+                       kind: DocumentKind? = nil,
                        embedder: (any Embedder)? = nil) async throws -> IngestionReport {
         let document: ReadDocument
         do {
@@ -129,7 +134,8 @@ public struct IngestionPipeline: Sendable {
                     origin: .upload(filename: url.lastPathComponent),
                     tier: tier,
                     page: document.pages.count > 1 ? pageNumber + 1 : nil,
-                    section: document.usedOCR ? "OCR" : nil)
+                    section: document.usedOCR ? "OCR" : nil,
+                    documentKind: kind)
 
                 try index.insert(IndexedChunk(
                     id: "\(id)#p\(pageNumber + 1)c\(chunk.index)",
