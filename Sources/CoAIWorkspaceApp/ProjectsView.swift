@@ -372,8 +372,35 @@ struct ProjectsView: View {
                         Button(kind.label) { issue(kind) }
                     }
                     Spacer()
+                    // §19.13 / P10.13 — how often somebody wants telling. The
+                    // cycle never issues anything itself: it says one is due,
+                    // and the button above is what issues it, so nothing can
+                    // arrive by a path that skips what manual issuing checks.
+                    Picker("ออกเอง", selection: $model.reportCycle) {
+                        ForEach(ReportSchedule.Cycle.allCases, id: \.self) {
+                            Text($0.label).tag($0)
+                        }
+                    }
+                    .labelsHidden().fixedSize()
+                    .accessibilityLabel("รอบการออกรายงานความคืบหน้าอัตโนมัติ")
                 }
                 .controlSize(.small)
+
+                if let due = model.reportDue {
+                    HStack(alignment: .firstTextBaseline, spacing: Space.row) {
+                        Label("ถึงรอบออกรายงานความคืบหน้าแล้ว", systemImage: "clock.badge")
+                            .font(.callout).foregroundStyle(.orange)
+                        Button("ออกตอนนี้") { issue(.highlight) }
+                            .buttonStyle(.borderedProminent).controlSize(.small)
+                    }
+                    if let gap = due.gapNote {
+                        // Three weeks away is one report and this sentence, not
+                        // three reports: backfilled ones put numbers under
+                        // dates nobody was working on.
+                        Text(gap).font(.caption2).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
 
                 if model.reports.isEmpty {
                     Text("ยังไม่มีรายงาน — ทุกบรรทัดในรายงานประกอบจากแผนงาน · ทะเบียน · span · baseline · ทะเบียนประโยชน์ ไม่ใช่ข้อความที่โมเดลแต่ง")
