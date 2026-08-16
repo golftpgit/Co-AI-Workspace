@@ -501,9 +501,13 @@ struct Engine: Sendable {
         // when the bridge is down is the sentence that tells somebody how to
         // start it (P14.2).
         let rBridgeScript = paths.analysisDirectory.appending(path: BridgeScript.fileName)
-        await gateway.register(REvalTool(
-            bridge: { RBridgeClient(scriptPath: rBridgeScript.path(percentEncoded: false)) },
-            store: { analysis }))
+        let rBridge = { @Sendable in
+            RBridgeClient(scriptPath: rBridgeScript.path(percentEncoded: false))
+        }
+        await gateway.register([
+            REvalTool(bridge: rBridge, store: { analysis }),
+            RInstallPackageTool(bridge: rBridge),
+        ])
         // Nil on a machine with no Python: the notebook's SQL cells still work,
         // and the screen says which half is missing rather than failing at the
         // first Python cell.

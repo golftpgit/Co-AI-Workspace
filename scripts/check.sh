@@ -1012,6 +1012,16 @@ else
   ok "numbers are drawn on solid layers, never on glass"
 fi
 
+# 3. Installing an R package is on the always-ask list, and `r_eval` cannot be
+#    used to route around it — the list is keyed on the tool name, and
+#    `install.packages(...)` inside a block of R is not a tool name (P14.4).
+if grep -q '"r_install_package"' Sources/CoreEngine/RiskScorer.swift \
+   && grep -q "refuseInstalls" Sources/ToolBelt/RTool.swift; then
+  ok "an R package install stops for a person, and r_eval cannot smuggle one past"
+else
+  fail "r_eval can install packages without the always-ask tool (§5.5, P14.4)"
+fi
+
 # P14 — R is a bridge, not a dependency.
 #
 # 1. The statistics stay Swift. The plan says R blocks nobody, and the way that

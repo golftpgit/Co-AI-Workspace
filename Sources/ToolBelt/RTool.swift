@@ -113,6 +113,28 @@ public struct REvalTool: AgentTool {
         return text
     }
 
+    /// R can install its own packages from inside `r_eval`, which would walk
+    /// straight past `AlwaysAsk` — the list is keyed on the tool name, and
+    /// `install.packages("x")` inside a block of R is not a tool name. So the
+    /// call is refused here and pointed at the tool that does stop for a
+    /// person, every time, under every autonomy setting (§5.5, P14.4).
+    ///
+    /// A crude match on purpose, exactly like `RunShellTool`'s destructive
+    /// patterns: the cost of a false alarm is one redirected call, and the
+    /// cost of a miss is other people's code running on somebody's machine
+    /// without them being asked.
+    static let installCalls = ["install.packages", "remotes::install",
+                               "devtools::install", "BiocManager::install",
+                               "renv::install", "pak::pkg_install"]
+
+    static func refuseInstalls(in code: String) throws {
+        guard let found = installCalls.first(where: { code.contains($0) }) else { return }
+        throw ToolError.invalidArguments(
+            "โค้ดนี้เรียก \(found) — การติดตั้งแพ็กเกจต้องใช้ทูล r_install_package "
+                + "ซึ่งหยุดถามคนทุกครั้งแม้อยู่โหมดทำงานเองทั้งหมด (§5.5) "
+                + "· ไม่ใช่เพราะติดตั้งไม่ได้ แต่เพราะมันคือการรันโค้ดของคนอื่นบนเครื่องคุณ")
+    }
+
     static func arguments(_ json: String) throws -> (code: String, table: String?) {
         struct Payload: Decodable {
             let code: String
@@ -122,6 +144,7 @@ public struct REvalTool: AgentTool {
               !payload.code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ToolError.invalidArguments("ต้องระบุ 'code'")
         }
+        try refuseInstalls(in: payload.code)
         if let table = payload.into_table {
             try RFrameImport.checkName(table)
         }
@@ -183,5 +206,94 @@ public enum RFrameImport {
     private static func quote(_ field: String) -> String {
         guard field.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" }) else { return field }
         return "\"" + field.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+    }
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// `r_install_package` (§12.7, P14.4).
+//
+// Separate from `r_eval` for one reason: **this one always asks.**
+// `AlwaysAsk` is keyed on the tool name, so an install hidden inside a block
+// of R would be a high-risk call that full autonomy waves through. Giving it
+// its own name is what makes the rule reachable.
+//
+// The reason it belongs on that list is the same one `install_package` gives:
+// installing a package runs other people's code — an R package with
+// compiled sources runs its configure script during installation — and
+// whatever that did is not in the output, not in the transcript, and not
+// visible in whatever the package is later used for. "The model was
+// confident" is not an answer to that.
+// ─────────────────────────────────────────────────────────────
+
+public struct RInstallPackageTool: AgentTool {
+    public let name = "r_install_package"
+    public let toolDescription = """
+    ติดตั้งแพ็กเกจ R ลงไลบรารีของผู้ใช้ผ่านสะพาน R — **ถามคนก่อนเสมอ** ไม่ว่าจะตั้งโหมดอัตโนมัติไว้แค่ไหน \
+    เพราะการติดตั้งแพ็กเกจคือการรันโค้ดของคนอื่นบนเครื่องนี้
+    """
+    public let riskLevel: RiskLevel = .high
+    public let parametersJSON = """
+    {
+      "type": "object",
+      "properties": {
+        "package": { "type": "string", "description": "ชื่อแพ็กเกจ R (ชื่อล้วน)" },
+        "repository": { "type": "string", "description": "CRAN mirror (ไม่ระบุ = cloud.r-project.org)" }
+      },
+      "required": ["package"]
+    }
+    """
+
+    private let bridge: @Sendable () async -> any REvaluating
+
+    public init(bridge: @escaping @Sendable () async -> any REvaluating) {
+        self.bridge = bridge
+    }
+
+    public func precheck(argumentsJSON: String, context: ToolContext) throws {
+        _ = try Self.arguments(argumentsJSON)
+    }
+
+    public func call(argumentsJSON: String, context: ToolContext) async throws -> ToolOutput {
+        let (package, repository) = try Self.arguments(argumentsJSON)
+        // Built here rather than taken as code: the whole point of this tool is
+        // that the person approving it can read what it will do, and a free-text
+        // R expression is not that.
+        let code = """
+        install.packages("\(package)", repos = "\(repository)")
+        cat(if ("\(package)" %in% rownames(installed.packages())) \
+            paste("ติดตั้งแล้ว:", packageVersion("\(package)")) else "ติดตั้งไม่สำเร็จ")
+        """
+        do {
+            let result = try await bridge().eval(code)
+            return ToolOutput(text: result.printed.isEmpty
+                              ? "สั่งติดตั้งแล้ว แต่ R ไม่ได้รายงานอะไรกลับมา"
+                              : result.printed)
+        } catch let error as RBridgeError {
+            throw ToolError.executionFailed(error.description)
+        }
+    }
+
+    static func arguments(_ json: String) throws -> (package: String, repository: String) {
+        struct Payload: Decodable {
+            let package: String
+            let repository: String?
+        }
+        guard let payload = try? JSONDecoder().decode(Payload.self, from: Data(json.utf8)) else {
+            throw ToolError.invalidArguments("ต้องระบุ 'package'")
+        }
+        // A package name, not an expression. Everything else is a way to run
+        // arbitrary R through a tool whose approval sheet says "install".
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._"))
+        guard !payload.package.isEmpty,
+              payload.package.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
+            throw ToolError.invalidArguments(
+                "ชื่อแพ็กเกจ '\(payload.package)' ใช้ไม่ได้ — ใส่ชื่อล้วน ไม่ใช่โค้ด R")
+        }
+        let repository = payload.repository ?? "https://cloud.r-project.org"
+        guard repository.hasPrefix("https://") else {
+            throw ToolError.invalidArguments("repository ต้องเป็น https")
+        }
+        return (payload.package, repository)
     }
 }
