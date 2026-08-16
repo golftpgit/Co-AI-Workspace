@@ -30,6 +30,12 @@ public enum SubmissionProblem: Error, CustomStringConvertible, Equatable {
     case notAnOption(prompt: String)
     case outOfRange(prompt: String)
     case tooLong(prompt: String)
+    /// A grid answered for some rows and not others (§20.3). Named rows,
+    /// because "the matrix is incomplete" leaves somebody scrolling.
+    case matrixIncomplete(prompt: String, rows: [String])
+    /// A ranking that is not a permutation of the options — a repeated place,
+    /// a gap, or a number outside 1…n.
+    case rankingNotAPermutation(prompt: String, detail: String)
 
     public var description: String {
         switch self {
@@ -43,6 +49,11 @@ public enum SubmissionProblem: Error, CustomStringConvertible, Equatable {
             "ข้อ “\(prompt)” มีคำตอบที่ไม่ได้อยู่ในตัวเลือก"
         case .outOfRange(let prompt):
             "ข้อ “\(prompt)” อยู่นอกช่วงที่กำหนด"
+        case .matrixIncomplete(let prompt, let rows):
+            "ข้อ “\(prompt)” ยังตอบไม่ครบทุกแถว: " + rows.joined(separator: " · ")
+        case .rankingNotAPermutation(let prompt, let detail):
+            "ข้อ “\(prompt)” จัดอันดับไม่ครบถ้วน — \(detail) "
+                + "· ต้องให้อันดับ 1 ถึงจำนวนตัวเลือก ไม่ซ้ำและไม่ข้าม"
         case .tooLong(let prompt):
             "ข้อ “\(prompt)” ยาวเกินที่กำหนด"
         }
@@ -76,6 +87,32 @@ public enum SubmissionValidator {
             let asked = wasAsked(item, fields: fields, items: byID)
             guard asked else { continue }
 
+            // §20.3 / P11.6 — a grid and a ranking arrive as one field per row
+            // or per option, so `fields[item.id]` is empty for both and the
+            // ordinary "did they answer" test would call a filled-in matrix
+            // unanswered.
+            switch item.kind {
+            case .matrix(let rows, _):
+                let parts = Self.parts(of: item, in: fields)
+                if parts.isEmpty {
+                    if item.required { missing.append(item.prompt.thai) }
+                    continue
+                }
+                answers.append(contentsOf: try Self.matrixAnswers(item, rows: rows, parts: parts))
+                continue
+            case .ranking(let options):
+                let parts = Self.parts(of: item, in: fields)
+                if parts.isEmpty {
+                    if item.required { missing.append(item.prompt.thai) }
+                    continue
+                }
+                answers.append(contentsOf: try Self.rankingAnswers(item, options: options,
+                                                                   parts: parts))
+                continue
+            default:
+                break
+            }
+
             if values.isEmpty {
                 if item.required { missing.append(item.prompt.thai) }
                 continue
@@ -107,6 +144,85 @@ public enum SubmissionValidator {
         case .atMost:
             guard let left = Double(answer), let right = Double(skip.value) else { return false }
             return left <= right
+        }
+    }
+
+    /// The sub-fields of a grid or a ranking, by index. The name is
+    /// `<item id>#<index>`, which is also what the renderer writes — one place
+    /// decides the shape, or a form posts names the validator throws away as
+    /// unknown.
+    static func parts(of item: Item, in fields: [String: [String]]) -> [Int: String] {
+        var parts: [Int: String] = [:]
+        for (name, values) in fields where name.hasPrefix(item.id + "#") {
+            guard let index = Int(name.dropFirst(item.id.count + 1)),
+                  let value = values.first(where: { !$0.isEmpty }) else { continue }
+            parts[index] = value
+        }
+        return parts
+    }
+
+    /// One answer per row, and a row left blank is a missing answer rather
+    /// than a row that means nothing (§20.3): a half-filled grid analysed as
+    /// though the blanks were "no" is the quiet version of making data up.
+    static func matrixAnswers(_ item: Item, rows: [Bilingual],
+                              parts: [Int: String]) throws -> [StoredAnswer] {
+        var answers: [StoredAnswer] = []
+        var unanswered: [String] = []
+
+        for (index, row) in rows.enumerated() {
+            guard let value = parts[index] else {
+                unanswered.append(row.thai)
+                continue
+            }
+            guard case .matrix(_, let columns) = item.kind,
+                  let column = Int(value), columns.indices.contains(column) else {
+                throw SubmissionProblem.notAnOption(prompt: item.prompt.thai)
+            }
+            guard case .matrix(_, let allColumns) = item.kind else { continue }
+            // The row is part of the id because a matrix is several questions
+            // wearing one prompt, and an analysis that cannot tell them apart
+            // has one variable where it needs five.
+            answers.append(StoredAnswer(itemID: "\(item.id)#\(index)",
+                                        text: allColumns[column].thai,
+                                        number: Double(column)))
+        }
+
+        if item.required && !unanswered.isEmpty {
+            throw SubmissionProblem.matrixIncomplete(prompt: item.prompt.thai, rows: unanswered)
+        }
+        return answers
+    }
+
+    /// A ranking is a permutation or it is not a ranking. Two options sharing
+    /// third place is not a partial answer to fix up later — it is a different
+    /// claim about preference, and accepting it silently would put a number in
+    /// the data that nobody chose.
+    static func rankingAnswers(_ item: Item, options: [Bilingual],
+                               parts: [Int: String]) throws -> [StoredAnswer] {
+        var places: [Int: Int] = [:]
+        for (index, value) in parts {
+            guard options.indices.contains(index), let place = Int(value) else {
+                throw SubmissionProblem.notAnOption(prompt: item.prompt.thai)
+            }
+            places[index] = place
+        }
+        guard places.count == options.count else {
+            throw SubmissionProblem.rankingNotAPermutation(
+                prompt: item.prompt.thai,
+                detail: "ให้อันดับมา \(places.count) จาก \(options.count) ตัวเลือก")
+        }
+        let given = places.values.sorted()
+        guard given == Array(1...options.count) else {
+            let repeated = Set(given.filter { place in given.count(where: { $0 == place }) > 1 })
+            throw SubmissionProblem.rankingNotAPermutation(
+                prompt: item.prompt.thai,
+                detail: repeated.isEmpty
+                    ? "มีอันดับที่ข้ามไป"
+                    : "อันดับ \(repeated.sorted().map(String.init).joined(separator: ", ")) ซ้ำกัน")
+        }
+        return options.enumerated().map { index, option in
+            StoredAnswer(itemID: "\(item.id)#\(index)", text: option.thai,
+                         number: Double(places[index] ?? 0))
         }
     }
 
@@ -159,9 +275,18 @@ public enum SubmissionValidator {
             }
             return [StoredAnswer(itemID: item.id, text: value)]
 
-        case .matrix, .ranking, .fileUpload:
-            // The renderer says out loud that it cannot draw these. Anything that
-            // arrives for one is therefore not something a respondent typed.
+        case .matrix, .ranking:
+            // Handled before this point, where the sub-fields are visible.
+            // Reaching here means a value arrived under the bare item id for a
+            // question that does not have one.
+            throw SubmissionProblem.notAnOption(prompt: prompt)
+
+        case .fileUpload:
+            // Still not drawn, and deliberately: an upload is a multipart body,
+            // a file on disk with somebody's data in it, and a retention rule
+            // of its own (§20.5). Half of it — a control that accepts a file
+            // and drops it — would be worse than the honest gap the renderer
+            // shows.
             throw SubmissionProblem.notAnOption(prompt: prompt)
         }
     }

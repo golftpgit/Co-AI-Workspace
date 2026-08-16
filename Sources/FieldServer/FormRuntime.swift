@@ -45,7 +45,11 @@ public enum FormRuntime {
         body += consentSection(instrument, agreed: answered["__consent"]?.first == "yes")
         body += "<ol class=\"items\">\n"
         for item in items {
-            body += itemSection(item, in: instrument, answered: answered[item.id] ?? [])
+            // A grid and a ranking arrive as `<id>#<index>` fields, so a
+            // resumed form has to be handed those too or half the answers come
+            // back blank on the way in (§20.5's resume, P11.7).
+            body += itemSection(item, in: instrument, answered: answered[item.id] ?? [],
+                                parts: SubmissionValidator.parts(of: item, in: answered))
         }
         body += "</ol>\n"
 
@@ -136,8 +140,9 @@ public enum FormRuntime {
         """
     }
 
-    private static func itemSection(_ item: Item, in instrument: Instrument,
-                                    answered: [String] = []) -> String {
+    static func itemSection(_ item: Item, in instrument: Instrument?,
+                                    answered: [String] = [],
+                                    parts previousParts: [Int: String] = [:]) -> String {
         let name = htmlEscaped(item.id)
         let prompt = htmlEscaped(item.prompt.thai)
         let required = item.required ? " required" : ""
@@ -180,12 +185,54 @@ public enum FormRuntime {
             control = "<input type=\"number\" inputmode=\"numeric\" name=\"\(name)\"\(bounds)\(value)\(required)>"
         case .date:
             control = "<input type=\"date\" name=\"\(name)\"\(value)\(required)>"
-        case .matrix, .ranking, .fileUpload:
-            // Types the model has and this runtime has not learned to draw.
-            // Rendered as an honest gap rather than as something that looks like
-            // a question and collects nothing (§20.3's rule, applied to the
-            // renderer): the instrument gate cannot catch this, so the page says
-            // it out loud.
+        case .matrix(let rows, let columns):
+            // A real table, not a grid of divs: a respondent using VoiceOver
+            // hears "แถว, คอลัมน์" from the headers, and a grid built out of
+            // stacks reads as a list of unlabelled radio buttons.
+            var table = "<table class=\"matrix\"><thead><tr><td></td>"
+            for column in columns {
+                table += "<th scope=\"col\">\(htmlEscaped(column.thai))</th>"
+            }
+            table += "</tr></thead><tbody>"
+            for (rowIndex, row) in rows.enumerated() {
+                let rowName = "\(name)#\(rowIndex)"
+                table += "<tr><th scope=\"row\">\(htmlEscaped(row.thai))</th>"
+                for (columnIndex, column) in columns.enumerated() {
+                    let checked = previousParts[rowIndex] == String(columnIndex) ? " checked" : ""
+                    // Every radio carries its own label for a screen reader,
+                    // because the visual header is two cells away from the
+                    // control and a table header is not a label.
+                    table += "<td><label class=\"sr-only\" for=\"\(rowName)-\(columnIndex)\">"
+                        + "\(htmlEscaped(row.thai)) — \(htmlEscaped(column.thai))</label>"
+                        + "<input type=\"radio\" id=\"\(rowName)-\(columnIndex)\" "
+                        + "name=\"\(rowName)\" value=\"\(columnIndex)\"\(checked)"
+                        + "\(item.required ? " required" : "")></td>"
+                }
+                table += "</tr>"
+            }
+            control = table + "</tbody></table>"
+
+        case .ranking(let options):
+            // Numbers rather than dragging. Dragging is unreachable by
+            // keyboard, unusable on a phone with one thumb, and this form is
+            // answered by people in a ward — the ranking is typed.
+            var list = "<ol class=\"ranking\">"
+            for (index, option) in options.enumerated() {
+                let optionName = "\(name)#\(index)"
+                let previous = previousParts[index].map { " value=\"\(htmlEscaped($0))\"" } ?? ""
+                list += "<li><label for=\"\(optionName)\">\(htmlEscaped(option.thai))</label>"
+                    + "<input type=\"number\" id=\"\(optionName)\" name=\"\(optionName)\" "
+                    + "min=\"1\" max=\"\(options.count)\" step=\"1\" inputmode=\"numeric\""
+                    + "\(previous)\(item.required ? " required" : "")></li>"
+            }
+            control = list + "</ol><p class=\"help\">ใส่อันดับ 1 ถึง \(options.count) "
+                + "ห้ามซ้ำและห้ามข้าม</p>"
+
+        case .fileUpload:
+            // Still not drawn, and on purpose: an upload is a multipart body, a
+            // file on disk with somebody's data in it, and a retention rule of
+            // its own (§20.5). A control that accepted a file and dropped it
+            // would be worse than this sentence.
             control = "<p class=\"unsupported\">ข้อชนิด “\(htmlEscaped(item.kind.label))” "
                 + "ยังแสดงบนเว็บฟอร์มไม่ได้ — ติดต่อผู้วิจัย</p>"
         }
