@@ -39,7 +39,7 @@ public struct StatTestTool: AgentTool {
                    "mann_whitney", "wilcoxon", "kruskal_wallis", "fisher_exact",
                    "linear_regression", "logistic_regression",
                    "risk_ratio", "odds_ratio", "risk_difference", "nnt",
-                   "diagnostic_accuracy", "survival"],
+                   "diagnostic_accuracy", "survival", "count_regression"],
           "description": "ชนิดการทดสอบ"
         },
         "groups": {
@@ -155,6 +155,12 @@ public struct StatTestTool: AgentTool {
             // would invent a p-value for a thing that does not have one.
             case "risk_ratio", "odds_ratio", "risk_difference", "nnt":
                 return ToolOutput(text: try Self.epidemiology(test, table: try table()))
+            case "count_regression":
+                // Counts go in `y` like any other outcome; what makes this its
+                // own test is the assumption it checks, not its arguments.
+                let (counts, predictors, names) = try regression()
+                result = try StatGate.countRegression(counts, predictors: predictors,
+                                                      names: names)
             case "survival":
                 // Censoring is what makes this its own test rather than a
                 // two-sample comparison of times, so the tool asks for it
