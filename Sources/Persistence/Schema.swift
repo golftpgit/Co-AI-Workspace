@@ -162,6 +162,17 @@ public enum Schema {
         // by removing the relation, because the document gets re-read: an
         // extraction that resurrected a rejected edge would undo somebody's
         // correction every time the file was ingested again.
+        // §11.8 / P18.3 — merges between names in two scripts, as a person
+        // decided them. Both answers are kept: a rejected pair proposed again
+        // every time the screen opens is a screen somebody stops reading.
+        "DEFINE TABLE IF NOT EXISTS entity_alignment SCHEMALESS",
+        "DEFINE FIELD IF NOT EXISTS uid ON entity_alignment TYPE string",
+        "DEFINE INDEX IF NOT EXISTS entity_alignment_uid ON entity_alignment FIELDS uid UNIQUE",
+        "DEFINE FIELD IF NOT EXISTS labels ON entity_alignment TYPE array<string>",
+        "DEFINE FIELD IF NOT EXISTS similarity ON entity_alignment TYPE float",
+        "DEFINE FIELD IF NOT EXISTS confirmed ON entity_alignment TYPE bool",
+        "DEFINE FIELD IF NOT EXISTS decided_at ON entity_alignment TYPE datetime",
+
         "DEFINE TABLE IF NOT EXISTS relation_rejection SCHEMALESS",
         "DEFINE FIELD IF NOT EXISTS uid ON relation_rejection TYPE string",
         "DEFINE INDEX IF NOT EXISTS relation_rejection_uid ON relation_rejection FIELDS uid UNIQUE",

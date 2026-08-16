@@ -55,6 +55,10 @@ struct Engine: Sendable {
     let conflictDetector: ConflictDetector
     /// Graph edges, and the model that reads them out of a sentence (§11.4).
     let relations: RelationStore
+    /// Which names a person said are one concept (§11.8, P18.3). Alongside
+    /// `relations` because both are decisions about the graph, and both are
+    /// only worth anything if they survive the next ingest.
+    let alignments: AlignmentStore
     let relationExtractor: RelationExtractor
     /// The knowledge base's durable half. The screen keeps an in-memory index
     /// for search and writes through to this, so closing the app does not
@@ -642,6 +646,7 @@ struct Engine: Sendable {
                       conflicts: ConflictStore(client: client),
                       conflictDetector: ConflictDetector(router: router),
                       relations: RelationStore(client: client),
+                      alignments: AlignmentStore(client: client),
                       relationExtractor: RelationExtractor(router: router),
                       knowledge: knowledgeStore, policySource: policySource,
                       router: router, processes: processes, gateway: gateway,
