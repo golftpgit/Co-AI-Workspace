@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import AgentKit
+import Observability
 import Knowledge
 import WebSearch
 @testable import CoreEngine
@@ -438,5 +439,56 @@ struct WidenViewTests {
         guard case .sentBack = outcome else {
             Issue.record("expected it to be sent back, got \(outcome)"); return
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// P12.6's outstanding item — the record of a widening had nowhere to live.
+//
+// It was heading for `Evidence`, which requires `passed: Bool`, and "what this
+// role was allowed to see" is not a pass or a fail. Forcing it into one would
+// have produced a flag nobody could read the meaning of. A span is where it
+// belongs: it already carries a role, a scope and a time.
+// ─────────────────────────────────────────────────────────────
+private actor RecordingSink: SpanSink {
+    private(set) var spans: [Span] = []
+    func record(_ span: Span) async { spans.append(span) }
+    func widenings() -> [Span] { spans.filter { $0.name == "view:widened" } }
+}
+
+@Suite("A widening leaves a record (P12.6)")
+struct WideningRecordTests {
+
+    @Test("widening a view writes a span with the reason and the new view")
+    func wideningIsRecorded() async throws {
+        let sink = RecordingSink()
+        let widenings = ViewWidenings()
+        let tool = WidenViewTool(widenings: widenings, spans: sink)
+
+        _ = try await tool.call(
+            argumentsJSON: #"{"reason":"ต้องดูงานวิจัยที่ยังไม่ผ่าน peer review","any_tier":true}"#,
+            context: ToolContext(scope: .central, conversationID: "cv_w", role: .researcher))
+
+        let recorded = await sink.widenings()
+        #expect(recorded.count == 1)
+        let span = try #require(recorded.first)
+        #expect(span.role == .researcher)
+        // The reason is the point: a widening nobody can account for later is
+        // a widening that cannot be reviewed.
+        #expect(span.detail?.contains("peer review") == true)
+        // And what it became, in the words a reviewer reads.
+        #expect(span.detail?.contains("ขอบเขต") == true)
+        #expect(span.endedAt != nil)
+    }
+
+    @Test("without a sink the tool still widens")
+    func noSinkIsNotAFailure() async throws {
+        // Every sink in this project is optional: the tool works without
+        // observability, it just cannot be asked about afterwards.
+        let tool = WidenViewTool(widenings: ViewWidenings())
+        let output = try await tool.call(
+            argumentsJSON: #"{"reason":"ต้องตามอ้างอิงต่ออีกหนึ่งชั้น","hops":2}"#,
+            context: ToolContext(scope: .central, conversationID: "cv_x", role: .analyst))
+        #expect(output.text.contains("ขยายมุมมอง"))
     }
 }
