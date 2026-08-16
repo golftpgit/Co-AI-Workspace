@@ -110,19 +110,28 @@ public actor AXNavigator {
         let element = try ElementFinder.find(query, in: before)
         let live = try locate(query)
 
-        AXUIElementSetAttributeValue(live, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-        // Some fields do accept a written value, and where they do it is both
-        // faster and less disruptive than synthesising keystrokes. Tried first,
-        // and the keyboard is the fallback rather than the other way round.
-        let written = AXUIElementSetAttributeValue(live, kAXValueAttribute as CFString,
-                                                   text as CFTypeRef)
-        if written != .success { Self.typeUnicode(text) }
+        // Focus decides the method, and it is asked rather than assumed: see
+        // `TextEntry` for why writing the value is the fallback and not the
+        // first choice.
+        let focused = AXUIElementSetAttributeValue(
+            live, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success
+        let plan = TextEntry.plan(canFocus: focused)
+        switch plan {
+        case .keyboard:
+            // Clear what is there first: typing into a field that already has
+            // text appends, and a driver that searched for "ผ่าตัดหมดไฟ"
+            // because of the previous query is worse than one that failed.
+            AXUIElementSetAttributeValue(live, kAXValueAttribute as CFString, "" as CFTypeRef)
+            Self.typeUnicode(text)
+        case .writeValue:
+            AXUIElementSetAttributeValue(live, kAXValueAttribute as CFString, text as CFTypeRef)
+        }
 
         let after = try await settled(after: before)
         return try await record(ScreenAction(
-            description: "พิมพ์ “\(text)” ลง \(element.label)",
+            description: "พิมพ์ “\(text)” ลง \(element.label) · \(plan.note)",
             before: before, after: after,
-            usedFallbackClick: written != .success))
+            usedFallbackClick: plan == .writeValue))
     }
 
     // MARK: - the parts that talk to the system
