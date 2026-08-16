@@ -56,6 +56,10 @@ public enum TeamEvent: Sendable {
     /// A person stopped one assignment (P4.7). Separate from `escalated`:
     /// escalation asks for a decision, this *is* one.
     case cancelled(assignmentID: String, reason: String)
+    /// The run hit its token ceiling (P4.8). Announced rather than left to be
+    /// inferred from a short list of deliverables: a run that stopped because
+    /// it ran out of budget looks exactly like a run that found less to do.
+    case budgetExhausted(summary: String, remaining: Int)
     case finished(deliverables: [Deliverable])
     case failed(String)
 }
@@ -116,6 +120,10 @@ public actor TeamOrchestrator {
     /// as live work forever, and having no `ended_at` it silently drops out of
     /// every duration the forecast is built from.
     private var openSpans: [String: Span] = [:]
+    /// The run's token ceiling (§5.5, P4.8). Shared with the specialists'
+    /// environment, which is what makes "how much has this run used" a
+    /// question with an answer.
+    private let budget: RunBudget?
     private let log = AppLog.logger("team")
 
     /// One row per assignment, so "who is doing what, and how did it go" is
@@ -148,7 +156,9 @@ public actor TeamOrchestrator {
                 ledgerStore: TaskLedgerStore? = nil,
                 spans: (any SpanSink)? = nil,
                 roleMemory: (@Sendable (Role) async -> [String])? = nil,
+                budget: RunBudget? = nil,
                 scope: Scope = .central) {
+        self.budget = budget
         self.router = router
         self.specialists = specialists
         self.reviewer = reviewer
@@ -394,11 +404,16 @@ public actor TeamOrchestrator {
     ///   plan is against the same leaf. `nil` is a real state — not every run
     ///   is against a plan — and the ledger and the spans both say so rather
     ///   than inventing a leaf.
+    /// - Parameter tokenCeiling: how many tokens this run may spend before it
+    ///   stops and asks for a person (P4.8). `nil` is no ceiling, which is the
+    ///   honest default — a number invented here would be a limit nobody chose.
     public func run(goal: String,
                     plan providedPlan: TeamPlan? = nil,
                     runUntilDone: Bool = false,
                     workPackage: String? = nil,
+                    tokenCeiling: Int? = nil,
                     emit: @Sendable (TeamEvent) -> Void = { _ in }) async -> [Deliverable] {
+        await budget?.begin(ceiling: tokenCeiling)
         let plan: TeamPlan
         do {
             if let providedPlan {
@@ -415,6 +430,11 @@ public actor TeamOrchestrator {
 
         var delivered = await work(through: plan.assignments,
                                    against: { _ in workPackage }, emit: emit)
+        if await budget?.isExhausted == true {
+            await announceExhaustion(emit)
+            emit(.finished(deliverables: delivered))
+            return delivered
+        }
 
         // §5.5's third switch. "Done" is read off the ledger rather than asked
         // of the model: what is left is a fact, and a model's opinion of
@@ -435,6 +455,10 @@ public actor TeamOrchestrator {
                 emit(.continuing(remaining: pending.count))
                 delivered += await work(through: pending,
                                         against: { leaves[$0.id] ?? nil }, emit: emit)
+                if await budget?.isExhausted == true {
+                    await announceExhaustion(emit)
+                    break
+                }
             }
         }
 
@@ -448,12 +472,36 @@ public actor TeamOrchestrator {
     ///   back up by run-until-done carries the leaf it was originally filed
     ///   under, and re-labelling it with today's would move somebody else's time
     ///   onto this promise.
+    /// How much is left in the ledger when the ceiling stopped the run. Said
+    /// as a count rather than left for somebody to work out from what did not
+    /// arrive.
+    private func announceExhaustion(_ emit: @Sendable (TeamEvent) -> Void) async {
+        guard let budget else { return }
+        let outstanding = ledger.values.filter { !$0.passed && !$0.cancelled }.count
+        emit(.budgetExhausted(summary: await budget.summary, remaining: outstanding))
+    }
+
     private func work(through assignments: [Assignment],
                       against: (Assignment) -> String?,
                       emit: @Sendable (TeamEvent) -> Void) async -> [Deliverable] {
         var delivered: [Deliverable] = []
 
         for original in assignments {
+            // Between assignments: work that has not started is the cheapest
+            // thing to not start. What is left is *written down* as needing a
+            // person — an assignment that never reaches the ledger is work
+            // that silently did not happen, which is the failure this whole
+            // ceiling is supposed to make visible (P4.8).
+            if await budget?.isExhausted == true {
+                for skipped in assignments.drop(while: { $0.id != original.id }) {
+                    ledger[skipped.id] = LedgerEntry(
+                        assignment: skipped, attempts: 0, passed: false, needsHuman: true,
+                        findings: ["ยังไม่ได้เริ่ม — การรันถึงเพดานโทเคนก่อน"],
+                        workPackage: against(skipped))
+                    await persist(skipped.id)
+                }
+                break
+            }
             guard let specialist = specialists[original.role] else {
                 emit(.failed(TeamError.noSpecialist(original.role).description))
                 continue

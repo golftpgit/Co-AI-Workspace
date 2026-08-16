@@ -1024,6 +1024,18 @@ else
   fail "r_eval can install packages without the always-ask tool (§5.5, P14.4)"
 fi
 
+# P4.8 — a run that stops on budget says so.
+#
+# The failure mode is silence: a run that quietly returns fewer deliverables
+# looks exactly like a run that found less to do, and the work it never
+# started is invisible unless it is written into the ledger.
+if grep -q "case budgetExhausted" Sources/CoreEngine/TeamOrchestrator.swift \
+   && grep -q "budgetExhausted" Sources/CoAIWorkspaceApp/TeamViewModel.swift; then
+  ok "hitting the token ceiling reaches the screen instead of shortening the run silently"
+else
+  fail "a run can stop on its token ceiling without telling anybody (§5.5, P4.8)"
+fi
+
 # P9.5 — the main actor does not do file work.
 #
 # Measured (E.29): decoding a 24 MB archive on the main actor stalls it for

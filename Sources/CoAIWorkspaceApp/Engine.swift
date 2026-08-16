@@ -429,7 +429,13 @@ struct Engine: Sendable {
         // so their tool calls go through the one hook chain (§5.3) rather than
         // a second path around it. Each still sees only its own tools — that
         // is enforced inside the specialist, not here.
-        let specialistEnvironment = SpecialistEnvironment(router: router, gateway: gateway)
+        // §5.5 / P4.8 — one budget object per workspace lead, shared with the
+        // specialists' environment. Shared rather than counted in two places:
+        // the tokens a specialist spends are the tokens the run spent, and two
+        // counters would disagree the first time one of them was not updated.
+        let runBudget = RunBudget()
+        let specialistEnvironment = SpecialistEnvironment(router: router, gateway: gateway,
+                                                          budget: runBudget)
         let taskLedger = TaskLedgerStore(client: client)
         // One lead per workspace, built the first time that workspace is worked
         // in (§19.1.1, P21.2). A factory rather than an instance: the wiring
@@ -464,6 +470,7 @@ struct Engine: Sendable {
                     let lessons = (try? await knowledgeStore.load(scope: .central)) ?? []
                     return RoleMemory.brief(for: role, in: lessons)
                 },
+                budget: runBudget,
                 // Pointed at its workspace from birth, so nothing ever has to
                 // re-point it — which is the move that could not be made safely
                 // mid-run.
