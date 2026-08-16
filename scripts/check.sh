@@ -97,7 +97,8 @@ DUP_SCOPE=$(grep -rlE "enum Scope[[:space:]]*[:{]" Sources --include=*.swift | w
 
 # The rule is about *library* targets: a library that prints has no way to be
 # quiet. Executables are where output is the product — the app writes through
-# AppLog, and EmbeddingCheck, MLXCheck and TierOneCheck exist to print what they
+# AppLog, and EmbeddingCheck, MLXCheck, TierOneCheck and UIResponsivenessCheck
+# exist to print what they
 # measured. The list is spelled out rather than derived from Package.swift: an
 # executable added here is a deliberate act, and having to name it is the point
 # at which somebody asks whether the printing belongs in a library.
@@ -113,7 +114,8 @@ DUP_SCOPE=$(grep -rlE "enum Scope[[:space:]]*[:{]" Sources --include=*.swift | w
 if grep -rnE "(^|[^A-Za-z0-9_.])print\(" Sources --include=*.swift \
    | grep -vE ":[0-9]+:[[:space:]]*(///?|\*)" \
    | grep -v "^Sources/CoAIWorkspaceApp" | grep -v "^Sources/EmbeddingCheck" \
-   | grep -v "^Sources/MLXCheck" | grep -v "^Sources/TierOneCheck" | grep -q .; then
+   | grep -v "^Sources/MLXCheck" | grep -v "^Sources/TierOneCheck" \
+   | grep -v "^Sources/UIResponsivenessCheck" | grep -q .; then
   fail "print() outside the app target — use AppLog/os.Logger"
 else
   ok "no stray print() in library targets"
@@ -1020,6 +1022,33 @@ if grep -q '"r_install_package"' Sources/CoreEngine/RiskScorer.swift \
   ok "an R package install stops for a person, and r_eval cannot smuggle one past"
 else
   fail "r_eval can install packages without the always-ask tool (§5.5, P14.4)"
+fi
+
+# P9.5 — the main actor does not do file work.
+#
+# Measured (E.29): decoding a 24 MB archive on the main actor stalls it for
+# 81.6 ms — five dropped frames, which reads as the app having hung — against
+# 2.6 ms with the same work moved off. Nothing bounds the size of somebody's
+# knowledge base, so this only gets worse with use.
+#
+# The rule is about where the work runs, not whether somebody remembered to
+# think about it: a synchronous read, write or encode inside an @MainActor view
+# model is a stall, and the fix is one `Task.detached` away.
+BLOCKING=$(grep -rnE "Data\(contentsOf:|String\(contentsOf:|\.write\(to:|DispatchQueue\.main\.sync|waitUntilExit\(\)" \
+  Sources/CoAIWorkspaceApp/*.swift | grep -v "Task.detached" || true)
+# A write inside a detached block is fine; the grep above cannot see the block,
+# so the check is on the three lines above each hit.
+STALLS=""
+for hit in $(echo "$BLOCKING" | grep -oE "^[^:]+:[0-9]+" || true); do
+  file="${hit%%:*}"; line="${hit##*:}"
+  start=$(( line > 4 ? line - 4 : 1 ))
+  sed -n "${start},${line}p" "$file" | grep -q "Task.detached" || STALLS="$STALLS $hit"
+done
+if [ -n "$STALLS" ]; then
+  echo "$STALLS" | tr ' ' '\n' | sed 's/^/   /' | head -5
+  fail "a view model reads or writes a file on the main actor (§24, P9.5)"
+else
+  ok "file work in view models runs off the main actor"
 fi
 
 # P14 — R is a bridge, not a dependency.

@@ -158,6 +158,11 @@ let package = Package(
         // statistics in `Analysis` are Swift and stay that way.
         .target(name: "RBridge", dependencies: ["Execution", "Observability"]),
 
+        // P9.5 — the responsiveness probe. An executable rather than a test:
+        // it measures wall-clock stalls, which is a measurement to read rather
+        // than an assertion to run in CI.
+        .executableTarget(name: "UIResponsivenessCheck"),
+
         // M6 — the tools themselves. Depends on Execution, never the reverse,
         // and CoreEngine never depends on this: tools plug in via AgentTool.
         // Analysis is here for `run_stat_test` (P6.6): the Statistical

@@ -634,7 +634,7 @@ public final class AnalysisViewModel {
     /// file. Built from the plan itself: every decision with the tag that says
     /// where it came from, and the Limitations section §14.1 writes out of the
     /// assumptions.
-    public func exportPlan(to url: URL) {
+    public func exportPlan(to url: URL) async {
         guard let plan else { return }
         let decisions = plan.decisions.map { decision in
             "\(decision.question): \(decision.value) — \(decision.origin.label)"
@@ -677,7 +677,12 @@ public final class AnalysisViewModel {
             // audit has nothing to refuse; it still runs, because the rule
             // belongs to the builder rather than to each caller.
             let rendered = try DocumentBuilder.render(draft)
-            try OfficeWriter.docx(rendered).write(to: url)
+            // P9.5 — building a .docx is a zip of several XML parts, and it
+            // runs off the main actor for the same reason the archive does
+            // (E.29).
+            try await Task.detached(priority: .userInitiated) {
+                try OfficeWriter.docx(rendered).write(to: url)
+            }.value
             status = Status(message: "บันทึกเอกสารที่ \(url.lastPathComponent) แล้ว" + note,
                             isError: false)
         } catch {
@@ -742,7 +747,12 @@ public final class AnalysisViewModel {
                                               paragraphs: [.bullets(table)]))
             }
             let rendered = try DocumentBuilder.render(draft)
-            try OfficeWriter.docx(rendered).write(to: url)
+            // P9.5 — building a .docx is a zip of several XML parts, and it
+            // runs off the main actor for the same reason the archive does
+            // (E.29).
+            try await Task.detached(priority: .userInitiated) {
+                try OfficeWriter.docx(rendered).write(to: url)
+            }.value
             status = Status(message: "บันทึกต้นฉบับ 5 บทที่ \(url.lastPathComponent) แล้ว — "
                             + "ตัวเลขทุกตัวในบทที่ 4 ผูกกับเซลล์ที่รันจริง และมีภาคผนวกบอกว่ามาจากคำสั่งไหน",
                             isError: false)

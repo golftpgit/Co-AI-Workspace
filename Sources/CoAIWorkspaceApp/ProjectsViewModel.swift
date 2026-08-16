@@ -647,7 +647,10 @@ public final class ProjectsViewModel {
                 do {
                     try FileManager.default.createDirectory(at: folder,
                                                             withIntermediateDirectories: true)
-                    try ReportDocument.docx(report).write(to: file, options: .atomic)
+                    // P9.5 — off the main actor (E.29).
+                    try await Task.detached(priority: .userInitiated) {
+                        try ReportDocument.docx(report).write(to: file, options: .atomic)
+                    }.value
                     note += " · \(file.lastPathComponent)"
                 } catch {
                     log.error("writing report: \(error)")
