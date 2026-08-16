@@ -1012,6 +1012,49 @@ else
   ok "numbers are drawn on solid layers, never on glass"
 fi
 
+# P20.6 — the screen leans on the type the person declared, and on nothing else.
+#
+# 1. Emphasis cannot reach usage. The spans record every screen anybody opens,
+#    so "move the panels they use most to the front" is always one import away
+#    — and it is how a layout stops being learnable.
+#    Comments are stripped first: this file argues about usage-based
+#    adaptation at length, and a rule that cannot tell the argument from the
+#    behaviour would be a rule against explaining yourself.
+BEHAVIOUR=$(grep -vE "^\s*//" Sources/ProjectKit/PanelEmphasis.swift \
+  | grep -nE "import (Persistence|Observability)|[Ss]pan|frequency|usage|history|Count" || true)
+if [ -n "$BEHAVIOUR" ]; then
+  echo "$BEHAVIOUR" | sed 's/^/   /' | head -3
+  fail "panel emphasis reads behaviour instead of the declared project type (§24.3, P20.6)"
+else
+  ok "panel emphasis has one input: the project type the person chose"
+fi
+
+# 2. Emphasis marks panels; it never reorders them. A list built from the
+#    emphasis is a screen that rearranges itself, which is the same problem in
+#    a nicer suit.
+TAB_LISTS=$(awk '/private var subTabs/,/private var subTabSelection/' \
+  Sources/CoAIWorkspaceApp/CoAIWorkspaceApp.swift | grep -ic "mphasis" || true)
+if [ "$TAB_LISTS" != "0" ]; then
+  fail "the sub-tab list is built from the project type — emphasis must mark, not reorder (P20.6)"
+else
+  ok "sub-tabs stay in one order for every project type"
+fi
+
+# 3. A panel named in the emphasis that the app no longer draws is a highlight
+#    pointing at nothing.
+MISSING=""
+for panel in $(grep -oE "case [a-zA-Z, ]+$" Sources/ProjectKit/PanelEmphasis.swift \
+               | sed 's/case //' | tr ',' ' '); do
+  grep -qE "case .*\b$panel\b" Sources/CoAIWorkspaceApp/CoAIWorkspaceApp.swift \
+    || MISSING="$MISSING $panel"
+done
+if [ -n "$MISSING" ]; then
+  echo "  $MISSING" | sed 's/^/  /'
+  fail "emphasis names a panel the app does not have:$MISSING (P20.6)"
+else
+  ok "every emphasised panel is a panel the app actually draws"
+fi
+
 # P20.5 — the reason shown is the decision, not a story about it.
 #
 # The failure this guards against is specific and easy to reach: a second

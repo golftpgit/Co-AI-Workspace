@@ -350,7 +350,16 @@ private struct RootView: View {
                         areaByTab[projects.workspaces.active.id] = now
                     }
                     .onChange(of: projects.workspaces.active) { _, now in
-                        area = areaByTab[now.id] ?? .chat
+                        // Where you left it wins over what the type suggests:
+                        // the project type is an opinion about a workspace
+                        // nobody has been in yet, not a correction of where
+                        // somebody chose to be (§24.3, P20.6).
+                        if let remembered = areaByTab[now.id] {
+                            area = remembered
+                        } else {
+                            area = .chat
+                            openEmphasisedPanel()
+                        }
                     }
                     // Which projects exist is the shell's own question, not the
                     // Plan screen's: the switcher in the header, the Workbench's
@@ -478,13 +487,21 @@ private struct RootView: View {
             // Sub-tabs belong to the area, not to the screen inside it: one
             // picker per level, so "where am I" has one answer (§19.2.6).
             if let tabs = subTabs, tabs.count > 1 {
+                // §24.3 / P20.6 — the project type marks its panels. It does
+                // not move them: the list is in the same order for every kind
+                // of project, because position is how a person finds things
+                // long before reading is.
                 Picker("ส่วนของพื้นที่", selection: subTabSelection) {
-                    ForEach(tabs) { tab in Text(tab.label).tag(tab) }
+                    ForEach(tabs) { tab in
+                        Text(emphasised(tab) ? "• \(tab.label)" : tab.label).tag(tab)
+                    }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .padding(.horizontal, 12).padding(.top, 8)
                 .accessibilityLabel("เลือกส่วนของ\(area.label)")
+                .accessibilityHint(emphasisReason ?? "")
+                .help(emphasisReason ?? "")
             }
 
             // `maxWidth/maxHeight: .infinity` because a `VStack` lets its
@@ -738,6 +755,41 @@ private struct RootView: View {
     }
 
     // MARK: - sub-tab plumbing
+
+    // MARK: - what the project type puts first (§24.3, P20.6)
+
+    /// The kind of project in front, or `nil` for General — which is not a
+    /// project and has no type to lean on.
+    private var emphasisKind: ProjectKind? {
+        projects.workspaces.active == .general ? nil : projects.selected?.kind
+    }
+
+    private var emphasisReason: String? {
+        emphasisKind.flatMap { PanelEmphasis.reason(for: $0) }
+    }
+
+    private func emphasised(_ tab: SubTab) -> Bool {
+        guard let kind = emphasisKind, let panel = WorkspacePanel(rawValue: tab.rawValue)
+        else { return false }
+        return PanelEmphasis.isEmphasised(panel, in: kind)
+    }
+
+    /// Where a workspace opens when it comes to the front. Applied on focus and
+    /// never again: a panel that keeps pulling itself forward while somebody is
+    /// working somewhere else is not emphasis, it is interference.
+    private func openEmphasisedPanel() {
+        guard let kind = emphasisKind, let panel = PanelEmphasis.opening(for: kind) else { return }
+        switch panel {
+        case .chat: area = .chat
+        case .plan: area = .plan
+        case .collect, .coding, .internalDB, .externalDB, .console, .results:
+            area = .workbench
+            if let tab = SubTab(rawValue: panel.rawValue) { workbenchTabSelection = tab }
+        case .documents, .graph, .conflicts, .sources:
+            area = .knowledge
+            if let tab = SubTab(rawValue: panel.rawValue) { knowledgeTab = tab }
+        }
+    }
 
     private var subTabs: [SubTab]? {
         switch area {
