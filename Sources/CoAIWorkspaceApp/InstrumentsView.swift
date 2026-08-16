@@ -29,6 +29,11 @@ struct InstrumentsView: View {
     @State private var constructQuestionID: String?
     @State private var newItem = ""
     @State private var newItemKind = ItemKindChoice.likert5
+    /// The rows/options and columns for the kinds that need a list typed in
+    /// (P11.6). Kept beside the picker rather than in a sheet: somebody adding
+    /// a grid knows its rows at the moment they choose "ตาราง".
+    @State private var newItemFirstList = ""
+    @State private var newItemSecondList = ""
     @State private var newItemConstruct: String?
     @State private var newItemDemographic = false
     @State private var expert = ""
@@ -42,11 +47,18 @@ struct InstrumentsView: View {
     @State private var editingConsent = false
     @State private var editingEthics = false
 
-    /// The kinds offered in the picker. A subset by design: matrix, ranking and
-    /// file upload exist in the model and need their own editors, and a picker
-    /// that offers a type this screen cannot configure is a dead end.
+    /// The kinds offered in the picker.
+    ///
+    /// `matrix` and `ranking` joined it once the web form could draw them
+    /// (P11.6): a picker that offers a type the *form* cannot render is the
+    /// same dead end as one this screen cannot configure — the instrument
+    /// would publish and nobody could answer it.
+    ///
+    /// `fileUpload` is still absent, and for the reason the renderer gives: an
+    /// upload is a multipart body, a file with somebody's data on a disk, and
+    /// a retention rule of its own (§20.5).
     enum ItemKindChoice: String, CaseIterable, Identifiable {
-        case likert5, likert7, single, multiple, openText, number, date
+        case likert5, likert7, single, multiple, openText, number, date, matrix, ranking
         var id: String { rawValue }
 
         var label: String {
@@ -58,10 +70,46 @@ struct InstrumentsView: View {
             case .openText: "ข้อความเปิด"
             case .number: "ตัวเลข"
             case .date: "วันที่"
+            case .matrix: "ตาราง (แถว × คอลัมน์)"
+            case .ranking: "จัดอันดับ"
             }
         }
 
-        var kind: ItemKind {
+        /// Whether this kind needs a list typed in beside it, and what to call
+        /// the two boxes. Nil for the kinds that carry their own labels.
+        var listLabels: (first: String, second: String?)? {
+            switch self {
+            case .matrix: ("แถว (บรรทัดละแถว)", "คอลัมน์ (บรรทัดละคอลัมน์)")
+            case .ranking: ("ตัวเลือกที่จะให้จัดอันดับ (บรรทัดละข้อ)", nil)
+            default: nil
+            }
+        }
+
+        /// - Parameters:
+        ///   - first: rows, or the options of a ranking.
+        ///   - second: columns.
+        func kind(first: String = "", second: String = "") -> ItemKind {
+            func lines(_ text: String) -> [Bilingual] {
+                text.split(separator: "\n")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty }
+                    .map { Bilingual($0) }
+            }
+            switch self {
+            case .matrix:
+                // Empty lists are allowed through to the gate rather than
+                // filled in with placeholders: a grid with no rows is a
+                // mistake somebody should be told about, and "แถว 1" would
+                // publish as though it were a question.
+                return .matrix(rows: lines(first), columns: lines(second))
+            case .ranking:
+                return .ranking(options: lines(first))
+            default:
+                return legacyKind
+            }
+        }
+
+        private var legacyKind: ItemKind {
             switch self {
             case .likert5:
                 .likert(levels: ["ไม่เห็นด้วยอย่างยิ่ง", "ไม่เห็นด้วย", "เฉย ๆ",
@@ -74,6 +122,9 @@ struct InstrumentsView: View {
             case .openText: .openText(maximumLength: 1_000)
             case .number: .number(minimum: nil, maximum: nil)
             case .date: .date
+            // Handled above; the compiler wants them named.
+            case .matrix: .matrix(rows: [], columns: [])
+            case .ranking: .ranking(options: [])
             }
         }
     }
@@ -500,10 +551,13 @@ struct InstrumentsView: View {
                         .toggleStyle(.checkbox)
                     Button("เพิ่มข้อ") {
                         let prompt = newItem
-                        let kind = newItemKind.kind
+                        let kind = newItemKind.kind(first: newItemFirstList,
+                                                     second: newItemSecondList)
                         let construct = newItemConstruct
                         let demographic = newItemDemographic
                         newItem = ""
+                        newItemFirstList = ""
+                        newItemSecondList = ""
                         Task {
                             await model.addItem(prompt: prompt, kind: kind,
                                                 constructID: construct,
@@ -513,6 +567,29 @@ struct InstrumentsView: View {
                     .disabled(newItem.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 .controlSize(.small)
+
+                // Only for the kinds that need it, and labelled with what the
+                // list is for: two unexplained text boxes under a picker are
+                // two boxes somebody leaves empty.
+                if let labels = newItemKind.listLabels {
+                    HStack(alignment: .top, spacing: Space.row) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(labels.first).font(.caption2).foregroundStyle(.secondary)
+                            TextEditor(text: $newItemFirstList)
+                                .font(.callout).frame(height: 60)
+                                .accessibilityLabel(labels.first)
+                        }
+                        if let second = labels.second {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(second).font(.caption2).foregroundStyle(.secondary)
+                                TextEditor(text: $newItemSecondList)
+                                    .font(.callout).frame(height: 60)
+                                    .accessibilityLabel(second)
+                            }
+                        }
+                    }
+                    .controlSize(.small)
+                }
 
                 Text("ข้อที่ไม่ผูก construct ต้องติดป้าย “ข้อมูลพื้นฐาน” — ข้อที่ไม่วัดอะไรเลยคือคอลัมน์ที่วิเคราะห์ไม่ได้ (§20.3) · บันทึกได้ แต่เผยแพร่ไม่ผ่าน")
                     .font(.caption2).foregroundStyle(.secondary)
