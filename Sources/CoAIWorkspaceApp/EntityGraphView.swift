@@ -126,17 +126,30 @@ struct EntityGraphView: View {
             let positions = Dictionary(uniqueKeysWithValues:
                 graph.nodes.map { (EntityGraph.normalise($0.entity), place($0)) })
 
+            // Computed once per draw rather than per edge: the map is over
+            // every document in the scope, and doing it inside the loop would
+            // rebuild it for every line.
+            let classes = model.classesByEntity
+
             ZStack {
                 ForEach(graph.edges) { edge in
                     if let from = positions[EntityGraph.normalise(edge.subject)],
                        let to = positions[EntityGraph.normalise(edge.object)] {
+                        // §11.9/P18.5 — the line from RA to QA is the finding;
+                        // the lines inside RA are the background it stands out
+                        // from. Weight and opacity rather than colour alone,
+                        // because a difference carried only by hue is a
+                        // difference some readers do not have.
+                        let crosses = model.crossesClasses(edge, using: classes)
                         Path { path in
                             path.move(to: from)
                             path.addLine(to: to)
                         }
                         .stroke(edge.id == selectedEdge?.id ? Color.accentColor
-                                                            : Color.secondary.opacity(0.35),
-                                lineWidth: edge.id == selectedEdge?.id ? 2 : 1)
+                                    : crosses ? Color.secondary.opacity(0.85)
+                                              : Color.secondary.opacity(0.25),
+                                lineWidth: edge.id == selectedEdge?.id ? 3
+                                    : crosses ? 2.5 : 1)
                     }
                 }
                 ForEach(graph.nodes) { node in
@@ -178,7 +191,12 @@ struct EntityGraphView: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(edge.subject) \(edge.predicate) \(edge.object)")
+                    // The list is where a screen reader meets the graph, so the
+                    // crossing has to be a word here — a thicker line says
+                    // nothing to somebody listening.
+                    .accessibilityLabel("\(edge.subject) \(edge.predicate) \(edge.object)"
+                                        + (model.crossesClasses(edge, using: model.classesByEntity)
+                                           ? " · ข้ามหมวด" : ""))
                     .accessibilityHint("กดเพื่อดูข้อความที่เป็นที่มาของความสัมพันธ์นี้")
                 }
             }

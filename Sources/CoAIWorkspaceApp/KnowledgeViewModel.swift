@@ -536,6 +536,38 @@ public final class KnowledgeViewModel {
             : Classifier.assign(subjects)
     }
 
+    /// Which LC classes each entity appears under (§11.9, P18.5).
+    ///
+    /// An entity belongs to the classes of the documents it is named in — there
+    /// is no other place a class could come from, and asking a model would be
+    /// inventing one. Built from what is already loaded, so it costs a pass
+    /// over the chunks rather than anything remote.
+    public var classesByEntity: [String: Set<LCClass>] {
+        var byEntity: [String: Set<LCClass>] = [:]
+        for document in documents {
+            let classes = Set(classification(of: document).subjects.map(\.class))
+            guard !classes.isEmpty else { continue }
+            for entity in document.entities {
+                byEntity[EntityGraph.normalise(entity), default: []].formUnion(classes)
+            }
+        }
+        return byEntity
+    }
+
+    /// Whether an edge joins two different classes — the line §11.9 says is
+    /// the interesting one in interdisciplinary work.
+    ///
+    /// **An end with no class is not a crossing.** Guessing otherwise would
+    /// highlight exactly the entities nobody has classified, which is the
+    /// opposite of the intent.
+    public func crossesClasses(_ edge: EntityGraph.Edge,
+                               using classes: [String: Set<LCClass>]) -> Bool {
+        guard let subject = classes[EntityGraph.normalise(edge.subject)],
+              let object = classes[EntityGraph.normalise(edge.object)],
+              !subject.isEmpty, !object.isEmpty else { return false }
+        return subject.isDisjoint(with: object)
+    }
+
     // MARK: -
 
     public func refresh() {
