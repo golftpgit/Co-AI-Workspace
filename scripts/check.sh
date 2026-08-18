@@ -506,11 +506,19 @@ import re
 manifest = open('Package.swift').read()
 block = manifest[manifest.index('.target(name: "Instruments"'):]
 block = block[:block.index('),') + 1]
+# Read the `dependencies:` array specifically, not every quoted word in the
+# target. The loose version counted the resource path out of
+# `resources: [.process("Resources")]` as a dependency named `Resources` and
+# failed on a directory (2026-08-18) — a rule that reports the wrong thing
+# teaches people to wave it through.
+deps = re.search(r'dependencies:\s*\[(.*?)\]', block, re.S)
+found = set(re.findall('"([A-Za-z]+)"', deps.group(1) if deps else ''))
 # `StatKit` joined the list in P11.3. It is arithmetic with no dependencies of
 # its own — distribution tails and an eigen-decomposition — so it is not a way
-# to reach a socket, which is the thing this rule is about.
-allowed = {"AgentKit", "Knowledge", "Observability", "StatKit"}
-found = set(re.findall('"([A-Za-z]+)"', block)) - {"Instruments"}
+# to reach a socket, which is the thing this rule is about. `Localisation` is
+# there on the same ground: it reads a bundle off disk and has no dependencies
+# of its own, so it cannot open one either.
+allowed = {"AgentKit", "Knowledge", "Observability", "StatKit", "Localisation"}
 print(' '.join(sorted(found - allowed)))
 DEPS
 )

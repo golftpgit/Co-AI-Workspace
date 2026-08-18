@@ -249,7 +249,7 @@ struct TeamOrchestratorTests {
         ])
         let refused = reviewer.review(blogsOnly, against: assignment, standard: [])
         #expect(!refused.passed)
-        #expect(refused.findings.contains { $0.contains("ต้องมีแหล่ง T1–T3 ยืนยันอย่างน้อยหนึ่งแหล่ง") })
+        #expect(refused.findings.contains { $0.contains("at least one T1–T3 source has to back it") })
 
         // One T3 standing behind them is enough to state something.
         var supported = blogsOnly.evidence
@@ -293,7 +293,7 @@ struct TeamOrchestratorTests {
         ])
         let verdict = reviewer.review(sameTwice, against: assignment, standard: [])
         #expect(!verdict.passed)
-        #expect(verdict.findings.contains { $0.contains("มีแหล่งเดียว") })
+        #expect(verdict.findings.contains { $0.contains("a single source") })
     }
 
     @Test("a specialist that throws is retried, not treated as a failure to review")
