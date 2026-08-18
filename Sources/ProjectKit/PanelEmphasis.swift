@@ -80,7 +80,8 @@ public enum PanelEmphasis {
     /// indistinguishable from a screen behaving oddly.
     public static func reason(for kind: ProjectKind) -> String? {
         guard !panels(for: kind).isEmpty else { return nil }
-        return "เน้นตามชนิดโครงการที่คุณเลือกไว้ (\(kind.label)) — ไม่ได้ปรับตามการใช้งาน"
+        return t("Emphasised for the project type you chose (\(kind.label)) — not adjusted by how you use it",
+                 "Explains why panels are emphasised. Placeholder is the project type.")
     }
 
     public static func isEmphasised(_ panel: WorkspacePanel, in kind: ProjectKind) -> Bool {

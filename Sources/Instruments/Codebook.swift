@@ -152,10 +152,10 @@ public enum CodebookProblem: Sendable, Equatable {
     public var text: String {
         switch self {
         case .undefined(_, let name):
-            "รหัส “\(name)” ยังไม่มีนิยาม — รหัสที่ไม่มีนิยามคือคำที่ผู้ลงรหัสสองคนอ่านคนละอย่าง "
-                + "แล้วโผล่มาเป็น κ ต่ำที่อธิบายไม่ได้"
+            localised("code “\(name)” has no definition — an undefined code is a word two coders each read their own way ", "A codebook problem. Placeholder: the code's name.")
+                + localised("and it surfaces later as a low κ nobody can account for", "Ends the undefined-code problem.")
         case .danglingParent(_, let name):
-            "รหัส “\(name)” ชี้ไปยังรหัสแม่ที่ไม่มีอยู่ในสมุดรหัส"
+            localised("code “\(name)” points at a parent code that is not in the codebook", "A codebook problem. Placeholder: the code's name.")
         }
     }
 }

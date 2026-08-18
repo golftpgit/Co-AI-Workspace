@@ -44,8 +44,8 @@ struct CodingView: View {
                     if let book = model.selected {
                         detail(book)
                     } else {
-                        Text("ยังไม่มีสมุดรหัสในโปรเจกต์นี้ — ตั้งชื่อทางซ้ายเพื่อเริ่ม "
-                             + "· สมุดรหัสคือชุดหมวดที่ใช้อ่านบทถอดเทป และเป็นสิ่งที่ κ วัดความสอดคล้องของมัน")
+                        Text(localised: "No codebook in this project yet — name one on the left to start · a codebook is the set of categories transcripts are read with, and it is what κ measures the agreement of",
+                             "Empty state on the coding screen.")
                             .font(.callout).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -62,7 +62,7 @@ struct CodingView: View {
     private var list: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("สมุดรหัส").font(.subheadline).bold()
+                Text(localised: "Codebook", "Heading over the list of codebooks.").font(.subheadline).bold()
                 Spacer()
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
@@ -75,7 +75,8 @@ struct CodingView: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(book.title.thai).font(.callout)
-                            Text("\(book.codes.count) รหัส · \(book.documentOrder.count) ฉบับ")
+                            Text(localised: "\(book.codes.count) codes · \(book.documentOrder.count) documents",
+                                 "A codebook row. Placeholders: how many codes and how many documents.")
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -83,18 +84,20 @@ struct CodingView: View {
                     }
                     .buttonStyle(.plain)
                     .fontWeight(model.selectedID == book.id ? .semibold : .regular)
-                    .accessibilityLabel("เปิดสมุดรหัส \(book.title.thai)")
+                    .accessibilityLabel(t("Open the codebook \(book.title.thai)",
+                                          "Screen-reader label. Placeholder is the codebook title."))
                 }
                 if model.codebooks.isEmpty {
-                    Text("ยังไม่มีสมุดรหัส").font(.caption).foregroundStyle(.secondary)
+                    Text(localised: "No codebook yet", "Shown when the codebook list is empty.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
 
             Divider()
             HStack {
-                TextField("ชื่อสมุดรหัสใหม่", text: $newBook)
+                TextField(t("New codebook name", "Text field for creating a codebook."), text: $newBook)
                     .textFieldStyle(.roundedBorder)
-                Button("สร้าง") {
+                Button(t("Create", "Button that creates the project.")) {
                     let title = newBook
                     newBook = ""
                     Task { await model.createCodebook(title: title) }
@@ -122,7 +125,7 @@ struct CodingView: View {
                         .frame(maxWidth: 420, alignment: .trailing)
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("ปิดข้อความนี้")
+                .accessibilityHint(t("dismiss this message", "Screen-reader hint on a dismiss button."))
             }
         }
 
@@ -136,12 +139,12 @@ struct CodingView: View {
     /// carries this name into a κ.
     @ViewBuilder
     private func coderBox() -> some View {
-        GroupBox("ผู้ลงรหัสที่กำลังทำอยู่") {
+        GroupBox(t("Who is coding right now", "Box heading over the current coder's name.")) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    TextField("ชื่อผู้ลงรหัส", text: $model.coder)
+                    TextField(t("Coder's name", "Text field naming who is coding."), text: $model.coder)
                         .textFieldStyle(.roundedBorder).frame(maxWidth: 260)
-                        .accessibilityLabel("ชื่อผู้ลงรหัสที่กำลังทำอยู่")
+                        .accessibilityLabel(t("Name of the coder working now", "Screen-reader label."))
                     if !model.progress.isEmpty {
                         Text(model.progress
                             .map { "\($0.coder) \($0.done)/\(model.units.count)" }
@@ -151,8 +154,8 @@ struct CodingView: View {
                     Spacer()
                 }
                 .controlSize(.small)
-                Text("ไม่ถูกจำข้ามครั้ง และไม่มีค่าตั้งต้นโดยตั้งใจ — κ เป็นข้อความเกี่ยวกับคน "
-                     + "และวิธีที่การศึกษาความสอดคล้องพังบ่อยที่สุดคือคนที่สองมานั่งลงกับเครื่องที่ยังเป็นชื่อคนแรก")
+                Text(localised: "Deliberately not remembered between sessions and given no default — κ is a claim about people, and the commonest way an agreement study breaks is the second coder sitting down at a machine still holding the first one's name",
+                     "Explains why the coder field is empty every time.")
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -164,7 +167,8 @@ struct CodingView: View {
 
     @ViewBuilder
     private func codesBox(_ book: Codebook) -> some View {
-        GroupBox("รหัส (\(book.codes.count))") {
+        GroupBox(t("Codes (\(book.codes.count))",
+                   "Box heading over the codebook's codes. Placeholder is how many.")) {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(book.codes) { code in
                     VStack(alignment: .leading, spacing: 1) {
@@ -175,31 +179,37 @@ struct CodingView: View {
                             Text(code.name.thai).font(.callout)
                             Spacer()
                         }
-                        Text(code.definition.isEmpty ? "ยังไม่มีนิยาม" : code.definition)
+                        Text(code.definition.isEmpty
+                             ? t("no definition yet", "Shown for a code nobody has defined.")
+                             : code.definition)
                             .font(.caption2)
                             .foregroundStyle(code.definition.isEmpty ? Color.orange : .secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 if book.codes.isEmpty {
-                    Text("ยังไม่มีรหัส — รหัสตัวแรกมักมาจากการอ่านบทถอดเทปฉบับแรกจนจบ")
+                    Text(localised: "No codes yet — the first one usually comes from reading the first transcript all the way through",
+                         "Shown when the codebook is empty.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
 
                 HStack {
-                    TextField("ชื่อรหัส", text: $newCode)
+                    TextField(t("Code name", "Text field naming a code."), text: $newCode)
                         .textFieldStyle(.roundedBorder).frame(maxWidth: 180)
-                    TextField("นิยาม — อะไรนับ อะไรไม่นับ", text: $newCodeDefinition)
+                    TextField(t("Definition — what counts and what does not",
+                                "Text field: the code's definition."),
+                              text: $newCodeDefinition)
                         .textFieldStyle(.roundedBorder)
-                    Picker("อยู่ใต้", selection: $newCodeParent) {
-                        Text("— รหัสเปิด —").tag(String?.none)
+                    Picker(t("Under", "Picker: which package the new one sits beneath."), selection: $newCodeParent) {
+                        Text(localised: "— open code —", "Picker option: this code has no parent.")
+                            .tag(String?.none)
                         ForEach(book.codes) { code in
                             Text(code.name.thai).tag(String?.some(code.id))
                         }
                     }
                     .labelsHidden().frame(maxWidth: 150)
-                    .accessibilityLabel("รหัสแม่ของรหัสนี้")
-                    Button("เพิ่มรหัส") {
+                    .accessibilityLabel(t("Parent of this code", "Screen-reader label."))
+                    Button(t("Add code", "Button that adds a code to the codebook.")) {
                         let name = newCode
                         let definition = newCodeDefinition
                         let parent = newCodeParent
@@ -226,10 +236,11 @@ struct CodingView: View {
 
     @ViewBuilder
     private func unitsBox(_ book: Codebook) -> some View {
-        GroupBox("ช่วงข้อความ (\(model.units.count))") {
+        GroupBox(t("Passages (\(model.units.count))",
+                   "Box heading over the passages being coded. Placeholder is how many.")) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("ช่วงข้อความถูกกำหนดครั้งเดียวแล้วทุกคนลงรหัสชุดเดียวกัน — "
-                     + "ผู้ลงรหัสสองคนที่ต่างคนต่างเลือกว่าช่วงเริ่มตรงไหน ไม่ได้เห็นตรงกันหรือไม่ตรงกันกับอะไรที่เทียบได้")
+                Text(localised: "Passages are fixed once and everybody codes the same set — two coders who each choose where a passage begins are not agreeing or disagreeing about anything comparable",
+                     "Explains why passages are defined before coding starts.")
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -245,22 +256,24 @@ struct CodingView: View {
                                 .font(.caption).lineLimit(2)
                             Spacer()
                             if let quotation = model.quotation(for: unit) {
-                                Text("ช่วง \(quotation.span.start)–\(quotation.span.end)")
+                                Text(localised: "characters \(quotation.span.start)–\(quotation.span.end)",
+                                     "Where a passage sits in the transcript. Placeholders: the start and end offsets.")
                                     .font(.caption2).foregroundStyle(.secondary)
-                                    .accessibilityLabel("ตำแหน่งในบทถอดเทป "
-                                        + "\(quotation.span.start) ถึง \(quotation.span.end)")
+                                    .accessibilityLabel(t("Position in the transcript, \(quotation.span.start) to \(quotation.span.end)",
+                                                          "Screen-reader label. Placeholders: the start and end offsets."))
                             } else {
-                                Text("อ้างกลับไม่ได้")
+                                Text(localised: "cannot be cited back", "Marker on a passage whose offsets no longer match the transcript.")
                                     .font(.caption2).foregroundStyle(.orange)
-                                    .help("ตำแหน่งนี้ไม่ตรงกับบทถอดเทปแล้ว — "
-                                          + "อาจถูกแก้หลังลงรหัส · ยกมาอ้างไม่ได้จนกว่าจะแบ่งช่วงใหม่")
+                                    .help(t("These offsets no longer match the transcript — it may have been edited after coding · it cannot be quoted until the passages are cut again",
+                                            "Tooltip explaining a passage that lost its anchor."))
                             }
                         }
                         HStack(spacing: 4) {
                             ForEach(book.codes) { code in
                                 codeButton(unit: unit, code: code.id, label: code.name.thai)
                             }
-                            codeButton(unit: unit, code: nil, label: "ไม่เข้ารหัสไหน")
+                            codeButton(unit: unit, code: nil,
+                                       label: t("fits no code", "Button that records that a passage matches none of the codes."))
                             Spacer()
                         }
                         .controlSize(.mini)
@@ -268,7 +281,8 @@ struct CodingView: View {
                     Divider()
                 }
                 if model.units.isEmpty {
-                    Text("ยังไม่มีช่วงข้อความ").font(.callout).foregroundStyle(.secondary)
+                    Text(localised: "No passages yet", "Shown when nothing has been cut into passages.")
+                        .font(.callout).foregroundStyle(.secondary)
                 }
 
                 // The transcripts themselves, and the one thing P11.8 could not
@@ -278,7 +292,8 @@ struct CodingView: View {
                 // did not have.
                 if !model.transcripts.isEmpty {
                     Divider()
-                    Text("บทถอดเทปในโครงการนี้").font(.callout).fontWeight(.medium)
+                    Text(localised: "Transcripts in this project", "Heading over the transcript list.")
+                        .font(.callout).fontWeight(.medium)
                     ForEach(model.transcripts) { transcript in
                         HStack {
                             VStack(alignment: .leading, spacing: 1) {
@@ -289,16 +304,16 @@ struct CodingView: View {
                                 // with no code is also an ordinary thing (§20.7
                                 // asks for a code, not for every study to have
                                 // one), so it says that instead of nothing.
-                                Text("\(transcript.paragraphs.count) ย่อหน้า · "
-                                     + (transcript.participantCode.map { "รหัสผู้เข้าร่วม \($0)" }
-                                        ?? "ยังไม่ได้ใส่รหัสผู้เข้าร่วม"))
+                                Text(localised: "\(transcript.paragraphs.count) paragraphs · \(transcript.participantCode.map { t("participant code \($0)", "Names a transcript's participant code. Placeholder is the code.") } ?? t("no participant code yet", "Shown for a transcript with no participant code."))",
+                                     "A transcript row. Placeholders: how many paragraphs, and the participant code or a stand-in.")
                                     .font(.caption2).foregroundStyle(.secondary)
                             }
                             Spacer()
                             if ingesting == transcript.id {
                                 ProgressView().controlSize(.small)
                             } else if let ingest {
-                                Button("ส่งเข้าคลังความรู้") {
+                                Button(t("Send it to the knowledge base",
+                                         "Button that indexes a transcript into the knowledge base.")) {
                                     ingesting = transcript.id
                                     Task {
                                         await ingest(transcript)
@@ -306,13 +321,13 @@ struct CodingView: View {
                                     }
                                 }
                                 .controlSize(.small)
-                                .accessibilityLabel("ส่ง \(transcript.title) เข้าคลังความรู้ของโครงการ")
+                                .accessibilityLabel(t("Send \(transcript.title) to the project's knowledge base",
+                                                      "Screen-reader label. Placeholder is the transcript title."))
                             }
                         }
                     }
-                    Text("แต่ละส่วนที่เข้าคลังพกช่วงข้อความของตัวเองไป — ผลค้นจึงอ้างกลับไปที่ย่อหน้า "
-                         + "ไม่ใช่อ้างทั้งบทสัมภาษณ์สองชั่วโมง · ส่งซ้ำได้ ระบบจะแทนที่ของเดิม "
-                         + "ไม่ใช่เก็บไว้ทั้งสองรุ่น")
+                    Text(localised: "Each passage that enters the base carries its own offsets — so a search result cites the paragraph rather than a two-hour interview · sending it again replaces what was there rather than keeping both versions",
+                         "Explains what happens when a transcript is indexed.")
                         .font(.caption2).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Divider()
@@ -325,11 +340,16 @@ struct CodingView: View {
                 // into the real text.
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        TextField("ชื่อบทถอดเทป (เช่น INT-01)", text: $newTranscriptTitle)
+                        TextField(t("Transcript name (for example: INT-01)",
+                                    "Text field naming a transcript."),
+                                  text: $newTranscriptTitle)
                             .textFieldStyle(.roundedBorder).frame(maxWidth: 170)
-                        TextField("รหัสผู้เข้าร่วม (ไม่ใช่ชื่อ)", text: $newTranscriptCode)
+                        TextField(t("Participant code (not a name)",
+                                    "Text field for the anonymous participant code."),
+                                  text: $newTranscriptCode)
                             .textFieldStyle(.roundedBorder).frame(maxWidth: 150)
-                        TextField("ผู้ถอดเทป", text: $newTranscriptBy)
+                        TextField(t("Transcribed by", "Text field naming who transcribed it."),
+                                  text: $newTranscriptBy)
                             .textFieldStyle(.roundedBorder).frame(maxWidth: 150)
                         Spacer()
                     }
@@ -338,9 +358,10 @@ struct CodingView: View {
                         .frame(height: 90)
                         .overlay(RoundedRectangle(cornerRadius: Radius.control)
                             .stroke(Color.secondary.opacity(0.3)))
-                        .accessibilityLabel("ข้อความบทถอดเทป")
+                        .accessibilityLabel(t("Transcript text", "Screen-reader label for the transcript editor."))
                     HStack {
-                        Button("เพิ่มบทถอดเทปและแบ่งเป็นช่วงตามย่อหน้า") {
+                        Button(t("Add the transcript and cut it into passages by paragraph",
+                                 "Button that stores a transcript and creates its coding units.")) {
                             let title = newTranscriptTitle
                             let code = newTranscriptCode
                             let by = newTranscriptBy
@@ -357,8 +378,8 @@ struct CodingView: View {
                         Spacer()
                     }
                     .controlSize(.small)
-                    Text("เก็บรหัสผู้เข้าร่วม ไม่เก็บชื่อ — บทถอดเทปคือสิ่งที่ถูกแบ่ง จัดทำดัชนี ค้น ส่งออก และยกมาอ้าง "
-                         + "ตัวตนที่เข้ามาตรงนี้จะโผล่ออกไปทั้งห้าทาง (§20.7)")
+                    Text(localised: "Store the participant code, never the name — a transcript is cut, indexed, searched, exported and quoted, so an identity entering here leaves by all five routes (§20.7)",
+                         "States the privacy rule for transcripts.")
                         .font(.caption2).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -377,14 +398,16 @@ struct CodingView: View {
         .buttonStyle(.bordered)
         .tint(chosen ? .accentColor : .secondary)
         .disabled(model.coder.trimmingCharacters(in: .whitespaces).isEmpty)
-        .accessibilityLabel("ลงรหัส \(label) ให้ช่วง \(unit.text.prefix(30))")
+        .accessibilityLabel(t("Apply \(label) to the passage \(unit.text.prefix(30))",
+                              "Screen-reader label. Placeholders: the code name and the start of the passage."))
     }
 
     // MARK: - what the coding says about itself
 
     @ViewBuilder
     private func reportBox() -> some View {
-        GroupBox("ความสอดคล้องระหว่างผู้ลงรหัส และความอิ่มตัว") {
+        GroupBox(t("Inter-coder agreement and saturation",
+                   "Box heading over κ and the saturation curve.")) {
             VStack(alignment: .leading, spacing: 8) {
                 if let reliability = model.reliability {
                     Text(reliability.summary)
@@ -401,21 +424,21 @@ struct CodingView: View {
                                     .foregroundStyle(row.applications == 0 ? Color.secondary
                                                      : (row.kappa >= 0.61 ? .green : .orange))
                                 Text(row.applications == 0
-                                     ? "ยังไม่เคยถูกใช้"
-                                     : "ใช้ \(row.applications) ครั้ง")
+                                     ? t("never applied", "Shown for a code no coder has used.")
+                                     : t("applied \(row.applications) times",
+                                         "How often a code was used. Placeholder is a count."))
                                     .font(.caption2).foregroundStyle(.secondary)
                                 Spacer()
                             }
                         }
                     }
-                    Text("κ ต่ำเพราะหมวดเดียวกินหมด เป็นคนละเรื่องกับผู้ลงรหัสไม่เก่ง จึงรายงาน % ที่ตรงกันจริงคู่กันเสมอ "
-                         + "· เกณฑ์ .61 (substantial) เป็นธรรมเนียมที่ใช้อ้าง ไม่ใช่ประตูที่นี่บังคับ — "
-                         + "κ ต่ำคือผลที่ต้องเล่า ไม่ใช่ความผิดที่ต้องซ่อน")
+                Text(localised: "A low κ caused by one category swallowing everything is a different thing from coders who disagree, so the raw percentage agreement is always reported beside it · the .61 (substantial) threshold is a convention people cite, not a gate enforced here — a low κ is a finding to report, not a fault to hide",
+                     "Explains how to read κ, and that nothing here blocks on it.")
                         .font(.caption2).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    Text("ต้องมีผู้ลงรหัสอย่างน้อย \(CodingAnalysis.minimumCoders) คน "
-                         + "และช่วงข้อความที่ทุกคนลงครบอย่างน้อยหนึ่งช่วง จึงจะคำนวณ κ ได้")
+                    Text(localised: "κ needs at least \(CodingAnalysis.minimumCoders) coders and at least one passage every one of them has coded",
+                         "Says why κ cannot be computed yet. Placeholder is the minimum number of coders.")
                         .font(.callout).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -428,10 +451,14 @@ struct CodingView: View {
                         HStack(spacing: 8) {
                             Text("\(point.position). \(point.documentID)")
                                 .font(.caption2).frame(width: 160, alignment: .leading)
-                            Text(point.newCodes == 0 ? "ไม่มีรหัสใหม่" : "รหัสใหม่ \(point.newCodes)")
+                            Text(point.newCodes == 0
+                                 ? t("no new codes", "Saturation point where nothing new appeared.")
+                                 : t("\(point.newCodes) new codes",
+                                     "Saturation point. Placeholder is how many codes were new."))
                                 .font(.caption2)
                                 .foregroundStyle(point.newCodes == 0 ? Color.secondary : .primary)
-                            Text("สะสม \(point.cumulative)")
+                            Text(localised: "\(point.cumulative) in total",
+                                 "Running total on the saturation curve. Placeholder is the cumulative count.")
                                 .font(.caption2).foregroundStyle(.secondary)
                             Spacer()
                         }

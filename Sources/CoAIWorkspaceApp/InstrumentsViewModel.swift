@@ -13,7 +13,7 @@ import Analysis
 // ─────────────────────────────────────────────────────────────
 // The data-collection tab's state (ARCHITECTURE §20.3, P11.2/P11.4).
 //
-// The Workbench's first sub-tab said "ยังไม่ได้ทำ — P11" until now, which was
+// The Workbench's first sub-tab said "not built — P11" until now, which was
 // honest and useless. This is what makes it a place to work: draft an instrument,
 // tie each question to what it measures, collect the expert ratings content
 // validity needs, publish — where the gate refuses and says why — and then open
@@ -153,7 +153,7 @@ public final class InstrumentsViewModel {
     /// Whether the selected version has been through the gate. §20.6's first
     /// invariant is that editing a published instrument makes a new version — so
     /// once this is true, everything that changes the form is closed and the only
-    /// way forward is "สร้างเวอร์ชันใหม่".
+    /// way forward is "New version".
     public var isApproved: Bool { approval != nil }
 
     public func attach(store: InstrumentStore, scope: Scope,
@@ -197,7 +197,7 @@ public final class InstrumentsViewModel {
             await refresh()
         } catch {
             log.error("loading instruments: \(error)")
-            status = Status(message: "โหลดเครื่องมือไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not load the instruments: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -208,7 +208,9 @@ public final class InstrumentsViewModel {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let instrument = Instrument(projectID: project, title: Bilingual(trimmed))
-        await save(instrument, note: "สร้าง “\(trimmed)” แล้ว — เพิ่มคำถามวิจัยและ construct ก่อนใส่ข้อคำถาม")
+        await save(instrument,
+                   note: t("Created “\(trimmed)” — add research questions and constructs before the items",
+                           "Status message after creating an instrument. Placeholder is its name."))
         selectedID = instrument.id
         await refresh()
         _ = store
@@ -221,8 +223,8 @@ public final class InstrumentsViewModel {
     private func editable() -> Instrument? {
         guard let instrument = selected else { return nil }
         guard !isApproved else {
-            status = Status(message: "เวอร์ชัน \(instrument.version) ผ่านประตูแล้ว จึงแก้ไม่ได้ — "
-                            + "กด “สร้างเวอร์ชันใหม่” เพราะข้อมูลที่เก็บมาแล้วต้องยังตรงกับฟอร์มที่ใช้เก็บ",
+            status = Status(message: t("Version \(instrument.version) has passed the gate and cannot be edited — press “New version”, because the data already collected must still match the form it was collected with",
+                                       "Status message refusing to edit an approved instrument. Placeholder is the version."),
                             isError: true)
             return nil
         }
@@ -287,7 +289,8 @@ public final class InstrumentsViewModel {
         guard let store, let instrument = selected else { return }
         let name = expert.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            status = Status(message: "ต้องมีชื่อผู้เชี่ยวชาญ — คะแนนที่ไม่มีคนให้ ป้องกันตัวเองในสอบไม่ได้",
+            status = Status(message: t("An expert's name is required — a rating with nobody behind it cannot defend itself at a viva",
+                                       "Status message when the expert name is missing."),
                             isError: true)
             return
         }
@@ -297,7 +300,7 @@ public final class InstrumentsViewModel {
                                  instrument: instrument.id)
             await refresh()
         } catch {
-            status = Status(message: "บันทึกคะแนนไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not save the rating: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -332,7 +335,9 @@ public final class InstrumentsViewModel {
             selectedID = nil
             scaleAnalysis = nil
             await reload()
-            status = Status(message: "ลบร่าง “\(instrument.title.thai)” แล้ว", isError: false)
+            status = Status(message: t("Deleted the draft “\(instrument.title.thai)”",
+                                       "Status message after deleting an instrument draft. Placeholder is its title."),
+                            isError: false)
         } catch {
             status = Status(message: "\(error)", isError: true)
         }
@@ -342,7 +347,9 @@ public final class InstrumentsViewModel {
     public func newVersion() async {
         guard let instrument = selected else { return }
         let next = instrument.nextVersion()
-        await save(next, note: "สร้างเวอร์ชัน \(next.version) — เวอร์ชันก่อนหน้าไม่ถูกแก้ ข้อมูลที่เก็บมาแล้วยังตรงกับฟอร์มที่ใช้เก็บ")
+        await save(next,
+                   note: t("Created version \(next.version) — the previous one is untouched, so data already collected still matches the form it was collected with",
+                           "Status message after opening a new instrument version. Placeholder is the version."))
         selectedID = next.id
         published = nil
         refusal = nil
@@ -364,7 +371,8 @@ public final class InstrumentsViewModel {
             published = approved
             refusal = nil
             log.info("instrument \(instrument.id) v\(instrument.version) approved by \(person)")
-            status = Status(message: "ผ่านประตูเครื่องมือแล้ว — เปิดฟอร์มให้คนอื่นกรอกได้แล้วจากกล่องด้านล่าง",
+            status = Status(message: t("The instrument passed its gate — the form can now be opened for others from the box below",
+                                       "Status message after publishing an instrument."),
                             isError: false)
             await refresh()
         } catch {
@@ -387,8 +395,9 @@ public final class InstrumentsViewModel {
         var approvedNow = published
         if approvedNow == nil { approvedNow = await reapprove() }
         guard let approved = approvedNow else {
-            status = Status(message: "ต้องผ่านประตูก่อนจึงจะเปิดฟอร์มให้คนอื่นกรอกได้ — "
-                            + "กรอกชื่อผู้อนุมัติแล้วกด “เผยแพร่เครื่องมือ”", isError: true)
+            status = Status(message: t("The gate has to pass before the form can be opened for others — enter the approver's name and press “Publish the instrument”",
+                                       "Status message refusing to serve an unapproved instrument."),
+                            isError: true)
             return
         }
         do {
@@ -404,11 +413,11 @@ public final class InstrumentsViewModel {
             waveIsOpen = await host.currentWave?.isOpen ?? false
             servingVersion = approved.instrument.version
             await refreshResponses()
-            status = Status(message: "เปิดฟอร์มแล้วในวงแลนนี้เท่านั้น — "
-                            + "คนอื่นในเครือข่ายเดียวกันเปิดลิงก์แล้วกรอกได้ · ไม่มีทางเข้าจากอินเทอร์เน็ต",
+            status = Status(message: t("The form is open on this local network only — anybody on the same network can open the link and fill it in · there is no way in from the internet",
+                                       "Status message after starting the response server."),
                             isError: false)
         } catch {
-            status = Status(message: "เปิดเซิร์ฟเวอร์ไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not start the server: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -420,8 +429,9 @@ public final class InstrumentsViewModel {
         await host.closeWave()
         waveIsOpen = false
         await refreshResponses()
-        status = Status(message: "ปิดรอบเก็บข้อมูลแล้ว — คำตอบที่ส่งเข้ามาหลังจากนี้ถูกปฏิเสธที่ endpoint "
-                        + "ไม่ใช่แค่ซ่อนปุ่มบนหน้าเว็บ", isError: false)
+        status = Status(message: t("The collection wave is closed — responses sent after this are refused at the endpoint, not merely hidden by a button on the page",
+                                   "Status message after closing a wave, saying where the refusal happens."),
+                        isError: false)
     }
 
     /// Stops listening. The round stays open unless somebody closed it — shutting
@@ -437,8 +447,10 @@ public final class InstrumentsViewModel {
         servingVersion = nil
         await loadResponses()
         status = Status(message: stillOpen
-                        ? "ปิดเซิร์ฟเวอร์แล้ว — รอบเก็บข้อมูลยังเปิดอยู่ เปิดเซิร์ฟเวอร์ใหม่แล้วเก็บต่อรอบเดิมได้"
-                        : "ปิดเซิร์ฟเวอร์แล้ว", isError: false)
+                        ? t("The server stopped — the wave is still open, so starting the server again continues it",
+                            "Status message after stopping the server with a wave still open.")
+                        : t("The server stopped", "Status message after stopping the response server."),
+                        isError: false)
     }
 
     public func refreshResponses() async {
@@ -485,7 +497,7 @@ public final class InstrumentsViewModel {
             // Driving the screen found the version where they did: the Keychain
             // refused (a re-signed build, but a locked keychain or a key from
             // another machine does the same), the linkage step never returned, and
-            // the table said "ยังไม่มีคำตอบสำหรับเวอร์ชันนี้" beside a round
+            // the table said "no responses for this version yet" beside a round
             // header that said forty. Forty answers were in the database the whole
             // time, and the screen was telling the researcher to go collect some.
             responseRows = submissions.map { submission in
@@ -531,7 +543,8 @@ public final class InstrumentsViewModel {
                                                previousText: previous, newText: newText,
                                                reason: reason, correctedBy: person))
             await loadResponses()
-            status = Status(message: "บันทึกการแก้ค่าแล้ว — ค่าเดิมยังอยู่ และดูได้จากช่องนั้น",
+            status = Status(message: t("The correction is recorded — the original value stays and is visible in that cell",
+                                       "Status message after correcting a response value."),
                             isError: false)
         } catch {
             status = Status(message: "\(error)", isError: true)
@@ -557,7 +570,7 @@ public final class InstrumentsViewModel {
             await reload()
             if let note { status = Status(message: note, isError: false) }
         } catch {
-            status = Status(message: "บันทึกไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not save: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -596,7 +609,7 @@ public final class InstrumentsViewModel {
     public func materialize() async {
         guard let instrument = selected, let analysis,
               let responses = await answerStore() else {
-            status = Status(message: "ยังเปิดฐานข้อมูลวิเคราะห์ของโปรเจกต์นี้ไม่ได้", isError: true)
+            status = Status(message: t("This project's analysis database cannot be opened yet", "Status message when the store is unavailable."), isError: true)
             return
         }
         do {
@@ -607,14 +620,15 @@ public final class InstrumentsViewModel {
                 .materialize(instrument: instrument.id, version: instrument.version,
                              prompts: prompts)
             materialized = result
-            status = Status(message: "ส่งเข้าตาราง \(result.table) แล้ว — \(result.rows) แถว "
-                            + "จาก \(result.submissions) ชุด"
+            status = Status(message: t("Written to the table \(result.table) — \(result.rows) rows from \(result.submissions) responses",
+                                       "Status message after materialising responses. Placeholders: the table name, how many rows, and how many responses.")
                             + (result.corrections > 0
-                               ? " · มี \(result.corrections) ค่าที่ถูกแก้หลังเก็บ (คอลัมน์ was_corrected)"
+                               ? t(" · \(result.corrections) values were corrected after collection (the was_corrected column)",
+                                   "Appended when corrected values are present. Placeholder is how many.")
                                : ""),
                             isError: false)
         } catch {
-            status = Status(message: "ส่งเข้าฐานข้อมูลวิเคราะห์ไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not write to the analysis database: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -632,7 +646,8 @@ public final class InstrumentsViewModel {
         let rows = responseRows
         guard !rows.isEmpty else {
             scaleAnalysis = nil
-            status = Status(message: "ยังไม่มีคำตอบให้วิเคราะห์ — ความเที่ยงและองค์ประกอบคำนวณจากคำตอบจริงเท่านั้น",
+            status = Status(message: t("No responses to analyse yet — reliability and factor structure are computed from real answers only",
+                                       "Status message when there is nothing to analyse."),
                             isError: true)
             return
         }
@@ -681,16 +696,16 @@ public final class InstrumentsViewModel {
     /// Registers a person and gives back the code that stands for them.
     public func enrol(identity: String) async {
         guard let store = await linkageStore() else {
-            status = Status(message: "เปิดไฟล์ตัวตนของโปรเจกต์นี้ไม่ได้ — "
-                            + "อาจเข้าถึง Keychain ไม่ได้ ซึ่งถูกต้องกว่าการเก็บโดยไม่เข้ารหัส",
+            status = Status(message: t("This project's identity file cannot be opened — the Keychain may be unreachable, which is more correct than storing it unencrypted",
+                                       "Status message when the participant identity store cannot be opened."),
                             isError: true)
             return
         }
         do {
             let participant = try await store.enrol(identity: identity)
             await loadParticipants()
-            status = Status(message: "ลงทะเบียนแล้ว — รหัสของผู้เข้าร่วมคนนี้คือ \(participant.code) "
-                            + "· ส่งลิงก์ที่ลงท้ายด้วย ?code=\(participant.code) ให้เขา",
+            status = Status(message: t("Registered — this participant's code is \(participant.code) · send them a link ending in ?code=\(participant.code)",
+                                       "Status message after registering a participant. Placeholder is their anonymous code, twice."),
                             isError: false)
         } catch {
             status = Status(message: "\(error)", isError: true)
@@ -701,15 +716,17 @@ public final class InstrumentsViewModel {
     public func inviteAllToCurrentWave() async {
         guard let store = await linkageStore(), let host,
               let wave = await host.currentWave, wave.isOpen else {
-            status = Status(message: "ต้องเปิดรอบเก็บข้อมูลก่อนจึงจะเชิญผู้เข้าร่วมเข้ารอบได้",
+            status = Status(message: t("A collection wave has to be open before participants can be invited into it",
+                                       "Status message refusing to invite participants."),
                             isError: true)
             return
         }
         do {
             try await store.invite(participants.map(\.code), to: wave.id)
             await loadParticipants()
-            status = Status(message: "เชิญผู้เข้าร่วม \(participants.count) คนเข้ารอบนี้แล้ว — "
-                            + "ตัวเลขที่ตอบกลับจะขึ้นเองเมื่อคำตอบเข้ามา", isError: false)
+            status = Status(message: t("Invited \(participants.count) participants into this wave — the response count fills in on its own as answers arrive",
+                                       "Status message after inviting participants. Placeholder is how many."),
+                            isError: false)
         } catch {
             status = Status(message: "\(error)", isError: true)
         }
@@ -720,7 +737,8 @@ public final class InstrumentsViewModel {
     public func reveal(code: String, reason: String, by person: String) async {
         guard !reason.trimmingCharacters(in: .whitespaces).isEmpty,
               !person.trimmingCharacters(in: .whitespaces).isEmpty else {
-            status = Status(message: "ต้องบอกเหตุผลและชื่อคนที่เปิดดู — การเปิดดูตัวตนถูกบันทึกทุกครั้ง",
+            status = Status(message: t("A reason and the name of whoever is looking are required — every look at an identity is recorded",
+                                       "Status message refusing to reveal an identity without an audit trail."),
                             isError: true)
             return
         }
@@ -729,7 +747,9 @@ public final class InstrumentsViewModel {
             if let identity = try await store.resolve(code: code, reason: reason, by: person) {
                 revealed = (code, identity)
             } else {
-                status = Status(message: "ไม่พบรหัส \(code) ในโปรเจกต์นี้", isError: true)
+                status = Status(message: t("The code \(code) is not in this project",
+                                           "Status message when a participant code is unknown. Placeholder is the code."),
+                                isError: true)
             }
         } catch {
             status = Status(message: "\(error)", isError: true)

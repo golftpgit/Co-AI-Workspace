@@ -32,7 +32,7 @@ struct ClassificationTests {
         // Sweeping it into "general works" would look tidy and empty the whole
         // scheme of meaning.
         #expect(result.subjects.contains { $0.class == .a } == false)
-        #expect(result.reason.contains("ไม่มีคำที่บอกหมวดได้ชัดพอ"))
+        #expect(result.reason.contains("no word in it said clearly enough"))
     }
 
     @Test("a guess says which words made it, so a person has something to disagree with")

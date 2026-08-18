@@ -32,15 +32,17 @@ struct ModelsView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text("โมเดลบนเครื่อง (Tier 0.5)").font(.headline)
+            Text(localised: "On-device models (Tier 0.5)",
+                 "Heading of the models screen. 'Tier 0.5' is the name of the guarantee floor.")
+                .font(.headline)
             VStack(alignment: .leading, spacing: 2) {
                 if let storage = model.storage {
-                    Text("ใช้ไป \(bytes(storage.usedBytes)) จากโควตา \(bytes(storage.quotaBytes)) · "
-                         + "ดิสก์ว่าง \(bytes(storage.freeDiskBytes))")
+                    Text(localised: "\(bytes(storage.usedBytes)) of a \(bytes(storage.quotaBytes)) quota used · \(bytes(storage.freeDiskBytes)) free on disk",
+                         "Model storage summary. Placeholders: used, quota, and free disk space.")
                 }
                 // §9.4's RAM→size→work table, for this machine specifically.
-                Text("RAM \(bytes(model.memory.totalBytes)) (ว่าง \(bytes(model.memory.availableBytes))) "
-                     + "→ แนะนำ \(model.sizeClass.recommendedSize) · \(model.sizeClass.trustedWith)")
+                Text(localised: "RAM \(bytes(model.memory.totalBytes)) (\(bytes(model.memory.availableBytes)) free) → suggested \(model.sizeClass.recommendedSize) · \(model.sizeClass.trustedWith)",
+                     "Memory summary and what it can run. Placeholders: total RAM, free RAM, a suggested model size, and what that size can be trusted with.")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -60,15 +62,16 @@ struct ModelsView: View {
 
     @ViewBuilder
     private var installedSection: some View {
-        Text("ติดตั้งแล้ว").font(.subheadline).bold()
+        Text(localised: "Installed", "Heading over models already on the machine.")
+            .font(.subheadline).bold()
         if model.installed.isEmpty {
             // Says what the absence means, not just that the list is empty:
-            // with no model here the guaranteed floor (§9.2 ข้อ 4) is missing.
+            // with no model here the guaranteed floor (§9.2 rule 4) is missing.
             ContentUnavailableView(
-                "ยังไม่มีโมเดลบนเครื่องนี้",
+                t("No model on this machine yet", "Empty state on the models screen."),
                 systemImage: "cpu",
-                description: Text("Tier 0.5 คือพื้นรับประกัน — ถ้า endpoint ล่มหรือออฟไลน์ "
-                                  + "งานที่ต้องความแม่นสูงจะไม่มีที่รัน เลือกโหลดสักตัวจากรายการข้างล่าง"))
+                description: Text(localised: "Tier 0.5 is the guarantee floor — if the endpoint is down or you are offline, work that needs accuracy has nowhere to run. Download one from the list below.",
+                                  "Empty-state explanation on the models screen."))
                 .frame(height: 160)
         } else {
             ForEach(model.installed, id: \.name) { installed in
@@ -87,8 +90,10 @@ struct ModelsView: View {
     @ViewBuilder
     private var leftoverSection: some View {
         if !model.leftovers.isEmpty {
-            Text("ดาวน์โหลดที่ค้างอยู่").font(.subheadline).bold()
-            Text("ไฟล์พวกนี้โหลดไม่จบ จึงโหลดเป็นโมเดลไม่ได้ แต่ยังกินพื้นที่และถูกนับในโควตา")
+            Text(localised: "Unfinished downloads", "Heading over partial model downloads.")
+                .font(.subheadline).bold()
+            Text(localised: "These did not finish, so they cannot be loaded as models — but they still take space and count against the quota",
+                 "Explains why unfinished downloads are shown.")
                 .font(.caption).foregroundStyle(.secondary)
             ForEach(model.leftovers) { leftover in
                 HStack(spacing: Space.row) {
@@ -101,14 +106,17 @@ struct ModelsView: View {
                     }
                     Spacer()
                     if leftover.isOurs {
-                        Button("ลบไฟล์ที่ค้าง", role: .destructive) {
+                        Button(t("Delete the partial files", "Button that removes an unfinished download."),
+                               role: .destructive) {
                             Task { await model.remove(leftover) }
                         }
-                        .accessibilityLabel("ลบไฟล์ที่ค้างของ \(leftover.directory.lastPathComponent)")
+                        .accessibilityLabel(t("Delete the partial files of \(leftover.directory.lastPathComponent)",
+                                              "Screen-reader label. Placeholder is the directory name."))
                     } else {
                         // Somebody else's library is somebody else's to tidy,
                         // and the path is what somebody needs to go and do it.
-                        Text("อยู่ในคลังของโปรแกรมอื่น")
+                        Text(localised: "in another program's cache",
+                             "Marker on a leftover download the app does not own.")
                             .font(.caption2).foregroundStyle(.secondary)
                             .help(leftover.directory.path(percentEncoded: false))
                     }
@@ -122,8 +130,10 @@ struct ModelsView: View {
 
     @ViewBuilder
     private var recommendedSection: some View {
-        Text("โหลดเพิ่ม").font(.subheadline).bold()
-        Text("รายการนี้คือโมเดลที่ runtime ของเราโหลดได้จริง — ไม่ใช่ทุกอย่างที่มีบน Hugging Face")
+        Text(localised: "Download more", "Heading over models available to download.")
+            .font(.subheadline).bold()
+        Text(localised: "This list is what our runtime can really load — not everything on Hugging Face",
+             "Explains why the download list is short.")
             .font(.caption).foregroundStyle(.secondary)
         ForEach(model.recommended) { entry in
             CatalogRow(model: model, entry: entry)
@@ -151,14 +161,16 @@ private struct InstalledRow: View {
                 HStack(spacing: 6) {
                     Text(installed.name).font(.body).bold()
                     if model.isSelected(installed) {
-                        Text("ใช้อยู่")
+                        Text(localised: "in use", "Marker on the model currently selected.")
                             .font(.caption2)
                             .padding(.horizontal, 6).padding(.vertical, 2)
                             .background(.tint.opacity(0.15), in: Capsule())
                     }
                 }
                 Text("\(ModelsView.format(installed.sizeOnDisk)) · context \(installed.contextWindow) "
-                     + "· \(installed.supportsTools ? "เรียกทูลได้" : "เรียกทูลไม่ได้")")
+                     + (installed.supportsTools
+                        ? t("· can call tools", "Marker on a model that supports tool calling.")
+                        : t("· cannot call tools", "Marker on a model that does not support tool calling.")))
                     .font(.caption).foregroundStyle(.secondary)
                 // The estimate the selection is allowed or refused on, shown
                 // with its numbers rather than as a verdict the user has to
@@ -172,20 +184,23 @@ private struct InstalledRow: View {
                     // Explains why Delete is missing: the catalogue also finds
                     // models owned by LM Studio, and this app does not delete
                     // other applications' files.
-                    Text("อยู่นอกโฟลเดอร์ของแอป — ลบจากที่นี่ไม่ได้")
+                    Text(localised: "outside the app's folder — cannot be deleted from here",
+                         "Marker on a model the app does not own.")
                         .font(.caption2).foregroundStyle(.tertiary)
                 }
             }
             Spacer()
             if !model.isSelected(installed) {
-                Button("ใช้ตัวนี้") { model.select(installed) }
+                Button(t("Use this one", "Button that selects a model as the local tier.")) {
+                    model.select(installed)
+                }
                     // Blocked rather than warned: §9.4 is explicit that a
                     // model over the line must not become the default.
                     .disabled(model.admission(for: installed).isBlocking)
             }
             if removable {
                 Button(role: .destructive) { confirmingDelete = true } label: {
-                    Label("ลบ", systemImage: "trash")
+                    Label(t("Delete", "Context-menu item that removes a file."), systemImage: "trash")
                 }
                 .labelStyle(.iconOnly)
             }
@@ -193,12 +208,15 @@ private struct InstalledRow: View {
         .padding(Space.box)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
         .task { removable = await model.isRemovable(installed) }
-        .confirmationDialog("ลบ \(installed.name)?",
+        .confirmationDialog(t("Delete \(installed.name)?",
+                              "Confirmation title. Placeholder is the model name."),
                             isPresented: $confirmingDelete, titleVisibility: .visible) {
-            Button("ลบ", role: .destructive) { Task { await model.delete(installed) } }
-            Button("ยกเลิก", role: .cancel) {}
+            Button(t("Delete", "Context-menu item that removes a file."),
+                   role: .destructive) { Task { await model.delete(installed) } }
+            Button(t("Cancel", "Button that dismisses the delete confirmation."), role: .cancel) {}
         } message: {
-            Text("คืนพื้นที่ \(ModelsView.format(installed.sizeOnDisk)) — โหลดใหม่ได้ทีหลัง")
+            Text(localised: "Frees \(ModelsView.format(installed.sizeOnDisk)) — it can be downloaded again later",
+                 "Message in the delete confirmation. Placeholder is how much space is freed.")
         }
     }
 }
@@ -212,8 +230,8 @@ private struct CatalogRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(entry.displayName) · \(entry.quantization)").font(.body).bold()
                 Text(entry.summary).font(.caption).foregroundStyle(.secondary)
-                Text("ดาวน์โหลด \(ModelsView.format(entry.downloadBytes)) · "
-                     + "แนะนำ RAM \(ModelsView.format(entry.minimumRAMBytes)) ขึ้นไป")
+                Text(localised: "\(ModelsView.format(entry.downloadBytes)) download · needs \(ModelsView.format(entry.minimumRAMBytes)) RAM or more",
+                     "A downloadable model. Placeholders: the download size and the minimum RAM.")
                     .font(.caption2).foregroundStyle(.tertiary)
                 let admission = model.admission(for: entry)
                 if admission.isBlocking {
@@ -236,9 +254,9 @@ private struct CatalogRow: View {
             }
             Spacer()
             if model.isDownloading(entry) {
-                Button("ยกเลิก") { model.cancel(entry) }
+                Button(t("Cancel", "Button that stops a running download.")) { model.cancel(entry) }
             } else {
-                Button("โหลด") { model.download(entry) }
+                Button(t("Download", "Button that starts downloading a model.")) { model.download(entry) }
                     .buttonStyle(.borderedProminent)
             }
         }

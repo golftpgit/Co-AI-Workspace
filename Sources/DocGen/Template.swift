@@ -124,10 +124,10 @@ public enum TemplateError: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .unreadable(let file):
-            return "อ่านไฟล์ \(file) ไม่ได้"
+            return localised("\(file) could not be read", "A template failure. Placeholder: the filename.")
         case .noHeadings(let file):
-            return "ไม่พบหัวข้อใน \(file) — เอกสารที่ใช้เป็นแม่แบบต้องมีหัวข้อ "
-                + "(ใช้สไตล์ Heading ของ Word หรืออย่างน้อยให้หัวข้อเป็นตัวหนาบรรทัดเดียว)"
+            return localised("no heading was found in \(file) — a document used as a template needs headings ", "A template failure. Placeholder: the filename.")
+                + localised("(use Word's Heading styles, or at least put each heading in bold on its own line)", "Ends the missing-heading failure.")
         }
     }
 }
@@ -192,7 +192,7 @@ public enum TemplateFiller {
     /// The placeholder a required-but-empty section gets. Visible on purpose:
     /// a heading with nothing under it reads as an oversight, and this reads
     /// as a to-do.
-    public static let emptyMarker = "(ยังไม่มีเนื้อหาในส่วนนี้ — ต้องเติมก่อนส่ง)"
+    public static let emptyMarker = localised("(this section is still empty — it has to be filled in before submission)", "Placeholder text for an empty section.")
 
     /// Reorders and renames a draft's sections to match a template.
     ///
@@ -249,6 +249,10 @@ public enum TemplateFiller {
         var text = heading.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         // Leading numbering in any of the shapes documents use: "1.", "1)",
         // "๑.", "บทที่ 1", "Chapter 2".
+        //
+        // LOCALISATION: matching data — see RULES.md U24. Read off headings in
+        // the template file somebody supplied, so it has to hold every language
+        // a template may be written in at once.
         for prefix in ["บทที่", "chapter", "section", "ตอนที่"] where text.hasPrefix(prefix) {
             text = String(text.dropFirst(prefix.count))
         }

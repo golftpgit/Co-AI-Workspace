@@ -86,7 +86,7 @@ final class MCPServersViewModel {
             finish()
             reload()
         } catch {
-            problem = ReadableFailure.message(for: error, doing: "บันทึกรายการ MCP server")
+            problem = ReadableFailure.message(for: error, doing: t("saving the MCP server list", "Names the action that failed."))
         }
     }
 }
@@ -99,16 +99,18 @@ struct MCPServersView: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("MCP server").font(.headline)
-                    Text("เครื่องมือของคนอื่นที่รันบนเครื่องนี้ — ทุกทูลที่ได้มาเดินผ่าน hook chain เดียวกับทูลในตัว (§6.2)")
+                    Text(localised: "Other people's tools, running on this machine — every tool they bring goes through the same hook chain as the built-in ones (§6.2)",
+                         "Explains what an MCP server is on this screen.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
-                Button("เพิ่มเซิร์ฟเวอร์") { model.startNew() }
+                Button(t("Add a server", "Button that defines a new MCP server.")) { model.startNew() }
             }
 
             if model.servers.isEmpty {
-                Text("ยังไม่มีเซิร์ฟเวอร์ที่ตั้งไว้เอง — ปลั๊กอินที่ติดตั้งด้านล่างเป็นคนละรายการ")
+                Text(localised: "No server of your own yet — the installed plug-ins below are a separate list",
+                     "Empty state on the MCP servers screen.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             ForEach(model.servers) { server in
@@ -119,7 +121,8 @@ struct MCPServersView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
-            Text("เพิ่มหรือแก้ที่นี่แล้วมีผลตอนเปิดแอปครั้งถัดไป — เซิร์ฟเวอร์ถูกต่อครั้งเดียวตอนบูต")
+            Text(localised: "Adding or editing here takes effect at the next launch — servers are connected once at boot",
+                 "Explains why MCP server changes are not live.")
                 .font(.caption2).foregroundStyle(.secondary)
         }
         .sheet(isPresented: $model.isEditing) { MCPServerEditor(model: model) }
@@ -135,9 +138,10 @@ struct MCPServersView: View {
                 Text("mcp__\(server.namespace)__…")
                     .font(.caption.monospaced()).foregroundStyle(.secondary)
                 Spacer()
-                Button("แก้") { model.edit(server) }
+                Button(t("Edit", "Button that opens an endpoint for editing.")) { model.edit(server) }
                     .buttonStyle(.borderless).font(.caption)
-                Button("ลบ", role: .destructive) { model.remove(server) }
+                Button(t("Delete", "Context-menu item that removes a file."),
+                       role: .destructive) { model.remove(server) }
                     .buttonStyle(.borderless).font(.caption)
             }
             Text(([server.command] + server.arguments).joined(separator: " "))
@@ -151,8 +155,8 @@ struct MCPServersView: View {
         .padding(Space.box)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(server.name) · ทูลขึ้นต้นด้วย mcp \(server.namespace) · "
-                            + (server.isReady ? "พร้อมต่อ" : "ยังไม่พร้อม"))
+        .accessibilityLabel(t("\(server.name) · its tools are prefixed mcp \(server.namespace) · \(server.isReady ? t("ready to connect", "MCP server status: it can be reached.") : t("not ready", "Channel status: something is missing."))",
+                              "Screen-reader label for an MCP server row. Placeholders: its name and its namespace."))
     }
 }
 
@@ -165,42 +169,50 @@ private struct MCPServerEditor: View {
         @Bindable var model = model
         let draft = $model.draft
         return VStack(alignment: .leading, spacing: 12) {
-                Text(draft.wrappedValue.name.isEmpty ? "เพิ่ม MCP server"
-                                                     : "แก้ \(draft.wrappedValue.name)")
+                Text(draft.wrappedValue.name.isEmpty
+                     ? t("Add an MCP server", "Sheet title when defining a server.")
+                     : t("Edit \(draft.wrappedValue.name)",
+                         "Sheet title when editing a channel account. Placeholder is its name."))
                     .font(.headline)
 
-                LabeledContent("ชื่อ") { TextField("weather", text: draft.name) }
-                Text("ทูลจากเซิร์ฟเวอร์นี้จะชื่อขึ้นต้นว่า `mcp__\(draft.wrappedValue.namespace)__`")
+                LabeledContent(t("Name", "Field label: what to call this endpoint.")) {
+                    TextField("weather", text: draft.name)
+                }
+                Text(localised: "Tools from this server are named `mcp__\(draft.wrappedValue.namespace)__…`",
+                     "Says how this server's tools will be named. Placeholder is the namespace.")
                     .font(.caption2).foregroundStyle(.secondary)
 
-                LabeledContent("คำสั่ง") { TextField("npx", text: draft.command) }
-                LabeledContent("อาร์กิวเมนต์") {
+                LabeledContent(t("Command", "Field label: the executable that starts the server.")) {
+                    TextField("npx", text: draft.command)
+                }
+                LabeledContent(t("Arguments", "Field label: what to pass the command.")) {
                     TextField("-y weather-mcp", text: draft.argumentsText)
                 }
-                Text("เว้นวรรคคั่น · ถ้ามีช่องว่างในค่าให้ใส่เครื่องหมายคำพูดครอบ "
-                     + "อ่านได้ \(draft.wrappedValue.arguments.count) ตัว")
+                Text(localised: "Separated by spaces · quote a value that contains a space · \(draft.wrappedValue.arguments.count) read so far",
+                     "Help under the arguments field. Placeholder is how many were parsed.")
                     .font(.caption2).foregroundStyle(.secondary)
 
-                LabeledContent("โฟลเดอร์ที่รัน (ว่างได้)") {
+                LabeledContent(t("Working folder (may be empty)",
+                                 "Field label: where the server process runs.")) {
                     TextField("/Users/…/project", text: draft.workingDirectory)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("ตัวแปรที่เซิร์ฟเวอร์ต้องการ").font(.callout)
+                    Text(localised: "Variables the server needs", "Heading over the environment editor.")
+                        .font(.callout)
                     TextEditor(text: draft.environmentText)
                         .font(.caption.monospaced())
                         .frame(height: 60)
                         .overlay(RoundedRectangle(cornerRadius: Radius.control)
                             .stroke(Color.secondary.opacity(0.3)))
-                        .accessibilityLabel("ตัวแปรที่เซิร์ฟเวอร์ต้องการ")
-                    Text("บรรทัดละหนึ่งคู่ `WEATHER_API_KEY = ชื่อที่เก็บไว้` — "
-                         + "ไฟล์เก็บแค่ชื่อ ค่าอยู่ใน Keychain (ตั้งค่าได้ที่หน้า endpoint) · "
-                         + "อ่านได้ \(draft.wrappedValue.environmentVariables.count) คู่")
+                        .accessibilityLabel(t("Variables the server needs", "Screen-reader label."))
+                    Text(localised: "One pair per line, `WEATHER_API_KEY = the stored name` — the file holds only the name, the value lives in the Keychain (set it on the endpoints screen) · \(draft.wrappedValue.environmentVariables.count) pairs read",
+                         "Help under the environment editor. Placeholder is how many pairs were parsed.")
                         .font(.caption2).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Toggle("เปิดใช้งาน", isOn: draft.isEnabled)
+                Toggle(t("Enabled", "Checkbox that turns a channel or server on."), isOn: draft.isEnabled)
 
                 ForEach(draft.wrappedValue.problems, id: \.self) { problem in
                     Text("• \(problem)").font(.caption).foregroundStyle(.red)
@@ -213,8 +225,10 @@ private struct MCPServerEditor: View {
 
                 HStack {
                     Spacer()
-                    Button("ปิด") { model.isEditing = false }
-                    Button("บันทึก") { model.save() }
+                    Button(t("Close", "Button that dismisses the endpoint sheet without saving.")) {
+                        model.isEditing = false
+                    }
+                    Button(t("Save", "Button that stores the edited entities.")) { model.save() }
                         .buttonStyle(.borderedProminent)
                         .disabled(!draft.wrappedValue.canSave)
                 }

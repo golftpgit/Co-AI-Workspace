@@ -65,7 +65,7 @@ struct ScheduleProjectionTests {
         // And it is named rather than quietly dropped — a chart missing a row
         // reads as a chart of all the rows.
         #expect(projection.unforecastable.contains { $0.packageID == "A" })
-        #expect(projection.unforecastable.first?.reason.contains("ไม่มีตัวเลขจริง") == true)
+        #expect(projection.unforecastable.first?.reason.contains("no real number to estimate from") == true)
     }
 
     /// The expensive mistake: treating the unknown as zero and handing its
@@ -78,7 +78,7 @@ struct ScheduleProjectionTests {
 
         #expect(projection.leaves.isEmpty, "a date was invented downstream of an unknown")
         #expect(projection.unforecastable.map(\.packageID) == ["A", "B", "C"])
-        #expect(projection.unforecastable[1].reason.contains("ขึ้นกับใบงานที่ยังประมาณเวลาไม่ได้"))
+        #expect(projection.unforecastable[1].reason.contains("depends on packages that cannot be estimated"))
         #expect(projection.p90Finish == nil)
     }
 

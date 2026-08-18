@@ -12,6 +12,25 @@
 	<string>com.coaiworkspace.app</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<!-- Which languages this app is offered in. Measured, not assumed: without
+	     these two keys the main bundle declares no localisations, macOS resolves
+	     the *app's* language to the development region, and every module bundle
+	     is then intersected against that one language. The result is that
+	     `Sources/*/Resources/th.lproj` ships inside the app, is found, is
+	     loadable — and is never chosen, on any machine, at any system language
+	     setting. Nothing warns. Driving the screen with the language forced to
+	     Thai is what found it: `preferredLocalizations` came back `["en"]` with
+	     `AppleLanguages` set to `(th)`.
+	     `scripts/check.sh` fails a language that ships without being declared
+	     here, because "the translation is in the bundle" is not the same claim
+	     as "a person can read it". -->
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>th</string>
+	</array>
 	<key>CFBundleShortVersionString</key>
 	<string>0.1.0</string>
 	<key>CFBundleVersion</key>

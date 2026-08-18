@@ -95,9 +95,9 @@ public struct ReadableFailure: Sendable, Equatable {
         if error is DecodingError {
             return ReadableFailure(
                 kind: .fileUnreadable(backup: nil),
-                what: "ไฟล์ของ\(doing) อ่านไม่ออก — รูปแบบข้างในไม่ตรงกับที่โปรแกรมรู้จัก",
-                whatToDo: "ถ้าเคยแก้ไฟล์นี้เองให้ตรวจดูก่อน · "
-                    + "ถ้าไม่เคย แปลว่าไฟล์เสีย และของเดิมถูกสำรองไว้ให้แล้ว",
+                what: localised("the \(doing) file cannot be read — what is inside it does not match the shape the program knows", "A readable failure. Placeholder: what was being done."),
+                whatToDo: localised("if you have edited this file yourself, look at it first · ", "What to do about an unreadable file.")
+                    + localised("if you have not, the file is damaged, and the original has already been kept aside", "Ends the advice about an unreadable file."),
                 detail: detail)
         }
 
@@ -121,8 +121,8 @@ public struct ReadableFailure: Sendable, Equatable {
             case 4, 260:
                 return ReadableFailure(
                     kind: .unknown,
-                    what: "ไม่พบไฟล์ของ\(doing)",
-                    whatToDo: "ถ้าเพิ่งย้ายหรือลบโฟลเดอร์ข้อมูล ให้ชี้กลับไปที่เดิม",
+                    what: localised("the \(doing) file is not there", "A readable failure. Placeholder: what was being done."),
+                    whatToDo: localised("if the data folder has just been moved or removed, point it back where it was", "What to do about a missing file."),
                     detail: detail)
             default: break
             }
@@ -136,8 +136,8 @@ public struct ReadableFailure: Sendable, Equatable {
             case .timedOut:
                 return ReadableFailure(
                     kind: .timedOut,
-                    what: "\(doing) ใช้เวลานานเกินกำหนดจนต้องหยุดรอ",
-                    whatToDo: "ปลายทางอาจกำลังโหลดโมเดลอยู่ — รออีกสักครู่แล้วลองใหม่ได้",
+                    what: localised("\(doing) took longer than the time allowed and was given up on", "A readable failure. Placeholder: what was being done."),
+                    whatToDo: localised("the other end may be loading a model — wait a moment and try again", "What to do about a timeout."),
                     detail: detail)
             default: break
             }
@@ -145,8 +145,8 @@ public struct ReadableFailure: Sendable, Equatable {
 
         return ReadableFailure(
             kind: .unknown,
-            what: "\(doing) ไม่สำเร็จ",
-            whatToDo: "ดูรายละเอียดข้างล่าง แล้วถ้าเกิดซ้ำให้บันทึกข้อความนี้ไว้",
+            what: localised("\(doing) did not succeed", "A readable failure. Placeholder: what was being done."),
+            whatToDo: localised("read the detail below, and if it happens again keep this message", "What to do about an unexplained failure."),
             detail: detail)
     }
 
@@ -172,10 +172,10 @@ public struct ReadableFailure: Sendable, Equatable {
                                       detail: String = "") -> ReadableFailure {
         ReadableFailure(
             kind: .fileUnreadable(backup: backup),
-            what: "ไฟล์ของ\(doing) อ่านไม่ออก",
+            what: localised("the \(doing) file cannot be read", "A readable failure. Placeholder: what was being done."),
             whatToDo: backup.map {
-                "ของเดิมถูกสำรองไว้ที่ \($0) แล้ว — ยังไม่มีอะไรหาย เปิดดูได้"
-            } ?? "เริ่มจากรายการว่างไปก่อน และอย่าเพิ่งบันทึกทับถ้ายังต้องการของเดิม",
+                localised("the original has been kept at \($0) — nothing is lost, and it can be opened", "Reassurance after an unreadable file. Placeholder: where the backup is.")
+            } ?? localised("this starts from an empty list; do not save over it if the original still matters", "What to do after an unreadable file."),
             detail: detail)
     }
 
@@ -188,18 +188,18 @@ public struct ReadableFailure: Sendable, Equatable {
     public static func newerSchema(doing: String, version: Int) -> ReadableFailure {
         ReadableFailure(
             kind: .fileUnreadable(backup: nil),
-            what: "ไฟล์ของ\(doing) ถูกเขียนโดยแอปรุ่นใหม่กว่านี้ (เวอร์ชัน \(version))",
-            whatToDo: "รอบนี้ใช้รายการว่างไปก่อน และ**ไม่ได้เขียนทับไฟล์นั้น** — "
-                + "เปิดด้วยรุ่นใหม่กว่าแล้วของเดิมยังอยู่ครบ",
+            what: localised("the \(doing) file was written by a newer version of the app (version \(version))", "A readable failure. Placeholders: what was being done and the file's version."),
+            whatToDo: localised("an empty list is being used this time, and **that file has not been written over** — ", "Reassurance about a newer-version file.")
+                + localised("open it with the newer version and everything is still there", "Ends the reassurance about a newer-version file."),
             detail: doing)
     }
 
     public static func serviceDown(name: String, detail: String = "") -> ReadableFailure {
         ReadableFailure(
             kind: .serviceDown(name: name),
-            what: "\(name) ไม่ตอบ",
-            whatToDo: "ดูหน้าสถานะว่าบริการนี้ยังทำงานอยู่ไหม — "
-                + "ถ้าเพิ่งหยุดไป ระบบจะพยายามเปิดใหม่ให้เอง",
+            what: localised("\(name) is not responding", "A readable failure. Placeholder: the service's name."),
+            whatToDo: localised("check the status page for whether the service is still running — ", "What to do about an unresponsive service.")
+                + localised("if it has only just stopped, the system will try to bring it back itself", "Ends the advice about an unresponsive service."),
             detail: detail)
     }
 
@@ -207,19 +207,19 @@ public struct ReadableFailure: Sendable, Equatable {
         ReadableFailure(
             kind: .outOfSpace,
             // Says what did *not* happen, because that is the question.
-            what: "ดิสก์เต็ม — \(doing) ยังไม่ถูกบันทึก",
+            what: localised("the disk is full — \(doing) has not been saved", "A readable failure. Placeholder: what was being done."),
             // Deliberately not "ลองใหม่อีกครั้ง": on a full disk that is a loop.
-            whatToDo: "ต้องมีที่ว่างก่อน ลบไฟล์ที่ไม่ใช้แล้วค่อยสั่งอีกครั้ง · "
-                + "ของเดิมบนดิสก์ยังอยู่ครบ ไม่ได้ถูกเขียนทับ",
+            whatToDo: localised("free some space, then try again · ", "What to do about a full disk.")
+                + localised("what is already on disk is intact and has not been written over", "Reassurance about a full disk."),
             detail: detail)
     }
 
     private static func notPermitted(doing: String, detail: String) -> ReadableFailure {
         ReadableFailure(
             kind: .notPermitted,
-            what: "ไม่ได้รับอนุญาตให้เขียนไฟล์ของ\(doing)",
-            whatToDo: "ตรวจสิทธิ์ของโฟลเดอร์ข้อมูล — "
-                + "ถ้าเพิ่งย้ายโฟลเดอร์มาจากเครื่องอื่นหรือจากดิสก์สำรอง มักเป็นเพราะเรื่องนี้",
+            what: localised("there is no permission to write the \(doing) file", "A readable failure. Placeholder: what was being done."),
+            whatToDo: localised("check the permissions on the data folder — ", "What to do about a permission failure.")
+                + localised("a folder just moved from another machine or from a backup is the usual cause", "Ends the advice about a permission failure."),
             detail: detail)
     }
 

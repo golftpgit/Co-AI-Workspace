@@ -64,6 +64,7 @@ extension TermDictionary {
     /// a word `NLTokenizer` splits; entries it handles correctly are left out
     /// rather than listed for completeness, because each one is a chance to
     /// merge something that should have stayed apart.
+    /// LOCALISATION: matching data — see RULES.md U24.
     public static let seed = TermDictionary([
         // statistics / method
         "โลจิสติก", "รีเกรสชัน", "พารามิเตอร์", "โมเดล", "แบบจำลอง",

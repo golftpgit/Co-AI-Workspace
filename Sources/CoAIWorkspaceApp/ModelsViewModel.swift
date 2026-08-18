@@ -124,13 +124,16 @@ public final class ModelsViewModel {
                 // First model on the machine: use it, rather than making the
                 // user find a second switch after a ten-minute download.
                 if self.selectedName == nil { self.select(model) }
-                self.status = Status(message: "โหลด \(entry.displayName) เสร็จแล้ว", isError: false)
+                self.status = Status(message: t("\(entry.displayName) finished downloading",
+                                                "Status message after a model download. Placeholder is its name."),
+                                     isError: false)
             } catch is CancellationError {
                 guard let self else { return }
                 self.finish(entry)
                 await self.refresh()
                 self.status = Status(
-                    message: "ยกเลิก \(entry.displayName) แล้ว — ไฟล์ที่โหลดเสร็จยังอยู่ เริ่มใหม่แล้วจะไปต่อจากเดิม",
+                    message: t("\(entry.displayName) cancelled — what downloaded stays, so starting again resumes",
+                               "Status message after cancelling a download. Placeholder is the model name."),
                     isError: false)
             } catch {
                 guard let self else { return }
@@ -198,7 +201,8 @@ public final class ModelsViewModel {
         do {
             try catalog.remove(leftover)
             await refresh()
-            status = Status(message: "ลบไฟล์ที่ค้างจากดาวน์โหลดแล้ว "
+            status = Status(message: t("Deleted the files left behind by a download ",
+                                       "Prefix of the status message after clearing a partial download.")
                             + "(\(ByteCountFormatter.string(fromByteCount: leftover.bytes, countStyle: .file)))",
                             isError: false)
         } catch {
@@ -218,7 +222,9 @@ public final class ModelsViewModel {
             try await installer.delete(model)
             await refresh()
             if selectedName == nil { select(installed.first) }
-            status = Status(message: "ลบ \(model.name) แล้ว", isError: false)
+            status = Status(message: t("Deleted \(model.name)",
+                                       "Status message after deleting a model. Placeholder is its name."),
+                            isError: false)
         } catch {
             log.error("delete \(model.name): \(error)")
             status = Status(message: "\(error)", isError: true)

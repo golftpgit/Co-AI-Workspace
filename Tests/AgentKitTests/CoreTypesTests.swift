@@ -63,7 +63,7 @@ struct CorroborationTests {
             Issue.record("T5 สิบแหล่งไม่ควรผ่าน")
             return
         }
-        #expect(reason.contains("ต้องมีแหล่ง T1–T3"))
+        #expect(reason.contains("at least one T1–T3 source has to back it"))
         #expect(!Corroboration.assess(tiers: manyWeak).isEnoughForQA)
     }
 
@@ -94,7 +94,7 @@ struct CorroborationTests {
             Issue.record("ไม่มีแหล่งเลยต้องไม่ผ่าน")
             return
         }
-        #expect(reason.contains("ไม่มีแหล่งอ้างอิงเลย"))
+        #expect(reason.contains("there is no source at all"))
     }
 
     @Test("an untiered source counts as a source and never as a strong one")
@@ -105,7 +105,7 @@ struct CorroborationTests {
             Issue.record("ควรไม่ผ่าน")
             return
         }
-        #expect(!reason.contains("ไม่มีแหล่งอ้างอิงเลย"))
+        #expect(!reason.contains("there is no source at all"))
     }
 
     @Test("the tier marker round-trips through tool output")

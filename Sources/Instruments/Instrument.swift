@@ -70,15 +70,15 @@ public enum ItemKind: Sendable, Codable, Equatable {
 
     public var label: String {
         switch self {
-        case .likert(let levels): "Likert \(levels.count) ระดับ"
-        case .single: "เลือกตอบเดียว"
-        case .multiple: "เลือกได้หลายข้อ"
-        case .openText: "ข้อความเปิด"
-        case .number: "ตัวเลข"
-        case .date: "วันที่"
+        case .likert(let levels): localised("\(levels.count)-point Likert", "A question type. Placeholder: how many points the scale has.")
+        case .single: localised("single choice", "A question type.")
+        case .multiple: localised("multiple choice", "A question type.")
+        case .openText: localised("open text", "A question type.")
+        case .number: localised("number", "A question type.")
+        case .date: localised("date", "A question type.")
         case .matrix(let rows, let columns): "matrix \(rows.count)×\(columns.count)"
-        case .ranking: "จัดอันดับ"
-        case .fileUpload: "อัปโหลดไฟล์"
+        case .ranking: localised("ranking", "A question type.")
+        case .fileUpload: localised("file upload", "A question type.")
         }
     }
 
@@ -232,9 +232,9 @@ public enum EthicsRecord: Sendable, Codable, Equatable {
     public var summary: String {
         switch self {
         case .approved(let committee, let number, _, let by):
-            "รับรองโดย \(committee) เลขที่ \(number) · แจ้งโดย \(by)"
+            localised("approved by \(committee), reference \(number) · recorded by \(by)", "An ethics approval. Placeholders: the committee, its reference number and who recorded it.")
         case .notHumanSubjects(let reason, let by):
-            "ประกาศว่าไม่เข้าข่ายวิจัยในมนุษย์: \(reason) · โดย \(by)"
+            localised("declared not to be human-subjects research: \(reason) · by \(by)", "An ethics exemption. Placeholders: the stated reason and who recorded it.")
         }
     }
 }

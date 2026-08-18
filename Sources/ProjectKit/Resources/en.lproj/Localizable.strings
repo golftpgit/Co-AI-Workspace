@@ -1,0 +1,523 @@
+/* The base language. Keys are the English sentences. */
+/* Drift summary. Placeholder is a count. */
+"%lld added" = "%lld added";
+/* Drift summary. Placeholder is a count. */
+"%lld removed" = "%lld removed";
+/* Drift summary. Placeholder is a count. */
+"%lld changed" = "%lld changed";
+/* Drift summary when the scope statement moved. */
+"scope changed" = "scope changed";
+/* Drift summary when the plan has not moved. */
+"matches the baseline" = "matches the baseline";
+/* Refusal message when a benefit measurement has no measurer. */
+"The name of who measured it is required — a number nobody vouches for is not a measurement" = "The name of who measured it is required — a number nobody vouches for is not a measurement";
+/* Title of a change request. Placeholder is the package title. */
+"Change work package: %@" = "Change work package: %@";
+/* Title of a change request. Placeholder is the package title. */
+"Add work package: %@" = "Add work package: %@";
+/* Title of a change request. Placeholder is the package title. */
+"Remove work package: %@" = "Remove work package: %@";
+/* Title of a change request. */
+"Change the project's scope" = "Change the project's scope";
+/* Title of a change request. */
+"Change how far the team may go on its own" = "Change how far the team may go on its own";
+/* Title of a change request; the tolerances that moved follow. */
+"Change tolerances: " = "Change tolerances: ";
+/* Headline of a pending change. Placeholders: the request number and its three impacts. */
+"This edit becomes change request #%lld · impact: scope %@, time %@, money %@" = "This edit becomes change request #%lld · impact: scope %@, time %@, money %@";
+/* Reason recorded on the throwaway baseline used to compute drift. */
+"now" = "now";
+/* Scope impact when only tolerances moved. */
+"Tolerances changed — the plan did not" = "Tolerances changed — the plan did not";
+/* Scope impact. Placeholder is how many were added. */
+"+%lld packages" = "+%lld packages";
+/* Scope impact. Placeholder is how many were removed. */
+"−%lld packages" = "−%lld packages";
+/* Scope impact. Placeholder is how many were edited. */
+"%lld packages changed" = "%lld packages changed";
+/* Scope impact. Placeholders: how many scope lines in and out. */
+"Scope: %lld in · %lld out" = "Scope: %lld in · %lld out";
+/* Impact when nothing moved. */
+"no change" = "no change";
+/* Time impact. Placeholders: the length before and after. */
+"critical path %lld → %lld packages" = "critical path %lld → %lld packages";
+/* Time impact when there is no history to estimate from. */
+"cannot be estimated — no work package in this project has measured time yet" = "cannot be estimated — no work package in this project has measured time yet";
+/* Time impact. Placeholders: the sign, the minutes, and the sample size. */
+"≈ %@%lld minutes (averaged over %lld finished packages)" = "≈ %@%lld minutes (averaged over %lld finished packages)";
+/* Time impact when nothing moved. */
+"no change to the order or the amount of work" = "no change to the order or the amount of work";
+/* Cost impact. Placeholder is the sample size. */
+"(averaged over %lld finished packages)" = "(averaged over %lld finished packages)";
+/* Cost impact when there is no history to estimate from. */
+"cannot be estimated — no spending has been recorded to compare against" = "cannot be estimated — no spending has been recorded to compare against";
+/* Cost impact when nothing moved. */
+"no change to the amount of work" = "no change to the amount of work";
+/* Name of an ISO 21502 practice. */
+"Planning" = "Planning";
+/* Name of an ISO 21502 practice. */
+"Benefits" = "Benefits";
+/* Name of an ISO 21502 practice. */
+"Scope" = "Scope";
+/* Name of an ISO 21502 practice. */
+"Resources and people" = "Resources and people";
+/* Name of an ISO 21502 practice. */
+"Schedule" = "Schedule";
+/* Name of an ISO 21502 practice. */
+"Cost" = "Cost";
+/* Name of an ISO 21502 practice. */
+"Risk" = "Risk";
+/* Name of an ISO 21502 practice. */
+"Issues" = "Issues";
+/* Name of an ISO 21502 practice. */
+"Change control" = "Change control";
+/* Name of an ISO 21502 practice. */
+"Quality" = "Quality";
+/* Name of an ISO 21502 practice. */
+"Stakeholders" = "Stakeholders";
+/* Name of an ISO 21502 practice. */
+"Communication" = "Communication";
+/* Name of an ISO 21502 practice. */
+"Organisational change" = "Organisational change";
+/* Name of an ISO 21502 practice. */
+"Reporting" = "Reporting";
+/* Name of an ISO 21502 practice. */
+"Information and documents" = "Information and documents";
+/* Name of an ISO 21502 practice. */
+"Procurement" = "Procurement";
+/* Name of an ISO 21502 practice. */
+"Lessons" = "Lessons";
+/* Refusal message when a tailoring record has no decider. */
+"The name of whoever decided not to do this practice is required" = "The name of whoever decided not to do this practice is required";
+/* Refusal message when a tailoring record has no reason. */
+"A reason for not doing it is required — “not relevant” on its own is not a record" = "A reason for not doing it is required — “not relevant” on its own is not a record";
+/* Conformance evidence. Placeholder is a count of packages. */
+"The plan has %lld work packages" = "The plan has %lld work packages";
+/* Conformance evidence. Placeholder is a count. */
+"%lld entries in the benefit register" = "%lld entries in the benefit register";
+/* Conformance evidence. Placeholder is a count. */
+"%lld packages taken by a person or an agent" = "%lld packages taken by a person or an agent";
+/* Conformance evidence. Placeholder is a count. */
+"%lld dependencies" = "%lld dependencies";
+/* Conformance evidence. Placeholder is a number of minutes. */
+"%lld minutes measured" = "%lld minutes measured";
+/* Conformance evidence. Placeholder is an amount in the endpoint's currency. */
+"$%.2f of spending recorded" = "$%.2f of spending recorded";
+/* Conformance evidence. Placeholder is a count. */
+"%lld entries in the risk register" = "%lld entries in the risk register";
+/* Conformance evidence. Placeholder is a count. */
+"%lld entries in the issue register" = "%lld entries in the issue register";
+/* Conformance evidence. Placeholders: how many baselines and how many change requests. */
+"%lld baseline versions · %lld change requests" = "%lld baseline versions · %lld change requests";
+/* Conformance evidence. Placeholder is a count. */
+"%lld pieces of evidence QA accepted" = "%lld pieces of evidence QA accepted";
+/* Conformance evidence. Placeholder is a count. */
+"%lld governance seats with a named person" = "%lld governance seats with a named person";
+/* Conformance evidence. Placeholder is a count. */
+"%lld messages sent to a person" = "%lld messages sent to a person";
+/* Conformance evidence. */
+"The effect on how people work has been recorded" = "The effect on how people work has been recorded";
+/* Conformance evidence. Placeholder is a count. */
+"%lld reports issued" = "%lld reports issued";
+/* G4 gate condition on data disposition. */
+"It has been decided where the remaining data and files go" = "It has been decided where the remaining data and files go";
+/* Conformance evidence. */
+"Procurement has been recorded" = "Procurement has been recorded";
+/* Conformance evidence. Placeholder is a count. */
+"%lld lessons" = "%lld lessons";
+/* Refusal message. Placeholders: the current stage and the one asked for. */
+"A stage cannot go backwards: %@ → %@" = "A stage cannot go backwards: %@ → %@";
+/* Refusal message. Placeholder is the gate name; the unmet conditions follow. */
+"%@ cannot pass yet — outstanding: " = "%@ cannot pass yet — outstanding: ";
+/* Refusal message when the project has ended. */
+"The project is closed" = "The project is closed";
+/* Refusal message when a data-disposition decision is incomplete. */
+"Both the policy applied and the name of who decided are required" = "Both the policy applied and the name of who decided are required";
+/* Refusal message for an archived project. Placeholder is its name. */
+"“%@” is closed — everything can be read, nothing can be changed (recording a benefit measured later is still allowed, because that adds a fact rather than amending an agreement)" = "“%@” is closed — everything can be read, nothing can be changed (recording a benefit measured later is still allowed, because that adds a fact rather than amending an agreement)";
+/* G1 gate condition. */
+"The project has a name" = "The project has a name";
+/* G1 gate condition. */
+"There is a reason for doing it (the brief)" = "There is a reason for doing it (the brief)";
+/* G1 gate condition. */
+"At least one thing in scope" = "At least one thing in scope";
+/* G1 gate condition. */
+"At least one thing out of scope" = "At least one thing out of scope";
+/* G1 gate condition. Executive is the standard role name. */
+"A named human business owner (Executive)" = "A named human business owner (Executive)";
+/* G2 gate condition. */
+"At least one acceptance criterion" = "At least one acceptance criterion";
+/* G2 gate condition. */
+"At least one work package" = "At least one work package";
+/* G2 gate condition. */
+"Every work package says what done means" = "Every work package says what done means";
+/* G2 gate condition. */
+"Every work package is tied to something in scope" = "Every work package is tied to something in scope";
+/* G2 gate condition. */
+"No parent package is empty" = "No parent package is empty";
+/* G2 gate condition. A is the RACI letter. */
+"Every work package has exactly one accountable (A)" = "Every work package has exactly one accountable (A)";
+/* G2 gate condition. */
+"High-risk work has a person accountable" = "High-risk work has a person accountable";
+/* G2 gate condition. */
+"The structure is whole (no orphan package)" = "The structure is whole (no orphan package)";
+/* G2 gate condition. */
+"No dependency waits on itself" = "No dependency waits on itself";
+/* G2 gate condition. */
+"Every in-scope line has a work package behind it" = "Every in-scope line has a work package behind it";
+/* G2 gate condition for studies with human participants. */
+"Work collecting data from people states its sample size and the assumptions behind it" = "Work collecting data from people states its sample size and the assumptions behind it";
+/* G3 gate condition. */
+"No unfinished work package" = "No unfinished work package";
+/* G3 gate condition. */
+"No undecided change request" = "No undecided change request";
+/* G3 gate condition. */
+"The plan matches the latest baseline" = "The plan matches the latest baseline";
+/* G4 gate condition. */
+"Every finished package has evidence QA accepted" = "Every finished package has evidence QA accepted";
+/* G4 gate condition. */
+"No open risk, issue or change request" = "No open risk, issue or change request";
+/* G4 gate condition when the knowledge base is unreachable. */
+"No conflict left open in the knowledge base (cannot be checked — not connected to it)" = "No conflict left open in the knowledge base (cannot be checked — not connected to it)";
+/* G4 gate condition. */
+"No conflict left open in the knowledge base" = "No conflict left open in the knowledge base";
+/* G4 gate condition when the analysis plan is unreachable. */
+"No assumption an agent guessed is still unconfirmed (cannot be checked — not connected to the analysis plan)" = "No assumption an agent guessed is still unconfirmed (cannot be checked — not connected to the analysis plan)";
+/* G4 gate condition. */
+"No assumption an agent guessed is still unconfirmed" = "No assumption an agent guessed is still unconfirmed";
+/* G4 gate condition. */
+"At least one lesson recorded (it flows into the shared base at closing)" = "At least one lesson recorded (it flows into the shared base at closing)";
+/* G4 gate condition before conformance has been evaluated. */
+"Every ISO 21502 practice has evidence or a recorded decision not to do it (not checked yet)" = "Every ISO 21502 practice has evidence or a recorded decision not to do it (not checked yet)";
+/* Prefix before the list of unanswered practices. */
+"Practices still unanswered: " = "Practices still unanswered: ";
+/* G4 gate condition. */
+"Every ISO 21502 practice has evidence or a recorded decision not to do it" = "Every ISO 21502 practice has evidence or a recorded decision not to do it";
+/* G4 gate condition on data disposition; a note about what could not be checked follows. */
+"It has been decided where the remaining data and files go · " = "It has been decided where the remaining data and files go · ";
+/* Prefix before the retention obligation that applies. */
+"Where the data goes: " = "Where the data goes: ";
+/* Name of the workspace that is not a project. */
+"General" = "General";
+/* Explains why panels are emphasised. Placeholder is the project type. */
+"Emphasised for the project type you chose (%@) — not adjusted by how you use it" = "Emphasised for the project type you chose (%@) — not adjusted by how you use it";
+/* Reason recorded on a baseline frozen by a change request. Placeholder is its title. */
+"Change request: %@" = "Change request: %@";
+/*  */
+"
+Difference from the baseline after this edit: " = "
+Difference from the baseline after this edit: ";
+/* Recorded as the origin of a register entry a person made. */
+"the user" = "the user";
+/* Reason recorded on the first baseline. */
+"passed G2" = "passed G2";
+/* Recorded on a terminated project. Placeholder is the reason. */
+"Ended early: %@" = "Ended early: %@";
+/*  */
+"
+
+Ended early: %@" = "
+
+Ended early: %@";
+/* Kind of register entry. */
+"Issue" = "Issue";
+/* Kind of register entry. */
+"Change request" = "Change request";
+/* Kind of register entry. */
+"Decision" = "Decision";
+/* Kind of register entry. */
+"Lesson" = "Lesson";
+/* Status of a register entry. */
+"open" = "open";
+/* Status of a register entry. */
+"awaiting a decision" = "awaiting a decision";
+/* Marker on an analysis plan somebody signed off. */
+"approved" = "approved";
+/* Status of a register entry. */
+"rejected" = "rejected";
+/* Status of a register entry. */
+"closed" = "closed";
+/* Stand-in when a human origin carries no name. */
+"a person" = "a person";
+/* Risk response. */
+"avoid" = "avoid";
+/* Risk response. */
+"reduce" = "reduce";
+/* Risk response. */
+"transfer" = "transfer";
+/* Risk response. */
+"accept" = "accept";
+/* Kind of issue. */
+"problem" = "problem";
+/* Kind of issue. */
+"concern" = "concern";
+/* Kind of issue. */
+"off specification" = "off specification";
+/* Refusal message when an agent tries to approve a change request. */
+"A change request needs a person to decide it — an agent may propose one but never approve it" = "A change request needs a person to decide it — an agent may propose one but never approve it";
+/* Refusal message. */
+"This entry is not a change request" = "This entry is not a change request";
+/* Refusal message. */
+"The name of the decider is required" = "The name of the decider is required";
+/* How often reports are issued. */
+"never automatically" = "never automatically";
+/* How often reports are issued. */
+"weekly" = "weekly";
+/* How often reports are issued. */
+"fortnightly" = "fortnightly";
+/* How often reports are issued. */
+"monthly" = "monthly";
+/* Explains why missed report cycles produce one report. Placeholder is how many were missed. */
+"%lld cycles went by without a report — this one covers the whole period rather than backfilling each, because a backfilled report is numbers put under dates nobody worked on" = "%lld cycles went by without a report — this one covers the whole period rather than backfilling each, because a backfilled report is numbers put under dates nobody worked on";
+/* Kind of report. */
+"Progress report" = "Progress report";
+/* Kind of report. */
+"End-of-stage report" = "End-of-stage report";
+/* Kind of report. */
+"End-of-project report" = "End-of-project report";
+/* Stand-in for an empty report section. */
+"— nothing recorded —" = "— nothing recorded —";
+/* Report header. Placeholders: the stage and when it was issued. */
+"Stage %@ · %@" = "Stage %@ · %@";
+/* Footer on every report, stating where its content comes from. */
+"This report is assembled from what the system recorded (the plan · the register · spans · baselines · the benefit ledger). No sentence in it was written by a model." = "This report is assembled from what the system recorded (the plan · the register · spans · baselines · the benefit ledger). No sentence in it was written by a model.";
+/* Report section heading. */
+"Finished" = "Finished";
+/* Report section heading. */
+"In progress and coming next" = "In progress and coming next";
+/* Report section heading. */
+"Where the agreed tolerances stand now" = "Where the agreed tolerances stand now";
+/* Report section heading for the first report. */
+"Risks and issues on record" = "Risks and issues on record";
+/* Report section heading for a later report. */
+"Risks and issues new since the previous report" = "Risks and issues new since the previous report";
+/* Report section heading. */
+"Time and money spent" = "Time and money spent";
+/* Report line. Placeholders: the baseline version, why it was frozen, and how many packages. */
+"The agreed plan: v%lld (%@) · %lld work packages" = "The agreed plan: v%lld (%@) · %lld work packages";
+/* Shown in the scope popover when there is nothing to compare against. */
+"No baseline yet — the plan has never been frozen into an agreement" = "No baseline yet — the plan has never been frozen into an agreement";
+/* Report section heading. */
+"Against the agreed plan" = "Against the agreed plan";
+/* Report section heading. */
+"Differences and why" = "Differences and why";
+/* Report section heading. */
+"Is the business case still worth it?" = "Is the business case still worth it?";
+/* Report section heading. */
+"Asking to enter the next stage" = "Asking to enter the next stage";
+/* The data-disposition line in a closing report. Placeholders: the action, the policy and who decided. */
+"Data and files: %@ under policy “%@” · decided by %@" = "Data and files: %@ under policy “%@” · decided by %@";
+/* Closing report line. Placeholders: the version and how many packages. */
+"The first agreed plan: v%lld · %lld work packages" = "The first agreed plan: v%lld · %lld work packages";
+/* Closing report line. Placeholders: how many packages and how many baselines. */
+"The plan at closing: %lld work packages · the agreement changed %lld times" = "The plan at closing: %lld work packages · the agreement changed %lld times";
+/* Report section heading. */
+"What was delivered" = "What was delivered";
+/* Report section heading. */
+"Benefits measured" = "Benefits measured";
+/* Report section heading. */
+"Total variance" = "Total variance";
+/* Report section heading. */
+"Handed on to somebody else" = "Handed on to somebody else";
+/* Report section heading. */
+"Practices decided against (tailoring)" = "Practices decided against (tailoring)";
+/* Report line for a package with no accepted evidence. */
+"No evidence QA has accepted yet" = "No evidence QA has accepted yet";
+/* A work package that can begin. Placeholder is its title. */
+"%@ — ready to start" = "%@ — ready to start";
+/* A register line in a report. Placeholders: its kind, title, status and who raised it. */
+"[%@] %@ — %@ · raised by %@" = "[%@] %@ — %@ · raised by %@";
+/* Report line. Placeholder is a number of minutes. */
+"Time measured from spans: %lld minutes" = "Time measured from spans: %lld minutes";
+/* Report line when no time has been recorded. */
+"Time: no span is tied to any of this project's work packages yet" = "Time: no span is tied to any of this project's work packages yet";
+/* Report line. Placeholder is an amount in the endpoint's currency. */
+"Spending recorded: $%@" = "Spending recorded: $%@";
+/* Report line when spending cannot be read. */
+"Spending: not connected to the ledger yet" = "Spending: not connected to the ledger yet";
+/* Report line when there is no drift. Placeholder is the baseline version. */
+"Today's plan matches v%lld" = "Today's plan matches v%lld";
+/* Report line when the plan has drifted. Placeholders: the version and a summary. */
+"Differs from v%lld: %@" = "Differs from v%lld: %@";
+/* Report line when drift is unavailable. */
+"The difference could not be read" = "The difference could not be read";
+/* A change request in a report. Placeholders: its title and who approved it. */
+"%@ — approved by %@" = "%@ — approved by %@";
+/* The impact of a change request. Placeholders: its scope, time and cost impact. */
+" · scope: %@ · time: %@ · money: %@" = " · scope: %@ · time: %@ · money: %@";
+/* Report line: the gate passes. */
+"every condition holds" = "every condition holds";
+/* Report line: the gate does not pass. */
+"not yet passed" = "not yet passed";
+/* Report line for a project with no next gate. */
+"The project is closed — there is no next stage" = "The project is closed — there is no next stage";
+/* An open register entry in a report. Placeholders: its kind, title and owner. */
+"[%@] %@ — still open · owner %@" = "[%@] %@ — still open · owner %@";
+/* Stand-in when a register entry has no owner. */
+"nobody yet" = "nobody yet";
+/* An unmeasured benefit in a report. Placeholders: its title, due date and owner. */
+"Still to be measured: %@ — due %@ · %@" = "Still to be measured: %@ — due %@ · %@";
+/* A lesson in a report. Placeholders: its cause and what to do differently. */
+" — cause: %@ · next time: %@" = " — cause: %@ · next time: %@";
+/* Where a lesson applies. Placeholder is the list. */
+" · applies to: %@" = " · applies to: %@";
+/* Who decided against a practice. Placeholder is their name. */
+" · decided by %@" = " · decided by %@";
+/* Appended to a tolerance line that has been exceeded. */
+" — breached" = " — breached";
+/* A tolerance line in a report. Placeholders: which tolerance and its limit. */
+"%@: limit %@ · not measured yet" = "%@: limit %@ · not measured yet";
+/* An open exception in a report. Placeholders: which tolerance and what is needed from a person. */
+"Stopped for a decision: the %@ tolerance was breached — %@" = "Stopped for a decision: the %@ tolerance was breached — %@";
+/*  */
+" · from %@ target %@ · reached %lld%% of target · measured by %@" = " · from %@ target %@ · reached %lld%% of target · measured by %@";
+/* An unmeasured benefit in a report. Placeholders: its title and due date. */
+"%@: not measured yet (due %@)" = "%@: not measured yet (due %@)";
+/* A retention obligation. Placeholders: the action, the policy and who decided. */
+"%@ under policy “%@” · decided by %@" = "%@ under policy “%@” · decided by %@";
+/* Appended with a retention due date. Placeholder is the date. */
+" · due %@" = " · due %@";
+/* Appended when a retention policy carries no duration. */
+" · **the policy states no period**, so there is no due date to warn about" = " · **the policy states no period**, so there is no due date to warn about";
+/* Retention result blocking a close. */
+"This project holds answers from people — where the data goes and who decided must be stated before it closes (§20.5)" = "This project holds answers from people — where the data goes and who decided must be stated before it closes (§20.5)";
+/* Retention result when the store was not consulted. */
+"Data retention policy — whether this project holds data from people has not been checked" = "Data retention policy — whether this project holds data from people has not been checked";
+/* Unit a forecast was computed over. */
+"tasks" = "tasks";
+/* Unit a forecast was computed over. */
+"turns" = "turns";
+/* A forecast band. Placeholders: the p50, the p90, the sample size and its unit. */
+"%@–%@ (from %lld %@)" = "%@–%@ (from %lld %@)";
+/* A short duration in seconds. Placeholder is a whole number. */
+"%lld s" = "%lld s";
+/* A duration in minutes. Placeholder is a whole number. */
+"%lld min" = "%lld min";
+/* Why a package cannot be forecast. */
+"no work of this kind has ever finished in this system — there is no real number to estimate from" = "no work of this kind has ever finished in this system — there is no real number to estimate from";
+/* Why a package cannot be forecast. Placeholder is how many blockers. */
+"depends on packages that cannot be estimated yet (%lld) — counting the unknown ones as zero would give this package a confident date with nothing behind it" = "depends on packages that cannot be estimated yet (%lld) — counting the unknown ones as zero would give this package a confident date with nothing behind it";
+/* Note on a timeline row. Placeholders: the worked time and the calendar span. */
+"%@ of real work spread across %@ — a gap is a gap" = "%@ of real work spread across %@ — a gap is a gap";
+/* A duration in days. Placeholder is a number. */
+"%.1f days" = "%.1f days";
+/* A duration of an hour or more. Placeholder is a number of hours. */
+"%.1f h" = "%.1f h";
+/* Timeline row for work against a package that no longer exists. Placeholder is its id. */
+"a work package that has been deleted (%@)" = "a work package that has been deleted (%@)";
+/* Timeline row for unplanned work. */
+"work not tied to any package" = "work not tied to any package";
+/* Title of a decision record. Placeholders: which tolerance and the new limit. */
+"Widen the %@ tolerance to %@" = "Widen the %@ tolerance to %@";
+/* Title of a decision record. Placeholder is which tolerance. */
+"Decide an exception: the %@ tolerance was breached" = "Decide an exception: the %@ tolerance was breached";
+/* Option recorded on a decision. Placeholder is which tolerance. */
+"Widen the %@ tolerance" = "Widen the %@ tolerance";
+/* Option recorded on a decision. */
+"Cut scope back to fit the existing tolerance" = "Cut scope back to fit the existing tolerance";
+/* Option recorded on a decision. */
+"End the project" = "End the project";
+/* Option recorded on a decision. */
+"Open a change request" = "Open a change request";
+/* Option recorded on a decision. */
+"Leave the plan alone" = "Leave the plan alone";
+/* The impact recorded on a decision. Placeholders: its three impacts. */
+"Impact: scope %@ · time %@ · money %@" = "Impact: scope %@ · time %@ · money %@";
+/* Refusal message when an exception is closed with no decision text. */
+"A decision has to be written — closing an exception without saying what was decided is deleting it" = "A decision has to be written — closing an exception without saying what was decided is deleting it";
+/* Status bar cell: time spent on this project. */
+"Time" = "Time";
+/* Name of a tolerance dimension. */
+"Benefit" = "Benefit";
+/* Unit of the time tolerance. */
+"multiples of the p90 that work of this kind has taken" = "multiples of the p90 that work of this kind has taken";
+/* Unit of the cost tolerance. */
+"per stage, in the endpoint's currency" = "per stage, in the endpoint's currency";
+/* Unit of the scope tolerance. */
+"work packages that may be added beyond the baseline" = "work packages that may be added beyond the baseline";
+/* Unit of the quality tolerance. */
+"rounds of rework per work package" = "rounds of rework per work package";
+/* Unit of the risk tolerance. */
+"highest risk level the team may take on its own (0 low · 1 medium · 2 high)" = "highest risk level the team may take on its own (0 low · 1 medium · 2 high)";
+/* Unit of the benefit tolerance. */
+"lowest acceptable value of the measure" = "lowest acceptable value of the measure";
+/* First line of an exception report. Placeholder is which tolerance. */
+"⚠️ The %@ tolerance was breached — the project is waiting on your decision" = "⚠️ The %@ tolerance was breached — the project is waiting on your decision";
+/* Exception report line. Placeholder is the cause. */
+"Cause: %@" = "Cause: %@";
+/* Exception report line. Placeholder is the effect. */
+"Effect: %@" = "Effect: %@";
+/* Exception report heading before the list of options. */
+"Options:" = "Options:";
+/* Exception report line. Placeholder is the suggestion. */
+"The team lead suggests: %@" = "The team lead suggests: %@";
+/* Exception report line. Placeholder is what is needed. */
+"What we need from you: %@" = "What we need from you: %@";
+/* Cause of an exception. Placeholders: which tolerance, its current value, its limit and its unit. */
+"The %@ tolerance was exceeded — now %@ against a limit of %@ (%@)" = "The %@ tolerance was exceeded — now %@ against a limit of %@ (%@)";
+/* Effect of an exception. */
+"The team takes on no new work in this stage until it is decided" = "The team takes on no new work in this stage until it is decided";
+/* Option offered in an exception report. Placeholder is which tolerance. */
+"Widen the %@ tolerance and carry on" = "Widen the %@ tolerance and carry on";
+/* Option offered in an exception report. */
+"End the project early" = "End the project early";
+/* Default recommendation on a system-generated exception. */
+"No suggestion from the team lead yet — this report was assembled from measured numbers" = "No suggestion from the team lead yet — this report was assembled from measured numbers";
+/* What an exception needs from a person. */
+"Choose one of the options, or change the tolerance and close this exception" = "Choose one of the options, or change the tolerance and close this exception";
+/* Why a project-type gate condition cannot be checked automatically. */
+"P11.8 — an interview guide has nowhere to live yet and no review step" = "P11.8 — an interview guide has nowhere to live yet and no review step";
+/* Why a project-type gate condition cannot be checked automatically. */
+"P11.8 — the saturation curve is computed and drawn, but *declaring* saturation is the researcher's conclusion, not the software's" = "P11.8 — the saturation curve is computed and drawn, but *declaring* saturation is the researcher's conclusion, not the software's";
+/* Why a project-type gate condition cannot be checked automatically. */
+"P6.6 — StatGate checks assumptions, but the result is not wired back to the project gate" = "P6.6 — StatGate checks assumptions, but the result is not wired back to the project gate";
+/* Why a project-type gate condition cannot be checked automatically. */
+"P6 — a dataset's provenance is not wired back to the gate yet" = "P6 — a dataset's provenance is not wired back to the gate yet";
+/* Why a project-type gate condition cannot be checked automatically. */
+"P11 — mixed-methods work has no marker for the quantitative side being finished" = "P11 — mixed-methods work has no marker for the quantitative side being finished";
+/* Why a project-type gate condition cannot be checked automatically. */
+"P11.8 — the same for the qualitative side" = "P11.8 — the same for the qualitative side";
+/* Why a project-type gate condition cannot be checked automatically. */
+"P11.9 — there is nowhere yet to write where the two sides meet" = "P11.9 — there is nowhere yet to write where the two sides meet";
+/* Why a project-type gate condition cannot be checked automatically. */
+"P9 — the target project's test results are not wired back to the gate yet" = "P9 — the target project's test results are not wired back to the gate yet";
+/* Why a project-type gate condition cannot be checked automatically. */
+"P10 — QA accepts work package by package, but there is no conclusion at the increment level" = "P10 — QA accepts work package by package, but there is no conclusion at the increment level";
+/* Prefix of a project-type gate condition. Placeholders: the gate id, what it comes after, and the requirement. */
+"%@ (after %@): %@" = "%@ (after %@): %@";
+/* A project-type gate condition that fails. Placeholder is the condition. */
+"%@ — not passed" = "%@ — not passed";
+/* A checkable but unchecked gate condition. Placeholder is the condition. */
+"%@ — this can be checked but has not been (not connected to the store it needs)" = "%@ — this can be checked but has not been (not connected to the store it needs)";
+/* A gate condition needing human confirmation. Placeholders: the condition and why it cannot be automated. */
+"%@ — this cannot be checked automatically (%@) · a person has to confirm it before the stage closes" = "%@ — this cannot be checked automatically (%@) · a person has to confirm it before the stage closes";
+/* A gate condition nobody recognises. Placeholder is the condition. */
+"%@ — this condition name is unknown · a typo in the project-type file, or a new condition not yet registered in `TypeGateConditions`" = "%@ — this condition name is unknown · a typo in the project-type file, or a new condition not yet registered in `TypeGateConditions`";
+/* Refusal message. Placeholder is the package title. */
+"“%@” has nothing inside it — that is a heading, not something deliverable" = "“%@” has nothing inside it — that is a heading, not something deliverable";
+/* Refusal message. Placeholder is the package title. */
+"“%@” does not say what done means" = "“%@” does not say what done means";
+/* Refusal message. Placeholder is the package title. */
+"“%@” is not tied to anything in scope" = "“%@” is not tied to anything in scope";
+/* Refusal message. Placeholder is the package title. */
+"“%@” is tied to a scope line that no longer exists" = "“%@” is tied to a scope line that no longer exists";
+/* Refusal message. Placeholder is the package title. */
+"“%@” names a parent that does not exist" = "“%@” names a parent that does not exist";
+/* Refusal message. Placeholder is the package title. */
+"“%@” loops back to itself" = "“%@” loops back to itself";
+/* Refusal message. Placeholder is the package title. A is the RACI letter. */
+"“%@” has nobody accountable (A)" = "“%@” has nobody accountable (A)";
+/* Refusal message. Placeholder is the package title. */
+"“%@” is classed high risk — the accountable (A) has to be a person, not the team lead" = "“%@” is classed high risk — the accountable (A) has to be a person, not the team lead";
+/* Refusal message. Placeholder is the package title. */
+"“%@” waits on a package that no longer exists" = "“%@” waits on a package that no longer exists";
+/* Refusal message. Placeholder is the package title. */
+"“%@” is in a cycle of packages waiting on each other — none of them can start" = "“%@” is in a cycle of packages waiting on each other — none of them can start";
+/* Refusal message. Placeholder is the package id. */
+"No work package %@" = "No work package %@";
+/* Refusal message. Placeholder is the package title. */
+"“%@” cannot be closed with no evidence — done with nothing to check is a claim" = "“%@” cannot be closed with no evidence — done with nothing to check is a claim";
+/* Refusal message. Placeholder is the package title. */
+"“%@” is a parent — it finishes when the packages inside it do, not by being pressed" = "“%@” is a parent — it finishes when the packages inside it do, not by being pressed";
+/* Prefix before the drift a pending edit would create. */
+"Difference from the baseline after this edit: " = "Difference from the baseline after this edit: ";

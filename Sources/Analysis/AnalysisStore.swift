@@ -58,8 +58,8 @@ public enum AnalysisError: Error, CustomStringConvertible, Equatable {
 
     public var description: String {
         switch self {
-        case .openFailed(let message): "เปิดฐานข้อมูลวิเคราะห์ไม่ได้: \(message)"
-        case .queryFailed(_, let message): "คำสั่ง SQL ล้มเหลว: \(message)"
+        case .openFailed(let message): localised("could not open the analysis database: \(message)", "Failure opening the local analysis database. Placeholder: the underlying message.")
+        case .queryFailed(_, let message): localised("the SQL statement failed: \(message)", "Failure running a SQL statement. Placeholder: the underlying message.")
         }
     }
 }

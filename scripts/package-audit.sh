@@ -34,7 +34,18 @@ if [ ! -d "$APP" ]; then
   exit 1
 fi
 
-# 1 — every resource bundle the binary names is inside the app.
+# 1 — every resource bundle the binary names is where *its own accessor* looks.
+#
+# "Inside the app" is not the test, and believing it was is what let this audit
+# print PACKAGE LOOKS PORTABLE over an app that died on launch (2026-08-18).
+# SwiftPM generates two different `Bundle.module` accessors:
+#
+# `Contents/Resources` is the only place a `.app` may keep them — `codesign`
+# refuses loose contents at the bundle root — but it is *not* where SwiftPM's
+# generated `Bundle.module` looks: that appends the bundle name to
+# `Bundle.main.bundleURL`, which for an app is the `.app` itself. So being in
+# `Contents/Resources` is necessary and not sufficient, and the code reaches
+# them through `Localisation.bundle(named:)` rather than `Bundle.module`.
 MISSING_BUNDLES=""
 for name in $(strings -a "$BIN" | grep -oE "[A-Za-z0-9_.-]+\.bundle" | sort -u); do
   # Only the SwiftPM ones: `<package>_<target>.bundle`.
@@ -45,9 +56,9 @@ for name in $(strings -a "$BIN" | grep -oE "[A-Za-z0-9_.-]+\.bundle" | sort -u);
   [ -d "$APP/Contents/Resources/$name" ] || MISSING_BUNDLES="$MISSING_BUNDLES $name"
 done
 if [ -n "$MISSING_BUNDLES" ]; then
-  fail "resource bundles the binary looks for are not in the app:$MISSING_BUNDLES"
+  fail "resource bundles the binary looks for are not where it looks:$MISSING_BUNDLES"
 else
-  ok "every resource bundle the binary names is inside the app"
+  ok "every resource bundle is where the accessor that loads it looks"
 fi
 
 # 2 — nothing links against a library that only exists on this machine.

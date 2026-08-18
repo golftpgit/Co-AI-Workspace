@@ -66,7 +66,11 @@ public final class EndpointsViewModel {
     // MARK: - endpoints
 
     public func beginAdding() {
-        draft = InferenceEndpoint(name: "", baseURL: "http://127.0.0.1:1234/v1", model: "")
+        // The GX10, because that is Tier 1 on this machine (§17.1). The field
+        // was pre-filled with a loopback port for a local model manager that is
+        // no longer part of any path (C7), which meant the one suggestion the
+        // screen made pointed at nothing.
+        draft = InferenceEndpoint(name: "", baseURL: "http://192.168.1.205:8000/v1", model: "")
         editing = true
     }
 
@@ -84,7 +88,9 @@ public final class EndpointsViewModel {
     public func save() async {
         let endpoint = draft
         guard !endpoint.name.isEmpty, endpoint.url != nil else {
-            status = Status(message: "ต้องมีชื่อและ URL ที่ใช้ได้", isError: true)
+            status = Status(message: t("A name and a usable URL are both required",
+                                       "Status message when the endpoint form is incomplete."),
+                            isError: true)
             return
         }
         checking.insert(endpoint.id)
@@ -95,12 +101,16 @@ public final class EndpointsViewModel {
         guard check.isUsable else {
             // Not saved. A registry full of endpoints that were never reachable
             // is a list of things to check by hand later.
-            status = Status(message: "ยังไม่บันทึก — \(check.message)", isError: true)
+            status = Status(message: t("Not saved — \(check.message)",
+                                       "Status message when the endpoint probe failed. Placeholder is why."),
+                            isError: true)
             return
         }
         registry.upsert(endpoint)
         editing = false
-        status = Status(message: "บันทึก \(endpoint.name) แล้ว · \(check.message)", isError: false)
+        status = Status(message: t("Saved \(endpoint.name) · \(check.message)",
+                                   "Status message after saving an endpoint. Placeholders: its name and the probe result."),
+                        isError: false)
         save(registry)
     }
 
@@ -122,7 +132,9 @@ public final class EndpointsViewModel {
             checks[endpoint.id] = await probe.check(endpoint)
             checking.remove(endpoint.id)
         }
-        status = Status(message: "ตรวจครบทุก endpoint แล้ว", isError: false)
+        status = Status(message: t("Every endpoint has been checked",
+                                   "Status message after re-probing all endpoints."),
+                        isError: false)
     }
 
     public func check(for endpoint: InferenceEndpoint) -> EndpointCheck? { checks[endpoint.id] }

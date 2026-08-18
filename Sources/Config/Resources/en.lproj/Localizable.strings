@@ -1,0 +1,17 @@
+/* Shown when a configured endpoint answered and can be used. */
+"Ready" = "Ready";
+
+/* ── fixtures for the localisation tests ──────────────────────────
+   Not shown anywhere. They exist because two facts about the mechanism can
+   only be established by running it, and both are silent when wrong:
+
+    • which key a Swift interpolation actually produces — `%@` for a String
+      but `%lld` for an Int. `scripts/check.sh` reads the keys the compiler
+      emits rather than deriving them, and this is the fact that made reading
+      the source untenable: telling those two apart needs the type checker;
+    • that a key nobody translated comes back as itself.
+
+   The values are markers rather than sentences so a passing test cannot be
+   confused with a working screen. */
+"%lld things" = "MARKER-LLD %lld";
+"%@ things" = "MARKER-AT %@";

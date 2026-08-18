@@ -42,17 +42,27 @@ public struct WBSProblem: Sendable, Equatable, Identifiable {
 
     public var text: String {
         switch kind {
-        case .emptyGroup: "“\(title)” ไม่มีใบงานอยู่ข้างใน — เป็นหัวข้อ ไม่ใช่สิ่งที่ส่งมอบได้"
-        case .noAcceptanceCriteria: "“\(title)” ยังไม่บอกว่าเสร็จแปลว่าอะไร"
-        case .noScopeRef: "“\(title)” ไม่ได้ผูกกับข้อไหนในขอบเขต 'ทำ'"
-        case .danglingScopeRef: "“\(title)” ผูกกับข้อที่ไม่มีอยู่ในขอบเขตแล้ว"
-        case .missingParent: "“\(title)” อ้างถึงงานแม่ที่ไม่มีอยู่"
-        case .cycle: "“\(title)” วนกลับมาหาตัวเอง"
-        case .noAccountable: "“\(title)” ยังไม่มีผู้รับผิดชอบผล (A)"
+        case .emptyGroup: t("“\(title)” has nothing inside it — that is a heading, not something deliverable",
+                            "Refusal message. Placeholder is the package title.")
+        case .noAcceptanceCriteria: t("“\(title)” does not say what done means",
+                                      "Refusal message. Placeholder is the package title.")
+        case .noScopeRef: t("“\(title)” is not tied to anything in scope",
+                            "Refusal message. Placeholder is the package title.")
+        case .danglingScopeRef: t("“\(title)” is tied to a scope line that no longer exists",
+                                  "Refusal message. Placeholder is the package title.")
+        case .missingParent: t("“\(title)” names a parent that does not exist",
+                               "Refusal message. Placeholder is the package title.")
+        case .cycle: t("“\(title)” loops back to itself",
+                       "Refusal message. Placeholder is the package title.")
+        case .noAccountable: t("“\(title)” has nobody accountable (A)",
+                               "Refusal message. Placeholder is the package title. A is the RACI letter.")
         case .highRiskWithoutHuman:
-            "“\(title)” จัดชั้นความเสี่ยงสูง — ผู้รับผิดชอบผล (A) ต้องเป็นคน ไม่ใช่หัวหน้าทีม"
-        case .missingDependency: "“\(title)” รอใบงานที่ไม่มีอยู่แล้ว"
-        case .dependencyCycle: "“\(title)” อยู่ในวงจรที่รอกันเอง — ไม่มีใบไหนเริ่มได้"
+            t("“\(title)” is classed high risk — the accountable (A) has to be a person, not the team lead",
+              "Refusal message. Placeholder is the package title.")
+        case .missingDependency: t("“\(title)” waits on a package that no longer exists",
+                                   "Refusal message. Placeholder is the package title.")
+        case .dependencyCycle: t("“\(title)” is in a cycle of packages waiting on each other — none of them can start",
+                                 "Refusal message. Placeholder is the package title.")
         }
     }
 }
@@ -300,11 +310,14 @@ public enum WBSError: Error, CustomStringConvertible, Equatable {
 
     public var description: String {
         switch self {
-        case .noSuchPackage(let id): "ไม่พบใบงาน \(id)"
+        case .noSuchPackage(let id): t("No work package \(id)",
+                                       "Refusal message. Placeholder is the package id.")
         case .doneWithoutEvidence(let title):
-            "“\(title)” ปิดไม่ได้ถ้าไม่มีหลักฐาน — เสร็จโดยไม่มีของให้ตรวจ คือคำกล่าวอ้าง"
+            t("“\(title)” cannot be closed with no evidence — done with nothing to check is a claim",
+              "Refusal message. Placeholder is the package title.")
         case .groupCannotBeDone(let title):
-            "“\(title)” เป็นงานแม่ — มันเสร็จเมื่อใบข้างในเสร็จ ไม่ใช่ด้วยการกดปิด"
+            t("“\(title)” is a parent — it finishes when the packages inside it do, not by being pressed",
+              "Refusal message. Placeholder is the package title.")
         }
     }
 }

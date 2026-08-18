@@ -49,7 +49,7 @@ struct ScheduleTimelineTests {
         // are reported rather than one being inferred from a rectangle.
         #expect(row.workedSeconds == 42 * 60)
         #expect(row.calendarSeconds == 72.2 * 3_600)
-        #expect(row.gapNote?.contains("ช่องว่างคือช่องว่าง") == true)
+        #expect(row.gapNote?.contains("a gap is a gap") == true)
     }
 
     @Test("a single unbroken piece of work has nothing to warn about")
@@ -96,7 +96,7 @@ struct ScheduleTimelineTests {
         let outside = try! #require(timeline.rows.last)
         #expect(outside.packageID == nil)
         #expect(outside.workedSeconds == 3 * 3_600)
-        #expect(outside.title.contains("ไม่ได้ผูก"))
+        #expect(outside.title.contains("not tied to any package"))
     }
 
     // Deleting a package does not un-spend the hours.
@@ -108,7 +108,7 @@ struct ScheduleTimelineTests {
 
         let orphan = try! #require(timeline.rows.first { $0.packageID == "wp_gone" })
         #expect(orphan.workedSeconds == 2 * 3_600)
-        #expect(orphan.title.contains("ถูกลบ"))
+        #expect(orphan.title.contains("has been deleted"))
     }
 
     // A chart of successes only shows a project that went better than it did.

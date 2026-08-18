@@ -47,8 +47,8 @@ public struct MultiplicityReport: Sendable, Equatable {
 
         public var controls: String {
             switch self {
-            case .bonferroni, .holm: "โอกาสที่จะมีผลบวกปลอม**สักข้อ**ในชุดนี้"
-            case .benjaminiHochberg: "**สัดส่วน**ของข้อที่พบว่าเป็นผลบวกปลอม"
+            case .bonferroni, .holm: localised("the chance of **any** false positive in the set", "What a family-wise correction controls.")
+            case .benjaminiHochberg: localised("the **share** of the findings that are false positives", "What a false-discovery-rate correction controls.")
             }
         }
     }
@@ -64,11 +64,11 @@ public struct MultiplicityReport: Sendable, Equatable {
     /// and it is the number that decides what they mean.
     public var summary: String {
         let lostCount = comparisons.count { $0.raw <= alpha } - survivors.count
-        var text = "ทดสอบ \(comparisons.count) ข้อ ปรับด้วย \(method.label) "
-            + "ซึ่งคุม\(method.controls) · เหลือที่ยังมีนัยสำคัญ \(survivors.count) ข้อ"
+        var text = localised("\(comparisons.count) tests, corrected with \(method.label) ", "Summary of a multiple-comparison correction. Placeholders: how many tests and the method's name.")
+            + localised("which controls \(method.controls) · \(survivors.count) remain significant", "Continues the correction summary. Placeholders: what the method controls and how many tests survived.")
         if lostCount > 0 {
-            text += " · **\(lostCount) ข้อที่ p ดิบต่ำกว่า \(alpha) ไม่รอดหลังปรับ** — "
-                + "การทดสอบ \(comparisons.count) ครั้งบนข้อมูลที่ไม่มีอะไรเลย ให้ผลแบบนั้นได้เอง"
+            text += localised(" · **\(lostCount) with a raw p below \(alpha) did not survive the correction** — ", "Warns how many findings the correction removed. Placeholders: how many were lost and the threshold.")
+                + localised("\(comparisons.count) tests on data containing nothing would produce that many on their own", "Ends the warning about removed findings. Placeholder: how many tests were run.")
         }
         return text
     }
@@ -84,10 +84,10 @@ public enum MultipleComparisons {
                               method: MultiplicityReport.Method = .holm,
                               alpha: Double = 0.05) throws -> MultiplicityReport {
         guard !tests.isEmpty else {
-            throw StatError.notEnoughData("ไม่มีการทดสอบให้ปรับ")
+            throw StatError.notEnoughData(localised("there are no tests to correct", "Why a multiple-comparison correction cannot run."))
         }
         guard tests.allSatisfy({ $0.p >= 0 && $0.p <= 1 }) else {
-            throw StatError.badShape("ค่า p ต้องอยู่ระหว่าง 0 ถึง 1")
+            throw StatError.badShape(localised("p-values must be between 0 and 1", "Why a multiple-comparison correction cannot run."))
         }
         let n = Double(tests.count)
         var adjusted: [AdjustedComparison]

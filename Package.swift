@@ -6,6 +6,14 @@ import PackageDescription
 // foundation ones only: AgentKit (types), Config, Observability, Sidecar, App.
 let package = Package(
     name: "CoAIWorkspace",
+    // English is the base language and Thai is a translation of it (2026-08-17).
+    //
+    // The app was written in Thai throughout — 3,459 strings across ten modules
+    // — which made it unusable to anybody who does not read Thai. The owner's
+    // call was to open it up. A localisation system rather than a translation
+    // pass, because the goal is *more* languages, and only one of those two
+    // makes the next language a translation job instead of a code job.
+    defaultLocalization: "en",
     platforms: [.macOS(.v26)],
     // MLX runs the embedding model in our own process rather than over HTTP to
     // whatever the user happens to have installed (ARCHITECTURE E.13). Its
@@ -31,7 +39,14 @@ let package = Package(
     ],
     targets: [
         // M2 — shared types/protocols only, no logic. Everything may import this.
-        .target(name: "AgentKit"),
+        .target(name: "AgentKit",
+                dependencies: ["Localisation"],
+                resources: [.process("Resources")],
+                swiftSettings: [
+                    .unsafeFlags(["-emit-localized-strings",
+                                  "-emit-localized-strings-path",
+                                  ".build/localized-strings/AgentKit"]),
+                ]),
 
         // The one call this project makes into LAPACK, behind a C header that
         // keeps Accelerate out of Swift (ARCHITECTURE §20.4). It exists as a C
@@ -49,8 +64,30 @@ let package = Package(
         // they do not.
         .target(name: "StatKit", dependencies: ["CLapack"]),
 
+        // Finding a module's own string catalogue inside a packaged `.app`,
+        // which `Bundle.module` cannot do — the file carries the measurement.
+        // No dependencies, because every module that shows text needs it.
+        .target(name: "Localisation"),
+
         // M11 — bootstrap config, paths, (settings + Keychain arrive in P9/P5).
-        .target(name: "Config", dependencies: ["AgentKit"]),
+        .target(name: "Config", dependencies: ["AgentKit", "Localisation"],
+                // The same localisation setup as every other module, and the one
+                // with tests behind it — see `LocalisationTests` for why that
+                // matters: SwiftPM ships an `.xcstrings` uncompiled, so the
+                // first attempt at this produced a bundle whose lookups all fell
+                // through to the key. With English keys that reads as working.
+                resources: [.process("Resources")],
+                // Emits the keys this module's call sites really look up, for
+                // `scripts/check.sh` to compare against the catalogues. Every
+                // module that ships a `Resources/*.lproj` needs this line, and
+                // the check fails a module that has one without it — a module
+                // whose keys nothing verifies is exactly where a translation
+                // goes missing quietly.
+                swiftSettings: [
+                    .unsafeFlags(["-emit-localized-strings",
+                                  "-emit-localized-strings-path",
+                                  ".build/localized-strings/Config"]),
+                ]),
 
         // M12 — spans. P0 ships the type + console sink; the SurrealDB sink is P1.6.
         .target(name: "Observability", dependencies: ["AgentKit"]),
@@ -107,7 +144,14 @@ let package = Package(
         // not know DuckDB exists, which is what keeps M16 unable to reach it.
         .target(name: "Analysis",
                 dependencies: ["AgentKit", "Observability", "Execution", "OLTP", "StatKit",
-                               .product(name: "DuckDB", package: "duckdb-swift")]),
+                               "Localisation",
+                               .product(name: "DuckDB", package: "duckdb-swift")],
+                resources: [.process("Resources")],
+                swiftSettings: [
+                    .unsafeFlags(["-emit-localized-strings",
+                                  "-emit-localized-strings-path",
+                                  ".build/localized-strings/Analysis"]),
+                ]),
 
         // M3 — the roster: agents, skills and plugins loaded from files
         // (ARCHITECTURE §7). Knows the *names* of tools and their declared
@@ -116,7 +160,14 @@ let package = Package(
         // ProjectKit came in with P11.1: a project-type manifest names roles,
         // stages and practices, and every one of those is checked at load time
         // rather than where it is used. Checking them means knowing them.
-        .target(name: "Roster", dependencies: ["AgentKit", "Observability", "ProjectKit"]),
+        .target(name: "Roster",
+                dependencies: ["AgentKit", "Observability", "ProjectKit", "Localisation"],
+                resources: [.process("Resources")],
+                swiftSettings: [
+                    .unsafeFlags(["-emit-localized-strings",
+                                  "-emit-localized-strings-path",
+                                  ".build/localized-strings/Roster"]),
+                ]),
 
         // M14 (ARCHITECTURE §19.15) — the project life cycle. It does *not*
         // depend on CoreEngine: the gate reads a stage through
@@ -128,7 +179,13 @@ let package = Package(
         // the package still built, because SwiftPM finds a module in the shared
         // build directory whether or not the target asked for it; a clean build
         // is where that shows up, and this one did not survive one.
-        .target(name: "ProjectKit", dependencies: ["AgentKit", "Knowledge"]),
+        .target(name: "ProjectKit", dependencies: ["AgentKit", "Knowledge", "Localisation"],
+                resources: [.process("Resources")],
+                swiftSettings: [
+                    .unsafeFlags(["-emit-localized-strings",
+                                  "-emit-localized-strings-path",
+                                  ".build/localized-strings/ProjectKit"]),
+                ]),
 
         // M4 — the channels (ARCHITECTURE §8). **This list is the invariant**
         // (P7.4): no ToolBelt, no CoreEngine, so a channel cannot reach a tool
@@ -147,7 +204,13 @@ let package = Package(
                                             // draft belongs next to the other renderers. The
                                             // edge only goes this way: ProjectKit does not
                                             // know what a .docx is.
-                                            "ProjectKit"]),
+                                            "ProjectKit", "Localisation"],
+                resources: [.process("Resources")],
+                swiftSettings: [
+                    .unsafeFlags(["-emit-localized-strings",
+                                  "-emit-localized-strings-path",
+                                  ".build/localized-strings/DocGen"]),
+                ]),
 
         // M9 — every process the system runs: sandbox profile, process group
         // signals, registry (ARCHITECTURE §13). Knows nothing about agents.
@@ -195,7 +258,14 @@ let package = Package(
         // M7 — the knowledge base's own logic: tokenisation, chunking and the
         // lexical half of hybrid search (ARCHITECTURE §11). Deliberately free
         // of storage and models so it can be measured on its own.
-        .target(name: "Knowledge", dependencies: ["AgentKit", "Observability"]),
+        .target(name: "Knowledge",
+                dependencies: ["AgentKit", "Observability", "Localisation"],
+                resources: [.process("Resources")],
+                swiftSettings: [
+                    .unsafeFlags(["-emit-localized-strings",
+                                  "-emit-localized-strings-path",
+                                  ".build/localized-strings/Knowledge"]),
+                ]),
 
         // M6/WebSearch — reading the web (ARCHITECTURE §1.4). Search results
         // are not evidence; anything worth citing is fetched and read.
@@ -232,7 +302,14 @@ let package = Package(
         // own — EFA needs an eigen-decomposition and Bartlett's test needs a
         // chi-square tail, and neither of those is a way to reach a socket.
         .target(name: "Instruments",
-                dependencies: ["AgentKit", "Knowledge", "Observability", "StatKit"]),
+                dependencies: ["AgentKit", "Knowledge", "Observability", "StatKit",
+                               "Localisation"],
+                resources: [.process("Resources")],
+                swiftSettings: [
+                    .unsafeFlags(["-emit-localized-strings",
+                                  "-emit-localized-strings-path",
+                                  ".build/localized-strings/Instruments"]),
+                ]),
 
         // M5/M7 — the embedding model, in-process. Depends on Knowledge (which
         // owns the `Embedder` protocol) and never the other way round, so the
@@ -292,6 +369,16 @@ let package = Package(
         .executableTarget(name: "TierOneCheck",
                           dependencies: ["LLMProviders", "AgentKit", "CoreEngine", "Knowledge"]),
 
+        // P9.1's other half, and the number P15.7 is waiting on: how good the
+        // judgements are on the model that is actually serving. Needs an
+        // endpoint and takes minutes, so an executable like the rest.
+        .executableTarget(name: "QualityCheck",
+                          dependencies: ["LLMProviders", "AgentKit", "CoreEngine"],
+                          // Read from the source directory through `#filePath`,
+                          // not from a bundle — it is a checked-in number meant
+                          // to show up in review as a diff.
+                          exclude: ["quality.floor"]),
+
         // M1 — hook chain, approval broker, tool gateway, agent loop. Every
         // decision the system makes lives here (ARCHITECTURE §5).
         .target(name: "CoreEngine",
@@ -302,7 +389,7 @@ let package = Package(
         // M13 — SwiftUI shell.
         .executableTarget(
             name: "CoAIWorkspaceApp",
-            dependencies: ["AgentKit", "Config", "Observability", "Sidecar", "Persistence",
+            dependencies: ["AgentKit", "Config", "Localisation", "Observability", "Sidecar", "Persistence",
                            "LLMProviders", "CoreEngine", "Execution", "ToolBelt",
                            "Knowledge", "EmbeddingRuntime", "MLXRuntime", "Analysis",
                            // §1.4.1 / P13.1 — the app owns the headless web view,
@@ -318,10 +405,35 @@ let package = Package(
             // built here without them compiles, links, runs from a test, and is
             // invisible to Siri — the same shape of failure as D6.
             // `scripts/build-app.sh` runs the processor over what these emit.
+            //
+            // `.lproj/Localizable.strings`, not a `.xcstrings` catalogue.
+            //
+            // SwiftPM ships an `.xcstrings` **raw** — it has no step that
+            // compiles one, so the bundle contained the authoring file and every
+            // lookup fell through to the key. With English keys that reads as
+            // working, which is why this was checked at runtime rather than
+            // assumed: the system here is `en-TH`, so the app would have shown
+            // correct English forever while Thai never appeared once.
+            resources: [.process("Resources")],
             swiftSettings: [
                 .unsafeFlags(["-emit-const-values",
                               "-Xfrontend", "-const-gather-protocols-file",
-                              "-Xfrontend", "Resources/AppIntentsProtocols.json"]),
+                              "-Xfrontend", "Resources/AppIntentsProtocols.json",
+                              // The compiler writes out the key every localised
+                              // call site actually looks up, one `.stringsdata`
+                              // per file. `scripts/check.sh` compares those keys
+                              // against `Resources/*.lproj` — the alternative was
+                              // deriving keys by reading the source, which cannot
+                              // be done correctly: `\(count)` becomes `%lld` and
+                              // `\(name)` becomes `%@`, and telling those apart
+                              // needs the type checker. A derivation that guesses
+                              // wrong passes its own check while every lookup
+                              // misses at runtime and falls back to English in
+                              // silence, which is the exact failure this whole
+                              // mechanism already produced once.
+                              "-emit-localized-strings",
+                              "-emit-localized-strings-path",
+                              ".build/localized-strings/CoAIWorkspaceApp"]),
             ]
         ),
 

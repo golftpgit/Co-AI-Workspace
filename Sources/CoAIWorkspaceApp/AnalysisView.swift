@@ -37,9 +37,9 @@ struct AnalysisView: View {
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .notebook: "สมุดงาน"
-            case .explorer: "ฐานข้อมูล"
-            case .plan: "แผนวิเคราะห์"
+            case .notebook: t("Notebook", "Console pane: the script and its output.")
+            case .explorer: t("Database", "Analysis pane: tables and external sources.")
+            case .plan: t("Analysis plan", "Analysis pane: the plan a statistical analysis follows.")
             }
         }
     }
@@ -71,10 +71,10 @@ struct AnalysisView: View {
                 // A closed store is not an empty database, and the screen must
                 // not let those look the same.
                 ContentUnavailableView(
-                    "เปิดฐานข้อมูลวิเคราะห์ไม่ได้",
+                    t("The analysis database could not be opened", "Empty state on the analysis screen."),
                     systemImage: "exclamationmark.triangle",
-                    description: Text("ไฟล์ analysis.duckdb เปิดไม่ได้ตอนเริ่มแอป — "
-                                      + "ส่วนอื่นของแอปยังทำงานตามปกติ ดูรายละเอียดที่หน้าสถานะระบบ"))
+                    description: Text(localised: "analysis.duckdb would not open at start-up — the rest of the app works as usual, and the detail is on the System status screen",
+                                      "Empty-state explanation when the analysis store is unavailable."))
             }
         }
         .task { await model.refresh() }
@@ -86,7 +86,7 @@ struct AnalysisView: View {
     private var header: some View {
         HStack(spacing: 12) {
             if chosen == nil {
-                Picker("มุมมอง", selection: $pane) {
+                Picker(t("View", "Picker over the panes of the console sub-tab."), selection: $pane) {
                     ForEach(Pane.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -108,7 +108,7 @@ struct AnalysisView: View {
                         .frame(maxWidth: 420, alignment: .trailing)
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("ปิดข้อความนี้")
+                .accessibilityHint(t("dismiss this message", "Screen-reader hint on a dismiss button."))
             }
         }
         .padding(Space.box)
@@ -129,8 +129,10 @@ private struct NotebookPane: View {
             if let notebook = model.notebook {
                 cells(of: notebook)
             } else {
-                ContentUnavailableView("ยังไม่มีสมุดงาน", systemImage: "square.grid.3x1.below.line.grid.1x2",
-                                       description: Text("กด + เพื่อสร้างสมุดงานแรก"))
+                ContentUnavailableView(t("No notebook yet", "Empty state in the notebook list."),
+                                       systemImage: "square.grid.3x1.below.line.grid.1x2",
+                                       description: Text(localised: "Press + to create the first one",
+                                                         "Empty-state instruction in the notebook list."))
                     // Without this the empty state takes its ideal width and the
                     // whole pane centres itself, leaving 390pt of blank white to
                     // the left of the notebook list — which reads as a screen
@@ -145,11 +147,11 @@ private struct NotebookPane: View {
     private var library: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("สมุดงาน").font(.subheadline).bold()
+                Text(localised: "Notebook", "Heading over the list of notebooks.").font(.subheadline).bold()
                 Spacer()
                 Button { model.newNotebook() } label: {
                         Image(systemName: "plus")
-                            .accessibilityLabel("สร้างสมุดงานใหม่")
+                            .accessibilityLabel(t("Create a new notebook", "Screen-reader label."))
                     }
                     .buttonStyle(.borderless)
             }
@@ -160,7 +162,8 @@ private struct NotebookPane: View {
                     Button { model.open(notebook) } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(notebook.title).lineLimit(1)
-                            Text("\(notebook.cells.count) เซลล์ · \(scopeLabel(notebook.scope))")
+                            Text(localised: "\(notebook.cells.count) cells · \(scopeLabel(notebook.scope))",
+                                 "A notebook row. Placeholders: how many cells it holds and which scope it belongs to.")
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -170,12 +173,15 @@ private struct NotebookPane: View {
                     .listRowBackground(notebook.id == model.notebook?.id
                                        ? Color.accentColor.opacity(0.15) : Color.clear)
                     .contextMenu {
-                        Button("ลบ", role: .destructive) { model.delete(notebook) }
+                        Button(t("Delete", "Context-menu item that removes a notebook."),
+                               role: .destructive) { model.delete(notebook) }
                     }
                     // The same action, offered where a context menu is not:
                     // right-click is a mouse, and VoiceOver reaches this
                     // through the actions rotor (§14.4).
-                    .accessibilityAction(named: "ลบสมุดงานนี้") { model.delete(notebook) }
+                    .accessibilityAction(named: t("Delete this notebook", "Screen-reader action name.")) {
+                        model.delete(notebook)
+                    }
                 }
             }
             .listStyle(.sidebar)
@@ -192,17 +198,17 @@ private struct NotebookPane: View {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(Array(notebook.cells.enumerated()), id: \.element.id) { index, cell in
                         // The number is for the screen reader, not the eye:
-                        // three buttons all called "รันเซลล์นี้" are the same
+                        // three buttons all called "run this cell" are the same
                         // button to somebody who cannot see which cell they
                         // are next to (measured, E.30).
                         CellView(number: index + 1, model: model, cell: cell)
                     }
                     HStack {
                         Button { model.addCell(kind: .sql) } label: {
-                            Label("เพิ่มเซลล์ SQL", systemImage: "plus")
+                            Label(t("Add a SQL cell", "Menu item that appends a SQL cell."), systemImage: "plus")
                         }
                         Button { model.addCell(kind: .python) } label: {
-                            Label("เพิ่มเซลล์ Python", systemImage: "plus")
+                            Label(t("Add a Python cell", "Menu item that appends a Python cell."), systemImage: "plus")
                         }
                         Spacer()
                     }
@@ -216,7 +222,7 @@ private struct NotebookPane: View {
 
     private func notebookBar(_ notebook: Notebook) -> some View {
         HStack(spacing: 10) {
-            TextField("ชื่อสมุดงาน", text: Binding(
+            TextField(t("Notebook name", "Text field holding the notebook's title."), text: Binding(
                 get: { notebook.title },
                 set: { model.rename($0) }))
                 .textFieldStyle(.plain)
@@ -224,7 +230,7 @@ private struct NotebookPane: View {
                 .frame(maxWidth: 280)
 
             Button { Task { await model.runAll() } } label: {
-                Label("รันทั้งหมด", systemImage: "play.fill")
+                Label(t("Run all", "Button that runs every cell in the notebook."), systemImage: "play.fill")
             }
 
             Spacer()
@@ -235,10 +241,12 @@ private struct NotebookPane: View {
 
     private func scopeLabel(_ scope: Scope) -> String {
         switch scope {
-        case .central: "ส่วนกลาง"
-        case .policy: "นโยบาย"
-        case .board(let runID): "กระดานงานรัน \(runID)"
-        case .project(let id): "โปรเจกต์ \(id.rawValue)"
+        case .central: t("shared", "Notebook scope: visible everywhere.")
+        case .policy: t("policy", "Notebook scope: belongs to policy work.")
+        case .board(let runID): t("board for run \(runID)",
+                                  "Notebook scope. Placeholder is the run id.")
+        case .project(let id): t("project \(id.rawValue)",
+                                 "Notebook scope. Placeholder is the project id.")
         }
     }
 }
@@ -253,23 +261,34 @@ private struct KernelBadge: View {
                 Label(reason, systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange).lineLimit(1)
             case .stopped:
-                Text("เคอร์เนล Python: ยังไม่ได้เริ่ม").font(.caption).foregroundStyle(.secondary)
-                Button("เริ่มเคอร์เนล") { Task { await model.startKernel() } }
+                Text(localised: "Python kernel: not started", "Kernel status before it is running.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button(t("Start the kernel", "Button that boots the Python kernel.")) {
+                    Task { await model.startKernel() }
+                }
             case .starting:
                 ProgressView().controlSize(.small)
-                Text("กำลังเริ่มเคอร์เนล…").font(.caption).foregroundStyle(.secondary)
+                Text(localised: "Starting the kernel…", "Kernel status while it boots.")
+                    .font(.caption).foregroundStyle(.secondary)
             case .ready(let version):
                 Label("Python \(version)", systemImage: "circle.fill")
                     .font(.caption).foregroundStyle(.green)
                 // Says what it costs before it is pressed: a restart is how the
                 // variables go away.
-                Button("เริ่มใหม่") { Task { await model.restartKernel() } }
-                    .help("ล้างตัวแปรทั้งหมดแล้วเริ่มเคอร์เนลใหม่")
-                Button("ปลดออก") { Task { await model.stopKernel() } }
-                    .help("คืนหน่วยความจำที่เคอร์เนลถืออยู่")
+                Button(t("Restart", "Button that restarts the Python kernel.")) {
+                    Task { await model.restartKernel() }
+                }
+                    .help(t("Clears every variable and starts the kernel again",
+                            "Tooltip on the restart button."))
+                Button(t("Unload", "Button that shuts the kernel down.")) {
+                    Task { await model.stopKernel() }
+                }
+                    .help(t("Gives back the memory the kernel is holding", "Tooltip on the unload button."))
             case .busy:
                 ProgressView().controlSize(.small)
-                Button("ขัดจังหวะ") { Task { await model.interruptKernel() } }
+                Button(t("Interrupt", "Button that stops the cell the kernel is running.")) {
+                    Task { await model.interruptKernel() }
+                }
             }
         }
         .buttonStyle(.borderless)
@@ -291,7 +310,7 @@ private struct CellView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                Picker("ชนิด", selection: Binding(
+                Picker(t("Kind", "Picker: whether a notebook cell is SQL or Python."), selection: Binding(
                     get: { cell.kind },
                     set: { model.setKind($0, for: cell.id) })) {
                         ForEach(NotebookCell.Kind.allCases, id: \.self) { Text($0.label).tag($0) }
@@ -299,7 +318,7 @@ private struct CellView: View {
                     .labelsHidden()
                     .pickerStyle(.segmented)
                     .frame(width: 140)
-                    .accessibilityLabel("ชนิดของเซลล์ที่ \(number)")
+                    .accessibilityLabel(t("Kind of cell \(number)", "Screen-reader label. Placeholder is the cell number."))
 
                 // What this cell would do, before it is run. The same
                 // assessment the runner will enforce — not a second opinion.
@@ -319,12 +338,12 @@ private struct CellView: View {
                     Button { Task { await model.run(cell.id) } } label: {
                         Image(systemName: "play.fill")
                     }
-                    .accessibilityLabel("รันเซลล์ที่ \(number)")
+                    .accessibilityLabel(t("Run cell \(number)", "Screen-reader label. Placeholder is the cell number."))
                 }
                 Button(role: .destructive) { model.removeCell(cell.id) } label: {
                     Image(systemName: "trash")
                 }
-                .accessibilityLabel("ลบเซลล์ที่ \(number)")
+                .accessibilityLabel(t("Delete cell \(number)", "Screen-reader label. Placeholder is the cell number."))
             }
             .buttonStyle(.borderless)
 
@@ -372,7 +391,9 @@ private struct CellOutputView: View {
                 case .python(let output):
                     PythonOutputView(output: output)
                 }
-                Text(String(format: "%.2f วินาที", seconds))
+                Text(String(format: t("%.2f seconds",
+                                      "How long a notebook cell took. Placeholder is a number of seconds."),
+                            seconds))
                     .font(.caption2).foregroundStyle(.tertiary)
             }
         }
@@ -437,7 +458,7 @@ private struct ExplorerPane: View {
 
                 HStack(spacing: 10) {
                     Button { Task { await model.runExplorer() } } label: {
-                        Label("รัน", systemImage: "play.fill")
+                        Label(t("Run", "Button that executes the SQL in the editor."), systemImage: "play.fill")
                     }
                     .keyboardShortcut(.return, modifiers: .command)
 
@@ -453,7 +474,8 @@ private struct ExplorerPane: View {
                     // §14.2 is explicit that this screen is read/write; being
                     // able to get data in is what makes it usable at all.
                     Button { importing = true } label: {
-                        Label("นำเข้า CSV/Parquet", systemImage: "square.and.arrow.down")
+                        Label(t("Import CSV/Parquet", "Button that loads a data file into the store."),
+                              systemImage: "square.and.arrow.down")
                     }
                 }
                 .padding(Space.box)
@@ -491,13 +513,14 @@ private struct ExplorerPane: View {
     private var catalogue: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("ตารางในสโตร์").font(.subheadline).bold()
+                Text(localised: "Tables in the store", "Heading over the analysis store's tables.")
+                    .font(.subheadline).bold()
                 Spacer()
                 Button { Task { await model.refresh() } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel("อ่านรายชื่อตารางใหม่")
+                .accessibilityLabel(t("Reload the list of tables", "Screen-reader label."))
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
             Divider()
@@ -509,11 +532,11 @@ private struct ExplorerPane: View {
                     // placeholders always filled the column, so an empty store
                     // never looked like a broken screen. §12.2's rule again — a
                     // list that says nothing is worse than one that says why.
-                    Text("ยังไม่มีตารางในสโตร์ของโปรเจกต์นี้ — นำเข้า CSV/Parquet "
-                         + "หรือดึงตารางจากฐานข้อมูลภายนอกเข้ามา")
+                    Text(localised: "No tables in this project's store yet — import a CSV or Parquet file, or pull a table in from an external database",
+                         "Shown when the analysis store is empty, naming both ways to fill it.")
                         .font(.caption).foregroundStyle(.secondary)
                         // Wraps rather than truncating: the sidebar is 200pt and
-                        // the one-line version ended at "นำเข้า…", which is half
+                        // the one-line version ended at "import…", which is half
                         // an instruction.
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -537,21 +560,25 @@ private struct ExplorerPane: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(table.name).font(.callout)
-                                Text(table.rowCount.map { "\($0) แถว" } ?? "นับแถวไม่ได้")
+                                Text(table.rowCount.map {
+                                    t("\($0) rows", "How many rows a table holds. Placeholder is a count.")
+                                } ?? t("row count unavailable", "Shown when a table's rows could not be counted."))
                                     .font(.caption2).foregroundStyle(.secondary)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityHint("ใส่คำสั่ง SELECT ของตารางนี้ลงในช่องเขียน SQL")
+                        .accessibilityHint(t("puts a SELECT for this table into the SQL editor",
+                                             "Screen-reader hint on a table row."))
                     }
                 }
                 }
                 if focus.showsExternal {
                 Section {
                     if model.connectors.isEmpty {
-                        Text("ยังไม่มีแหล่งข้อมูลภายนอก — กด + เพื่อเพิ่ม")
+                        Text(localised: "No external source yet — press + to add one",
+                             "Shown when no external database has been configured.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     ForEach(model.connectors) { connector in
@@ -560,17 +587,19 @@ private struct ExplorerPane: View {
                     // Named rather than omitted: a list with two silent
                     // failures in it is worse than one that says why (§12.2).
                     ForEach(UnsupportedConnector.allCases) { kind in
-                        Label("\(kind.label) — ยังต่อไม่ได้", systemImage: "minus.circle")
+                        Label(t("\(kind.label) — not reachable yet",
+                                "Shown for a connector kind that cannot be used. Placeholder is its name."),
+                              systemImage: "minus.circle")
                             .font(.caption2).foregroundStyle(.tertiary)
                             .help(kind.reason)
                     }
                 } header: {
                     HStack {
-                        Text("แหล่งข้อมูลภายนอก")
+                        Text(localised: "External sources", "Heading over configured external databases.")
                         Spacer()
                         Button { addingConnector = true } label: {
                                 Image(systemName: "plus")
-                                    .accessibilityLabel("เพิ่มแหล่งข้อมูลภายนอก")
+                                    .accessibilityLabel(t("Add an external source", "Screen-reader label."))
                             }
                             .buttonStyle(.borderless)
                     }
@@ -610,13 +639,18 @@ private struct ConnectorRow: View {
                     .font(.system(size: 7))
                     .foregroundStyle(model.isConnected(connector) ? .green : .secondary)
                     .accessibilityLabel(model.isConnected(connector)
-                                        ? "ต่ออยู่" : "ยังไม่ได้ต่อ")
+                                        ? t("connected", "Connector status: the database is open.")
+                                        : t("not connected", "Connector status: the database is closed."))
                 Text(connector.alias).font(.callout)
                 Spacer()
                 if model.isConnected(connector) {
-                    Button("ปลด") { Task { await model.disconnect(connector) } }
+                    Button(t("Disconnect", "Button that closes an external database.")) {
+                        Task { await model.disconnect(connector) }
+                    }
                 } else {
-                    Button("ต่อ") { Task { await model.connect(connector) } }
+                    Button(t("Connect", "Button that opens an external database.")) {
+                        Task { await model.connect(connector) }
+                    }
                         // Says why before it is pressed, rather than failing
                         // with a driver error afterwards.
                         .disabled(!connector.secretIsAvailable)
@@ -625,7 +659,9 @@ private struct ConnectorRow: View {
             .buttonStyle(.borderless)
             .font(.caption)
 
-            Text(connector.kind.rawValue + (connector.readOnly ? " · อ่านอย่างเดียว" : " · เขียนได้"))
+            Text(connector.kind.rawValue + (connector.readOnly
+                                            ? t(" · read-only", "Appended to a connector that cannot be written to.")
+                                            : t(" · writable", "Appended to a connector that can be written to.")))
                 .font(.caption2).foregroundStyle(.secondary)
             if let variable = connector.secretVariable, !connector.secretIsAvailable {
                 // Says which of the two it is: never entered, or the Keychain
@@ -645,19 +681,23 @@ private struct ConnectorRow: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityHint("ใส่คำสั่ง SELECT ของตารางนี้ลงในช่องเขียน SQL")
-                    Button("ดึงเข้ามา") { Task { await model.pull(table, from: connector.alias) } }
+                    .accessibilityHint(t("puts a SELECT for this table into the SQL editor",
+                                         "Screen-reader hint on a table row."))
+                    Button(t("Pull it in", "Button that copies an external table into the analysis store.")) {
+                        Task { await model.pull(table, from: connector.alias) }
+                    }
                         .buttonStyle(.borderless)
                         .font(.caption2)
                 }
             }
         }
         .contextMenu {
-            Button("ลบแหล่งนี้", role: .destructive) {
+            Button(t("Remove this source", "Button that forgets an external database."),
+                   role: .destructive) {
                 Task { await model.remove(connector: connector) }
             }
         }
-        .accessibilityAction(named: "ลบแหล่งข้อมูลนี้") {
+        .accessibilityAction(named: t("Remove this source", "Screen-reader action name.")) {
             Task { await model.remove(connector: connector) }
         }
     }
@@ -677,32 +717,41 @@ private struct ConnectorSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("เพิ่มแหล่งข้อมูลภายนอก").font(.headline)
+            Text(localised: "Add an external source", "Title of the sheet that defines a connector.")
+                .font(.headline)
 
-            Picker("ชนิด", selection: $kind) {
+            Picker(t("Kind", "Picker: which kind of external database this is."), selection: $kind) {
                 ForEach(ConnectorKind.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
 
-            TextField("ชื่อที่ใช้ใน SQL (เช่น lab)", text: $alias)
-            TextField(kind == .sqlite ? "เส้นทางไฟล์ .sqlite"
-                                      : "host=… port=… dbname=… user=… (ไม่ต้องใส่รหัสผ่าน)",
+            TextField(t("Name to use in SQL (for example: lab)",
+                        "Text field: the alias this source is referred to by in queries."),
+                      text: $alias)
+            TextField(kind == .sqlite
+                      ? t("path to the .sqlite file", "Placeholder for a SQLite connector.")
+                      : t("host=… port=… dbname=… user=… (no password here)",
+                          "Placeholder for a Postgres connector, saying plainly not to type the password."),
                       text: $target)
             if kind != .sqlite {
-                SecretField(name: $secretVariable, title: "ชื่อรหัสผ่าน",
+                SecretField(name: $secretVariable,
+                            title: t("Password name", "Label on the field naming the stored password."),
                             placeholder: "PGPASSWORD")
-                Text("รหัสผ่านไม่ถูกเก็บลงไฟล์ของแหล่งข้อมูล — ไฟล์เก็บแค่ชื่อ "
-                     + "ส่วนค่าอยู่ใน Keychain และถูกอ่านตอนต่อเท่านั้น")
+                Text(localised: "The password is not written to the source's file — the file holds only the name, the value lives in the Keychain and is read only when connecting",
+                     "Explains where a connector password is kept.")
                     .font(.caption2).foregroundStyle(.secondary)
             }
-            Toggle("อ่านอย่างเดียว", isOn: $readOnly)
-            Text("§12.2 ตั้งค่าเริ่มต้นเป็นอ่านอย่างเดียว เพราะข้อมูลปลายทางมักเป็นของคนอื่น")
+            Toggle(t("Read-only", "Checkbox that stops this connector writing to the source."),
+                   isOn: $readOnly)
+            Text(localised: "§12.2 makes read-only the default, because the data at the other end usually belongs to somebody else",
+                 "Explains why new connectors are read-only.")
                 .font(.caption2).foregroundStyle(.secondary)
 
             HStack {
                 Spacer()
-                Button("ยกเลิก", role: .cancel) { isPresented = false }
-                Button("บันทึกและต่อ") {
+                Button(t("Cancel", "Button that closes the connector sheet without saving."),
+                       role: .cancel) { isPresented = false }
+                Button(t("Save and connect", "Button that stores the connector and opens it.")) {
                     let connector = DBConnector(
                         alias: alias.trimmingCharacters(in: .whitespaces),
                         kind: kind,
@@ -773,11 +822,12 @@ private struct PlanPane: View {
     private var list: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("แผนวิเคราะห์").font(.subheadline).bold()
+                Text(localised: "Analysis plan", "Heading over the list of analysis plans.")
+                    .font(.subheadline).bold()
                 Spacer()
                 Button { model.open(plan: nil) } label: {
                         Image(systemName: "plus")
-                            .accessibilityLabel("อ่านโครงร่างใหม่")
+                            .accessibilityLabel(t("Read a protocol again", "Screen-reader label."))
                     }
                     .buttonStyle(.borderless)
             }
@@ -790,10 +840,12 @@ private struct PlanPane: View {
                             Text(plan.title).lineLimit(1)
                             HStack(spacing: 4) {
                                 if plan.isApproved {
-                                    Label("อนุมัติแล้ว", systemImage: "checkmark.seal.fill")
+                                    Label(t("approved", "Marker on an analysis plan somebody signed off."),
+                                          systemImage: "checkmark.seal.fill")
                                         .foregroundStyle(.green)
                                 } else {
-                                    Text("ค้าง \(plan.blockers.count) ข้อ")
+                                    Text(localised: "\(plan.blockers.count) outstanding",
+                                         "How many blockers an analysis plan still has. Placeholder is a count.")
                                         .foregroundStyle(.orange)
                                 }
                             }
@@ -806,9 +858,10 @@ private struct PlanPane: View {
                     .listRowBackground(plan.id == model.plan?.id
                                        ? Color.accentColor.opacity(0.15) : Color.clear)
                     .contextMenu {
-                        Button("ลบ", role: .destructive) { Task { await model.deletePlan(plan) } }
+                        Button(t("Delete", "Context-menu item that removes an analysis plan."),
+                               role: .destructive) { Task { await model.deletePlan(plan) } }
                     }
-                    .accessibilityAction(named: "ลบแผนนี้") {
+                    .accessibilityAction(named: t("Delete this plan", "Screen-reader action name.")) {
                         Task { await model.deletePlan(plan) }
                     }
                 }
@@ -820,11 +873,12 @@ private struct PlanPane: View {
 
     private var proposalEntry: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("อ่านโครงร่างวิจัย").font(.headline)
-            Text("วางข้อความโครงร่างแล้วระบบจะสกัดคำถามวิจัย ประชากร ปัจจัย ผลลัพธ์ วิธี และช่วงเวลา "
-                 + "แล้วเทียบกับคอลัมน์ที่มีอยู่จริงในสโตร์ เพื่อบอกว่าอะไรยังขาด (§12.4)")
+            Text(localised: "Read a research protocol", "Title of the panel that ingests a protocol.")
+                .font(.headline)
+            Text(localised: "Paste the protocol and the research question, population, exposure, outcome, method and time window are extracted, then compared against the columns that really exist in the store to say what is missing (§12.4)",
+                 "Explains what reading a protocol does.")
                 .font(.caption).foregroundStyle(.secondary)
-            TextField("ชื่อแผน", text: $model.planTitle)
+            TextField(t("Plan name", "Text field holding the analysis plan's title."), text: $model.planTitle)
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 360)
 
@@ -833,7 +887,8 @@ private struct PlanPane: View {
                     // §12.4 wants this to key off `doc_type: proposal`; the
                     // ingest pipeline records no document type yet, so the
                     // list is everything and the choice is the user's.
-                    Menu("ใช้เอกสารจากคลังความรู้") {
+                    Menu(t("Use a document from the knowledge base",
+                           "Menu that picks a stored document as the protocol.")) {
                         ForEach(model.knowledgeDocuments, id: \.id) { document in
                             Button(document.title) {
                                 Task { await model.useDocument(document.id) }
@@ -841,7 +896,8 @@ private struct PlanPane: View {
                         }
                     }
                     .frame(maxWidth: 260)
-                    Text("หรือวางข้อความเองข้างล่าง")
+                    Text(localised: "or paste the text yourself below",
+                         "Alternative to picking a stored document.")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             }
@@ -852,7 +908,9 @@ private struct PlanPane: View {
                 .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: Radius.box))
             HStack {
                 Button { Task { await model.readProposal() } } label: {
-                    Label("อ่านและหาช่องว่าง", systemImage: "text.magnifyingglass")
+                    Label(t("Read it and find the gaps",
+                            "Button that extracts the plan and compares it with the store."),
+                          systemImage: "text.magnifyingglass")
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(model.isReadingProposal)
@@ -871,12 +929,14 @@ private struct PlanPane: View {
             VStack(alignment: .leading, spacing: 14) {
                 header(plan)
                 if !plan.openGaps.isEmpty {
-                    Text("รายงานช่องว่าง (Gap Report)").font(.subheadline).bold()
+                    Text(localised: "Gap report", "Heading over what the protocol asks for and the store lacks.")
+                        .font(.subheadline).bold()
                     ForEach(plan.openGaps) { gap in
                         GapRow(model: model, gap: gap)
                     }
                 }
-                Text("การตัดสินใจในแผน").font(.subheadline).bold()
+                Text(localised: "Decisions in the plan", "Heading over choices recorded in an analysis plan.")
+                    .font(.subheadline).bold()
                 ForEach(plan.decisions) { decision in
                     DecisionRow(model: model, decision: decision, locked: plan.isApproved)
                 }
@@ -885,7 +945,9 @@ private struct PlanPane: View {
                 // the sentence it will become, while there is still time to
                 // change it.
                 if !model.limitationsPreview.isEmpty {
-                    Text("ข้อจำกัดที่จะขึ้นในเอกสารอัตโนมัติ (§14.1)").font(.subheadline).bold()
+                    Text(localised: "Limitations that will appear in generated documents (§14.1)",
+                         "Heading over limitations carried automatically into writing.")
+                        .font(.subheadline).bold()
                     ForEach(model.limitationsPreview.items) { item in
                         Label(item.text, systemImage: "text.append")
                             .font(.caption)
@@ -897,7 +959,9 @@ private struct PlanPane: View {
                     }
                 }
                 if !plan.revisions.isEmpty {
-                    Text("ประวัติการถอนอนุมัติ").font(.subheadline).bold()
+                    Text(localised: "History of withdrawn approvals",
+                         "Heading over times an analysis plan's approval was revoked.")
+                        .font(.subheadline).bold()
                     ForEach(Array(plan.revisions.enumerated()), id: \.offset) { _, reason in
                         Label(reason, systemImage: "arrow.uturn.backward")
                             .font(.caption).foregroundStyle(.secondary)
@@ -915,12 +979,13 @@ private struct PlanPane: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(plan.title).font(.headline)
                 Spacer()
-                // P7.9: the shape it comes out in. "แบบของเราเอง" is P7.6's
+                // P7.9: the shape it comes out in. "our own layout" is P7.6's
                 // layout; the rest are documents this person uploaded.
-                Picker("แม่แบบ", selection: Binding(
+                Picker(t("Template", "Picker over document templates for export."), selection: Binding(
                     get: { model.selectedTemplateID },
                     set: { model.selectTemplate($0) })) {
-                        Text("แบบของเราเอง").tag(String?.none)
+                        Text(localised: "our own layout", "Template option: the built-in document shape.")
+                            .tag(String?.none)
                         ForEach(model.templates) { template in
                             Text(template.name).tag(String?.some(template.id))
                         }
@@ -930,26 +995,34 @@ private struct PlanPane: View {
                 Button {
                     importingTemplate = true
                 } label: {
-                    Label("เพิ่มแม่แบบจากไฟล์", systemImage: "doc.badge.plus")
+                    Label(t("Add a template from a file", "Button that learns a template from a .docx."),
+                          systemImage: "doc.badge.plus")
                 }
-                .help("เลือกไฟล์ .docx ที่มีหัวข้อครบ แล้วระบบจะจำโครงของมันไว้")
+                .help(t("Pick a .docx with all its headings and its structure is remembered",
+                        "Tooltip on the add-template button."))
                 // P7.9's other half: a template learned from a file with one
                 // heading in the wrong place used to be a template you lived
                 // with, because the only way to change it was another file.
                 if model.selectedTemplateID != nil {
-                    Button("แก้แม่แบบ") { editingTemplate = true }
-                        .accessibilityLabel("แก้หัวข้อของแม่แบบที่เลือกอยู่")
+                    Button(t("Edit the template", "Button that opens the template editor.")) {
+                        editingTemplate = true
+                    }
+                        .accessibilityLabel(t("Edit the headings of the selected template", "Screen-reader label."))
                 }
                 // §14.1: a pre-registration is something you send to somebody.
                 Button { exporting = true } label: {
-                    Label("ส่งออก .docx", systemImage: "square.and.arrow.up")
+                    Label(t("Export .docx", "Button that writes the document out."),
+                          systemImage: "square.and.arrow.up")
                 }
                 if plan.isApproved {
-                    Label("อนุมัติแล้วโดย \(plan.approvedBy ?? "")",
+                    Label(t("approved by \(plan.approvedBy ?? "")",
+                            "Marker on an approved analysis plan. Placeholder is who approved it."),
                           systemImage: "checkmark.seal.fill")
                         .font(.caption).foregroundStyle(.green)
                 } else {
-                    Button("อนุมัติแผนทั้งก้อน") { Task { await model.approvePlan() } }
+                    Button(t("Approve the whole plan", "Button that signs off the analysis plan.")) {
+                        Task { await model.approvePlan() }
+                    }
                         .buttonStyle(.borderedProminent)
                         .disabled(!plan.isReadyForApproval)
                 }
@@ -962,8 +1035,8 @@ private struct PlanPane: View {
                         .font(.caption).foregroundStyle(.orange)
                 }
             } else {
-                Text("แก้อะไรหลังจากนี้ การอนุมัติจะถูกถอนเองและต้องอนุมัติใหม่ — "
-                     + "แผนที่แก้ได้เงียบๆ ไม่ใช่ pre-registration")
+                Text(localised: "Any edit after this withdraws the approval on its own and it must be approved again — a plan that can be changed quietly is not a pre-registration",
+                     "Explains why approval is revoked by editing. 'pre-registration' is the research term.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -992,9 +1065,10 @@ private struct GapRow: View {
             Text(gap.detail).font(.caption).foregroundStyle(.secondary)
             if gap.options.isEmpty {
                 HStack {
-                    TextField("คำตอบของคุณ", text: $answer)
+                    TextField(t("Your answer", "Text field for answering a question the plan raised."),
+                              text: $answer)
                         .textFieldStyle(.roundedBorder)
-                    Button("บันทึกคำตอบ") {
+                    Button(t("Save the answer", "Button that records the answer.")) {
                         Task { await model.resolve(gap: gap.id, with: answer) }
                     }
                     .disabled(answer.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -1037,7 +1111,7 @@ private struct DecisionRow: View {
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(background, in: Capsule())
                 if decision.origin == .agentSuggested && !locked {
-                    Button("ยืนยัน") {
+                    Button(t("Confirm", "Button that records the reversal.")) {
                         Task { await model.confirm(decision: decision.id) }
                     }
                     .font(.caption)
@@ -1090,7 +1164,8 @@ private struct ResultTable: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             if result.columns.isEmpty {
-                Text("คำสั่งสำเร็จ · ไม่มีผลลัพธ์เป็นตาราง")
+                Text(localised: "The statement succeeded · no table came back",
+                     "Shown after SQL that returns no rows, so success is not mistaken for an empty result.")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 ScrollView([.horizontal, .vertical]) {
@@ -1145,8 +1220,10 @@ private struct ResultTable: View {
             + Double(result.duration.components.seconds) * 1_000
         let timing = String(format: "%.0f ms", milliseconds)
         return result.rowCount > limit
-            ? "แสดง \(shown) จาก \(result.rowCount) แถว · \(timing)"
-            : "\(result.rowCount) แถว · \(timing)"
+            ? t("showing \(shown) of \(result.rowCount) rows · \(timing)",
+                "Result summary when the table is truncated. Placeholders: rows shown, rows total, and how long it took.")
+            : t("\(result.rowCount) rows · \(timing)",
+                "Result summary. Placeholders: how many rows and how long it took.")
     }
 }
 
@@ -1162,8 +1239,10 @@ private struct ConfirmSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Label(pending.assessment.effect == .destructive
-                  ? "คำสั่งนี้ลบหรือเขียนทับข้อมูล"
-                  : "คำสั่งนี้เปลี่ยนข้อมูล",
+                  ? t("This statement deletes or overwrites data",
+                      "Warning above a destructive SQL confirmation.")
+                  : t("This statement changes data",
+                      "Warning above a data-changing SQL confirmation."),
                   systemImage: pending.assessment.effect == .destructive
                       ? "exclamationmark.octagon.fill" : "pencil.circle.fill")
                 .font(.headline)
@@ -1195,9 +1274,13 @@ private struct ConfirmSheet: View {
 
             HStack {
                 Spacer()
-                Button("ยกเลิก", role: .cancel) { model.cancelConfirmation() }
+                Button(t("Cancel", "Button that abandons running the SQL."),
+                       role: .cancel) { model.cancelConfirmation() }
                     .keyboardShortcut(.cancelAction)
-                Button(pending.assessment.effect == .destructive ? "รันทั้งที่ลบข้อมูล" : "รัน") {
+                Button(pending.assessment.effect == .destructive
+                       ? t("Run it even though it deletes data",
+                           "Confirming button on a destructive statement — deliberately long to read.")
+                       : t("Run", "Confirming button on a statement that changes data.")) {
                     Task { await model.confirm() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -1226,16 +1309,17 @@ private struct TemplateEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.box) {
-            SectionHeading(title: "แก้แม่แบบ “\(template.name)”",
-                           help: "หัวข้อที่เรียนมาจากเอกสารจริง — เปลี่ยนชื่อ สลับลำดับ "
-                               + "หรือบอกว่าหัวข้อไหนไม่จำเป็นก็ได้ · สิ่งที่ไฟล์ตัวอย่างเขียนไว้ใต้หัวข้อ "
-                               + "จะติดไปกับหัวข้อเสมอ")
+            SectionHeading(title: t("Edit the template “\(template.name)”",
+                                    "Title of the template editor. Placeholder is the template's name."),
+                           help: t("Headings learned from a real document — rename them, reorder them, or say which are not required · whatever the sample file wrote under a heading always travels with it",
+                                   "Explains what the template editor changes."))
 
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.row) {
                     ForEach(Array(template.sections.enumerated()), id: \.offset) { index, section in
                         HStack(spacing: Space.row) {
-                            TextField("ชื่อหัวข้อ", text: Binding(
+                            TextField(t("Heading name", "Text field holding one template heading."),
+                                      text: Binding(
                                 get: { renaming[index] ?? section.heading },
                                 set: { renaming[index] = $0 }))
                                 .textFieldStyle(.roundedBorder)
@@ -1244,9 +1328,11 @@ private struct TemplateEditor: View {
                                     model.editTemplate(template.id) { $0.renaming(index, to: name) }
                                     renaming[index] = nil
                                 }
-                                .accessibilityLabel("ชื่อหัวข้อที่ \(index + 1)")
+                                .accessibilityLabel(t("Name of heading \(index + 1)",
+                                                      "Screen-reader label. Placeholder is the heading's position."))
 
-                            Toggle("จำเป็น", isOn: Binding(
+                            Toggle(t("Required", "Checkbox marking a template heading as mandatory."),
+                                   isOn: Binding(
                                 get: { section.isRequired },
                                 set: { required in
                                     model.editTemplate(template.id) {
@@ -1259,12 +1345,14 @@ private struct TemplateEditor: View {
                                 model.editTemplate(template.id) { $0.moving(index, to: index - 1) }
                             } label: { Image(systemName: "arrow.up") }
                                 .disabled(index == 0)
-                                .accessibilityLabel("ย้าย \(section.heading) ขึ้น")
+                                .accessibilityLabel(t("Move \(section.heading) up",
+                                                      "Screen-reader label. Placeholder is the heading's name."))
                             Button {
                                 model.editTemplate(template.id) { $0.moving(index, to: index + 1) }
                             } label: { Image(systemName: "arrow.down") }
                                 .disabled(index == template.sections.count - 1)
-                                .accessibilityLabel("ย้าย \(section.heading) ลง")
+                                .accessibilityLabel(t("Move \(section.heading) down",
+                                                      "Screen-reader label. Placeholder is the heading's name."))
                         }
                         if let guidance = section.guidance {
                             // Kept in front of the person editing: it is the
@@ -1285,7 +1373,8 @@ private struct TemplateEditor: View {
 
             HStack {
                 Spacer()
-                Button("เสร็จแล้ว") { dismiss() }.keyboardShortcut(.defaultAction)
+                Button(t("Done", "Button that closes the template editor.")) { dismiss() }
+                    .keyboardShortcut(.defaultAction)
             }
         }
         .padding(Space.section)

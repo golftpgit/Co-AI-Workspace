@@ -54,7 +54,7 @@ struct CountModelTests {
         #expect(isClose(check.statistic ?? 0, 15.0011, 1e-3))
         #expect(check.detail.contains("negative binomial"),
                 "the warning has to name the model that handles it")
-        #expect(check.detail.contains("แคบเกินจริง"))
+        #expect(check.detail.contains("too narrow"))
     }
 
     @Test("counts that behave pass the check rather than being warned about anyway")

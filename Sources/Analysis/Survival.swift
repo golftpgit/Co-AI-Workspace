@@ -62,10 +62,10 @@ public enum Survival {
     /// leave and not after.
     public static func kaplanMeier(_ observations: [SurvivalObservation]) throws -> SurvivalCurve {
         guard !observations.isEmpty else {
-            throw StatError.notEnoughData("ไม่มีข้อมูลการติดตาม")
+            throw StatError.notEnoughData(localised("there is no follow-up data", "Why a survival curve cannot be built."))
         }
         guard observations.allSatisfy({ $0.time >= 0 }) else {
-            throw StatError.badShape("เวลาติดตามติดลบ")
+            throw StatError.badShape(localised("a follow-up time is negative", "Why a survival curve cannot be built."))
         }
         let eventTimes = Set(observations.filter(\.event).map(\.time)).sorted()
         var survival = 1.0
@@ -99,7 +99,7 @@ public enum Survival {
     public static func logRank(_ a: [SurvivalObservation],
                                _ b: [SurvivalObservation]) throws -> StatResult {
         guard !a.isEmpty, !b.isEmpty else {
-            throw StatError.notEnoughData("log-rank ต้องมีข้อมูลทั้งสองกลุ่ม")
+            throw StatError.notEnoughData(localised("a log-rank test needs data in both groups", "Why a log-rank test cannot run."))
         }
         let times = Set((a + b).filter(\.event).map(\.time)).sorted()
         var observedA = 0.0, expectedA = 0.0, variance = 0.0
@@ -121,7 +121,7 @@ public enum Survival {
                 * ((atRisk - events) / (atRisk - 1))
         }
         guard variance > 0 else {
-            throw StatError.notEnoughData("ไม่มีเหตุการณ์พอจะเทียบสองกลุ่ม")
+            throw StatError.notEnoughData(localised("there are not enough events to compare the two groups", "Why a log-rank test cannot run."))
         }
         let chiSquare = (observedA - expectedA) * (observedA - expectedA) / variance
         return StatResult(
@@ -129,8 +129,8 @@ public enum Survival {
             statistic: chiSquare,
             pValue: Statistics.chiSquarePValue(chiSquare, degreesOfFreedom: 1),
             degreesOfFreedom: 1,
-            summary: String(format: "log-rank χ² = %.3f · กลุ่มแรกเกิดเหตุการณ์ %.0f ครั้ง "
-                            + "เทียบกับที่คาด %.2f", chiSquare, observedA, expectedA),
+            summary: String(format: localised("log-rank χ² = %.3f · the first group had %.0f events ", "Result of a log-rank test. Placeholders: the statistic and the observed event count.")
+                            + localised("against %.2f expected", "Ends the log-rank result. Placeholder: the expected event count."), chiSquare, observedA, expectedA),
             assumptions: [],
             alternatives: [])
     }
@@ -162,13 +162,13 @@ public enum Survival {
     public static func cox(_ observations: [SurvivalObservation],
                            covariates: [[Double]],
                            maximumIterations: Int = 50) throws -> CoxFit {
-        guard !observations.isEmpty else { throw StatError.notEnoughData("ไม่มีข้อมูล") }
-        guard !covariates.isEmpty else { throw StatError.badShape("ต้องมีตัวแปรอย่างน้อยหนึ่งตัว") }
+        guard !observations.isEmpty else { throw StatError.notEnoughData(localised("there is no data", "Why a Cox model cannot be fitted.")) }
+        guard !covariates.isEmpty else { throw StatError.badShape(localised("at least one variable is needed", "Why a Cox model cannot be fitted.")) }
         guard covariates.allSatisfy({ $0.count == observations.count }) else {
-            throw StatError.badShape("จำนวนค่าตัวแปรไม่เท่ากับจำนวนผู้ถูกติดตาม")
+            throw StatError.badShape(localised("there are not as many variable values as people followed", "Why a Cox model cannot be fitted."))
         }
         guard observations.contains(where: \.event) else {
-            throw StatError.notEnoughData("ไม่มีเหตุการณ์เกิดขึ้นเลย — ประมาณค่าไม่ได้")
+            throw StatError.notEnoughData(localised("no events happened at all — nothing can be estimated", "Why a Cox model cannot be fitted."))
         }
 
         let p = covariates.count
@@ -207,14 +207,14 @@ public enum Survival {
             }
 
             guard let step = solve(information, score) else {
-                throw StatError.notEnoughData("ประมาณค่าไม่ลู่เข้า — ข้อมูลอาจแยกกลุ่มได้สมบูรณ์")
+                throw StatError.notEnoughData(localised("the fit did not converge — the data may be perfectly separable", "Why a Cox model could not be fitted."))
             }
             for j in 0..<p { beta[j] += step[j] }
             if step.allSatisfy({ abs($0) < 1e-9 }) { break }
         }
 
         guard let covariance = invert(information) else {
-            throw StatError.notEnoughData("เมทริกซ์ข้อมูลกลับด้านไม่ได้")
+            throw StatError.notEnoughData(localised("the data matrix cannot be inverted", "Why a Cox model could not be fitted."))
         }
         let errors = (0..<p).map { covariance[$0][$0].squareRoot() }
         let z = Epidemiology.z95
@@ -262,8 +262,8 @@ public enum Survival {
             return AssumptionCheck(
                 name: "proportional hazards",
                 wasChecked: false, passed: false, statistic: nil, pValue: nil,
-                detail: "เหตุการณ์น้อยเกินกว่าจะตรวจ Schoenfeld residuals ได้ (ต้องมีอย่างน้อย 5) "
-                    + "— ยังไม่ได้ตรวจ ไม่ใช่ผ่าน")
+                detail: localised("too few events to check the Schoenfeld residuals (at least 5 are needed) ", "Why the proportional-hazards assumption was not checked.")
+                    + localised("— not checked, which is not the same as passed", "Ends the reason the proportional-hazards assumption was not checked."))
         }
 
         // Correlation between the residuals and time. Under proportional
@@ -280,9 +280,9 @@ public enum Survival {
             statistic: statistic,
             pValue: pValue,
             detail: pValue >= StatGate.alpha
-                ? String(format: "Schoenfeld residuals ไม่สัมพันธ์กับเวลาอย่างมีนัย (p = %.3f)", pValue)
-                : String(format: "Schoenfeld residuals สัมพันธ์กับเวลา (p = %.3f) — "
-                         + "อัตราส่วนความเสี่ยงเปลี่ยนไปตามเวลา ค่าเดียวจึงสรุปมันไม่ได้", pValue))
+                ? String(format: localised("the Schoenfeld residuals show no significant relationship with time (p = %.3f)", "The proportional-hazards check passed. Placeholder: the p-value."), pValue)
+                : String(format: localised("the Schoenfeld residuals do vary with time (p = %.3f) — ", "The proportional-hazards check failed. Placeholder: the p-value.")
+                         + localised("the hazard ratio changes over time, so one number cannot summarise it", "Ends the failed proportional-hazards check."), pValue))
     }
 
     // MARK: - small linear algebra, kept local

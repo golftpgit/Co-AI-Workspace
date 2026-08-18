@@ -41,7 +41,7 @@ public struct RoleLesson: Sendable, Equatable {
 
     /// The line that goes into the assignment.
     public var briefLine: String {
-        (namesThisRole ? "บทเรียนสำหรับบทบาทนี้" : "บทเรียนทั่วไป")
+        (namesThisRole ? localised("a lesson for this role", "Labels a lesson that names the role it is for.") : localised("a general lesson", "Labels a lesson that names no particular role."))
             + " — \(source): \(text)"
     }
 }
@@ -51,6 +51,7 @@ public enum RoleMemory {
     /// Thai and English words that mean each role, as somebody closing a
     /// project would actually write them. Deliberately not the raw enum case:
     /// nobody types `teamLead` into a lessons-learned field.
+    /// LOCALISATION: matching data — see RULES.md U24.
     static func vocabulary(for role: Role) -> [String] {
         switch role {
         case .teamLead: ["team lead", "หัวหน้าทีม", "หัวหน้า", "ผู้จัดการโครงการ", "lead"]
@@ -73,6 +74,15 @@ public enum RoleMemory {
         return chunk.provenance.documentID.hasPrefix("lessons/")
     }
 
+    /// The line that says who a lesson is for, in the words somebody writes it.
+    ///
+    /// LOCALISATION: matching data — see RULES.md U24. Read *out of* the lesson,
+    /// so it must hold every language a lesson may be written in at once. Put
+    /// briefly through `t()` during the migration, which made the whole chunk
+    /// the fallback whenever the interface was English — and then every mention
+    /// of a role read as an address to it (2026-08-18).
+    static let appliesMarkers = ["ใช้กับ:", "applies to:"]
+
     /// Which roles a lesson names, if any.
     static func rolesNamed(in text: String) -> Set<Role> {
         let lower = text.lowercased()
@@ -80,7 +90,7 @@ public enum RoleMemory {
         // mentions the analyst is not a lesson addressed to the analyst, and
         // reading the whole chunk turns every mention into an address.
         let applies = lower.components(separatedBy: .newlines)
-            .first(where: { $0.contains("ใช้กับ:") }) ?? lower
+            .first(where: { line in appliesMarkers.contains { line.contains($0) } }) ?? lower
         return Set(Role.allCases.filter { role in
             vocabulary(for: role).contains { applies.contains($0.lowercased()) }
         })
@@ -122,8 +132,8 @@ public enum RoleMemory {
         if all.count > limit {
             // No silent truncation: a brief that shows five of twelve without
             // saying so reads as "there were five".
-            lines.append("(ยังมีบทเรียนที่เกี่ยวข้องอีก \(all.count - limit) ข้อในคลังกลาง — "
-                         + "ค้นด้วย kb_search ได้)")
+            lines.append(localised("(\(all.count - limit) more relevant lessons are in the central store — ", "Says how many lessons were left out. Placeholder: the number not shown.")
+                         + localised("search for them with kb_search)", "Ends the note about lessons left out."))
         }
         return lines
     }

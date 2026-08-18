@@ -1,0 +1,116 @@
+/* ภาษาไทย — คำแปลของข้อความที่โมดูลนี้เป็นเจ้าของ */
+
+/* ── Accountability ──────────────────────────────────────────── */
+
+"a person" = "คน";
+"team lead" = "หัวหน้าทีม";
+"business owner (Executive)" = "ผู้รับผิดชอบทางธุรกิจ (Executive)";
+"user representative (Senior User)" = "ตัวแทนผู้ใช้ (Senior User)";
+
+/* ── AnalysisPlan ────────────────────────────────────────────── */
+
+"set by the protocol" = "โครงร่างระบุไว้";
+"confirmed by a person" = "คนยืนยันแล้ว";
+"proposed by an agent" = "agent เสนอ";
+"critical — the analysis cannot proceed without it" = "วิกฤต — ไม่มีแล้ววิเคราะห์ไม่ได้";
+"ambiguous — it can be read more than one way" = "กำกวม — ตีความได้หลายแบบ";
+"a method has to be chosen" = "ต้องเลือกวิธี";
+"the plan cannot be approved yet:\n" = "ยังอนุมัติแผนไม่ได้:\n";
+"the plan holds no decisions yet" = "แผนยังไม่มีการตัดสินใจใดๆ";
+"still an agent's proposal that nobody has confirmed: %@" = "ยังเป็นข้อเสนอของ agent ที่ยังไม่มีคนยืนยัน: %@";
+"changed the decision “%@” after approval" = "แก้การตัดสินใจ “%@” หลังอนุมัติ";
+"answered the gap “%@” after approval" = "ตอบช่องว่าง “%@” หลังอนุมัติ";
+"added the decision “%@” after approval" = "เพิ่มการตัดสินใจ “%@” หลังอนุมัติ";
+"found the new gap “%@” after approval" = "พบช่องว่างใหม่ “%@” หลังอนุมัติ";
+
+/* ── CoreTypes ───────────────────────────────────────────────── */
+
+"the scope is not known" = "ไม่รู้ว่าเป็น scope ไหน";
+"tier %lld is not one this system knows" = "ไม่รู้จัก tier %lld";
+"reasonably supported, but short of the 'two or more primary sources' bar" = "มีแหล่งรองรับพอสมควร แต่ยังไม่ถึงเกณฑ์ 'แหล่งชั้นต้นสองแหล่งขึ้นไป'";
+"there is no source at all" = "ไม่มีแหล่งอ้างอิงเลย";
+"a single source — nothing corroborates it" = "มีแหล่งเดียว — ยังยืนยันข้ามแหล่งไม่ได้";
+"only secondary sources (T4–T5), %lld of them — " = "มีแต่แหล่งชั้นรอง (T4–T5) %lld แหล่ง — ";
+"at least one T1–T3 source has to back it" = "ต้องมีแหล่ง T1–T3 ยืนยันอย่างน้อยหนึ่งแหล่ง";
+
+/* ── Project ─────────────────────────────────────────────────── */
+
+"starting up" = "เริ่มต้น";
+"planning" = "วางแผน";
+"delivery" = "ดำเนินงาน";
+"closing" = "ปิดโครงการ";
+"closed" = "ปิดแล้ว";
+"general" = "ทั่วไป";
+"research" = "งานวิจัย";
+"software" = "ซอฟต์แวร์";
+"data analysis" = "วิเคราะห์ข้อมูล";
+"delivered in full" = "ส่งมอบครบ";
+"stopped early" = "ยุติก่อนกำหนด";
+"left where it is" = "เก็บไว้ที่เดิม";
+"moved to the archive" = "ย้ายเข้าคลังเก็บถาวร";
+"handed to a successor" = "ยกให้ผู้รับต่อ";
+"deleted under the retention policy" = "ลบตามนโยบายเก็บรักษา";
+
+/* ── ReadableFailure ─────────────────────────────────────────── */
+
+"the %@ file cannot be read — what is inside it does not match the shape the program knows" = "ไฟล์ของ%@ อ่านไม่ออก — รูปแบบข้างในไม่ตรงกับที่โปรแกรมรู้จัก";
+"if you have edited this file yourself, look at it first · " = "ถ้าเคยแก้ไฟล์นี้เองให้ตรวจดูก่อน · ";
+"if you have not, the file is damaged, and the original has already been kept aside" = "ถ้าไม่เคย แปลว่าไฟล์เสีย และของเดิมถูกสำรองไว้ให้แล้ว";
+"the %@ file is not there" = "ไม่พบไฟล์ของ%@";
+"if the data folder has just been moved or removed, point it back where it was" = "ถ้าเพิ่งย้ายหรือลบโฟลเดอร์ข้อมูล ให้ชี้กลับไปที่เดิม";
+"%@ took longer than the time allowed and was given up on" = "%@ ใช้เวลานานเกินกำหนดจนต้องหยุดรอ";
+"the other end may be loading a model — wait a moment and try again" = "ปลายทางอาจกำลังโหลดโมเดลอยู่ — รออีกสักครู่แล้วลองใหม่ได้";
+"%@ did not succeed" = "%@ ไม่สำเร็จ";
+"read the detail below, and if it happens again keep this message" = "ดูรายละเอียดข้างล่าง แล้วถ้าเกิดซ้ำให้บันทึกข้อความนี้ไว้";
+"the %@ file cannot be read" = "ไฟล์ของ%@ อ่านไม่ออก";
+"the original has been kept at %@ — nothing is lost, and it can be opened" = "ของเดิมถูกสำรองไว้ที่ %@ แล้ว — ยังไม่มีอะไรหาย เปิดดูได้";
+"this starts from an empty list; do not save over it if the original still matters" = "เริ่มจากรายการว่างไปก่อน และอย่าเพิ่งบันทึกทับถ้ายังต้องการของเดิม";
+"the %@ file was written by a newer version of the app (version %lld)" = "ไฟล์ของ%@ ถูกเขียนโดยแอปรุ่นใหม่กว่านี้ (เวอร์ชัน %lld)";
+"an empty list is being used this time, and **that file has not been written over** — " = "รอบนี้ใช้รายการว่างไปก่อน และ**ไม่ได้เขียนทับไฟล์นั้น** — ";
+"open it with the newer version and everything is still there" = "เปิดด้วยรุ่นใหม่กว่าแล้วของเดิมยังอยู่ครบ";
+"%@ is not responding" = "%@ ไม่ตอบ";
+"check the status page for whether the service is still running — " = "ดูหน้าสถานะว่าบริการนี้ยังทำงานอยู่ไหม — ";
+"if it has only just stopped, the system will try to bring it back itself" = "ถ้าเพิ่งหยุดไป ระบบจะพยายามเปิดใหม่ให้เอง";
+"the disk is full — %@ has not been saved" = "ดิสก์เต็ม — %@ ยังไม่ถูกบันทึก";
+"free some space, then try again · " = "ต้องมีที่ว่างก่อน ลบไฟล์ที่ไม่ใช้แล้วค่อยสั่งอีกครั้ง · ";
+"what is already on disk is intact and has not been written over" = "ของเดิมบนดิสก์ยังอยู่ครบ ไม่ได้ถูกเขียนทับ";
+"there is no permission to write the %@ file" = "ไม่ได้รับอนุญาตให้เขียนไฟล์ของ%@";
+"check the permissions on the data folder — " = "ตรวจสิทธิ์ของโฟลเดอร์ข้อมูล — ";
+"a folder just moved from another machine or from a backup is the usual cause" = "ถ้าเพิ่งย้ายโฟลเดอร์มาจากเครื่องอื่นหรือจากดิสก์สำรอง มักเป็นเพราะเรื่องนี้";
+
+/* ── SecretPresentation ──────────────────────────────────────── */
+
+"this secret has no name yet, so there is nowhere to store it" = "ยังไม่ได้ตั้งชื่อให้ความลับนี้ จึงยังเก็บค่าไม่ได้";
+"set · held in this machine's Keychain" = "ตั้งไว้แล้ว · เก็บใน Keychain ของเครื่องนี้";
+"from the environment rather than the Keychain — " = "มาจาก environment ไม่ใช่ Keychain — ";
+"a value every process this user runs can read · " = "ค่าแบบนี้ทุกโปรเซสของผู้ใช้คนนี้อ่านได้ · ";
+"save over it here to move it into the Keychain" = "บันทึกทับที่นี่เพื่อย้ายเข้า Keychain";
+"using a test value set inside this process" = "กำลังใช้ค่าทดสอบที่ตั้งไว้ในโปรเซสนี้";
+"not set" = "ยังไม่ได้ตั้ง";
+"the Keychain could not be read (%@) — " = "อ่าน Keychain ไม่ได้ (%@) — ";
+"**which does not mean it was never set** — do not type a new one over it yet" = "**ยังไม่ได้แปลว่ายังไม่ได้ตั้ง** อย่าเพิ่งกรอกใหม่ทับ";
+
+/* ── SecretStore ─────────────────────────────────────────────── */
+
+"the Keychain could not be reached (OSStatus %d)" = "เข้าถึง Keychain ไม่ได้ (OSStatus %d)";
+"no secret store (Keychain) has been installed in this process, so nothing can be saved" = "ยังไม่ได้ติดตั้งที่เก็บความลับ (Keychain) ในโปรเซสนี้ จึงบันทึกไม่ได้";
+
+/* ── ToolProficiency ─────────────────────────────────────────── */
+
+"%lld%% succeeded (attempts: %lld)" = "สำเร็จ %lld%% (ลองใช้: %lld ครั้ง)";
+"used too little to say anything (attempts: %lld)" = "ยังใช้ไม่พอจะบอกอะไร (ลองใช้: %lld ครั้ง)";
+" · a rule blocked %lld more, which is not counted against the role" = " · ถูกกฎห้ามไว้อีก %lld (ไม่นับเป็นความผิดของบทบาท)";
+
+/* ── VersionedList ───────────────────────────────────────────── */
+
+"this file was written by a newer version of the app, and has not been written over " = "ไฟล์นี้ถูกเขียนโดยแอปรุ่นใหม่กว่า — ไม่บันทึกทับให้ ";
+"because overwriting it would lose those settings for the version you would go back to" = "เพราะการเขียนทับคือการทำให้การตั้งค่าหายไปจากรุ่นที่คุณจะกลับไปใช้";
+
+/* ── WorkBreakdown ───────────────────────────────────────────── */
+
+"queued" = "รอคิว";
+"ready" = "พร้อมเริ่ม";
+"in progress" = "กำลังทำ";
+"awaiting QA" = "รอ QA";
+"blocked" = "ติด";
+"done" = "เสร็จ";

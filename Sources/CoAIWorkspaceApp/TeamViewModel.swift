@@ -66,8 +66,9 @@ public final class TeamViewModel {
         public var id = UUID()
         public var role: Role = .researcher
         public var goal: String = ""
-        public var deliverableType: String = "เอกสารสรุป"
-        /// One criterion per line, as `เกณฑ์ | หลักฐานที่ต้องเห็น`.
+        public var deliverableType: String = t("a summary document",
+                                               "Default kind of deliverable for a new assignment.")
+        /// One criterion per line, as `criterion | evidence that must be seen`.
         public var criteria: String = ""
 
         var assignment: Assignment? {
@@ -80,7 +81,9 @@ public final class TeamViewModel {
                 // with none is kept, and the standard says so in words rather
                 // than being silently dropped.
                 let evidence = parts.count > 1 && !parts[1].isEmpty
-                    ? parts[1] : "หลักฐานที่ตรวจได้จากสิ่งที่รันจริง"
+                    ? parts[1]
+                    : t("evidence checkable against what actually ran",
+                        "Default evidence requirement when a criterion names none.")
                 return Criterion(text: text, evidenceRequired: evidence)
             }
             let trimmedGoal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -183,7 +186,7 @@ public final class TeamViewModel {
             for row in rows { merge(row) }
         } catch {
             log.error("loading task ledger: \(error)")
-            status = Status(message: "โหลดบันทึกงานของทีมไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not load the team's work record: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -201,7 +204,9 @@ public final class TeamViewModel {
     /// user edits; approving it is a separate act.
     public func propose() async {
         guard let team else {
-            status = Status(message: "ยังต่อทีมไม่ได้ — เอนจินยังไม่พร้อม", isError: true)
+            status = Status(message: t("The team cannot be reached yet — the engine is not ready",
+                                       "Status message when the engine has not booted."),
+                            isError: true)
             return
         }
         let goal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -221,10 +226,11 @@ public final class TeamViewModel {
                         .map { "\($0.text) | \($0.evidenceRequired)" }
                         .joined(separator: "\n"))
             }
-            status = Status(message: "หัวหน้าทีมเสนอ \(draft.count) งาน — แก้ได้ก่อนเริ่ม",
+            status = Status(message: t("The team lead proposes \(draft.count) assignments — editable before anything starts",
+                                       "Status message after planning. Placeholder is how many assignments."),
                             isError: false)
         } catch {
-            status = Status(message: "วางแผนไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not plan it: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -235,7 +241,9 @@ public final class TeamViewModel {
         guard !isRunning else { return }
         draft = [Draft(role: role,
                        goal: goal.trimmingCharacters(in: .whitespacesAndNewlines))]
-        status = Status(message: "ข้ามหัวหน้าทีม — เขียนงานและเกณฑ์ตรวจรับเอง", isError: false)
+        status = Status(message: t("Skipping the team lead — write the assignment and its criteria yourself",
+                                   "Status message after choosing a single specialist."),
+                        isError: false)
     }
 
     /// Starts work on one leaf of the plan (§19.6, P10.4).
@@ -258,8 +266,9 @@ public final class TeamViewModel {
                        criteria: assignment.acceptanceCriteria
                            .map { "\($0.text) | \($0.evidenceRequired)" }
                            .joined(separator: "\n"))]
-        status = Status(message: "เอาใบงาน “\(package.title)” มาเป็นงานของทีมแล้ว — "
-                        + "ตรวจเกณฑ์ตรวจรับก่อนสั่งเริ่ม", isError: false)
+        status = Status(message: t("Work package “\(package.title)” is now team work — check its acceptance criteria before starting",
+                                   "Status message after starting work from the plan. Placeholder is the package title."),
+                        isError: false)
         return true
     }
 
@@ -295,7 +304,9 @@ public final class TeamViewModel {
     /// to work: `propose` or `draftDirect` first, edit, then this.
     public func start() async {
         guard let team else {
-            status = Status(message: "ยังต่อทีมไม่ได้ — เอนจินยังไม่พร้อม", isError: true)
+            status = Status(message: t("The team cannot be reached yet — the engine is not ready",
+                                       "Status message when the engine has not booted."),
+                            isError: true)
             return
         }
         let goal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -328,7 +339,8 @@ public final class TeamViewModel {
             await MainActor.run {
                 self?.isRunning = false
                 if self?.status?.isError != true {
-                    self?.status = Status(message: "ทีมทำงานจบแล้ว — ได้ผลงาน \(deliverables.count) ชิ้น",
+                    self?.status = Status(message: t("The team finished — \(deliverables.count) deliverables",
+                                                     "Status message when a team run completes. Placeholder is how many deliverables."),
                                           isError: false)
                 }
             }
@@ -345,12 +357,15 @@ public final class TeamViewModel {
     /// the specialist reads this in the same place it reads QA's findings.
     public func rework(_ row: Row, note: String) async {
         guard let team, let assignment = assignment(for: row) else {
-            status = Status(message: "งานนี้เก่าเกินกว่าจะสั่งแก้ได้ — บันทึกไม่มีเกณฑ์ตรวจรับของมัน",
+            status = Status(message: t("This assignment is too old to send back — its record has no acceptance criteria",
+                                       "Status message when rework is impossible."),
                             isError: true)
             return
         }
         isRunning = true
-        status = Status(message: "สั่งแก้ \(row.role.rawValue) แล้ว", isError: false)
+        status = Status(message: t("Sent back to \(row.role.rawValue)",
+                                   "Status message after filing rework. Placeholder is the role."),
+                        isError: false)
         await team.rework(assignment, note: note) { event in
             Task { @MainActor in self.apply(event) }
         }
@@ -359,7 +374,11 @@ public final class TeamViewModel {
     }
 
     /// Stops one piece of work and says so in the ledger.
-    public func cancel(_ row: Row, reason: String = "ผู้ใช้ยกเลิกงานนี้") async {
+    /// The default reason is computed inside rather than in the signature: a
+    /// default argument may not call an internal function, and `t` is internal.
+    public func cancel(_ row: Row, reason: String? = nil) async {
+        let reason = reason ?? t("the user cancelled this assignment",
+                                 "Recorded reason when a person stops one assignment.")
         guard let team else { return }
         await team.cancel(row.id, assignment: assignment(for: row), reason: reason) { event in
             Task { @MainActor in self.apply(event) }
@@ -384,9 +403,11 @@ public final class TeamViewModel {
         isRunning = false
         for index in rows.indices where rows[index].progress == .running {
             rows[index].progress = .escalated
-            rows[index].findings.append("ผู้ใช้สั่งหยุดกลางคัน")
+            rows[index].findings.append(t("a person stopped it part-way",
+                                          "Recorded on an assignment a person halted mid-run."))
         }
-        status = Status(message: "หยุดการทำงานของทีมแล้ว", isError: false)
+        status = Status(message: t("The team was stopped", "Status message after cancelling the run."),
+                        isError: false)
     }
 
     private func apply(_ event: TeamEvent) {
@@ -432,15 +453,16 @@ public final class TeamViewModel {
             }
 
         case .continuing(let remaining):
-            status = Status(message: "ทำต่อเองตาม Run-until-done — เหลืองานค้างในบันทึก \(remaining) งาน",
+            status = Status(message: t("Carrying on under Run-until-done — \(remaining) assignments still outstanding in the record",
+                                       "Status message while continuing automatically. Placeholder is how many remain. Run-until-done is a mode name."),
                             isError: false)
 
         case .budgetExhausted(let summary, let remaining):
             // Marked as an error state on purpose: the run stopped short, and
             // a neutral note is how somebody reads a truncated run as a
             // finished one (P4.8).
-            status = Status(message: "หยุดเพราะถึงเพดานโทเคนของการรันนี้ — \(summary) "
-                            + "· เหลืองานที่ยังไม่ผ่าน \(remaining) งาน อยู่ในบันทึกให้สั่งต่อได้",
+            status = Status(message: t("Stopped at this run's token ceiling — \(summary) · \(remaining) assignments have not passed and stay in the record to continue",
+                                       "Status message when the token ceiling halts a run. Placeholders: a usage summary and how many assignments remain."),
                             isError: true)
 
         case .finished:

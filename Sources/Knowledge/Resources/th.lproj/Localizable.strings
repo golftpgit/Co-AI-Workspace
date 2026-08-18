@@ -1,0 +1,107 @@
+/* ภาษาไทย — คำแปลของข้อความที่โมดูลนี้เป็นเจ้าของ */
+
+/* ── Classification ──────────────────────────────────────────── */
+
+"General works" = "งานทั่วไป";
+"Philosophy, psychology, religion" = "ปรัชญา จิตวิทยา ศาสนา";
+"Auxiliary sciences of history" = "ศาสตร์ประกอบประวัติศาสตร์";
+"World history" = "ประวัติศาสตร์โลก";
+"History of the Americas" = "ประวัติศาสตร์อเมริกา";
+"History of the Americas (local)" = "ประวัติศาสตร์อเมริกา (ท้องถิ่น)";
+"Geography, anthropology" = "ภูมิศาสตร์ มานุษยวิทยา";
+"Social sciences" = "สังคมศาสตร์";
+"Political science" = "รัฐศาสตร์";
+"Law" = "กฎหมาย";
+"Education" = "การศึกษา";
+"Music" = "ดนตรี";
+"Fine arts" = "วิจิตรศิลป์";
+"Language and literature" = "ภาษาและวรรณคดี";
+"Science" = "วิทยาศาสตร์";
+"Medicine" = "การแพทย์";
+"Agriculture" = "เกษตรศาสตร์";
+"Technology" = "เทคโนโลยี";
+"Military science" = "วิทยาการทหาร";
+"Naval science" = "วิทยาการนาวี";
+"Library science" = "บรรณารักษศาสตร์";
+"Public health" = "สาธารณสุข";
+"Internal medicine" = "อายุรศาสตร์";
+"Nursing" = "การพยาบาล";
+"Paediatrics" = "กุมารเวชศาสตร์";
+"Pharmacotherapy" = "เภสัชบำบัด";
+"Mathematics and computing" = "คณิตศาสตร์และคอมพิวเตอร์";
+"Biology" = "ชีววิทยา";
+"Physiology" = "สรีรวิทยา";
+"Statistics" = "สถิติ";
+"Sociology" = "สังคมวิทยา";
+"Theory and practice of education" = "ทฤษฎีและปฏิบัติการศึกษา";
+"Electrical and computer engineering" = "วิศวกรรมไฟฟ้าและคอมพิวเตอร์";
+"no word in it said clearly enough what it is about" = "ไม่มีคำที่บอกหมวดได้ชัดพอ";
+"the words that placed it — " = "คำที่ทำให้จัดหมวดนี้ — ";
+
+/* ── ClosingHandover ─────────────────────────────────────────── */
+
+"participant data — the people in it consented to this study, and only this one" = "ข้อมูลจากผู้เข้าร่วม — ผู้ให้ข้อมูลยินยอมกับงานนี้ งานเดียว";
+"a table pulled from a database — the system cannot tell whether it holds personal data" = "ตารางที่ดึงมาจากฐานข้อมูล — ระบบบอกไม่ได้ว่ามีข้อมูลบุคคลหรือไม่";
+"the project's drafts and working notes — lessons go up by their own path" = "ร่างและบันทึกระหว่างทางของโปรเจกต์ — บทเรียนขึ้นไปทางของมันเอง";
+"an outside document with no tier — sent up it would be re-ranked as if nobody had ever assessed it" = "เอกสารภายนอกที่ไม่มี tier — ขึ้นไปแล้วจะถูกจัดอันดับใหม่เหมือนไม่เคยมีใครประเมิน";
+"an outside reference, with the tier it already had" = "เอกสารอ้างอิงภายนอก พร้อม tier เดิม";
+
+/* ── ConflictLedger ──────────────────────────────────────────── */
+
+"a T1 source (official document)" = "แหล่ง T1 (เอกสารทางการ)";
+"a T2 source (peer-reviewed)" = "แหล่ง T2 (peer-reviewed)";
+"a T3 source (preprint or semi-official)" = "แหล่ง T3 (preprint/กึ่งทางการ)";
+"a T4 source (a community that reviews its own)" = "แหล่ง T4 (ชุมชนที่ตรวจกันเอง)";
+"a T5 source (the open web)" = "แหล่ง T5 (เว็บทั่วไป)";
+"written by the system itself (no outside tier)" = "ระบบเขียนเอง (ไม่มี tier ภายนอก)";
+"%lld — recent" = "ปี %lld — ใหม่";
+"%lld — reasonably recent" = "ปี %lld — พอสมควร";
+"%lld — old" = "ปี %lld — เก่า";
+"no year given" = "ไม่ระบุปี";
+"%lld other sources agree" = "มีอีก %lld แหล่งที่สอดคล้อง";
+
+/* ── EntityGraph ─────────────────────────────────────────────── */
+
+"nothing has been extracted around “%@” in this scope yet" = "“%@” ยังไม่มีความสัมพันธ์ที่สกัดได้ในขอบเขตนี้";
+"%lld things · %lld relationships around “%@”" = "%lld สิ่ง · %lld ความสัมพันธ์ รอบ “%@”";
+" · %lld more lie beyond what is shown — widen the range to see them" = " · อีก %lld สิ่งอยู่ไกลกว่าที่แสดง — เพิ่มระยะเพื่อดู";
+
+/* ── KnowledgeView ───────────────────────────────────────────── */
+
+"scope " = "ขอบเขต ";
+"%@ sources and above" = "แหล่งอย่างน้อย %@";
+"fully citable only" = "เฉพาะที่อ้างอิงได้ครบ";
+"system-generated evidence only" = "เฉพาะหลักฐานที่ระบบสร้าง";
+"kind " = "ชนิด ";
+"%lld hops through the graph" = "เดินกราฟ %lld ชั้น";
+
+/* ── Provenance ──────────────────────────────────────────────── */
+
+"research protocol" = "โครงร่างวิจัย";
+"research paper" = "งานวิจัย";
+"guideline" = "แนวปฏิบัติ";
+"dataset" = "ชุดข้อมูล";
+"report" = "รายงาน";
+"other" = "อื่น ๆ";
+
+/* ── RoleMemory ──────────────────────────────────────────────── */
+
+"a lesson for this role" = "บทเรียนสำหรับบทบาทนี้";
+"a general lesson" = "บทเรียนทั่วไป";
+"(%lld more relevant lessons are in the central store — " = "(ยังมีบทเรียนที่เกี่ยวข้องอีก %lld ข้อในคลังกลาง — ";
+"search for them with kb_search)" = "ค้นด้วย kb_search ได้)";
+
+/* ── SourceRegistry ──────────────────────────────────────────── */
+
+"Engineering" = "วิศวกรรม";
+"Computing" = "คอมพิวเตอร์";
+"Social science" = "สังคมศาสตร์";
+"Policy" = "นโยบาย";
+"General" = "ทั่วไป";
+"Ministry of Public Health (Thailand)" = "กระทรวงสาธารณสุข";
+"National Statistical Office (Thailand)" = "สำนักงานสถิติแห่งชาติ";
+"Royal Thai Government Gazette" = "ราชกิจจานุเบกษา";
+"Chulalongkorn University" = "จุฬาลงกรณ์มหาวิทยาลัย";
+"Mahidol University" = "มหาวิทยาลัยมหิดล";
+"ThaiLIS (Thai thesis repository)" = "ThaiLIS (คลังวิทยานิพนธ์)";
+"NRCT (National Research Council of Thailand)" = "วช. (สำนักงานการวิจัยแห่งชาติ)";

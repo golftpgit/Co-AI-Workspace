@@ -120,6 +120,25 @@ public struct LocalModelCatalog: Sendable {
             ?? all.min { $0.sizeOnDisk < $1.sizeOnDisk }
     }
 
+    /// The model to demonstrate the guarantee with (§9.2 rule 4, P5.4).
+    ///
+    /// **The smallest one that fits, not the largest** — which is the opposite
+    /// of `preferred`, and deliberately so. `preferred` answers "what should do
+    /// the work"; this answers "what proves there is a floor at all", and those
+    /// are different questions with different right answers.
+    ///
+    /// Measured why it matters: the guarantee check used `preferred`, so the
+    /// model it ran against changed with whatever memory happened to be free —
+    /// a 4.5 GB model at 6.9 GB free, nothing at all at 2.7 GB — and the check
+    /// passed or skipped at random while nothing about the code moved. A floor
+    /// chosen by auction against current free memory is not a floor (E.46).
+    public func floorModel(memory: MachineMemory = .current()) async -> LocalModel? {
+        let all = await installed()
+        let fitting = all.filter { !AdmissionControl.admit($0, memory: memory).isBlocking }
+        return fitting.min { $0.sizeOnDisk < $1.sizeOnDisk }
+            ?? all.min { $0.sizeOnDisk < $1.sizeOnDisk }
+    }
+
     // MARK: - what counts as a chat model
 
     /// A directory holding weights and a chat template, for an architecture

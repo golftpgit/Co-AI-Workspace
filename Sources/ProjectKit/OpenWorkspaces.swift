@@ -89,7 +89,9 @@ public struct OpenWorkspaces: Sendable, Equatable {
 
     /// The tab that is always there. Not a project, has no lifecycle, and every
     /// list starts with it.
-    public static let generalTitle = "ทั่วไป"
+    public static var generalTitle: String {
+        t("General", "Name of the workspace that is not a project.")
+    }
 
     public init() {
         entries = [Entry(tab: .general, title: Self.generalTitle, access: .readWrite)]

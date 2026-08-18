@@ -111,12 +111,12 @@ public enum DocumentKind: String, Sendable, Equatable, Codable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .proposal: "โครงร่างวิจัย"
-        case .paper: "งานวิจัย"
-        case .guideline: "แนวปฏิบัติ"
-        case .dataset: "ชุดข้อมูล"
-        case .report: "รายงาน"
-        case .other: "อื่น ๆ"
+        case .proposal: localised("research protocol", "A kind of document.")
+        case .paper: localised("research paper", "A kind of document.")
+        case .guideline: localised("guideline", "A kind of document.")
+        case .dataset: localised("dataset", "A kind of document.")
+        case .report: localised("report", "A kind of document.")
+        case .other: localised("other", "A kind of document.")
         }
     }
 }

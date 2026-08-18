@@ -35,27 +35,27 @@ public enum LCClass: String, Sendable, Equatable, Hashable, Codable, CaseIterabl
 
     public var label: String {
         switch self {
-        case .a: "งานทั่วไป"
-        case .b: "ปรัชญา จิตวิทยา ศาสนา"
-        case .c: "ศาสตร์ประกอบประวัติศาสตร์"
-        case .d: "ประวัติศาสตร์โลก"
-        case .e: "ประวัติศาสตร์อเมริกา"
-        case .f: "ประวัติศาสตร์อเมริกา (ท้องถิ่น)"
-        case .g: "ภูมิศาสตร์ มานุษยวิทยา"
-        case .h: "สังคมศาสตร์"
-        case .j: "รัฐศาสตร์"
-        case .k: "กฎหมาย"
-        case .l: "การศึกษา"
-        case .m: "ดนตรี"
-        case .n: "วิจิตรศิลป์"
-        case .p: "ภาษาและวรรณคดี"
-        case .q: "วิทยาศาสตร์"
-        case .r: "แพทยศาสตร์"
-        case .s: "เกษตรศาสตร์"
-        case .t: "เทคโนโลยี"
-        case .u: "วิทยาการทหาร"
-        case .v: "วิทยาการนาวี"
-        case .z: "บรรณารักษศาสตร์"
+        case .a: localised("General works", "Library of Congress class A.")
+        case .b: localised("Philosophy, psychology, religion", "Library of Congress class B.")
+        case .c: localised("Auxiliary sciences of history", "Library of Congress class C.")
+        case .d: localised("World history", "Library of Congress class D.")
+        case .e: localised("History of the Americas", "Library of Congress class E.")
+        case .f: localised("History of the Americas (local)", "Library of Congress class F.")
+        case .g: localised("Geography, anthropology", "Library of Congress class G.")
+        case .h: localised("Social sciences", "Library of Congress class H.")
+        case .j: localised("Political science", "Library of Congress class J.")
+        case .k: localised("Law", "Library of Congress class K.")
+        case .l: localised("Education", "Library of Congress class L.")
+        case .m: localised("Music", "Library of Congress class M.")
+        case .n: localised("Fine arts", "Library of Congress class N.")
+        case .p: localised("Language and literature", "Library of Congress class P.")
+        case .q: localised("Science", "Library of Congress class Q.")
+        case .r: localised("Medicine", "Library of Congress class R.")
+        case .s: localised("Agriculture", "Library of Congress class S.")
+        case .t: localised("Technology", "Library of Congress class T.")
+        case .u: localised("Military science", "Library of Congress class U.")
+        case .v: localised("Naval science", "Library of Congress class V.")
+        case .z: localised("Library science", "Library of Congress class Z.")
         }
     }
 }
@@ -97,18 +97,18 @@ public struct LCSubject: Sendable, Equatable, Hashable, Codable {
     /// that lies about coverage.
     public var label: String {
         switch code {
-        case "RA": "สาธารณสุข"
-        case "RC": "อายุรศาสตร์"
-        case "RT": "การพยาบาล"
-        case "RJ": "กุมารเวชศาสตร์"
-        case "RM": "เภสัชบำบัด"
-        case "QA": "คณิตศาสตร์และคอมพิวเตอร์"
-        case "QH": "ชีววิทยา"
-        case "QP": "สรีรวิทยา"
-        case "HA": "สถิติ"
-        case "HM": "สังคมวิทยา"
-        case "LB": "ทฤษฎีและปฏิบัติการศึกษา"
-        case "TK": "วิศวกรรมไฟฟ้าและคอมพิวเตอร์"
+        case "RA": localised("Public health", "Library of Congress subclass RA.")
+        case "RC": localised("Internal medicine", "Library of Congress subclass RC.")
+        case "RT": localised("Nursing", "Library of Congress subclass RT.")
+        case "RJ": localised("Paediatrics", "Library of Congress subclass RJ.")
+        case "RM": localised("Pharmacotherapy", "Library of Congress subclass RM.")
+        case "QA": localised("Mathematics and computing", "Library of Congress subclass QA.")
+        case "QH": localised("Biology", "Library of Congress subclass QH.")
+        case "QP": localised("Physiology", "Library of Congress subclass QP.")
+        case "HA": localised("Statistics", "Library of Congress subclass HA.")
+        case "HM": localised("Sociology", "Library of Congress subclass HM.")
+        case "LB": localised("Theory and practice of education", "Library of Congress subclass LB.")
+        case "TK": localised("Electrical and computer engineering", "Library of Congress subclass TK.")
         default: `class`.label
         }
     }
@@ -136,17 +136,26 @@ public struct Classification: Sendable, Equatable, Codable {
     }
 
     public static let unclassified = Classification(subjects: [], assignedBy: .system,
-                                                    reason: "ไม่มีคำที่บอกหมวดได้ชัดพอ")
+                                                    reason: localised("no word in it said clearly enough what it is about", "Why a document was left unclassified."))
 }
 
 public enum Classifier {
     /// Words that place a document, per subclass.
+    ///
+    /// **Not translatable, and not just untranslated.** These are the words
+    /// looked for *in the document*, so they must stay in the language the
+    /// document is written in — several of them are also class labels, and the
+    /// literal-level replacer duly rewrote eight of them into `t(…)` calls,
+    /// which would have made a Thai document stop classifying the moment the
+    /// interface was English (2026-08-18). Adding a language here means adding
+    /// its words, never swapping the existing ones out.
     ///
     /// Keywords rather than a model, and that is a decision with a reason: a
     /// classifier that cannot say *why* it filed something under `RA` gives a
     /// person nothing to disagree with, and §11.9's whole point is that a wrong
     /// class must be correctable. A matched word is an argument; a logit is not.
     /// It is also free, which matters for something that runs on every ingest.
+    /// LOCALISATION: matching data — see RULES.md U24.
     static let vocabulary: [(code: String, words: [String])] = [
         ("RA", ["สาธารณสุข", "ระบาดวิทยา", "อนามัย", "public health", "epidemiolog",
                 "prevention", "screening", "vaccination", "วัคซีน", "คัดกรอง"]),
@@ -191,7 +200,7 @@ public enum Classifier {
             .map { "\($0.0.code): " + $0.1.prefix(3).joined(separator: ", ") }
             .joined(separator: " · ")
         return Classification(subjects: matched.map(\.0), assignedBy: .system,
-                              reason: "คำที่ทำให้จัดหมวดนี้ — " + reason)
+                              reason: localised("the words that placed it — ", "Introduces the matched words that decided a classification.") + reason)
     }
 
     /// The subclasses offered on screen when somebody corrects a class.

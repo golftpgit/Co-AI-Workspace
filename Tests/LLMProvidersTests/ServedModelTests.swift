@@ -20,7 +20,10 @@ import AgentKit
 // ─────────────────────────────────────────────────────────────
 
 /// The smallest OpenAI-compatible server that can answer these questions.
-private final class StubEndpoint: @unchecked Sendable {
+/// Internal rather than private: the metered-endpoint tests need the same
+/// server, and a second copy of an OpenAI-compatible stub would drift from this
+/// one exactly where it matters — the shape of the frame that carries usage.
+final class StubEndpoint: @unchecked Sendable {
     private let listener: NWListener
     private let lock = NSLock()
     private var _served: [String]
@@ -28,6 +31,10 @@ private final class StubEndpoint: @unchecked Sendable {
     private var _dropsMidStream = false
     private var _chunks: [String]?
     private var _bodies: [String] = []
+    /// What the server says the turn cost. A real one always does; this one did
+    /// not, so nothing that bills by token could be tested through it (C2b).
+    private var _promptTokens = 0
+    private var _completionTokens = 0
     /// How many chat requests must be connected before any of them is answered,
     /// and how many have arrived. Its own condition rather than the main lock:
     /// the waiting happens while holding it, and everything else must stay
@@ -67,6 +74,10 @@ private final class StubEndpoint: @unchecked Sendable {
     }
 
     enum StubError: Error { case didNotStart(String) }
+
+    func reports(promptTokens: Int, completionTokens: Int) {
+        lock.withLock { _promptTokens = promptTokens; _completionTokens = completionTokens }
+    }
 
     private final class Reported: @unchecked Sendable {
         private let lock = NSLock()
@@ -176,8 +187,15 @@ private final class StubEndpoint: @unchecked Sendable {
                     .replacingOccurrences(of: "\n", with: "\\n")
                 return #"data: {"choices":[{"delta":{"content":"\#(escaped)"}}]}"#
             }
+            // Usage on the final frame, the way a real server bills it. Without
+            // it nothing downstream can be charged for anything, which is why
+            // the metered tier had never been exercised over HTTP at all: every
+            // budget test so far used an in-process stub that simply asserted a
+            // number (C2b).
+            let (prompt, completion) = lock.withLock { (_promptTokens, _completionTokens) }
             payload = (events
-                + [#"data: {"choices":[{"delta":{},"finish_reason":"stop"}]}"#, "data: [DONE]", "", ""])
+                + [#"data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":\#(prompt),"completion_tokens":\#(completion)}}"#,
+                   "data: [DONE]", "", ""])
                 .joined(separator: "\n\n")
         } else {
             payload = #"{"error":{"message":"model not found"}}"#
@@ -271,7 +289,7 @@ struct ServedModelTests {
         } catch let error as LLMError {
             let message = "\(error)"
             #expect(message.contains("GX10"), "the message does not say which endpoint went away")
-            #expect(message.contains("ไม่ตอบ") || message.contains("นานเกินกำหนด"),
+            #expect(message.contains("is not responding") || message.contains("longer than the time allowed"),
                     "not a sentence anybody can act on: \(message)")
             #expect(message.contains("NSURLErrorDomain") == false,
                     "Foundation's error code reached the person: \(message)")

@@ -1,0 +1,116 @@
+/* The base language. Keys are the English sentences. */
+
+/* ── Accountability ──────────────────────────────────────────── */
+
+"a person" = "a person";
+"team lead" = "team lead";
+"business owner (Executive)" = "business owner (Executive)";
+"user representative (Senior User)" = "user representative (Senior User)";
+
+/* ── AnalysisPlan ────────────────────────────────────────────── */
+
+"set by the protocol" = "set by the protocol";
+"confirmed by a person" = "confirmed by a person";
+"proposed by an agent" = "proposed by an agent";
+"critical — the analysis cannot proceed without it" = "critical — the analysis cannot proceed without it";
+"ambiguous — it can be read more than one way" = "ambiguous — it can be read more than one way";
+"a method has to be chosen" = "a method has to be chosen";
+"the plan cannot be approved yet:\n" = "the plan cannot be approved yet:\n";
+"the plan holds no decisions yet" = "the plan holds no decisions yet";
+"still an agent's proposal that nobody has confirmed: %@" = "still an agent's proposal that nobody has confirmed: %@";
+"changed the decision “%@” after approval" = "changed the decision “%@” after approval";
+"answered the gap “%@” after approval" = "answered the gap “%@” after approval";
+"added the decision “%@” after approval" = "added the decision “%@” after approval";
+"found the new gap “%@” after approval" = "found the new gap “%@” after approval";
+
+/* ── CoreTypes ───────────────────────────────────────────────── */
+
+"the scope is not known" = "the scope is not known";
+"tier %lld is not one this system knows" = "tier %lld is not one this system knows";
+"reasonably supported, but short of the 'two or more primary sources' bar" = "reasonably supported, but short of the 'two or more primary sources' bar";
+"there is no source at all" = "there is no source at all";
+"a single source — nothing corroborates it" = "a single source — nothing corroborates it";
+"only secondary sources (T4–T5), %lld of them — " = "only secondary sources (T4–T5), %lld of them — ";
+"at least one T1–T3 source has to back it" = "at least one T1–T3 source has to back it";
+
+/* ── Project ─────────────────────────────────────────────────── */
+
+"starting up" = "starting up";
+"planning" = "planning";
+"delivery" = "delivery";
+"closing" = "closing";
+"closed" = "closed";
+"general" = "general";
+"research" = "research";
+"software" = "software";
+"data analysis" = "data analysis";
+"delivered in full" = "delivered in full";
+"stopped early" = "stopped early";
+"left where it is" = "left where it is";
+"moved to the archive" = "moved to the archive";
+"handed to a successor" = "handed to a successor";
+"deleted under the retention policy" = "deleted under the retention policy";
+
+/* ── ReadableFailure ─────────────────────────────────────────── */
+
+"the %@ file cannot be read — what is inside it does not match the shape the program knows" = "the %@ file cannot be read — what is inside it does not match the shape the program knows";
+"if you have edited this file yourself, look at it first · " = "if you have edited this file yourself, look at it first · ";
+"if you have not, the file is damaged, and the original has already been kept aside" = "if you have not, the file is damaged, and the original has already been kept aside";
+"the %@ file is not there" = "the %@ file is not there";
+"if the data folder has just been moved or removed, point it back where it was" = "if the data folder has just been moved or removed, point it back where it was";
+"%@ took longer than the time allowed and was given up on" = "%@ took longer than the time allowed and was given up on";
+"the other end may be loading a model — wait a moment and try again" = "the other end may be loading a model — wait a moment and try again";
+"%@ did not succeed" = "%@ did not succeed";
+"read the detail below, and if it happens again keep this message" = "read the detail below, and if it happens again keep this message";
+"the %@ file cannot be read" = "the %@ file cannot be read";
+"the original has been kept at %@ — nothing is lost, and it can be opened" = "the original has been kept at %@ — nothing is lost, and it can be opened";
+"this starts from an empty list; do not save over it if the original still matters" = "this starts from an empty list; do not save over it if the original still matters";
+"the %@ file was written by a newer version of the app (version %lld)" = "the %@ file was written by a newer version of the app (version %lld)";
+"an empty list is being used this time, and **that file has not been written over** — " = "an empty list is being used this time, and **that file has not been written over** — ";
+"open it with the newer version and everything is still there" = "open it with the newer version and everything is still there";
+"%@ is not responding" = "%@ is not responding";
+"check the status page for whether the service is still running — " = "check the status page for whether the service is still running — ";
+"if it has only just stopped, the system will try to bring it back itself" = "if it has only just stopped, the system will try to bring it back itself";
+"the disk is full — %@ has not been saved" = "the disk is full — %@ has not been saved";
+"free some space, then try again · " = "free some space, then try again · ";
+"what is already on disk is intact and has not been written over" = "what is already on disk is intact and has not been written over";
+"there is no permission to write the %@ file" = "there is no permission to write the %@ file";
+"check the permissions on the data folder — " = "check the permissions on the data folder — ";
+"a folder just moved from another machine or from a backup is the usual cause" = "a folder just moved from another machine or from a backup is the usual cause";
+
+/* ── SecretPresentation ──────────────────────────────────────── */
+
+"this secret has no name yet, so there is nowhere to store it" = "this secret has no name yet, so there is nowhere to store it";
+"set · held in this machine's Keychain" = "set · held in this machine's Keychain";
+"from the environment rather than the Keychain — " = "from the environment rather than the Keychain — ";
+"a value every process this user runs can read · " = "a value every process this user runs can read · ";
+"save over it here to move it into the Keychain" = "save over it here to move it into the Keychain";
+"using a test value set inside this process" = "using a test value set inside this process";
+"not set" = "not set";
+"the Keychain could not be read (%@) — " = "the Keychain could not be read (%@) — ";
+"**which does not mean it was never set** — do not type a new one over it yet" = "**which does not mean it was never set** — do not type a new one over it yet";
+
+/* ── SecretStore ─────────────────────────────────────────────── */
+
+"the Keychain could not be reached (OSStatus %d)" = "the Keychain could not be reached (OSStatus %d)";
+"no secret store (Keychain) has been installed in this process, so nothing can be saved" = "no secret store (Keychain) has been installed in this process, so nothing can be saved";
+
+/* ── ToolProficiency ─────────────────────────────────────────── */
+
+"%lld%% succeeded (attempts: %lld)" = "%lld%% succeeded (attempts: %lld)";
+"used too little to say anything (attempts: %lld)" = "used too little to say anything (attempts: %lld)";
+" · a rule blocked %lld more, which is not counted against the role" = " · a rule blocked %lld more, which is not counted against the role";
+
+/* ── VersionedList ───────────────────────────────────────────── */
+
+"this file was written by a newer version of the app, and has not been written over " = "this file was written by a newer version of the app, and has not been written over ";
+"because overwriting it would lose those settings for the version you would go back to" = "because overwriting it would lose those settings for the version you would go back to";
+
+/* ── WorkBreakdown ───────────────────────────────────────────── */
+
+"queued" = "queued";
+"ready" = "ready";
+"in progress" = "in progress";
+"awaiting QA" = "awaiting QA";
+"blocked" = "blocked";
+"done" = "done";

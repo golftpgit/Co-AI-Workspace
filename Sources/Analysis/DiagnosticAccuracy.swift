@@ -61,7 +61,7 @@ public enum DiagnosticAccuracy {
     /// study however clean its point estimate looks.
     public static func sensitivity(_ table: DiagnosticTable) throws -> Estimate {
         guard table.diseased > 0 else {
-            throw StatError.notEnoughData("ไม่มีผู้ป่วยจริงในชุดข้อมูล — คำนวณ sensitivity ไม่ได้")
+            throw StatError.notEnoughData(localised("there is nobody with the disease in the data — sensitivity cannot be computed", "Why a diagnostic measure cannot be computed."))
         }
         return Epidemiology.wilson(successes: table.truePositives, trials: table.diseased)
     }
@@ -69,7 +69,7 @@ public enum DiagnosticAccuracy {
     /// Specificity — of the people who do not have it, how many the test clears.
     public static func specificity(_ table: DiagnosticTable) throws -> Estimate {
         guard table.well > 0 else {
-            throw StatError.notEnoughData("ไม่มีคนปกติในชุดข้อมูล — คำนวณ specificity ไม่ได้")
+            throw StatError.notEnoughData(localised("there is nobody without the disease in the data — specificity cannot be computed", "Why a diagnostic measure cannot be computed."))
         }
         return Epidemiology.wilson(successes: table.trueNegatives, trials: table.well)
     }
@@ -87,7 +87,7 @@ public enum DiagnosticAccuracy {
     public static func predictiveValues(_ table: DiagnosticTable,
                                         prevalence: Double) throws -> PredictiveValues {
         guard prevalence > 0, prevalence < 1 else {
-            throw StatError.badShape("ความชุกต้องอยู่ระหว่าง 0 ถึง 1 (ไม่รวมปลายทั้งสอง)")
+            throw StatError.badShape(localised("prevalence must be between 0 and 1, ends excluded", "Why a diagnostic measure cannot be computed."))
         }
         let sensitivity = try self.sensitivity(table).value
         let specificity = try self.specificity(table).value
@@ -99,7 +99,7 @@ public enum DiagnosticAccuracy {
 
         guard truePositiveShare + falsePositiveShare > 0,
               trueNegativeShare + falseNegativeShare > 0 else {
-            throw StatError.notEnoughData("การทดสอบนี้ไม่แยกอะไรเลย — ค่าทำนายคำนวณไม่ได้")
+            throw StatError.notEnoughData(localised("this test separates nothing — predictive values cannot be computed", "Why a diagnostic measure cannot be computed."))
         }
         return PredictiveValues(
             positive: truePositiveShare / (truePositiveShare + falsePositiveShare),
@@ -116,10 +116,10 @@ public enum DiagnosticAccuracy {
         let specificity = try self.specificity(table).value
         guard specificity < 1 else {
             throw StatError.notEnoughData(
-                "specificity เป็น 1 พอดี — LR+ เป็นอนันต์ ซึ่งเป็นผลของขนาดตัวอย่าง ไม่ใช่ของการทดสอบ")
+                localised("specificity is exactly 1 — LR+ is infinite, which is a fact about the sample size rather than about the test", "Why a likelihood ratio cannot be reported."))
         }
         guard specificity > 0 else {
-            throw StatError.notEnoughData("specificity เป็นศูนย์ — LR− คำนวณไม่ได้")
+            throw StatError.notEnoughData(localised("specificity is zero — LR− cannot be computed", "Why a likelihood ratio cannot be reported."))
         }
         return (positive: sensitivity / (1 - specificity),
                 negative: (1 - sensitivity) / specificity)
@@ -141,12 +141,12 @@ public enum DiagnosticAccuracy {
     ///   - labels: true for diseased.
     public static func areaUnderROC(scores: [Double], labels: [Bool]) throws -> Estimate {
         guard scores.count == labels.count else {
-            throw StatError.badShape("จำนวนคะแนนกับป้ายกำกับไม่เท่ากัน")
+            throw StatError.badShape(localised("there are not as many scores as labels", "Why an ROC curve cannot be computed."))
         }
         let positives = zip(scores, labels).filter { $0.1 }.map(\.0)
         let negatives = zip(scores, labels).filter { !$0.1 }.map(\.0)
         guard !positives.isEmpty, !negatives.isEmpty else {
-            throw StatError.notEnoughData("ต้องมีทั้งกลุ่มที่เป็นโรคและไม่เป็นโรค")
+            throw StatError.notEnoughData(localised("both a diseased and a non-diseased group are needed", "Why an ROC curve cannot be computed."))
         }
 
         var wins = 0.0
@@ -172,6 +172,6 @@ public enum DiagnosticAccuracy {
         return Estimate(value: area,
                         lower: max(0, area - halfWidth),
                         upper: min(1, area + halfWidth),
-                        method: "Hanley–McNeil 95% CI (พื้นที่ = Mann–Whitney)")
+                        method: localised("Hanley–McNeil 95% CI (the area equals Mann–Whitney)", "How the interval around the area under the ROC curve was computed."))
     }
 }

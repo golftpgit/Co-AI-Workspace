@@ -57,12 +57,12 @@ public struct ItemValidity: Sendable, Equatable, Identifiable {
 
     public var reason: String? {
         guard !passes else { return nil }
-        guard let ioc else { return "ยังไม่มีผู้เชี่ยวชาญให้คะแนนข้อนี้" }
+        guard let ioc else { return localised("no expert has rated this item yet", "Why an item has no validity figure.") }
         if ioc < 0.5 {
-            return String(format: "IOC %.2f ต่ำกว่า 0.50", ioc)
+            return String(format: localised("IOC %.2f is below 0.50", "An item failed the IOC threshold. Placeholder: the IOC."), ioc)
         }
         if let icvi, icvi < 0.78 {
-            return String(format: "I-CVI %.2f ต่ำกว่า 0.78", icvi)
+            return String(format: localised("I-CVI %.2f is below 0.78", "An item failed the I-CVI threshold. Placeholder: the I-CVI."), icvi)
         }
         return nil
     }
@@ -102,15 +102,15 @@ public struct ContentValidity: Sendable, Equatable {
     }
 
     public var summary: String {
-        guard !items.isEmpty else { return "ยังไม่มีผลประเมิน" }
-        var parts = ["ผู้เชี่ยวชาญ \(experts.count) คน", "ข้อที่ผ่าน \(items.count - failing.count)/\(items.count)"]
+        guard !items.isEmpty else { return localised("no assessment yet", "Shown before any expert review exists.") }
+        var parts = [localised("\(experts.count) experts", "How many experts reviewed. Placeholder: the count."), localised("\(items.count - failing.count)/\(items.count) items passed", "How many items passed. Placeholders: passing count and total.")]
         if let scviAve { parts.append(String(format: "S-CVI/Ave %.2f", scviAve)) }
         if !hasPanel {
-            parts.append("ต้องมีผู้เชี่ยวชาญอย่างน้อย \(Self.minimumPanel) คน — "
-                         + "เกณฑ์ IOC/CVI ตั้งไว้สำหรับคณะผู้เชี่ยวชาญ 3–5 คน")
+            parts.append(localised("at least \(Self.minimumPanel) experts are needed — ", "Why a content-validity result is not usable. Placeholder: the minimum panel size.")
+                         + localised("the IOC and CVI thresholds are set for a panel of 3 to 5", "Ends the reason a content-validity result is not usable."))
         }
         if let worst = failing.first, let reason = worst.reason {
-            parts.append("ข้อที่ยังไม่ผ่าน: \(reason)")
+            parts.append(localised("items not yet passing: \(reason)", "Lists the failing items. Placeholder: the reasons."))
         }
         return parts.joined(separator: " · ")
     }

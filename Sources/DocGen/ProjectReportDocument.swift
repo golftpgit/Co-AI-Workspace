@@ -22,19 +22,19 @@ extension ProjectReport {
         DocumentDraft(
             title: title,
             authors: [],
-            sections: [Section(heading: "รายงานนี้เขียนเมื่อไร",
+            sections: [Section(heading: localised("When this report was written", "A report section heading."),
                                paragraphs: [.bullets([
-                                   "ขั้น\(stageAtIssue.label)",
+                                   localised("stage: \(stageAtIssue.label)", "The project stage at the time of the report. Placeholder: the stage."),
                                    generatedAt.formatted(date: .long, time: .shortened),
-                                   "ชนิดรายงาน: \(kind.label)",
+                                   localised("report type: \(kind.label)", "The kind of report. Placeholder: the kind."),
                                ])])]
                 + sections.map { Section(heading: $0.heading, paragraphs: [.bullets($0.lines)]) }
-                + [Section(heading: "ที่มาของตัวเลขในรายงานนี้",
+                + [Section(heading: localised("Where the numbers in this report come from", "A report section heading."),
                            paragraphs: [.plain(
-                               "ทุกบรรทัดข้างต้นประกอบจากข้อมูลที่ระบบบันทึกไว้ — แผนงานและหลักฐานที่ QA รับ · "
-                               + "ทะเบียนความเสี่ยง/ปัญหา/คำขอเปลี่ยนแปลง/บทเรียน · span ที่ผูกกับใบงาน · "
-                               + "baseline ที่ freeze ไว้ · ทะเบียนประโยชน์ "
-                               + "ไม่มีประโยคใดที่โมเดลแต่งขึ้น และเปลี่ยนข้อมูลต้นทางแล้วรายงานฉบับถัดไปเปลี่ยนตาม")])])
+                               localised("every line above is assembled from what the system recorded — the plan and the evidence QA accepted · ", "Explains the report's provenance.")
+                               + localised("the risk, issue, change-request and lesson registers · the spans tied to each work item · ", "Continues the provenance note.")
+                               + localised("the frozen baseline · the benefits register ", "Continues the provenance note.")
+                               + localised("no sentence here was invented by a model, and changing the source data changes the next report", "Ends the provenance note."))])])
     }
 }
 

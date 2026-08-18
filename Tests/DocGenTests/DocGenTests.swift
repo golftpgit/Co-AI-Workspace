@@ -86,7 +86,7 @@ struct CitationTests {
         _ = bibliography.marker(for: CitedText("แนวทางล่าสุด", from: webSource))
         let entry = bibliography.entries()[0]
         #expect(entry.contains("https://www.who.int/guide"))
-        #expect(entry.contains("เข้าถึง 2026-08-06") || entry.contains("เข้าถึง 2026-08-05"))
+        #expect(entry.contains("accessed 2026-08-06") || entry.contains("accessed 2026-08-05"))
         #expect(entry.contains("(T1)"))
     }
 
@@ -101,7 +101,7 @@ struct CitationTests {
         ])
         #expect(!audit.isComplete)
         #expect(audit.missing.count == 1)
-        #expect(audit.missing[0].fields == ["ผู้เขียน", "ปี"])
+        #expect(audit.missing[0].fields == ["author", "year"])
         // "n.d." rather than a guessed year — the flag above is what fixes it.
         #expect(Bibliography.year(source("a", title: "x", tier: .t3, year: nil)) == "n.d.")
     }
@@ -142,7 +142,7 @@ struct CorroborationTests {
             Issue.record("three quotes from one paper should not corroborate anything")
             return
         }
-        #expect(reason.contains("แหล่งเดียว"))
+        #expect(reason.contains("a single source"))
     }
 
     /// §14.1 is explicit: ten weak sources are not two strong ones.
@@ -204,12 +204,12 @@ struct LimitationsTests {
         var plan = planWithAssumptions()
         let suggestion = plan.agentSuggestions[0].id
         plan.confirm(suggestion)
-        try plan.approve(by: "ผู้วิจัย")
+        try plan.approve(by: "the researcher")
 
         #expect(plan.agentSuggestions.isEmpty)      // §12.4's rule still holds
         let section = LimitationsBuilder.build(plan: plan)
         #expect(section.items.count == 1)
-        #expect(section.items[0].text.contains("ผู้วิจัยยืนยันแล้ว"))
+        #expect(section.items[0].text.contains("confirmed by the researcher"))
     }
 
     /// §11.6 keeps both sides verbatim precisely so this can be written.
@@ -230,7 +230,7 @@ struct LimitationsTests {
         #expect(section.items.count == 1)
         #expect(section.items[0].kind == .resolvedConflict)
         #expect(section.items[0].text.contains("ให้ยาต่อกี่ชั่วโมงหลังผ่าตัด"))
-        #expect(section.items[0].text.contains("ผู้วิจัย"))
+        #expect(section.items[0].text.contains("the researcher"))
     }
 
     @Test("a conflict nobody has decided is not reported as a resolved one")
@@ -274,7 +274,7 @@ struct LimitationsTests {
     func emptySectionIsExplicit() {
         let section = LimitationsBuilder.build()
         #expect(section.isEmpty)
-        #expect(section.rendered().contains("ไม่พบข้อจำกัด"))
+        #expect(section.rendered().contains("no limitation was recorded"))
     }
 
     @Test("everything a run recorded ends up in one section, in order")
@@ -286,7 +286,7 @@ struct LimitationsTests {
             statistical: ["ANOVA: ความแปรปรวนไม่เท่ากันระหว่างกลุ่ม"])
         #expect(section.items.map(\.kind) == [.assumption, .thinEvidence, .statistical])
         let text = section.rendered()
-        #expect(text.hasPrefix("ข้อจำกัดของการศึกษานี้"))
+        #expect(text.hasPrefix("Limitations of this study"))
         #expect(text.components(separatedBy: "•").count == 4)
     }
 }

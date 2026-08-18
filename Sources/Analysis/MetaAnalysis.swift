@@ -73,11 +73,11 @@ public struct Heterogeneity: Sendable, Equatable {
     /// its own thresholds.
     public var interpretation: String {
         switch iSquared {
-        case ..<25: "ความต่างระหว่างงานต่ำ — ค่ารวมแบบ fixed effect พออธิบายได้"
-        case ..<50: "ความต่างระหว่างงานปานกลาง"
-        case ..<75: "ความต่างระหว่างงานสูง — ควรใช้ random effects และอธิบายว่าต่างเพราะอะไร"
-        default: "ความต่างระหว่างงานสูงมาก — **การรวมค่าอาจไม่มีความหมาย** "
-            + "ค่ารวมของสิ่งที่ไม่ใช่สิ่งเดียวกันคือค่าเฉลี่ยที่ไม่มีใครวัดได้"
+        case ..<25: localised("heterogeneity is low — a fixed-effect pooled value is defensible", "Interpretation of I² below its first threshold.")
+        case ..<50: localised("heterogeneity is moderate", "Interpretation of a middling I².")
+        case ..<75: localised("heterogeneity is high — use random effects and say what the studies differ in", "Interpretation of a high I².")
+        default: localised("heterogeneity is very high — **pooling may not mean anything** ", "Interpretation of a very high I².")
+            + localised("an average over things that are not the same thing is an average nobody could measure", "Ends the interpretation of a very high I².")
         }
     }
 }
@@ -98,12 +98,12 @@ public struct FunnelAsymmetry: Sendable, Equatable {
     /// usual level would mean "no evidence of asymmetry" almost always.
     public var summary: String {
         isAsymmetric
-            ? String(format: "Egger's test: intercept %.3f (p = %.4f) — **funnel ไม่สมมาตร** "
-                     + "งานเล็กในชุดนี้ให้ผลต่างจากงานใหญ่อย่างเป็นระบบ ซึ่งเข้าได้กับ "
-                     + "publication bias (งานที่ไม่พบผลมักไม่ถูกตีพิมพ์) หรือกับคุณภาพงานเล็กที่ต่างออกไป "
-                     + "· ค่ารวมน่าจะเกินจริง", intercept, pValue)
-            : String(format: "Egger's test: intercept %.3f (p = %.4f) — ไม่พบความไม่สมมาตร "
-                     + "· **ไม่ได้แปลว่าไม่มี** การทดสอบนี้พลังต่ำเมื่องานน้อยกว่าสิบชิ้น",
+            ? String(format: localised("Egger's test: intercept %.3f (p = %.4f) — **the funnel is asymmetric** ", "Result of Egger's test when asymmetry is found.")
+                     + localised("the small studies here differ systematically from the large ones, which fits ", "Continues the funnel-asymmetry finding.")
+                     + localised("publication bias (studies finding nothing often go unpublished) or with small studies simply being of different quality ", "Continues the funnel-asymmetry finding.")
+                     + localised("· the pooled value is probably overstated", "Ends the funnel-asymmetry finding."), intercept, pValue)
+            : String(format: localised("Egger's test: intercept %.3f (p = %.4f) — no asymmetry was found ", "Result of Egger's test when no asymmetry is found.")
+                     + localised("· **which is not the same as there being none** — this test has little power below ten studies", "Ends the result of Egger's test when no asymmetry is found."),
                      intercept, pValue)
     }
 }
@@ -113,10 +113,10 @@ public enum MetaAnalysis {
     public static func pool(_ studies: [StudyEffect],
                             model: PooledEffect.Model = .random) throws -> PooledEffect {
         guard studies.count >= 2 else {
-            throw StatError.notEnoughData("การรวมค่าต้องมีอย่างน้อยสองงาน")
+            throw StatError.notEnoughData(localised("pooling needs at least two studies", "Why a meta-analysis cannot run."))
         }
         guard studies.allSatisfy({ $0.standardError > 0 }) else {
-            throw StatError.badShape("ทุกงานต้องมี standard error มากกว่าศูนย์")
+            throw StatError.badShape(localised("every study must have a standard error greater than zero", "Why a meta-analysis cannot run."))
         }
 
         let tauSquared = model == .random ? try heterogeneity(studies).tauSquared : 0
@@ -139,7 +139,7 @@ public enum MetaAnalysis {
     /// Q, I² and τ² — the evidence about whether pooling is meaningful at all.
     public static func heterogeneity(_ studies: [StudyEffect]) throws -> Heterogeneity {
         guard studies.count >= 2 else {
-            throw StatError.notEnoughData("ต้องมีอย่างน้อยสองงานถึงจะวัดความต่างระหว่างงานได้")
+            throw StatError.notEnoughData(localised("heterogeneity cannot be measured with fewer than two studies", "Why heterogeneity cannot be computed."))
         }
         let weights = studies.map(\.weight)
         let total = weights.reduce(0, +)
@@ -175,7 +175,7 @@ public enum MetaAnalysis {
     public static func funnelAsymmetry(_ studies: [StudyEffect]) throws -> FunnelAsymmetry {
         guard studies.count >= 3 else {
             throw StatError.notEnoughData(
-                "Egger's test ต้องมีอย่างน้อยสามงาน — และยังพลังต่ำมากจนกว่าจะถึงสิบงาน")
+                localised("Egger's test needs at least three studies — and still has very little power below ten", "Why Egger's test cannot run."))
         }
         let precision = studies.map { 1 / $0.standardError }
         let deviate = studies.map { $0.effect / $0.standardError }
@@ -189,7 +189,7 @@ public enum MetaAnalysis {
             varianceX += (precision[index] - meanX) * (precision[index] - meanX)
         }
         guard varianceX > 0 else {
-            throw StatError.notEnoughData("ทุกงานมีความแม่นยำเท่ากัน — ทดสอบความไม่สมมาตรไม่ได้")
+            throw StatError.notEnoughData(localised("every study has the same precision — asymmetry cannot be tested for", "Why Egger's test cannot run."))
         }
         let slope = covariance / varianceX
         let intercept = meanY - slope * meanX

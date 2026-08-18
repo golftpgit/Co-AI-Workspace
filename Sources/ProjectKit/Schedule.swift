@@ -25,8 +25,8 @@ public struct ScheduleEstimate: Sendable, Equatable {
     /// What the band is made of.
     ///
     /// Carried on the estimate rather than remembered by the caller, because
-    /// the caller forgot: the time popover spent a release labelled "งานชนิด
-    /// เดียวกัน" over a band computed from chat turns, and before that from
+    /// the caller forgot: the time popover spent a release labelled "the same
+    /// kind of work" over a band computed from chat turns, and before that from
     /// individual tool calls. A band is a claim about a population, and a claim
     /// whose population is only known at the call site travels without it.
     public enum Basis: Sendable, Equatable {
@@ -48,16 +48,19 @@ public struct ScheduleEstimate: Sendable, Equatable {
     /// What the sample is counted in, for a sentence that has to name it.
     public var unit: String {
         switch basis {
-        case .assignments: "งาน"
-        case .turns: "เทิร์น"
+        case .assignments: t("tasks", "Unit a forecast was computed over.")
+        case .turns: t("turns", "Unit a forecast was computed over.")
         }
     }
 
     public var label: String {
         func minutes(_ seconds: TimeInterval) -> String {
-            seconds < 90 ? "\(Int(seconds)) วิ" : "\(Int(seconds / 60)) นาที"
+            seconds < 90
+                ? t("\(Int(seconds)) s", "A short duration in seconds. Placeholder is a whole number.")
+                : t("\(Int(seconds / 60)) min", "A duration in minutes. Placeholder is a whole number.")
         }
-        return "\(minutes(p50))–\(minutes(p90)) (จาก \(sampleCount) \(unit))"
+        return t("\(minutes(p50))–\(minutes(p90)) (from \(sampleCount) \(unit))",
+                 "A forecast band. Placeholders: the p50, the p90, the sample size and its unit.")
     }
 }
 

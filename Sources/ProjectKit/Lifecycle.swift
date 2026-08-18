@@ -61,16 +61,20 @@ public enum LifecycleError: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .notForward(let from, let to):
-            return "ย้อนขั้นไม่ได้: \(from.label) → \(to.label)"
+            return t("A stage cannot go backwards: \(from.label) → \(to.label)",
+                     "Refusal message. Placeholders: the current stage and the one asked for.")
         case .gateNotPassed(let gate, let unmet):
-            return "ยังผ่าน \(gate) ไม่ได้ — ค้าง: " + unmet.joined(separator: " · ")
+            return t("\(gate) cannot pass yet — outstanding: ",
+                     "Refusal message. Placeholder is the gate name; the unmet conditions follow.")
+                + unmet.joined(separator: " · ")
         case .alreadyClosed:
-            return "โครงการปิดแล้ว"
+            return t("The project is closed", "Refusal message when the project has ended.")
         case .dispositionIncomplete:
-            return "ต้องบอกทั้งนโยบายที่ใช้และชื่อคนที่ตัดสิน"
+            return t("Both the policy applied and the name of who decided are required",
+                     "Refusal message when a data-disposition decision is incomplete.")
         case .projectIsArchived(let name):
-            return "“\(name)” ปิดไปแล้ว — เปิดอ่านได้ทั้งหมด แต่แก้ไม่ได้ "
-                + "(บันทึกผลประโยชน์ที่วัดได้ภายหลังยังทำได้ เพราะเป็นการเพิ่มข้อเท็จจริง ไม่ใช่แก้ข้อตกลง)"
+            return t("“\(name)” is closed — everything can be read, nothing can be changed (recording a benefit measured later is still allowed, because that adds a fact rather than amending an agreement)",
+                     "Refusal message for an archived project. Placeholder is its name.")
         }
     }
 }
@@ -88,7 +92,7 @@ extension GateCondition {
 /// this module does not own, and "nobody asked" must not arrive at the gate
 /// looking like "asked and fine". `nil` fails the condition and says so in the
 /// text — the same rule the stage gate uses for a project it cannot read
-/// ("ไม่มีทางถาม ไม่เท่ากับอนุญาต"), and the reason the eight conditions do not
+/// ("no way to ask is not the same as permission"), and the reason the eight conditions do not
 /// quietly shrink to five when a store is missing.
 public struct ClosingFacts: Sendable, Equatable {
     /// Risks, issues and change requests still open (§19.11). Transferring one
@@ -217,18 +221,19 @@ public enum ProjectLifecycle {
             // the half people skip, and the half an agent needs in order to
             // refuse work with a reason.
             conditions = [
-                GateCondition(text: "โครงการมีชื่อ",
+                GateCondition(text: t("The project has a name", "G1 gate condition."),
                               satisfied: !project.name.trimmingCharacters(in: .whitespaces).isEmpty),
-                GateCondition(text: "มีเหตุผลที่ทำ (brief)",
+                GateCondition(text: t("There is a reason for doing it (the brief)", "G1 gate condition."),
                               satisfied: !project.brief.trimmingCharacters(in: .whitespaces).isEmpty),
-                GateCondition(text: "ขอบเขต 'ทำ' อย่างน้อย 1 ข้อ",
+                GateCondition(text: t("At least one thing in scope", "G1 gate condition."),
                               satisfied: !project.statement.inScope.isEmpty),
-                GateCondition(text: "ขอบเขต 'ไม่ทำ' อย่างน้อย 1 ข้อ",
+                GateCondition(text: t("At least one thing out of scope", "G1 gate condition."),
                               satisfied: !project.statement.outOfScope.isEmpty),
                 // §19.5 — the seat that is never an agent's. Empty by default
                 // rather than filled in with a plausible name: the point of
                 // the rule is that somebody put their own name there.
-                GateCondition(text: "มีชื่อผู้รับผิดชอบทางธุรกิจ (Executive) ที่เป็นคน",
+                GateCondition(text: t("A named human business owner (Executive)",
+                                      "G1 gate condition. Executive is the standard role name."),
                               satisfied: project.executive?.isFilled == true),
             ]
         case .planning:
@@ -237,33 +242,41 @@ public enum ProjectLifecycle {
             // condition names a plan that looks finished and is not (§19.6).
             let uncovered = wbs.uncoveredScope(inScope: project.statement.inScope)
             conditions = [
-                GateCondition(text: "เกณฑ์รับงานอย่างน้อย 1 ข้อ",
+                GateCondition(text: t("At least one acceptance criterion", "G2 gate condition."),
                               satisfied: !project.statement.acceptanceCriteria.isEmpty),
-                GateCondition(text: "มีใบงานอย่างน้อย 1 ใบ",
+                GateCondition(text: t("At least one work package", "G2 gate condition."),
                               satisfied: !wbs.leaves.isEmpty),
-                GateCondition(vacuousWhenEmpty: noLeaves, text: "ทุกใบงานบอกว่าเสร็จแปลว่าอะไร",
+                GateCondition(vacuousWhenEmpty: noLeaves,
+                              text: t("Every work package says what done means", "G2 gate condition."),
                               satisfied: !problems.contains { $0.kind == .noAcceptanceCriteria }),
-                GateCondition(vacuousWhenEmpty: noLeaves, text: "ทุกใบงานผูกกับข้อในขอบเขต 'ทำ'",
+                GateCondition(vacuousWhenEmpty: noLeaves,
+                              text: t("Every work package is tied to something in scope", "G2 gate condition."),
                               satisfied: !problems.contains {
                                   $0.kind == .noScopeRef || $0.kind == .danglingScopeRef
                               }),
-                GateCondition(vacuousWhenEmpty: noLeaves, text: "ไม่มีงานแม่ที่ไม่มีใบงานอยู่ข้างใน",
+                GateCondition(vacuousWhenEmpty: noLeaves,
+                              text: t("No parent package is empty", "G2 gate condition."),
                               satisfied: !problems.contains { $0.kind == .emptyGroup }),
-                GateCondition(vacuousWhenEmpty: noLeaves, text: "ทุกใบงานมีผู้รับผิดชอบผล (A) หนึ่งคน",
+                GateCondition(vacuousWhenEmpty: noLeaves,
+                              text: t("Every work package has exactly one accountable (A)",
+                                      "G2 gate condition. A is the RACI letter."),
                               satisfied: !problems.contains { $0.kind == .noAccountable }),
-                GateCondition(vacuousWhenEmpty: noLeaves, text: "งานเสี่ยงสูงมีคนเป็นผู้รับผิดชอบผล",
+                GateCondition(vacuousWhenEmpty: noLeaves,
+                              text: t("High-risk work has a person accountable", "G2 gate condition."),
                               satisfied: !problems.contains { $0.kind == .highRiskWithoutHuman }),
-                GateCondition(vacuousWhenEmpty: noLeaves, text: "โครงสร้างไม่ขาด (ไม่มีใบงานลอย)",
+                GateCondition(vacuousWhenEmpty: noLeaves,
+                              text: t("The structure is whole (no orphan package)", "G2 gate condition."),
                               satisfied: !problems.contains {
                                   $0.kind == .missingParent || $0.kind == .cycle
                               }),
-                GateCondition(vacuousWhenEmpty: noLeaves, text: "เส้นพึ่งพาไม่รอกันเอง",
+                GateCondition(vacuousWhenEmpty: noLeaves,
+                              text: t("No dependency waits on itself", "G2 gate condition."),
                               satisfied: !problems.contains {
                                   $0.kind == .dependencyCycle || $0.kind == .missingDependency
                               }),
                 // The other half of the 100% rule: work that covers nothing is
                 // caught above, scope that nothing covers is caught here.
-                GateCondition(text: "ทุกข้อในขอบเขต 'ทำ' มีใบงานรองรับ",
+                GateCondition(text: t("Every in-scope line has a work package behind it", "G2 gate condition."),
                               satisfied: uncovered.isEmpty),
                 // §12.6.1 / P19.6 — asked here because here is the last moment
                 // it can change anything. A study too small to see the effect
@@ -277,7 +290,8 @@ public enum ProjectLifecycle {
                 // render as a green tick that means "checked and fine" — the
                 // distinction this type was given a third state for.
                 GateCondition(vacuousWhenEmpty: !study.collectsPrimaryData,
-                              text: "งานที่เก็บข้อมูลจากคน ระบุขนาดตัวอย่างพร้อมสมมติฐานที่ใช้คำนวณ",
+                              text: t("Work collecting data from people states its sample size and the assumptions behind it",
+                                      "G2 gate condition for studies with human participants."),
                               satisfied: !study.collectsPrimaryData
                                   || study.hasPlannedSampleSize),
             ]
@@ -286,58 +300,64 @@ public enum ProjectLifecycle {
             // read first and the extra ones read as what they are: what *this
             // kind* of project promised on top (§20.2).
             conditions = [
-                GateCondition(text: "ไม่มีใบงานที่ยังไม่เสร็จ",
+                GateCondition(text: t("No unfinished work package", "G3 gate condition."),
                               satisfied: openWorkPackages == 0),
                 // §19.11 — the plan may have moved, but it may not have moved
                 // *quietly*: drift that no change request accounts for is the
                 // difference between a project that changed and one that was
                 // rewritten.
-                GateCondition(text: "ไม่มีคำขอเปลี่ยนแปลงที่ยังไม่ตัดสิน",
+                GateCondition(text: t("No undecided change request", "G3 gate condition."),
                               satisfied: undecidedChanges == 0),
-                GateCondition(text: "แผนตรงกับ baseline ล่าสุด",
+                GateCondition(text: t("The plan matches the latest baseline", "G3 gate condition."),
                               satisfied: drift?.isEmpty ?? true),
             ] + TypeGateConditions.conditions(for: typeGates, facts: typeFacts)
         case .closing:
             // §19.12's eight, in the standard's order. This is the project's own
-            // rule turned on itself — README §5's "ห้าม mark งานเป็นเสร็จถ้ายัง
-            // มีรายการค้าง" as eight things a gate reads rather than a sentence
+            // rule turned on itself — README §5's "never mark work done while
+            // anything is outstanding" as eight things a gate reads rather than a sentence
             // somebody remembers.
             let delivered = wbs.leaves.filter { $0.status == .done }
             let unreviewed = delivered.filter { !$0.evidence.contains(where: \.passed) }
             conditions = [
-                GateCondition(text: "ไม่มีใบงานที่ยังไม่เสร็จ",
+                GateCondition(text: t("No unfinished work package", "G3 gate condition."),
                               satisfied: openWorkPackages == 0),
                 GateCondition(vacuousWhenEmpty: delivered.isEmpty,
-                              text: "ทุกใบงานที่เสร็จมีหลักฐานที่ QA รับแล้ว",
+                              text: t("Every finished package has evidence QA accepted", "G4 gate condition."),
                               satisfied: unreviewed.isEmpty),
-                GateCondition(text: "ไม่มีความเสี่ยง/ปัญหา/คำขอเปลี่ยนแปลงที่ยังเปิดอยู่",
+                GateCondition(text: t("No open risk, issue or change request", "G4 gate condition."),
                               satisfied: closing.openRegisterEntries == 0),
                 GateCondition(text: closing.openConflicts == nil
-                              ? "ไม่มีข้อขัดแย้งค้างในคลังความรู้ (ยังตรวจไม่ได้ — ไม่ได้ต่อกับคลัง)"
-                              : "ไม่มีข้อขัดแย้งค้างในคลังความรู้",
+                              ? t("No conflict left open in the knowledge base (cannot be checked — not connected to it)",
+                                  "G4 gate condition when the knowledge base is unreachable.")
+                              : t("No conflict left open in the knowledge base", "G4 gate condition."),
                               satisfied: closing.openConflicts == 0),
                 GateCondition(text: closing.pendingAssumptions == nil
-                              ? "ไม่มีสมมติฐานที่ agent เดาไว้แล้วยังไม่มีใครยืนยัน (ยังตรวจไม่ได้ — ไม่ได้ต่อกับแผนวิเคราะห์)"
-                              : "ไม่มีสมมติฐานที่ agent เดาไว้แล้วยังไม่มีใครยืนยัน",
+                              ? t("No assumption an agent guessed is still unconfirmed (cannot be checked — not connected to the analysis plan)",
+                                  "G4 gate condition when the analysis plan is unreachable.")
+                              : t("No assumption an agent guessed is still unconfirmed", "G4 gate condition."),
                               satisfied: closing.pendingAssumptions == 0),
                 GateCondition(text: {
                                   guard let gaps = closing.conformanceGaps else {
-                                      return "ทุก practice ของ ISO 21502 มีของจริงหรือมีบันทึกว่าไม่ทำ (ยังไม่ได้ตรวจ)"
+                                      return t("Every ISO 21502 practice has evidence or a recorded decision not to do it (not checked yet)",
+                                               "G4 gate condition before conformance has been evaluated.")
                                   }
                                   guard !gaps.isEmpty else {
-                                      return "ทุก practice ของ ISO 21502 มีของจริงหรือมีบันทึกว่าไม่ทำ"
+                                      return t("Every ISO 21502 practice has evidence or a recorded decision not to do it",
+                                               "G4 gate condition.")
                                   }
-                                  // Naming them matters: "conformance ไม่ผ่าน"
+                                  // Naming them matters: "conformance failed"
                                   // sends somebody hunting through seventeen
                                   // rows for the two that are empty.
-                                  return "ยังไม่ได้ตอบ practice: "
+                                  return t("Practices still unanswered: ",
+                                           "Prefix before the list of unanswered practices.")
                                       + gaps.map(\.label).joined(separator: " · ")
                               }(),
                               satisfied: closing.conformanceGaps?.isEmpty == true),
                 // Recorded here, published on the way out (`advance`): a lesson
                 // cannot be in `central` before the project is closed, so the
                 // gate checks the half that can be true now and says so.
-                GateCondition(text: "บันทึกบทเรียนอย่างน้อย 1 ข้อ (ไหลเข้าคลังส่วนกลางตอนปิด)",
+                GateCondition(text: t("At least one lesson recorded (it flows into the shared base at closing)",
+                                      "G4 gate condition."),
                               satisfied: hasLessons),
                 // Condition 8 keeps its original job — every project has to say
                 // where its files go — and P11.10 adds the half that was missing:
@@ -346,22 +366,27 @@ public enum ProjectLifecycle {
                 // `policy` scope (§20.5). Free text used to satisfy this.
                 {
                     guard closing.dataDisposition?.isDecided == true else {
-                        return GateCondition(text: "ตัดสินแล้วว่าข้อมูลและไฟล์ที่เหลือจะไปทางไหน",
+                        return GateCondition(text: t("It has been decided where the remaining data and files go",
+                                              "G4 gate condition on data disposition."),
                                              satisfied: false)
                     }
                     switch closing.retention {
                     case .notApplicable:
-                        return GateCondition(text: "ตัดสินแล้วว่าข้อมูลและไฟล์ที่เหลือจะไปทางไหน",
+                        return GateCondition(text: t("It has been decided where the remaining data and files go",
+                                              "G4 gate condition on data disposition."),
                                              satisfied: true)
                     case .unchecked(let note):
                         // Not a block: one unwired reader must not stop every
                         // project from closing (the ProjectTypeGate decision).
                         // Not a tick either — U21-2.
-                        return GateCondition(text: "ตัดสินแล้วว่าข้อมูลและไฟล์ที่เหลือจะไปทางไหน · "
+                        return GateCondition(text: t("It has been decided where the remaining data and files go · ",
+                                                     "G4 gate condition on data disposition; a note about what could not be checked follows.")
                                                    + note,
                                              satisfied: true, vacuous: true)
                     case .satisfied(let obligation):
-                        return GateCondition(text: "ปลายทางของข้อมูล: " + obligation.summary,
+                        return GateCondition(text: t("Where the data goes: ",
+                                                     "Prefix before the retention obligation that applies.")
+                                                   + obligation.summary,
                                              satisfied: true)
                     case .blocked(let why):
                         return GateCondition(text: why, satisfied: false)

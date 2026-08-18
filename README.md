@@ -166,7 +166,7 @@ xcodebuild -downloadComponent MetalToolchain   # ครั้งเดียว�
 **เครื่องใหม่**: ต้องรัน `fetch-helpers.sh` ก่อน ไม่งั้นเทสฝั่ง Persistence จะข้าม และแอปจะเริ่มฐานข้อมูลไม่ได้ ·
 ต้องมี Metal Toolchain + รัน `build-metallib.sh` ไม่งั้นโมเดล embedding โหลดไม่ขึ้น (`Failed to load the default metallib`) —
 SwiftPM คอมไพล์ Metal shader ไม่ได้ จึงต้องมีขั้น `xcodebuild` แยกไว้ทำอย่างเดียว
-([ARCH E.13](docs/VERIFICATION_LOG.md#e13-bge-m3-ในโปรเซสเราเอง--รันได้จริง--เจอกับดักสำคัญ-2026-08-11))
+([ARCH E.13](docs/verification/01-e01-e15.md#e13-bge-m3-ในโปรเซสเราเอง--รันได้จริง--เจอกับดักสำคัญ-2026-08-11))
 
 endpoint ของ Tier 1 ตั้งใน `bootstrap.plist` ที่
 `~/Library/Containers/com.coaiworkspace.app/Data/Library/Application Support/CoAIWorkspace/`

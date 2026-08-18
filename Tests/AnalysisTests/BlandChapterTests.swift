@@ -40,7 +40,7 @@ struct CorrelationTests {
         let doubled = height.map { $0 * 2 }
         let r = try Reliability.correlation(height, doubled)
         #expect(isClose(r.coefficient, 1.0, 1e-9))
-        #expect(r.summary.contains("ไม่ใช่ความสอดคล้อง"))
+        #expect(r.summary.contains("correlation is not agreement"))
         #expect(r.summary.contains("Bland–Altman"))
     }
 
@@ -79,7 +79,7 @@ struct CorrelationTests {
         let k = try Reliability.kappa(a, b)
         #expect(k.observedAgreement > 0.9, "raw agreement is high, as it always is here")
         #expect(k.value < k.observedAgreement, "chance agreement was not removed")
-        #expect(k.interpretation.contains("ความบังเอิญ"))
+        #expect(k.interpretation.contains("chance alone would have produced"))
     }
 
     @Test("weighted kappa treats a near miss as a near miss")
@@ -91,7 +91,7 @@ struct CorrelationTests {
         let weighted = try Reliability.kappa(a, b, ordered: true)
         #expect(weighted.value > plain.value)
         #expect(weighted.weighted)
-        #expect(weighted.interpretation.contains("ถ่วงน้ำหนัก"))
+        #expect(weighted.interpretation.contains("weighted"))
     }
 
     @Test("one category, or ratings of different lengths, is refused")
@@ -114,7 +114,7 @@ struct PairedCategoricalTests {
         #expect(isClose(result.statistic, 6.8810, 1e-3))
         #expect(result.pValue < 0.01)
         #expect(result.exact == false)
-        #expect(result.summary.contains("ไม่เปลี่ยนไม่ได้ถูกนับ"))
+        #expect(result.summary.contains("did not change are not counted"))
     }
 
     /// Below 25 discordant pairs the χ² approximation is poor, and choosing
@@ -218,7 +218,7 @@ struct MultiplicityTests {
     func summaryNamesTheCount() throws {
         let report = try MultipleComparisons.adjust(tests, method: .holm)
         #expect(report.summary.contains("5"))
-        #expect(report.summary.contains("ไม่รอดหลังปรับ"))
+        #expect(report.summary.contains("did not survive the correction"))
     }
 
     @Test("FDR keeps more than Holm, and says it controls something different")
@@ -226,8 +226,8 @@ struct MultiplicityTests {
         let fdr = try MultipleComparisons.adjust(tests, method: .benjaminiHochberg)
         let holm = try MultipleComparisons.adjust(tests, method: .holm)
         #expect(fdr.survivors.count >= holm.survivors.count)
-        #expect(fdr.method.controls.contains("สัดส่วน"))
-        #expect(holm.method.controls.contains("สักข้อ"))
+        #expect(fdr.method.controls.contains("the **share**"))
+        #expect(holm.method.controls.contains("the chance of **any**"))
     }
 
     @Test("an empty set, or a p outside 0…1, is refused")

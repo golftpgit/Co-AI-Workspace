@@ -3,8 +3,8 @@ import SwiftUI
 // ─────────────────────────────────────────────────────────────
 // Where every screen from §14.2 went (ARCHITECTURE §19.2, P10.12).
 //
-// Risk R13 names this task's failure mode exactly: "ยุบ 14 หน้าจอเป็น 4 พื้นที่
-// แล้วของหาย". It is the same mistake as v1's `Scope.project` — a
+// Risk R13 names this task's failure mode exactly: "collapse 14 screens into 4
+// areas and lose things". It is the same mistake as v1's `Scope.project` — a
 // reorganisation that reads as complete because the new structure is tidy, while
 // two of the old screens quietly have no home.
 //
@@ -14,7 +14,7 @@ import SwiftUI
 // if a row here is missing — a screen cannot be dropped by being forgotten,
 // only by being deleted from the standard it is measured against.
 //
-// The three states are deliberately distinguished. "ยังไม่ได้ทำ" with a task
+// The three states are deliberately distinguished. "not built" with a task
 // number is an honest answer; a row silently absent is not.
 // ─────────────────────────────────────────────────────────────
 
@@ -29,9 +29,9 @@ struct IAEntry: Identifiable {
 
         var label: String {
             switch self {
-            case .done: "ครบ"
-            case .partial: "บางส่วน"
-            case .notBuilt: "ยังไม่ได้ทำ"
+            case .done: t("complete", "Screen-map state: everything the spec lists is reachable.")
+            case .partial: t("partial", "Screen-map state: reachable, but not everything is there.")
+            case .notBuilt: t("not built", "Screen-map state: nothing of it exists yet.")
             }
         }
 
@@ -54,69 +54,92 @@ struct IAEntry: Identifiable {
 }
 
 enum IAInventory {
+    // The area and sub-tab names, written once and reused, so the map says the
+    // same words the picker does. Reusing the picker's own keys rather than new
+    // ones keeps them one string in the catalogue, not two that drift.
+    private static var chat: String { t("Chat", "Area 1 of 5: asking the team to do something.") }
+    private static var plan: String { t("Plan", "Area 2 of 5: what was agreed, and who is accountable.") }
+    private static var workbench: String { t("Workbench", "Area 3 of 5: where the data is and what to do with it.") }
+    private static var knowledge: String { t("Knowledge", "Area 4 of 5: what is true, and how we know.") }
+    private static var system: String { t("System", "Area 5 of 5: settings — models, budget, channels.") }
+    private static var console: String { t("Script + console", "Sub-tab: the notebook and its output.") }
+    private static var collect: String { t("Collect", "Sub-tab: gathering data into the project.") }
+    private static var coding: String { t("Code", "Sub-tab: qualitative coding of collected material.") }
+    private static var sources: String { t("Sources and tiers", "Sub-tab: where knowledge came from and how far it is trusted. 'tier' is a term of art here.") }
+    private static var rail: String { t("Right rail: watch the team", "Screen-map location for the team rail.") }
+
     /// One row per §14.2 screen, in that table's order.
     static let entries: [IAEntry] = [
-        IAEntry(screen: "Chat", area: "สนทนา", subTab: "บทสนทนา",
+        IAEntry(screen: "Chat", area: chat, subTab: t("Conversations", "Heading and window title over the list of past conversations."),
                 state: .done),
-        IAEntry(screen: "Team View", area: "สนทนา", subTab: "แถบขวา: เฝ้าดูทีม",
-                state: .partial("ส่วน *ตั้งค่า* ทีมย้ายไปอยู่ Plan → ทีม & RACI ตาม §19.2.5 — "
-                                + "หน้านี้เหลือเฉพาะการเฝ้าดูและสั่งรายงาน")),
-        IAEntry(screen: "Live Monitor", area: "สนทนา", subTab: "แถบขวา: เฝ้าดูทีม",
-                state: .partial("การ์ดต่อ step ยังไม่มี — เห็น assignment กับสถานะ QA "
-                                + "แต่ยังกดขยายดู raw output ต่อ step ไม่ได้")),
-        IAEntry(screen: "Approvals", area: "สนทนา", subTab: "แถบอนุมัติในบทสนทนา",
-                state: .partial("อนุมัติ inline ได้จริงในบทสนทนา · ยังไม่มีรายการรวมข้ามบทสนทนา")),
-        IAEntry(screen: "Notebook", area: "โต๊ะทำงาน", subTab: "สคริปต์ + คอนโซล",
+        IAEntry(screen: "Team View", area: chat, subTab: rail,
+                state: .partial(t("The team *settings* moved to Plan → Team & RACI per §19.2.5 — what is left here is watching and asking for reports",
+                                  "Screen-map note for the Team View row."))),
+        IAEntry(screen: "Live Monitor", area: chat, subTab: rail,
+                state: .partial(t("There is no card per step yet — assignments and QA status are visible, but the raw output of a single step cannot be expanded",
+                                  "Screen-map note for the Live Monitor row."))),
+        IAEntry(screen: "Approvals", area: chat,
+                subTab: t("Approval bar inside the conversation", "Screen-map location for approvals."),
+                state: .partial(t("Approving inline in the conversation works · there is no combined list across conversations yet",
+                                  "Screen-map note for the Approvals row."))),
+        IAEntry(screen: "Notebook", area: workbench, subTab: console,
                 state: .done),
-        IAEntry(screen: "DB Explorer", area: "โต๊ะทำงาน",
-                subTab: "ฐานข้อมูลภายใน · ฐานข้อมูลภายนอก",
+        IAEntry(screen: "DB Explorer", area: workbench,
+                subTab: t("Internal database", "Sub-tab: the project's own store.")
+                    + " · " + t("External database", "Sub-tab: databases outside the project."),
                 state: .done),
-        IAEntry(screen: "Knowledge Base", area: "คลังความรู้", subTab: "เอกสาร",
-                state: .partial("กราฟ entity/relation ทำแล้ว (แท็บ “กราฟ”) — "
-                                + "ย่านรอบสิ่งที่เลือก ไม่ใช่ทั้งกราฟ และทุกเส้นกดดูข้อความต้นทางได้ · "
-                                + "ยังไม่มีทางแก้ความสัมพันธ์จากหน้ากราฟโดยตรง")),
-        IAEntry(screen: "Conflict Ledger", area: "คลังความรู้", subTab: "ข้อขัดแย้ง",
+        IAEntry(screen: "Knowledge Base", area: knowledge,
+                subTab: t("Documents", "Sub-tab: source documents in the knowledge base."),
+                state: .partial(t("The entity/relation graph exists (the “Graph” tab) — the neighbourhood around what is selected rather than the whole graph, and every edge opens the passage it came from · there is still no way to edit a relation from the graph itself",
+                                  "Screen-map note for the Knowledge Base row."))),
+        IAEntry(screen: "Conflict Ledger", area: knowledge,
+                subTab: t("Conflicts", "Sub-tab: claims that contradict each other."),
                 state: .done),
-        IAEntry(screen: "Models", area: "ระบบ", subTab: "โมเดล",
+        IAEntry(screen: "Models", area: system,
+                subTab: t("Models", "Sub-tab: which models are available."),
                 state: .done),
-        IAEntry(screen: "Workflow Builder", area: "โต๊ะทำงาน", subTab: "สคริปต์ + คอนโซล",
-                state: .partial("บันทึกลำดับขั้นแล้วรันซ้ำได้ · ทุกขั้นเดินผ่าน `ToolGateway` "
-                                + "· palette อ่านจากทูลที่ต่ออยู่จริง · **ไม่มี node canvas แบบ n8n โดยตั้งใจ** "
-                                + "— ขั้นเรียงเป็นลำดับ ส่วนการแตกงานเป็นการตัดสินใจของหัวหน้าทีม (§2.2) ไม่ใช่เส้นที่คนลาก")),
-        IAEntry(screen: "Templates", area: "โต๊ะทำงาน", subTab: "ผลลัพธ์ + เอกสาร",
-                state: .partial("เรียนแม่แบบจากไฟล์ .docx ที่อัปโหลดได้แล้ว · "
-                                + "ยังไม่มีหน้าจัดการแม่แบบเป็นของตัวเอง")),
-        IAEntry(screen: "File Viewer/Editor", area: "โต๊ะทำงาน", subTab: "สคริปต์ + คอนโซล",
-                state: .partial("เปิด/แก้/บันทึกไฟล์ข้อความและโค้ดได้ · `.docx`/`.pptx`/`.pdf` "
-                                + "แสดงเป็นข้อความอ่านอย่างเดียว · ยังไม่มีตัวแสดงรูป "
-                                + "และยังสร้าง/ลบ/เปลี่ยนชื่อไฟล์จากหน้านี้ไม่ได้")),
-        IAEntry(screen: "Processes", area: "สนทนา", subTab: "แถบขวา: โปรเซส",
-                state: .partial("เห็นโปรเซสที่รันอยู่และสั่งหยุดได้ · ยังไม่มีตารางข้ามทุกบทสนทนา")),
-        IAEntry(screen: "Settings", area: "ระบบ",
-                subTab: "งบ + endpoint · โมเดล · ช่องทาง · ปลั๊กอิน",
-                state: .partial("มีหมวด inference/งบ/โมเดล/ปลั๊กอิน/ช่องทาง · "
-                                + "**ยังไม่มีหน้าเพิ่ม MCP server เอง** — `MCPServerStore` อยู่บน "
-                                + "engine และไม่มีหน้าจอไหนอ่าน (ปลั๊กอินที่แพ็กมาแล้วเพิ่มได้) · "
-                                + "หมวดที่เหลือใน §15 ยังไม่มีหน้า")),
+        IAEntry(screen: "Workflow Builder", area: workbench, subTab: console,
+                state: .partial(t("A sequence of steps can be saved and re-run · every step goes through `ToolGateway` · the palette is read from the tools really connected · **there is deliberately no n8n-style node canvas** — steps are a sequence, and splitting work is the team lead's decision (§2.2) rather than a line somebody drags",
+                                  "Screen-map note for the Workflow Builder row."))),
+        IAEntry(screen: "Templates", area: workbench,
+                subTab: t("Results + documents", "Sub-tab: findings and what is written from them."),
+                state: .partial(t("A template can be learned from an uploaded .docx · there is no screen of its own for managing templates yet",
+                                  "Screen-map note for the Templates row."))),
+        IAEntry(screen: "File Viewer/Editor", area: workbench, subTab: console,
+                state: .partial(t("Text and code files can be opened, edited and saved · `.docx`/`.pptx`/`.pdf` show as read-only text · there is no image viewer, and files cannot be created, deleted or renamed from here",
+                                  "Screen-map note for the File Viewer/Editor row."))),
+        IAEntry(screen: "Processes", area: chat,
+                subTab: t("Right rail: processes", "Screen-map location for the process list."),
+                state: .partial(t("Running processes are visible and can be stopped · there is no table across every conversation yet",
+                                  "Screen-map note for the Processes row."))),
+        IAEntry(screen: "Settings", area: system,
+                subTab: t("Budget + endpoints", "Sub-tab: spending limits and the servers that answer.")
+                    + " · " + t("Models", "Sub-tab: which models are available.")
+                    + " · " + t("Channels", "Sub-tab: ways the app reaches out, such as mail or chat.")
+                    + " · " + t("Plug-ins", "Screen-map location for bundled plug-ins."),
+                state: .partial(t("There are sections for inference, budget, models, plug-ins and channels · **there is still no screen for adding an MCP server** — `MCPServerStore` lives on the engine and no screen reads it (bundled plug-ins can be added) · the remaining sections of §15 have no screen",
+                                  "Screen-map note for the Settings row."))),
         // Not in §14.2 because it did not exist then. Listed so the inventory is
         // the whole app rather than only the parts that were reorganised.
-        IAEntry(screen: "Plan", area: "แผนงาน",
-                subTab: "ภาพรวม · แผนงาน+ลำดับ · กระดานงาน · ทีม & RACI · ประโยชน์ & ปิดงาน",
+        IAEntry(screen: "Plan", area: plan,
+                subTab: t("Overview", "Plan sub-tab: the project brief, scope and standards.")
+                    + " · " + t("Plan + sequence", "Plan sub-tab: the work breakdown and what depends on what.")
+                    + " · " + t("Board", "Plan sub-tab: work packages as a kanban board.")
+                    + " · " + t("Team & RACI", "Plan sub-tab: who is accountable for each package.")
+                    + " · " + t("Benefits & closing", "Plan sub-tab: measured benefits and the conditions for closing."),
                 state: .done),
         // Kept current deliberately: the three things this row said were missing
         // were built in P11.5, P11.6b and P11.7b, and an inventory that lags the
         // app is the R13 failure it exists to prevent, one level up.
-        IAEntry(screen: "เก็บข้อมูล", area: "โต๊ะทำงาน", subTab: "เก็บข้อมูล",
-                state: .partial("ออกแบบเครื่องมือ · ประตูก่อนเก็บข้อมูล · เปิดฟอร์มในวงแลน · "
-                                + "กรอกต่อทีหลัง · รหัสนิรนามและ attrition · รอบเก็บข้อมูลที่ปิดแล้วปิดจริง · "
-                                + "ตารางคำตอบพร้อมบันทึกการแก้ไข · materialize เข้า DuckDB · "
-                                + "α/ω/EFA จากคำตอบจริง — ยังไม่มี: ชนิดข้อ matrix/ranking/อัปโหลดไฟล์ในฟอร์มที่เสิร์ฟ")),
-        IAEntry(screen: "ลงรหัส", area: "โต๊ะทำงาน", subTab: "ลงรหัส",
-                state: .partial("สมุดรหัสพร้อมนิยามและรหัสแม่ · ช่วงข้อความที่กำหนดครั้งเดียวแล้วทุกคนลงชุดเดียวกัน · "
-                                + "κ ระหว่างผู้ลงรหัส (Cohen/Fleiss) รายรวมและรายรหัส · เส้นโค้งความอิ่มตัว — "
-                                + "ยังไม่มี: ถอดเทปเข้าคลังความรู้พร้อม provenance และการอ้างกลับถึงช่วงข้อความจริง (P11.8 ครึ่งหลัง)")),
-        IAEntry(screen: "แหล่งและ tier", area: "คลังความรู้", subTab: "แหล่งและ tier",
-                state: .partial("ดูทะเบียนแหล่งและ tier ได้ · เปิด/ปิดรายแหล่งยังไม่บันทึกถาวร (P13)")),
+        IAEntry(screen: "Collect", area: workbench, subTab: collect,
+                state: .partial(t("Instrument design · the gate before collection · serving the form on the LAN · resuming a part-filled form · anonymous codes and attrition · a closed wave really closing · a response table with an edit record · materialising into DuckDB · α/ω/EFA from real answers — missing: matrix, ranking and file-upload question kinds in the served form",
+                                  "Screen-map note for the Collect row."))),
+        IAEntry(screen: "Code", area: workbench, subTab: coding,
+                state: .partial(t("A codebook with definitions and parent codes · passages fixed once so every coder rates the same set · inter-coder κ (Cohen/Fleiss) overall and per code · a saturation curve — missing: transcripts entering the knowledge base with provenance, and citing back to the real passage (second half of P11.8)",
+                                  "Screen-map note for the Code row."))),
+        IAEntry(screen: "Sources and tiers", area: knowledge, subTab: sources,
+                state: .partial(t("The register of sources and their tiers can be read · turning one on or off is not stored yet (P13)",
+                                  "Screen-map note for the Sources and tiers row."))),
     ]
 }
 
@@ -126,11 +149,10 @@ struct IAInventoryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                Text("หน้าจอเดิมอยู่ที่ไหนแล้ว")
+                Text(localised: "Where each of the old screens went", "Title of the screen map.")
                     .font(.headline)
-                Text("ตาราง §14.2 ของสถาปัตยกรรมมี 14 หน้า · จัดใหม่เป็น 4 พื้นที่ + ระบบ "
-                     + "ตาราง §19.2 · แถวไหนยังไม่ได้ทำจะบอกตรง ๆ พร้อมเลข task "
-                     + "— `check.sh` จะแดงถ้ามีหน้าใน §14.2 ที่ไม่มีแถวที่นี่")
+                Text(localised: "§14.2 of the architecture lists 14 screens · they were reorganised into four areas plus System by §19.2 · a row that is not built says so plainly, with its task number — `check.sh` goes red if a screen in §14.2 has no row here",
+                     "Explains what the screen map is and what keeps it honest.")
                     .font(.caption).foregroundStyle(.secondary)
 
                 ForEach(IAInventory.entries) { entry in
@@ -151,8 +173,8 @@ struct IAInventoryView: View {
                         }
                     }
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("\(entry.screen) อยู่ที่ \(entry.area) \(entry.subTab) — "
-                                        + "\(entry.state.label) \(entry.state.note ?? "")")
+                    .accessibilityLabel(t("\(entry.screen) is in \(entry.area) \(entry.subTab) — \(entry.state.label) \(entry.state.note ?? "")",
+                                          "Screen-reader label for a screen-map row. Placeholders: the screen, its area, its sub-tab, its state and any note."))
                 }
             }
             .padding(Space.section)

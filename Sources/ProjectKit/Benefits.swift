@@ -46,9 +46,9 @@ public struct BenefitMeasurement: Sendable, Codable, Equatable {
 public struct Benefit: Sendable, Codable, Equatable, Identifiable {
     public let id: String
     public let projectID: ProjectID
-    /// What is supposed to get better — "เวลาที่ใช้ทำรายงานประจำเดือน".
+    /// What is supposed to get better — "time spent on the monthly report".
     public var title: String
-    /// How it is counted — "ชั่วโมงต่อเดือน", "จำนวนข้อผิดพลาดต่อ 100 ระเบียน".
+    /// How it is counted — "hours per month", "errors per 100 records".
     /// Prose, but prose that names a unit: a measure with no unit cannot be
     /// compared against a target.
     public var measure: String
@@ -59,7 +59,7 @@ public struct Benefit: Sendable, Codable, Equatable, Identifiable {
     /// When somebody looks. Often after `closedAt`, which is why measuring is
     /// allowed on a closed project.
     public var reviewAt: Date
-    /// Whose job the looking is (§19.12's "ใครวัด").
+    /// Whose job the looking is (§19.12's "who measures it").
     public var owner: RACIActor
     public var result: BenefitMeasurement?
     public let createdAt: Date
@@ -128,8 +128,8 @@ public struct BenefitLedger: Sendable, Equatable {
     }
 
     /// The worst measured benefit, as a fraction of its target. `nil` when
-    /// nothing has been measured — which the tolerance strip renders as "ยังไม่
-    /// ได้วัด" rather than as a full bar. A business case that looks healthy
+    /// nothing has been measured — which the tolerance strip renders as "not
+    /// measured yet" rather than as a full bar. A business case that looks healthy
     /// because nobody checked is the exact failure §19.12 is about.
     public var lowestAchievement: Double? {
         measured.compactMap(\.achievement).min()
@@ -141,7 +141,8 @@ public enum BenefitError: Error, CustomStringConvertible, Equatable {
 
     public var description: String {
         switch self {
-        case .emptyMeasurer: "ต้องระบุชื่อคนที่วัด — ตัวเลขที่ไม่มีใครรับรองไม่ใช่ผลการวัด"
+        case .emptyMeasurer: t("The name of who measured it is required — a number nobody vouches for is not a measurement",
+                               "Refusal message when a benefit measurement has no measurer.")
         }
     }
 }

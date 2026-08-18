@@ -39,7 +39,7 @@ public struct ProjectedLeaf: Sendable, Equatable, Identifiable {
     public let p50Finish: Date
     public let p90Finish: Date
     /// How many finished pieces of work the band is made of, so the screen can
-    /// say "จาก 6 งาน" rather than presenting a number with no provenance.
+    /// say "from 6 tasks" rather than presenting a number with no provenance.
     public let sampleCount: Int
 
     public var id: String { packageID }
@@ -93,14 +93,15 @@ public enum ScheduleForecast {
             guard blockers.isEmpty else {
                 unknown.insert(package.id)
                 unforecastable.append((package.id, package.title,
-                                       "ขึ้นกับใบงานที่ยังประมาณเวลาไม่ได้ (\(blockers.count) ใบ) — "
-                                           + "ถ้านับใบที่ไม่รู้เป็นศูนย์ ใบนี้จะได้วันที่ดูมั่นใจโดยไม่มีอะไรรองรับ"))
+                                       t("depends on packages that cannot be estimated yet (\(blockers.count)) — counting the unknown ones as zero would give this package a confident date with nothing behind it",
+                                         "Why a package cannot be forecast. Placeholder is how many blockers.")))
                 continue
             }
             guard let band = estimate(package) else {
                 unknown.insert(package.id)
                 unforecastable.append((package.id, package.title,
-                                       "ยังไม่เคยมีงานชนิดเดียวกันเสร็จในระบบนี้ — ไม่มีตัวเลขจริงให้ประมาณ"))
+                                       t("no work of this kind has ever finished in this system — there is no real number to estimate from",
+                                         "Why a package cannot be forecast.")))
                 continue
             }
 

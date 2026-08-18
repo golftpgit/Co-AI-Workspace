@@ -41,10 +41,10 @@ public struct Correlation: Sendable, Equatable {
 
     /// What the number does and does not say.
     public var summary: String {
-        String(format: "%@ = %.3f (95%% CI %.3f ถึง %.3f, n = %d, p = %.4f)",
+        String(format: localised("%@ = %.3f (95%% CI %.3f to %.3f, n = %d, p = %.4f)", "A correlation coefficient with its interval. Placeholders: the coefficient's name, its value, the two interval bounds, the number of pairs and the p-value."),
                kind.label, coefficient, lower, upper, n, pValue)
-            + " — **ความสัมพันธ์ไม่ใช่ความสอดคล้อง**: เครื่องมือสองชิ้นที่อ่านค่าเป็นสองเท่าของกันและกันเป๊ะ ๆ "
-            + "ได้ r = 1.00 และไม่ตรงกันสักค่าเดียว ถ้าคำถามคือ 'วัดแทนกันได้ไหม' ให้ใช้ Bland–Altman"
+            + localised(" — **correlation is not agreement**: two instruments that read exactly double each other ", "Warning appended to every correlation, saying what it does not measure.")
+            + localised("score r = 1.00 and never once agree · if the question is 'can one replace the other', use Bland–Altman", "Ends the warning that correlation is not agreement.")
     }
 }
 
@@ -62,17 +62,18 @@ public struct Kappa: Sendable, Equatable {
     /// as a convention so nobody quotes it as a threshold.
     public var interpretation: String {
         let band = switch value {
-        case ..<0: "แย่กว่าการเดา"
-        case ..<0.21: "เกือบไม่ตรงกันเลย"
-        case ..<0.41: "ตรงกันน้อย"
-        case ..<0.61: "ตรงกันปานกลาง"
-        case ..<0.81: "ตรงกันดี"
-        default: "ตรงกันดีมาก"
+        case ..<0: localised("worse than guessing", "Landis & Koch band for a negative kappa.")
+        case ..<0.21: localised("almost no agreement", "Landis & Koch band for kappa below 0.21.")
+        case ..<0.41: localised("slight agreement", "Landis & Koch band for kappa below 0.41.")
+        case ..<0.61: localised("moderate agreement", "Landis & Koch band for kappa below 0.61.")
+        case ..<0.81: localised("substantial agreement", "Landis & Koch band for kappa below 0.81.")
+        default: localised("almost perfect agreement", "Landis & Koch band for kappa of 0.81 and above.")
         }
-        return String(format: "κ%@ = %.3f (95%% CI %.3f ถึง %.3f) — %@",
-                      weighted ? " ถ่วงน้ำหนัก" : "", value, lower, upper, band)
-            + " · ตรงกันดิบ \(String(format: "%.1f%%", observedAgreement * 100)) "
-            + "ซึ่ง \(String(format: "%.1f%%", expectedAgreement * 100)) เป็นการตรงกันที่คาดได้จากความบังเอิญ"
+        return String(format: localised("κ%@ = %.3f (95%% CI %.3f to %.3f) — %@", "A kappa with its interval. Placeholders: the word 'weighted' or nothing, the value, the two interval bounds, and the band it falls in."),
+                      weighted ? localised(" weighted", "Inserted after κ when linear weights were used.") : "", value, lower, upper, band)
+            + String(format: localised(" · raw agreement %.1f%%, of which %.1f%% was the agreement chance alone would have produced",
+                                       "Follows a kappa. Placeholders: the observed agreement percentage and the share of it expected from chance."),
+                     observedAgreement * 100, expectedAgreement * 100)
     }
 }
 
@@ -86,12 +87,12 @@ public enum Reliability {
     public static func correlation(_ x: [Double], _ y: [Double],
                                    kind: Correlation.Kind = .pearson) throws -> Correlation {
         guard x.count == y.count else {
-            throw StatError.badShape("ต้องมีจำนวนค่าเท่ากันทั้งสองชุด")
+            throw StatError.badShape(localised("both sets must have the same number of values", "Why a correlation cannot be computed."))
         }
         guard x.count >= 4 else {
             // Fisher's z needs n − 3 in a denominator, and a correlation from
             // three points is a line through three points.
-            throw StatError.notEnoughData("ต้องมีอย่างน้อย 4 คู่")
+            throw StatError.notEnoughData(localised("at least 4 pairs are needed", "Why a correlation cannot be computed."))
         }
         let a = kind == .spearman ? Statistics.ranks(x) : x
         let b = kind == .spearman ? Statistics.ranks(y) : y
@@ -104,7 +105,7 @@ public enum Reliability {
             varianceB += (b[index] - meanB) * (b[index] - meanB)
         }
         guard varianceA > 0, varianceB > 0 else {
-            throw StatError.badShape("ชุดใดชุดหนึ่งมีค่าเดียวกันทั้งหมด — หาความสัมพันธ์ไม่ได้")
+            throw StatError.badShape(localised("one of the sets is a single repeated value — there is no correlation to find", "Why a correlation cannot be computed."))
         }
         let r = covariance / (varianceA * varianceB).squareRoot()
         let n = Double(a.count)
@@ -134,14 +135,14 @@ public enum Reliability {
     public static func kappa(_ first: [Int], _ second: [Int],
                              ordered: Bool = false) throws -> Kappa {
         guard first.count == second.count else {
-            throw StatError.badShape("ผู้ให้คะแนนสองคนต้องให้คะแนนรายการชุดเดียวกัน")
+            throw StatError.badShape(localised("the two raters must have rated the same items", "Why kappa cannot be computed."))
         }
         guard first.count >= 2 else {
-            throw StatError.notEnoughData("ต้องมีอย่างน้อยสองรายการ")
+            throw StatError.notEnoughData(localised("at least two items are needed", "Why kappa cannot be computed."))
         }
         let categories = Array(Set(first + second)).sorted()
         guard categories.count >= 2 else {
-            throw StatError.badShape("มีหมวดเดียว — ความตรงกันไม่มีอะไรให้วัด")
+            throw StatError.badShape(localised("there is only one category — agreement has nothing to measure", "Why kappa cannot be computed."))
         }
         let index = Dictionary(uniqueKeysWithValues: categories.enumerated().map { ($1, $0) })
         let size = categories.count
@@ -167,7 +168,7 @@ public enum Reliability {
             }
         }
         guard expected < 1 else {
-            throw StatError.badShape("ความตรงกันที่คาดจากความบังเอิญเท่ากับ 100% — κ ไม่นิยาม")
+            throw StatError.badShape(localised("chance agreement is 100% — κ is undefined", "Why kappa cannot be computed."))
         }
         let value = (observed - expected) / (1 - expected)
 

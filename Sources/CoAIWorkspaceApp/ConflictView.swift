@@ -26,9 +26,12 @@ struct ConflictView: View {
 
             if model.visible.isEmpty {
                 ContentUnavailableView(
-                    model.showsDecided ? "ยังไม่มีข้อขัดแย้งที่บันทึกไว้" : "ไม่มีข้อขัดแย้งที่รอตัดสิน",
+                    model.showsDecided
+                        ? t("No conflicts recorded yet", "Empty state when showing decided conflicts too.")
+                        : t("No conflicts waiting to be decided", "Empty state when showing only open conflicts."),
                     systemImage: "checkmark.seal",
-                    description: Text("ระบบจะยกขึ้นมาเองเมื่อพบว่าสองแหล่งตอบคำถามเดียวกันไม่ตรงกัน"))
+                    description: Text(localised: "One is raised on its own whenever two sources answer the same question differently",
+                                      "Empty-state explanation on the conflicts screen."))
                     // Takes the space under the header so it centres there,
                     // rather than leaving the stack short enough to be centred
                     // as a whole.
@@ -62,18 +65,21 @@ struct ConflictView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("ความรู้ที่ขัดกัน").font(.headline)
+                Text(localised: "Knowledge that contradicts itself", "Heading of the conflicts screen.")
+                    .font(.headline)
                 if model.openCount > 0 {
-                    Text("\(model.openCount) รอตัดสิน")
+                    Text(localised: "\(model.openCount) waiting",
+                         "Count of undecided conflicts. Placeholder is how many.")
                         .font(.caption)
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(.orange.opacity(0.18), in: Capsule())
                         .foregroundStyle(.orange)
                 }
                 Spacer()
-                Toggle("แสดงที่ตัดสินแล้ว", isOn: $model.showsDecided)
+                Toggle(t("Show decided ones", "Checkbox that includes settled conflicts in the list."),
+                       isOn: $model.showsDecided)
                     .toggleStyle(.switch)
-                    .accessibilityLabel("แสดงข้อขัดแย้งที่ตัดสินไปแล้วด้วย")
+                    .accessibilityLabel(t("Also show conflicts that have been decided", "Screen-reader label."))
             }
 
             if let status = model.status {
@@ -106,7 +112,9 @@ private struct ConflictCard: View {
                 Text(conflict.headline).font(.title3.weight(.semibold))
                 Spacer()
                 if let decision = conflict.decision {
-                    Label(decision.decidedByHuman ? "คุณตัดสินแล้ว" : "ระบบตัดสินให้",
+                    Label(decision.decidedByHuman
+                          ? t("you decided this", "Marker on a conflict a person settled.")
+                          : t("the system decided this", "Marker on a conflict the system settled."),
                           systemImage: decision.decidedByHuman ? "person.fill.checkmark" : "wand.and.stars")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -114,9 +122,11 @@ private struct ConflictCard: View {
             }
 
             HStack(alignment: .top, spacing: 12) {
-                SideColumn(label: "ฝั่ง A", side: conflict.a,
+                SideColumn(label: t("Side A", "Column heading for the first claim in a conflict."),
+                           side: conflict.a,
                            reasons: conflict.weightAReasons, score: conflict.scoreA)
-                SideColumn(label: "ฝั่ง B", side: conflict.b,
+                SideColumn(label: t("Side B", "Column heading for the second claim in a conflict."),
+                           side: conflict.b,
                            reasons: conflict.weightBReasons, score: conflict.scoreB)
             }
 
@@ -132,9 +142,10 @@ private struct ConflictCard: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
 
-                Button("ตัดสินข้อขัดแย้งนี้", action: decide)
+                Button(t("Decide this conflict", "Button that opens the decision sheet."), action: decide)
                     .buttonStyle(.borderedProminent)
-                    .accessibilityLabel("เปิดหน้าต่างตัดสินข้อขัดแย้ง \(conflict.headline)")
+                    .accessibilityLabel(t("Open the decision sheet for \(conflict.headline)",
+                                          "Screen-reader label. Placeholder summarises the conflict."))
             }
         }
         .padding(Space.section)
@@ -165,8 +176,11 @@ private struct ConflictCard: View {
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(record.isReopening
-                                 ? "กลับคำตัดสิน — \(record.note)"
-                                 : (record.note.isEmpty ? "ตัดสิน" : record.note))
+                                 ? t("reversed — \(record.note)",
+                                     "History row for a reversed decision. Placeholder is the reason given.")
+                                 : (record.note.isEmpty
+                                    ? t("decided", "History row for a decision recorded without a note.")
+                                    : record.note))
                                 .font(.callout)
                             Text(record.recordedAt.formatted(date: .abbreviated, time: .shortened))
                                 .font(.caption2).foregroundStyle(.secondary)
@@ -176,10 +190,11 @@ private struct ConflictCard: View {
 
                 if reopening {
                     HStack(spacing: Space.row) {
-                        TextField("ทำไมถึงกลับคำตัดสิน", text: $reason)
+                        TextField(t("Why reverse it", "Text field: the required reason for reversing a decision."),
+                                  text: $reason)
                             .textFieldStyle(.roundedBorder)
-                            .accessibilityLabel("เหตุผลที่กลับคำตัดสิน")
-                        Button("ยืนยัน") {
+                            .accessibilityLabel(t("Reason for reversing the decision", "Screen-reader label."))
+                        Button(t("Confirm", "Button that records the reversal.")) {
                             Task {
                                 await model.reopen(conflict, reason: reason)
                                 reason = ""
@@ -187,16 +202,22 @@ private struct ConflictCard: View {
                             }
                         }
                         .disabled(reason.trimmingCharacters(in: .whitespaces).isEmpty)
-                        Button("ยกเลิก") { reopening = false; reason = "" }
+                        Button(t("Cancel", "Button that abandons reversing a decision.")) {
+                            reopening = false; reason = ""
+                        }
                     }
                 } else {
-                    Button("กลับคำตัดสินนี้") { reopening = true }
-                        .accessibilityHint("คำตัดสินเดิมจะยังอยู่ในประวัติ และต้องบอกเหตุผล")
+                    Button(t("Reverse this decision", "Button that reopens a settled conflict.")) {
+                        reopening = true
+                    }
+                        .accessibilityHint(t("The original decision stays in the history, and a reason is required",
+                                             "Screen-reader hint on the reverse button."))
                 }
             }
             .padding(.top, Space.row)
         } label: {
-            Text("ประวัติคำตัดสิน").font(.caption)
+            Text(localised: "Decision history", "Heading over the record of how a conflict was settled.")
+                .font(.caption)
         }
     }
 
@@ -205,14 +226,26 @@ private struct ConflictCard: View {
     /// inventing one.
     private var proposalText: String {
         let suggestion: String? = switch conflict.proposal {
-        case .preferA(let reason): "ระบบเสนอให้ใช้ฝั่ง A — \(reason)"
-        case .preferB(let reason): "ระบบเสนอให้ใช้ฝั่ง B — \(reason)"
-        case .bothInContext(let condition): "ระบบเสนอว่าถูกทั้งคู่ในบริบทต่างกัน — \(condition)"
-        case .unresolved: "ระบบไม่เสนอฝั่งใด — น้ำหนักสองฝั่งใกล้กันเกินไป"
+        case .preferA(let reason):
+            t("The system suggests side A — \(reason)",
+              "A suggested resolution. Placeholder is the reason given.")
+        case .preferB(let reason):
+            t("The system suggests side B — \(reason)",
+              "A suggested resolution. Placeholder is the reason given.")
+        case .bothInContext(let condition):
+            t("The system suggests both are right in different contexts — \(condition)",
+              "A suggested resolution. Placeholder states the condition that separates them.")
+        case .unresolved:
+            t("The system suggests neither — the two sides weigh too closely",
+              "A suggested resolution that declines to pick a side.")
         case nil: nil
         }
-        guard let suggestion else { return "ยังไม่มีข้อเสนอของระบบสำหรับข้อขัดแย้งนี้" }
-        return suggestion + " (เป็นข้อเสนอ ไม่ใช่ข้อสรุป)"
+        guard let suggestion else {
+            return t("The system has no suggestion for this conflict yet",
+                     "Shown when nothing has been suggested.")
+        }
+        return suggestion + t(" (a suggestion, not a conclusion)",
+                              "Appended to every suggestion so it is never read as a decision.")
     }
 }
 
@@ -250,14 +283,17 @@ private struct SideColumn: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
-            Text("เข้าถึงเมื่อ \(side.provenance.accessedAt.formatted(Self.accessed))")
+            Text(localised: "accessed \(side.provenance.accessedAt.formatted(Self.accessed))",
+                 "When a source was read. Placeholder is a date.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
 
             Text(reasons)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text(String(format: "น้ำหนักรวม %.2f", score))
+            Text(String(format: t("total weight %.2f",
+                                  "The combined weight of one side of a conflict. Placeholder is a number."),
+                        score))
                 .font(.caption2.monospaced())
                 .foregroundStyle(.tertiary)
         }
@@ -272,8 +308,10 @@ private struct TierChip: View {
             .font(.caption2.monospaced())
             .padding(.horizontal, 5).padding(.vertical, 1)
             .background(.secondary.opacity(0.18), in: Capsule())
-            .accessibilityLabel(tier.map { "ระดับความน่าเชื่อถือ \($0.rawValue.uppercased())" }
-                                ?? "ไม่มีระดับความน่าเชื่อถือภายนอก")
+            .accessibilityLabel(tier.map {
+                t("trust tier \($0.rawValue.uppercased())",
+                  "Screen-reader label for a source's trust tier. Placeholder is the tier code.")
+            } ?? t("no external trust tier", "Screen-reader label when a source has no tier."))
     }
 }
 
@@ -295,19 +333,25 @@ private struct DecisionSummary: View {
 
     private var text: String {
         switch decision.resolution {
-        case .preferA(let reason): "ใช้ฝั่ง A — \(reason)"
-        case .preferB(let reason): "ใช้ฝั่ง B — \(reason)"
-        case .bothInContext(let condition): "ถูกทั้งคู่ในบริบทต่างกัน — \(condition)"
-        case .unresolved: "ยังไม่ตัดสิน — เอกสารต้องระบุว่าเรื่องนี้ยังไม่ยุติ"
+        case .preferA(let reason): t("Use side A — \(reason)",
+                                     "A recorded decision. Placeholder is the reason.")
+        case .preferB(let reason): t("Use side B — \(reason)",
+                                     "A recorded decision. Placeholder is the reason.")
+        case .bothInContext(let condition): t("Both are right in different contexts — \(condition)",
+                                              "A recorded decision. Placeholder states the condition.")
+        case .unresolved: t("Not decided — documents must say this is unsettled",
+                            "A recorded decision to leave the conflict open.")
         }
     }
 
     private var scopeText: String {
         switch decision.scope {
-        case .central: "ใช้เป็นคำตัดสินกลาง ทุกโปรเจกต์"
-        case .project(let id): "ใช้เฉพาะโปรเจกต์ \(id.rawValue)"
-        case .board(let runID): "ใช้เฉพาะการรันนี้ (\(runID))"
-        case .policy: "ขอบเขตนโยบาย"
+        case .central: t("binding on every project", "How widely a decision applies.")
+        case .project(let id): t("only in project \(id.rawValue)",
+                                 "How widely a decision applies. Placeholder is the project id.")
+        case .board(let runID): t("only in this run (\(runID))",
+                                  "How widely a decision applies. Placeholder is the run id.")
+        case .policy: t("policy scope", "How widely a decision applies.")
         }
     }
 }
@@ -359,10 +403,10 @@ private struct DecisionSheet: View {
 
         var label: String {
             switch self {
-            case .a: "ใช้ฝั่ง A"
-            case .b: "ใช้ฝั่ง B"
-            case .both: "ถูกทั้งคู่ ในบริบทต่างกัน"
-            case .unresolved: "ยังไม่ตัดสิน"
+            case .a: t("Use side A", "Choice in the decision sheet.")
+            case .b: t("Use side B", "Choice in the decision sheet.")
+            case .both: t("Both, in different contexts", "Choice in the decision sheet.")
+            case .unresolved: t("Leave it unsettled", "Choice in the decision sheet.")
             }
         }
     }
@@ -371,32 +415,41 @@ private struct DecisionSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(conflict.question).font(.headline)
 
-            Picker("คำตัดสิน", selection: $choice) {
+            Picker(t("Decision", "Picker over the four ways to settle a conflict."), selection: $choice) {
                 ForEach(Choice.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.radioGroup)
-            .accessibilityLabel("เลือกคำตัดสิน")
+            .accessibilityLabel(t("Choose the decision", "Screen-reader label for the decision picker."))
 
             switch choice {
             case .both:
                 // Required: "it depends" with nothing after it settles nothing.
-                TextField("ระบุเงื่อนไข เช่น ผู้ใหญ่ใช้ค่าหนึ่ง เด็กใช้อีกค่า", text: $condition)
+                TextField(t("State the condition, for example: one value for adults, another for children",
+                            "Text field for the condition that separates two contexts."),
+                          text: $condition)
                     .textFieldStyle(.roundedBorder)
             case .unresolved:
-                Text("เอกสารที่อ้างเรื่องนี้จะถูกเขียนให้ระบุว่ายังไม่ยุติ")
+                Text(localised: "Documents citing this will be written to say it is unsettled",
+                     "Consequence of leaving a conflict undecided.")
                     .font(.caption).foregroundStyle(.secondary)
             case .a, .b:
-                TextField("เหตุผล (ไม่บังคับ)", text: $reason)
+                TextField(t("Reason (optional)", "Text field for an optional note on a decision."),
+                          text: $reason)
                     .textFieldStyle(.roundedBorder)
             }
 
-            Toggle("ใช้เป็นคำตัดสินกลางสำหรับทุกโปรเจกต์", isOn: $asPrecedent)
-                .accessibilityHint("ถ้าปิดไว้ คำตัดสินจะใช้เฉพาะขอบเขตที่กำลังดูอยู่")
+            Toggle(t("Make this binding on every project",
+                     "Checkbox that widens a decision beyond the current scope."),
+                   isOn: $asPrecedent)
+                .accessibilityHint(t("If off, the decision applies only to the scope you are looking at",
+                                     "Screen-reader hint for the precedent switch."))
 
             HStack {
                 Spacer()
-                Button("ยกเลิก") { dismiss() }
-                Button("บันทึก") {
+                Button(t("Cancel", "Button that closes the decision sheet without recording anything.")) {
+                    dismiss()
+                }
+                Button(t("Record", "Button that records the conflict decision.")) {
                     save(resolution, asPrecedent)
                     dismiss()
                 }
@@ -410,8 +463,12 @@ private struct DecisionSheet: View {
 
     private var resolution: ConflictResolution {
         switch choice {
-        case .a: .preferA(reason: reason.isEmpty ? "ผู้ใช้เลือก" : reason)
-        case .b: .preferB(reason: reason.isEmpty ? "ผู้ใช้เลือก" : reason)
+        case .a: .preferA(reason: reason.isEmpty
+                          ? t("chosen by the user", "Recorded as the reason when a person picks a side without typing one.")
+                          : reason)
+        case .b: .preferB(reason: reason.isEmpty
+                          ? t("chosen by the user", "Recorded as the reason when a person picks a side without typing one.")
+                          : reason)
         case .both: .bothInContext(condition: condition)
         case .unresolved: .unresolved
         }

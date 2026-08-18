@@ -53,7 +53,7 @@ struct ReportingTests {
         let before = ReportBuilder.build(.highlight,
                                          from: ReportInputs(project: project,
                                                             wbs: WorkBreakdown([leaf])))
-        #expect(before.rendered.contains("กำลังทำ"))
+        #expect(before.rendered.contains("in progress"))
         #expect(!before.rendered.contains("α = 0.74"))
 
         leaf.status = .done
@@ -117,11 +117,11 @@ struct ReportingTests {
         let report = ReportBuilder.build(.highlight, from: ReportInputs(
             project: project, tolerances: tolerances, measured: [.scope]))
 
-        #expect(report.rendered.contains("ยังไม่ได้วัด"))
+        #expect(report.rendered.contains("not measured yet"))
         // Cost is not in `measured`, so the money line must not claim a number.
-        #expect(report.rendered.contains("ค่าใช้จ่าย: ยังไม่ได้ต่อกับบัญชีการใช้จ่าย"))
+        #expect(report.rendered.contains("Spending: not connected to the ledger yet"))
         // And the provenance line, which is what makes the rest checkable.
-        #expect(report.rendered.contains("ไม่มีประโยคที่โมเดลแต่งขึ้น"))
+        #expect(report.rendered.contains("No sentence in it was written by a model"))
     }
 
     @Test("an end-stage report shows the gate it is asking to pass")
@@ -139,7 +139,7 @@ struct ReportingTests {
         // Every condition, with its state — the report is the request to move on,
         // so it has to carry what the decision rests on.
         #expect(report.rendered.contains("✓"))
-        #expect(report.rendered.contains("ยังไม่มี baseline"))
+        #expect(report.rendered.contains("No baseline yet"))
     }
 
     @Test("an end-project report hands over what is still open")
@@ -169,15 +169,15 @@ struct ReportingTests {
         #expect(report.rendered.contains("หัวหน้าภาค"))
         // The most commonly dropped handover item there is: a benefit whose
         // review date is after the project ends.
-        #expect(report.rendered.contains("ยังต้องวัด: เวลาสรุปแบบสอบถาม"))
-        #expect(report.rendered.contains("ย้ายเข้าคลังเก็บถาวร"))
+        #expect(report.rendered.contains("Still to be measured: เวลาสรุปแบบสอบถาม"))
+        #expect(report.rendered.contains("moved to the archive"))
         #expect(report.rendered.contains("ขอจากผู้แปล"))
     }
 
     @Test("a section with nothing in it says so rather than reading as fine")
     func emptySectionsAreHonest() {
         let report = ReportBuilder.build(.highlight, from: ReportInputs(project: project()))
-        #expect(report.rendered.contains("ไม่มีรายการที่ระบบบันทึกไว้"))
+        #expect(report.rendered.contains("nothing recorded"))
     }
 
     @Test("issuing a report keeps it, and makes reporting a practice with evidence")
@@ -196,7 +196,7 @@ struct ReportingTests {
                                      in: await service.conformanceFacts(of: created.id)) == nil)
 
         let first = try #require(try await service.issueReport(.highlight, for: created.id))
-        #expect(first.title.contains("ออกรายงาน"))
+        #expect(first.title.contains("report"))
         #expect(Conformance.evidence(for: .reporting,
                                      in: await service.conformanceFacts(of: created.id)) != nil)
 
@@ -222,11 +222,11 @@ struct ReportingTests {
                                             measuredSeconds: 1_800))
 
         let report = try #require(try await service.issueReport(.highlight, for: created.id))
-        #expect(report.rendered.contains("฿240"))
-        #expect(report.rendered.contains("30 นาที"))
+        #expect(report.rendered.contains("$240"))
+        #expect(report.rendered.contains("30 minutes"))
         // Time is not in `measured`, but elapsed seconds are a count of spans
         // rather than a ratio — the ratio is what needs history, and the report
         // says minutes because that is what was actually recorded.
-        #expect(report.rendered.contains("เวลา: 1.5 / 1.50") == false)
+        #expect(report.rendered.contains("Time: 1.5 / 1.50") == false)
     }
 }

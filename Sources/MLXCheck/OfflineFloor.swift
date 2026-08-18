@@ -25,12 +25,32 @@ enum OfflineFloor {
     /// service and refuses instantly, so the check does not wait on a timeout.
     static let deadEndpoint = URL(string: "http://127.0.0.1:9/v1")!
 
-    static func router(with model: LocalModel) -> ModelRouter {
-        ModelRouter(executors: [
-            OnDeviceExecutor(),
-            LocalTier(model: model),
-            VLLMExecutor(baseURL: deadEndpoint, model: "gx10-27b"),
-        ])
+    /// One chain for every case, the way the app has one.
+    ///
+    /// It used to be built per call, and the second case then failed with the
+    /// model reported `unavailable` — because the *first* case had loaded the
+    /// weights into a different `LocalTier`, and admission control asks about
+    /// free memory, which those weights were now occupying. Two tiers for one
+    /// model double-count it. `Engine` builds exactly one, so a check that
+    /// builds several was not testing the thing that ships (E.46).
+    private static let shared = MemoisedRouter()
+
+    actor MemoisedRouter {
+        private var routers: [String: ModelRouter] = [:]
+        func router(for model: LocalModel) -> ModelRouter {
+            if let existing = routers[model.name] { return existing }
+            let made = ModelRouter(executors: [
+                OnDeviceExecutor(),
+                LocalTier(model: model),
+                VLLMExecutor(baseURL: deadEndpoint, model: "gx10-27b"),
+            ])
+            routers[model.name] = made
+            return made
+        }
+    }
+
+    static func router(with model: LocalModel) async -> ModelRouter {
+        await shared.router(for: model)
     }
 
     /// High-impact work with the network gone. Must land on Tier 0.5.
@@ -60,7 +80,7 @@ enum OfflineFloor {
     /// the endpoint down this is the case U13 described: without Tier 0.5 the
     /// answer for every document is "no conflicts", with no error anywhere.
     static func detectsConflictsOffline(_ model: LocalModel) async throws -> String {
-        let router = router(with: model)
+        let router = await router(with: model)
         let detector = ConflictDetector(router: router)
         let finding = await detector.detect(
             "ผู้ป่วยเบาหวานชนิดที่ 2 ควรได้รับ metformin 500 มก. วันละสองครั้งเป็นยาเริ่มต้น",

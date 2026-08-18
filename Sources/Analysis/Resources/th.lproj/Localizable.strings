@@ -1,0 +1,349 @@
+/* ภาษาไทย — คำแปลของข้อความที่โมดูลนี้เป็นเจ้าของ */
+
+/* ── Agreement ───────────────────────────────────────────────── */
+
+"%@ = %.3f (95%% CI %.3f to %.3f, n = %d, p = %.4f)" = "%@ = %.3f (95%% CI %.3f ถึง %.3f, n = %d, p = %.4f)";
+" — **correlation is not agreement**: two instruments that read exactly double each other " = " — **ความสัมพันธ์ไม่ใช่ความสอดคล้อง**: เครื่องมือสองชิ้นที่อ่านค่าเป็นสองเท่าของกันและกันเป๊ะ ๆ ";
+"score r = 1.00 and never once agree · if the question is 'can one replace the other', use Bland–Altman" = "ได้ r = 1.00 และไม่ตรงกันสักค่าเดียว ถ้าคำถามคือ 'วัดแทนกันได้ไหม' ให้ใช้ Bland–Altman";
+"worse than guessing" = "แย่กว่าการเดา";
+"almost no agreement" = "เกือบไม่ตรงกันเลย";
+"slight agreement" = "ตรงกันน้อย";
+"moderate agreement" = "ตรงกันปานกลาง";
+"substantial agreement" = "ตรงกันดี";
+"almost perfect agreement" = "ตรงกันดีมาก";
+"κ%@ = %.3f (95%% CI %.3f to %.3f) — %@" = "κ%@ = %.3f (95%% CI %.3f ถึง %.3f) — %@";
+" weighted" = " ถ่วงน้ำหนัก";
+" · raw agreement %.1f%%, of which %.1f%% was the agreement chance alone would have produced" = " · ตรงกันดิบ %.1f%% ซึ่ง %.1f%% เป็นการตรงกันที่คาดได้จากความบังเอิญ";
+"both sets must have the same number of values" = "ต้องมีจำนวนค่าเท่ากันทั้งสองชุด";
+"at least 4 pairs are needed" = "ต้องมีอย่างน้อย 4 คู่";
+"one of the sets is a single repeated value — there is no correlation to find" = "ชุดใดชุดหนึ่งมีค่าเดียวกันทั้งหมด — หาความสัมพันธ์ไม่ได้";
+"the two raters must have rated the same items" = "ผู้ให้คะแนนสองคนต้องให้คะแนนรายการชุดเดียวกัน";
+"at least two items are needed" = "ต้องมีอย่างน้อยสองรายการ";
+"there is only one category — agreement has nothing to measure" = "มีหมวดเดียว — ความตรงกันไม่มีอะไรให้วัด";
+"chance agreement is 100% — κ is undefined" = "ความตรงกันที่คาดจากความบังเอิญเท่ากับ 100%% — κ ไม่นิยาม";
+
+/* ── AnalysisStore ───────────────────────────────────────────── */
+
+"could not open the analysis database: %@" = "เปิดฐานข้อมูลวิเคราะห์ไม่ได้: %@";
+"the SQL statement failed: %@" = "คำสั่ง SQL ล้มเหลว: %@";
+
+/* ── Connectors ──────────────────────────────────────────────── */
+
+"DuckDB has no official SQL Server extension yet — §12.2 plans to go via ATTACH " = "DuckDB ยังไม่มี extension ทางการสำหรับ SQL Server — §12.2 วางไว้ว่าจะไปทาง ATTACH ";
+"once one exists; for now the connection genuinely cannot be made" = "เมื่อมี ตอนนี้ยังต่อไม่ได้จริง";
+"needs a native driver (v1 showed the community \"mongo\" extension " = "ต้องใช้ไดรเวอร์ native (v1 พิสูจน์แล้วว่า community extension \"mongo\" ";
+"does not keep up with core builds) — it has not been added as a dependency" = "build ตาม core ไม่ทัน) — ยังไม่ได้เพิ่มเป็น dependency";
+"no password has been set for this source (“%@”)" = "ยังไม่ได้ตั้งรหัสผ่านของแหล่งนี้ (“%@”)";
+"could not read the password “%@” from the Keychain (%@) — which does not mean it was never set" = "อ่านรหัสผ่าน “%@” จาก Keychain ไม่ได้ (%@) — ยังไม่ได้แปลว่ายังไม่ได้ตั้ง";
+"could not connect to '%@': %@" = "ต่อ '%@' ไม่สำเร็จ: %@";
+
+/* ── CountModels ─────────────────────────────────────────────── */
+
+"fewer observations than parameters — overdispersion cannot be checked" = "ข้อมูลน้อยเกินกว่าจำนวนพารามิเตอร์ — ตรวจการกระจายเกินไม่ได้";
+"Pearson χ²/df = %.2f — the variance is close to the mean, as Poisson assumes" = "Pearson χ²/df = %.2f — ความแปรปรวนใกล้เคียงค่าเฉลี่ยตามที่ Poisson สมมติ";
+"Pearson χ²/df = %.2f (p = %.4f) — **the data are more spread out than Poisson allows** " = "Pearson χ²/df = %.2f (p = %.4f) — **ข้อมูลกระจายเกินกว่าที่ Poisson รับได้** ";
+"Poisson intervals will be too narrow, and findings that are not real will look significant " = "ช่วงความเชื่อมั่นจาก Poisson จะแคบเกินจริง และผลที่ไม่จริงจะดูมีนัยสำคัญ ";
+"· use a negative binomial instead" = "· ใช้ negative binomial แทน";
+"the data are not overdispersed — a negative binomial has nothing to add over Poisson" = "ข้อมูลไม่ได้กระจายเกิน — negative binomial ไม่มีอะไรจะอธิบายเพิ่มจาก Poisson";
+"there is no data" = "ไม่มีข้อมูล";
+"a count model needs non-negative whole numbers" = "โมเดลนับต้องการจำนวนนับที่ไม่ติดลบและเป็นจำนวนเต็ม";
+"there are not as many predictor values as observations" = "จำนวนค่าตัวแปรต้นไม่เท่ากับจำนวนการสังเกต";
+"no events happened at all" = "ไม่มีเหตุการณ์เกิดขึ้นเลย";
+"there must be more observations than parameters" = "จำนวนการสังเกตต้องมากกว่าจำนวนพารามิเตอร์";
+"the fit did not converge — the predictors may be perfectly collinear" = "ประมาณค่าไม่ลู่เข้า — ตัวแปรต้นอาจซ้อนกันสมบูรณ์";
+"the data matrix cannot be inverted" = "เมทริกซ์ข้อมูลกลับด้านไม่ได้";
+
+/* ── DiagnosticAccuracy ──────────────────────────────────────── */
+
+"there is nobody with the disease in the data — sensitivity cannot be computed" = "ไม่มีผู้ป่วยจริงในชุดข้อมูล — คำนวณ sensitivity ไม่ได้";
+"there is nobody without the disease in the data — specificity cannot be computed" = "ไม่มีคนปกติในชุดข้อมูล — คำนวณ specificity ไม่ได้";
+"prevalence must be between 0 and 1, ends excluded" = "ความชุกต้องอยู่ระหว่าง 0 ถึง 1 (ไม่รวมปลายทั้งสอง)";
+"this test separates nothing — predictive values cannot be computed" = "การทดสอบนี้ไม่แยกอะไรเลย — ค่าทำนายคำนวณไม่ได้";
+"specificity is exactly 1 — LR+ is infinite, which is a fact about the sample size rather than about the test" = "specificity เป็น 1 พอดี — LR+ เป็นอนันต์ ซึ่งเป็นผลของขนาดตัวอย่าง ไม่ใช่ของการทดสอบ";
+"specificity is zero — LR− cannot be computed" = "specificity เป็นศูนย์ — LR− คำนวณไม่ได้";
+"there are not as many scores as labels" = "จำนวนคะแนนกับป้ายกำกับไม่เท่ากัน";
+"both a diseased and a non-diseased group are needed" = "ต้องมีทั้งกลุ่มที่เป็นโรคและไม่เป็นโรค";
+"Hanley–McNeil 95% CI (the area equals Mann–Whitney)" = "Hanley–McNeil 95%% CI (พื้นที่ = Mann–Whitney)";
+
+/* ── Epidemiology ────────────────────────────────────────────── */
+
+"a cell is zero — the log interval for a risk ratio cannot be computed" = "มีเซลล์ที่เป็นศูนย์ — RR คำนวณช่วงความเชื่อมั่นแบบ log ไม่ได้";
+"a cell is zero — Woolf's odds ratio cannot be computed until a continuity correction has been decided on" = "มีเซลล์ที่เป็นศูนย์ — OR แบบ Woolf คำนวณไม่ได้ (ต้องตัดสินใจเรื่อง continuity correction ก่อน)";
+"the risk difference is zero — the number needed to treat is infinite" = "ผลต่างความเสี่ยงเป็นศูนย์ — NNT เป็นอนันต์";
+"the interval around the risk difference crosses zero — " = "ช่วงความเชื่อมั่นของผลต่างความเสี่ยงคร่อมศูนย์ — ";
+"inverting it does not give one continuous interval, so it cannot be reported as a number needed to treat" = "NNT ที่กลับด้านจากช่วงนี้ไม่ใช่ช่วงเดียวที่ต่อเนื่อง จึงรายงานเป็น NNT ไม่ได้";
+"NNH — how many must be exposed for one extra person to be harmed · " = "NNH — จำนวนที่ต้องได้รับจนเกิดอันตรายเพิ่ม 1 ราย · ";
+"inverted from the Wald 95% CI of the risk difference" = "กลับด้านจากช่วง Wald ของผลต่างความเสี่ยง 95%% CI";
+"NNT — how many must be treated to prevent one case · " = "NNT — จำนวนที่ต้องรักษาจนป้องกันได้ 1 ราย · ";
+"the population is zero" = "ประชากรเป็นศูนย์";
+"the number of cases must be between 0 and the size of the population" = "จำนวนผู้ป่วยต้องอยู่ระหว่าง 0 ถึงจำนวนประชากร";
+"person-time must be greater than zero" = "person-time ต้องมากกว่าศูนย์";
+"there were no events — the rate is zero and a log interval cannot be computed" = "ไม่มีเหตุการณ์เลย — อัตราเป็นศูนย์และช่วงแบบ log คำนวณไม่ได้";
+"there are no age strata" = "ไม่มีชั้นอายุ";
+"every stratum must have person-time greater than zero" = "ทุกชั้นต้องมี person-time มากกว่าศูนย์";
+"the standard population weights add up to zero" = "น้ำหนักประชากรมาตรฐานรวมเป็นศูนย์";
+"one of the groups has nobody in it" = "มีกลุ่มที่ไม่มีคนอยู่เลย";
+"a count is negative" = "จำนวนนับติดลบ";
+
+/* ── MetaAnalysis ────────────────────────────────────────────── */
+
+"heterogeneity is low — a fixed-effect pooled value is defensible" = "ความต่างระหว่างงานต่ำ — ค่ารวมแบบ fixed effect พออธิบายได้";
+"heterogeneity is moderate" = "ความต่างระหว่างงานปานกลาง";
+"heterogeneity is high — use random effects and say what the studies differ in" = "ความต่างระหว่างงานสูง — ควรใช้ random effects และอธิบายว่าต่างเพราะอะไร";
+"heterogeneity is very high — **pooling may not mean anything** " = "ความต่างระหว่างงานสูงมาก — **การรวมค่าอาจไม่มีความหมาย** ";
+"an average over things that are not the same thing is an average nobody could measure" = "ค่ารวมของสิ่งที่ไม่ใช่สิ่งเดียวกันคือค่าเฉลี่ยที่ไม่มีใครวัดได้";
+"Egger's test: intercept %.3f (p = %.4f) — **the funnel is asymmetric** " = "Egger's test: intercept %.3f (p = %.4f) — **funnel ไม่สมมาตร** ";
+"the small studies here differ systematically from the large ones, which fits " = "งานเล็กในชุดนี้ให้ผลต่างจากงานใหญ่อย่างเป็นระบบ ซึ่งเข้าได้กับ ";
+"publication bias (studies finding nothing often go unpublished) or with small studies simply being of different quality " = "publication bias (งานที่ไม่พบผลมักไม่ถูกตีพิมพ์) หรือกับคุณภาพงานเล็กที่ต่างออกไป ";
+"· the pooled value is probably overstated" = "· ค่ารวมน่าจะเกินจริง";
+"Egger's test: intercept %.3f (p = %.4f) — no asymmetry was found " = "Egger's test: intercept %.3f (p = %.4f) — ไม่พบความไม่สมมาตร ";
+"· **which is not the same as there being none** — this test has little power below ten studies" = "· **ไม่ได้แปลว่าไม่มี** การทดสอบนี้พลังต่ำเมื่องานน้อยกว่าสิบชิ้น";
+"pooling needs at least two studies" = "การรวมค่าต้องมีอย่างน้อยสองงาน";
+"every study must have a standard error greater than zero" = "ทุกงานต้องมี standard error มากกว่าศูนย์";
+"heterogeneity cannot be measured with fewer than two studies" = "ต้องมีอย่างน้อยสองงานถึงจะวัดความต่างระหว่างงานได้";
+"Egger's test needs at least three studies — and still has very little power below ten" = "Egger's test ต้องมีอย่างน้อยสามงาน — และยังพลังต่ำมากจนกว่าจะถึงสิบงาน";
+"every study has the same precision — asymmetry cannot be tested for" = "ทุกงานมีความแม่นยำเท่ากัน — ทดสอบความไม่สมมาตรไม่ได้";
+
+/* ── MissingData ─────────────────────────────────────────────── */
+
+"%lld of %lld rows are complete on every variable " = "แถวที่ครบทุกตัวแปร %lld จาก %lld ";
+" · the variable missing most is %@ " = " · ตัวแปรที่ขาดมากที่สุดคือ %@ ";
+" · **a complete-case analysis throws away " = " · **การวิเคราะห์เฉพาะแถวที่ครบ ทิ้งคนไป ";
+"%lld people** — more than any single variable is missing " = "%lld คน** ซึ่งมากกว่าช่องว่างของตัวแปรใดตัวแปรหนึ่ง ";
+"because each row is missing something different" = "เพราะแต่ละแถวขาดคนละที่กัน";
+"those missing %@ (%d people) have a mean %@ of %.3f " = "คนที่ขาด %@ (%d คน) มีค่าเฉลี่ยของ %@ = %.3f ";
+"against %.3f for those not missing it (p = %.4f)" = "ส่วนคนที่ไม่ขาดได้ %.3f (p = %.4f)";
+" — **the missingness is not random**: a complete-case analysis " = " — **การขาดหายไม่ได้สุ่ม**: การวิเคราะห์เฉพาะแถวที่ครบ ";
+"therefore answers a question about a different group of people than the one being studied" = "จึงตอบคำถามเกี่ยวกับกลุ่มตัวอย่างคนละกลุ่มกับที่ตั้งใจศึกษา";
+" — no difference was found, **which does not mean the missingness is random**: " = " — ไม่พบความต่าง **ซึ่งไม่ได้แปลว่าการขาดหายสุ่ม**: ";
+"the reason people are missing is usually not in the file, so data can never prove MCAR — only the opposite" = "เหตุผลที่คนหายไปมักไม่ได้อยู่ในไฟล์ ข้อมูลจึงพิสูจน์ MCAR ไม่ได้ พิสูจน์ได้แต่ตรงข้าม";
+"there are no variables to check" = "ไม่มีตัวแปรให้ตรวจ";
+"every variable must have the same number of rows" = "ทุกตัวแปรต้องมีจำนวนแถวเท่ากัน";
+"both variables must have the same number of rows" = "ทั้งสองตัวแปรต้องมีจำนวนแถวเท่ากัน";
+"at least two rows are needed both where the value is missing and where it is present " = "ต้องมีอย่างน้อยสองแถวในทั้งกลุ่มที่ขาดและกลุ่มที่ไม่ขาด ";
+"for a comparison — there are %lld and %lld" = "จึงจะเทียบกันได้ — ตอนนี้มี %lld กับ %lld";
+
+/* ── Mortality ───────────────────────────────────────────────── */
+
+"significantly above the reference population" = "สูงกว่าประชากรอ้างอิงอย่างมีนัยสำคัญ";
+"significantly below the reference population" = "ต่ำกว่าประชากรอ้างอิงอย่างมีนัยสำคัญ";
+"not yet distinguishable from the reference population" = "ยังแยกจากประชากรอ้างอิงไม่ได้";
+"SMR = %.2f (95%% CI %.2f–%.2f) · %d deaths observed " = "SMR = %.2f (95%% CI %.2f–%.2f) · ตายจริง %d ราย ";
+"against the %.1f the reference rates predict — %@" = "เทียบกับ %.1f รายที่อัตราของประชากรอ้างอิงทำนายไว้ — %@";
+" · **the interval is exact (Poisson)** because at these few deaths the normal approximation " = " · **ช่วงคำนวณแบบ exact (Poisson)** เพราะการประมาณแบบปกติที่จำนวนตายน้อย ";
+"puts the lower bound below zero, which is not a number of deaths" = "ให้ขอบล่างต่ำกว่าศูนย์ ซึ่งไม่ใช่จำนวนคนตาย";
+"there are no age bands" = "ไม่มีชั้นอายุ";
+"person-time, reference rates and death counts cannot be negative" = "person-time, อัตราอ้างอิง และจำนวนตาย ติดลบไม่ได้";
+"the reference rates predict no deaths at all — there is nothing to divide by" = "อัตราของประชากรอ้างอิงทำนายว่าจะไม่มีใครตายเลย — หารด้วยศูนย์ไม่ได้";
+"a life table needs at least two age bands" = "ตารางชีพต้องมีอย่างน้อยสองช่วงอายุ";
+"age bands must be wider than zero and mortality rates cannot be negative" = "ช่วงอายุต้องกว้างกว่าศูนย์ และอัตราตายติดลบไม่ได้";
+"the age bands must be in ascending order" = "ช่วงอายุต้องเรียงจากน้อยไปมาก";
+
+/* ── Multilevel ──────────────────────────────────────────────── */
+
+"at least two clusters are needed to separate the variance between them" = "ต้องมีอย่างน้อยสองกลุ่มถึงจะแยกความแปรปรวนระหว่างกลุ่มได้";
+"every cluster holds a single observation — within-cluster variance cannot be separated from between-cluster variance" = "ทุกกลุ่มมีข้อมูลเดียว — แยกความแปรปรวนภายในกลุ่มออกจากระหว่างกลุ่มไม่ได้";
+"ICC = %.3f · design effect = %.2f — the clustering barely matters" = "ICC = %.3f · design effect = %.2f — การจับกลุ่มแทบไม่มีผล";
+"ICC = %.3f · design effect = %.2f — **the data are nested** " = "ICC = %.3f · design effect = %.2f — **ข้อมูลซ้อนชั้น** ";
+"%d observations from %d clusters are worth only about %.1f independent ones " = "ข้อมูล %d ชิ้นจาก %d กลุ่ม มีค่าเท่ากับข้อมูลอิสระราว %.1f ชิ้นเท่านั้น ";
+"· a method that treats them all as independent gives intervals about %.2f times too narrow " = "· วิธีที่ถือว่าทุกชิ้นอิสระจะให้ช่วงความเชื่อมั่นแคบเกินจริงราว %.2f เท่า ";
+"which is the commonest mistake in public health work" = "ซึ่งเป็นความผิดพลาดที่พบบ่อยที่สุดในงานสาธารณสุข";
+"the second half of P19.5" = "P19.5 ครึ่งหลัง";
+
+/* ── MultipleComparisons ─────────────────────────────────────── */
+
+"the chance of **any** false positive in the set" = "โอกาสที่จะมีผลบวกปลอม**สักข้อ**ในชุดนี้";
+"the **share** of the findings that are false positives" = "**สัดส่วน**ของข้อที่พบว่าเป็นผลบวกปลอม";
+"%lld tests, corrected with %@ " = "ทดสอบ %lld ข้อ ปรับด้วย %@ ";
+"which controls %@ · %lld remain significant" = "ซึ่งคุม%@ · เหลือที่ยังมีนัยสำคัญ %lld ข้อ";
+" · **%lld with a raw p below %lf did not survive the correction** — " = " · **%lld ข้อที่ p ดิบต่ำกว่า %lf ไม่รอดหลังปรับ** — ";
+"%lld tests on data containing nothing would produce that many on their own" = "การทดสอบ %lld ครั้งบนข้อมูลที่ไม่มีอะไรเลย ให้ผลแบบนั้นได้เอง";
+"there are no tests to correct" = "ไม่มีการทดสอบให้ปรับ";
+"p-values must be between 0 and 1" = "ค่า p ต้องอยู่ระหว่าง 0 ถึง 1";
+
+/* ── Notebook ────────────────────────────────────────────────── */
+
+"Untitled notebook" = "สมุดงานใหม่";
+"needs confirming before it runs: %@" = "ต้องยืนยันก่อนรัน: %@";
+"the cell is empty" = "เซลล์ว่าง";
+
+/* ── NotebookKernel ──────────────────────────────────────────── */
+
+"no Python was found on this machine (looked in: %@)" = "ไม่พบ Python บนเครื่องนี้ (ลองหาที่: %@)";
+"the kernel has not been started — press 'Start kernel' first" = "เคอร์เนลยังไม่ได้เริ่ม — กด 'เริ่มเคอร์เนล' ก่อน";
+"could not start the kernel: %@" = "เริ่มเคอร์เนลไม่สำเร็จ: %@";
+"the kernel replied in a form that could not be read: %@" = "เคอร์เนลตอบมาในรูปแบบที่อ่านไม่ออก: %@";
+"the kernel stopped: %@" = "เคอร์เนลหยุดทำงาน: %@";
+"the kernel sent no reply" = "ไม่มีคำตอบจากเคอร์เนล";
+"the request could not be encoded" = "เข้ารหัสคำสั่งไม่ได้";
+"it did not respond to the interrupt — the kernel has to be restarted" = "ไม่ตอบสนองต่อการขัดจังหวะ — ต้องเริ่มเคอร์เนลใหม่";
+"no reason given" = "ไม่ทราบสาเหตุ";
+"\n… truncated at %d characters" = "\n… ตัดที่ %d ตัวอักษร";
+"the request that arrived could not be read" = "คำสั่งที่ส่งมาอ่านไม่ออก";
+
+/* ── PairedCategorical ───────────────────────────────────────── */
+
+"pairs that went + to −: %lld · − to +: %lld" = "คู่ที่เปลี่ยนจาก + เป็น −: %lld · จาก − เป็น +: %lld";
+"tested exactly (binomial) because so few pairs changed — p = %.4f" = "ทดสอบแบบ exact (binomial) เพราะคู่ที่เปลี่ยนมีน้อย — p = %.4f";
+"%@ · %@ · **pairs that did not change are not counted** because they say nothing about change" = "%@ · %@ · **คู่ที่ไม่เปลี่ยนไม่ได้ถูกนับ** เพราะมันไม่บอกอะไรเรื่องการเปลี่ยนแปลง";
+" · proportions in order: " = " · สัดส่วนตามลำดับ: ";
+" · **this test asks whether the proportions run in order**, not which group differs from which " = " · **ทดสอบนี้ถามว่าสัดส่วนไล่ไปตามลำดับหรือไม่** ไม่ใช่ว่ากลุ่มไหนต่างจากกลุ่มไหน ";
+"if the groups could be reordered without losing meaning, this is the wrong test" = "ถ้าลำดับของกลุ่มสลับได้โดยไม่เสียความหมาย แปลว่าใช้ผิดการทดสอบ";
+"pair counts cannot be negative" = "จำนวนคู่ติดลบไม่ได้";
+"no pair changed — there is no change to test" = "ไม่มีคู่ไหนเปลี่ยนเลย — ไม่มีอะไรให้ทดสอบเรื่องการเปลี่ยนแปลง";
+"a trend needs at least three groups that can be put in order" = "แนวโน้มต้องมีอย่างน้อยสามกลุ่มที่เรียงลำดับได้";
+"the number of cases must be between 0 and the size of the group" = "จำนวนเคสต้องอยู่ระหว่าง 0 กับจำนวนทั้งหมดของกลุ่ม";
+"there must be as many ordinal scores as groups" = "จำนวนคะแนนลำดับต้องเท่ากับจำนวนกลุ่ม";
+"everyone is a case, or nobody is — there is no trend to test" = "ทุกคนเป็นเคส หรือไม่มีใครเป็นเลย — ไม่มีแนวโน้มให้ทดสอบ";
+"every group has the same ordinal score — there is no order to follow" = "คะแนนลำดับทุกกลุ่มเท่ากัน — ไม่มีลำดับให้ไล่";
+
+/* ── SQLGuard ────────────────────────────────────────────────── */
+
+"read only" = "อ่านอย่างเดียว";
+"changes data" = "เปลี่ยนข้อมูล";
+"deletes or overwrites data" = "ลบหรือเขียนทับข้อมูล";
+"there is nothing to run" = "ไม่มีคำสั่งให้รัน";
+"%lld statements" = "%lld คำสั่ง";
+"%lld change data" = "เปลี่ยนข้อมูล %lld";
+"%lld delete or overwrite" = "ลบหรือเขียนทับ %lld";
+"the named table" = "ตารางที่ระบุไว้";
+"deletes matching rows in %@" = "ลบแถวใน %@ ที่ตรงเงื่อนไข";
+"no WHERE — deletes every row in %@" = "ไม่มี WHERE — ลบทุกแถวใน %@";
+"changes matching rows in %@" = "แก้แถวใน %@ ที่ตรงเงื่อนไข";
+"no WHERE — changes every row in %@" = "ไม่มี WHERE — แก้ทุกแถวใน %@";
+"overwrites the existing %@" = "เขียนทับ %@ ที่มีอยู่เดิม";
+"creates %@" = "สร้าง %@";
+"overwrites clashing rows in %@" = "เขียนทับแถวที่ชนกันใน %@";
+"adds rows to %@" = "เพิ่มแถวลง %@";
+"drops %@ entirely — the app cannot bring it back" = "ลบ %@ ทิ้งทั้งหมด — กู้คืนจากในแอปไม่ได้";
+"empties every row in %@" = "ล้างทุกแถวใน %@";
+"changes the structure of %@" = "เปลี่ยนโครงสร้างของ %@";
+"attaches an outside database read-only" = "ต่อฐานข้อมูลภายนอกแบบอ่านอย่างเดียว";
+"attaches an outside database with writing allowed" = "ต่อฐานข้อมูลภายนอกแบบเขียนได้ด้วย";
+"copies data to or from a file" = "คัดลอกข้อมูลเข้า/ออกไฟล์";
+"the statement starts with a quoted name — assumed to change data until proven otherwise" = "คำสั่งขึ้นต้นด้วยชื่อในเครื่องหมายคำพูด — ถือว่าเปลี่ยนข้อมูลไว้ก่อน";
+"%@ is a statement this guard does not know — assumed to change data until proven otherwise" = "คำสั่ง %@ ที่ตัวคุมยังไม่รู้จัก — ถือว่าเปลี่ยนข้อมูลไว้ก่อน";
+
+/* ── StatGate ────────────────────────────────────────────────── */
+
+"two-sample t-test (Student)" = "t-test สองกลุ่ม (Student)";
+"two-sample t-test (Welch)" = "t-test สองกลุ่ม (Welch)";
+"one-way ANOVA" = "ANOVA ทางเดียว";
+"chi-square" = "ไคสแควร์";
+"linear regression" = "การถดถอยเชิงเส้น";
+"logistic regression" = "การถดถอยโลจิสติก";
+"survival analysis" = "การวิเคราะห์การรอดชีพ";
+"multilevel model (nested data)" = "โมเดลหลายระดับ (ข้อมูลซ้อนชั้น)";
+"Poisson regression (count data)" = "การถดถอยปัวซง (ข้อมูลนับ)";
+"negative binomial regression (overdispersed counts)" = "การถดถอย negative binomial (ข้อมูลนับที่กระจายเกิน)";
+"McNemar (paired proportions)" = "McNemar (สัดส่วนแบบจับคู่)";
+"chi-square for trend" = "ไคสแควร์สำหรับแนวโน้ม";
+"correlation (Pearson/Spearman)" = "ความสัมพันธ์ (Pearson/Spearman)";
+"inter-rater agreement (κ)" = "ความตรงกันระหว่างผู้ให้คะแนน (κ)";
+"  → assumptions not met, suggested instead: " = "  → ข้อสมมติไม่ผ่าน เสนอให้ใช้: ";
+" or " = " หรือ ";
+" (changing method means going back to the Analysis Plan for approval)" = " (เปลี่ยนวิธี = ต้องกลับไปอนุมัติที่ Analysis Plan)";
+"Not enough data for this test: %@" = "ข้อมูลไม่พอสำหรับการทดสอบนี้: %@";
+"The data is the wrong shape: %@" = "รูปร่างข้อมูลไม่ถูกต้อง: %@";
+"This system cannot compute %@ itself yet (planned for %@) — " = "ระบบยังคำนวณ %@ เองไม่ได้ (แผน %@) — ";
+"so there is no result to report · if it is needed now, compute it with an external tool " = "จึงไม่มีผลให้รายงาน · ถ้าจำเป็นต้องใช้ตอนนี้ ต้องคำนวณจากเครื่องมือภายนอก ";
+"and record where it came from; do not claim it as a result of this system" = "แล้วบันทึกที่มาไว้ อย่าอ้างว่าเป็นผลของระบบนี้";
+"at least 2 values per group are needed" = "ต้องมีอย่างน้อยกลุ่มละ 2 ค่า";
+"group 1" = "กลุ่ม 1";
+"group 2" = "กลุ่ม 2";
+"mean %.4g vs %.4g (difference %.4g) · t = %.4f · p = %.4g" = "ค่าเฉลี่ย %.4g เทียบ %.4g (ต่างกัน %.4g) · t = %.4f · p = %.4g";
+"paired data must have the same number of values on both sides" = "ข้อมูลจับคู่ต้องมีจำนวนเท่ากัน";
+"at least 2 pairs are needed" = "ต้องมีอย่างน้อย 2 คู่";
+"the per-pair differences" = "ผลต่างรายคู่";
+"mean difference %.4g · t = %.4f · p = %.4g" = "ผลต่างเฉลี่ย %.4g · t = %.4f · p = %.4g";
+"at least 2 groups with 2 values each are needed" = "ต้องมีอย่างน้อย 2 กลุ่ม กลุ่มละ 2 ค่า";
+"group %lld" = "กลุ่ม %lld";
+"the table must be at least 2×2 with rows of equal length" = "ตารางต้องมีอย่างน้อย 2×2 และทุกแถวยาวเท่ากัน";
+"the table is empty" = "ตารางว่าง";
+"expected count in every cell ≥ 5" = "จำนวนที่คาดหวังในแต่ละช่อง ≥ 5";
+"the smallest expected count is %.2f" = "ช่องที่น้อยที่สุดคาดหวัง %.2f";
+"%d cells expect fewer than 5 (smallest %.2f) — " = "%d ช่องมีค่าคาดหวังต่ำกว่า 5 (น้อยสุด %.2f) — ";
+"the chi-square approximation is not trustworthy at these counts" = "การประมาณด้วยไคสแควร์เชื่อถือไม่ได้ที่จำนวนเท่านี้";
+"McNemar takes a 2×2 table of *pairs* (before × after)" = "McNemar ใช้ตาราง 2×2 ของ*คู่* (ก่อน × หลัง)";
+"the order of the groups is meaningful" = "ลำดับของกลุ่มมีความหมาย";
+"This test assumes the groups are ordered by a real quantity — " = "การทดสอบนี้ถือว่ากลุ่มเรียงตามปริมาณจริง — ";
+"if they could be shuffled without losing meaning, use an ordinary chi-square" = "ถ้าสลับลำดับได้โดยไม่เสียความหมาย ให้ใช้ไคสแควร์ธรรมดา";
+"the relationship is linear" = "ความสัมพันธ์เป็นเส้นตรง";
+"Pearson and Spearman agree closely — no sign of curvature" = "Pearson กับ Spearman ใกล้เคียงกัน — ไม่มีสัญญาณว่าความสัมพันธ์โค้ง";
+"Spearman (%.3f) is well above Pearson (%.3f) — " = "Spearman (%.3f) สูงกว่า Pearson (%.3f) อยู่มาก — ";
+"the relationship is probably curved; use Spearman or describe the shape first" = "ความสัมพันธ์น่าจะโค้ง ใช้ Spearman หรืออธิบายรูปร่างก่อน";
+"Fisher's exact here supports 2×2 tables only" = "Fisher's exact ที่นี่รองรับเฉพาะตาราง 2×2";
+"odds ratio ≈ %.4g · p = %.4g (two-sided)" = "odds ratio ≈ %.4g · p = %.4g (สองทาง)";
+"no assumption about sample size" = "ไม่มีข้อสมมติเรื่องขนาดตัวอย่าง";
+"The probability is computed exactly from the table, not approximated" = "คำนวณความน่าจะเป็นตรงจากตาราง ไม่ใช่การประมาณ";
+"U = %.1f · z = %.4f · p = %.4g (normal approximation, corrected for ties)" = "U = %.1f · z = %.4f · p = %.4g (ประมาณด้วยปกติ แก้ค่าซ้ำแล้ว)";
+"no normal distribution required" = "ไม่ต้องการการแจกแจงปกติ";
+"The test works on ranks, so it does not depend on the shape of the distribution" = "ทดสอบจากอันดับ จึงไม่ขึ้นกับรูปร่างการแจกแจง";
+"at least 2 pairs with a non-zero difference are needed" = "ต้องมีคู่ที่ค่าต่างกันอย่างน้อย 2 คู่";
+"W⁺ = %.1f · z = %.4f · p = %.4g (using %d differing pairs)" = "W⁺ = %.1f · z = %.4f · p = %.4g (ใช้ %d คู่ที่ต่างกัน)";
+"The test works on the ranks of the differences" = "ทดสอบจากอันดับของผลต่าง";
+"at least 2 non-empty groups are needed" = "ต้องมีอย่างน้อย 2 กลุ่มที่ไม่ว่าง";
+"The test works on ranks pooled across the groups" = "ทดสอบจากอันดับรวมทุกกลุ่ม";
+"there must be more rows than variables, and the variables must not be exact duplicates" = "จำนวนแถวต้องมากกว่าจำนวนตัวแปร และตัวแปรต้องไม่ซ้ำกันพอดี";
+"the residuals" = "ส่วนเหลือ (residual)";
+"R² = %.4f · intercept %.4g · %@" = "R² = %.4f · ค่าคงที่ %.4g · %@";
+"the outcome must be 0/1 and there must be more rows than variables" = "ผลลัพธ์ต้องเป็น 0/1 และแถวต้องมากกว่าจำนวนตัวแปร";
+"no complete separation" = "ไม่มีการแยกกลุ่มสมบูรณ์ (separation)";
+"Some variable predicts the outcome perfectly, so its coefficient runs off to infinity " = "ตัวแปรบางตัวทำนายผลลัพธ์ได้สมบูรณ์ ค่าสัมประสิทธิ์จึงวิ่งไปไม่สิ้นสุด ";
+"— the number you get is not an effect size" = "— ตัวเลขที่ได้ไม่ใช่ขนาดของผล";
+"The estimate converged in %lld iterations" = "ค่าประมาณลู่เข้าใน %lld รอบ";
+"linearity of the logit" = "ความเป็นเส้นตรงของ logit";
+"This module cannot check it yet — look at it with Box–Tidwell or a plot before trusting the result" = "โมดูลนี้ยังตรวจไม่ได้ — ต้องดูด้วยวิธี Box–Tidwell หรือกราฟก่อนเชื่อผล";
+"%@: OR = %.4g (p could not be computed)" = "%@: OR = %.4g (คำนวณ p ไม่ได้)";
+"mean %.4f (95%% CI %.4f–%.4f · corrected for clustering) " = "ค่าเฉลี่ย %.4f (95%% CI %.4f–%.4f · แก้ตามการจับกลุ่มแล้ว) ";
+"· treated as independent it would be %.4f–%.4f, which is too narrow" = "· ถ้าคิดแบบข้อมูลอิสระจะได้ %.4f–%.4f ซึ่งแคบเกินจริง";
+"%@: rate ratio %.4f (SE of the log = %.4f)" = "%@: rate ratio %.4f (SE ของ log = %.4f)";
+"The Cox model did not converge, so the assumption could not be checked — which is not the same as passing" = "โมเดล Cox ไม่ลู่เข้า จึงยังตรวจสมมติฐานไม่ได้ — ไม่ใช่ว่าผ่าน";
+"normal distribution of %@" = "การแจกแจงปกติของ%@";
+"only %lld values — too few to test" = "มีเพียง %lld ค่า — น้อยเกินกว่าจะทดสอบได้";
+"cannot be tested (all values identical, or n above 5000)" = "ทดสอบไม่ได้ (ค่าทั้งหมดเท่ากัน หรือ n เกิน 5000)";
+"Shapiro–Wilk W = %.4f, p = %.4g — no evidence against normality" = "Shapiro–Wilk W = %.4f, p = %.4g — ไม่พบหลักฐานว่าไม่ปกติ";
+"Shapiro–Wilk W = %.4f, p = %.4g — the data does not fit a normal distribution" = "Shapiro–Wilk W = %.4f, p = %.4g — ข้อมูลไม่เข้ากับการแจกแจงปกติ";
+"equal variance across groups" = "ความแปรปรวนเท่ากันระหว่างกลุ่ม";
+"there is no spread within the groups, so it cannot be tested" = "ค่าภายในกลุ่มไม่กระจายเลย ทดสอบไม่ได้";
+"Levene (Brown–Forsythe) W = %.4f, p = %.4g · variance per group: %@" = "Levene (Brown–Forsythe) W = %.4f, p = %.4g · ความแปรปรวนรายกลุ่ม: %@";
+" — use Welch instead of Student, or move to a rank-based method" = " — ใช้ Welch แทน Student หรือเปลี่ยนไปใช้วิธีอันดับ";
+"no multicollinearity" = "ไม่มี multicollinearity";
+"there is only one predictor, so nothing can be collinear" = "มีตัวแปรต้นเดียว จึงไม่มีอะไรให้ซ้ำซ้อน";
+" — a VIF above 10 means the variables explain each other " = " — VIF เกิน 10 แปลว่าตัวแปรอธิบายกันเอง ";
+"so the individual coefficients cannot be read separately" = "ค่าสัมประสิทธิ์แต่ละตัวจึงตีความแยกไม่ได้";
+"cannot be checked with this data" = "ตรวจไม่ได้กับข้อมูลชุดนี้";
+" — no curvature left over" = " — ไม่พบความโค้งที่เหลืออยู่";
+" — curvature remains in the residuals; a linear model is not enough" = " — ยังมีความโค้งเหลืออยู่ในส่วนเหลือ โมเดลเส้นตรงยังไม่พอ";
+
+/* ── StudySize ───────────────────────────────────────────────── */
+
+"the difference to detect is zero — that would need an unlimited sample" = "ผลต่างที่ต้องการตรวจจับเป็นศูนย์ — ต้องใช้ตัวอย่างไม่จำกัด";
+"the standard deviation must be greater than zero" = "ส่วนเบี่ยงเบนมาตรฐานต้องมากกว่าศูนย์";
+"to detect a difference of %.4g at SD = %.4g" = "ตรวจจับผลต่าง %.4g เมื่อ SD = %.4g";
+"proportions must be between 0 and 1" = "สัดส่วนต้องอยู่ระหว่าง 0 ถึง 1";
+"the two proportions are equal — there is no difference to detect" = "สองสัดส่วนเท่ากัน — ไม่มีผลต่างให้ตรวจจับ";
+"to detect the difference between %.3g and %.3g" = "ตรวจจับความต่างระหว่าง %.3g กับ %.3g";
+"at least two people per group are needed" = "ต้องมีอย่างน้อยสองคนต่อกลุ่ม";
+"power must be between 0.5 and 1 (usually 0.80 or 0.90)" = "power ต้องอยู่ระหว่าง 0.5 ถึง 1 (ปกติ 0.80 หรือ 0.90)";
+"alpha must be between 0 and 1" = "alpha ต้องอยู่ระหว่าง 0 ถึง 1";
+"these must be paired measurements on the same people — the counts differ" = "ต้องเป็นการวัดคู่กันบนคนเดียวกัน — จำนวนไม่เท่ากัน";
+"at least three pairs are needed" = "ต้องมีอย่างน้อยสามคู่";
+
+/* ── Survival ────────────────────────────────────────────────── */
+
+"there is no follow-up data" = "ไม่มีข้อมูลการติดตาม";
+"a follow-up time is negative" = "เวลาติดตามติดลบ";
+"a log-rank test needs data in both groups" = "log-rank ต้องมีข้อมูลทั้งสองกลุ่ม";
+"there are not enough events to compare the two groups" = "ไม่มีเหตุการณ์พอจะเทียบสองกลุ่ม";
+"log-rank χ² = %.3f · the first group had %.0f events " = "log-rank χ² = %.3f · กลุ่มแรกเกิดเหตุการณ์ %.0f ครั้ง ";
+"against %.2f expected" = "เทียบกับที่คาด %.2f";
+"at least one variable is needed" = "ต้องมีตัวแปรอย่างน้อยหนึ่งตัว";
+"there are not as many variable values as people followed" = "จำนวนค่าตัวแปรไม่เท่ากับจำนวนผู้ถูกติดตาม";
+"no events happened at all — nothing can be estimated" = "ไม่มีเหตุการณ์เกิดขึ้นเลย — ประมาณค่าไม่ได้";
+"the fit did not converge — the data may be perfectly separable" = "ประมาณค่าไม่ลู่เข้า — ข้อมูลอาจแยกกลุ่มได้สมบูรณ์";
+"too few events to check the Schoenfeld residuals (at least 5 are needed) " = "เหตุการณ์น้อยเกินกว่าจะตรวจ Schoenfeld residuals ได้ (ต้องมีอย่างน้อย 5) ";
+"— not checked, which is not the same as passed" = "— ยังไม่ได้ตรวจ ไม่ใช่ผ่าน";
+"the Schoenfeld residuals show no significant relationship with time (p = %.3f)" = "Schoenfeld residuals ไม่สัมพันธ์กับเวลาอย่างมีนัย (p = %.3f)";
+"the Schoenfeld residuals do vary with time (p = %.3f) — " = "Schoenfeld residuals สัมพันธ์กับเวลา (p = %.3f) — ";
+"the hazard ratio changes over time, so one number cannot summarise it" = "อัตราส่วนความเสี่ยงเปลี่ยนไปตามเวลา ค่าเดียวจึงสรุปมันไม่ได้";

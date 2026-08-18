@@ -66,6 +66,7 @@ public enum EmbedderDiagnosis: Sendable, Equatable {
 /// can tell them apart. Cheap, and the only thing standing between a
 /// script-blind model and a knowledge base full of identical vectors.
 public func diagnose(_ embedder: some Embedder) async throws -> EmbedderDiagnosis {
+    /// LOCALISATION: matching data — see RULES.md U24.
     let probes: [(script: String, texts: [String])] = [
         ("Thai", ["การให้อินซูลินในผู้ป่วยเบาหวาน", "การปนเปื้อนโลหะหนักในแหล่งน้ำดิบ"]),
         ("Latin", ["insulin therapy in diabetic patients", "heavy metal contamination in water"]),

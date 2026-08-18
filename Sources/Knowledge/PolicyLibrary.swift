@@ -99,12 +99,14 @@ public struct PolicyDocumentParser: Sendable {
     /// Words that make a rule a prohibition rather than guidance. Kept short
     /// and explicit: the alternative is guessing at intent, and a gate that
     /// guesses wrong either blocks work or waves through what it should stop.
+    /// LOCALISATION: matching data — see RULES.md U24.
     static let prohibitionMarkers = [
         "ห้าม", "ต้องไม่", "อย่า",
         "must not", "may not", "never", "do not", "don't", "forbidden", "prohibited",
     ]
     /// Dropped when working out what a rule is *about*: they carry the
     /// prohibition, not the subject.
+    /// LOCALISATION: matching data — see RULES.md U24.
     private static let ignoredTerms: Set<String> = [
         "ห้าม", "ต้องไม่", "อย่า", "ต้อง", "ควร", "การ", "ใน", "ที่", "และ", "หรือ", "ของ",
         "must", "not", "may", "never", "do", "don't", "the", "a", "an", "on", "in",

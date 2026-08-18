@@ -17,7 +17,7 @@
 | Reference manager | ไม่พึ่ง Zotero — ทำ provenance-based citation เอง | คงเดิม |
 | Compute dispatch ไป GX10 | ไม่ทำใน v1 — scale up บน Mac ให้เต็มก่อน | คงเดิม |
 | Multi-user / auth | single-user ไม่มี auth layer | คงเดิม |
-| Analysis store | DuckDB | **ทบทวนใหม่แล้ว → คงเดิม** ([§12.1](../ARCHITECTURE.md#121-analysis-store--ทำไมยังเป็น-duckdb)) |
+| Analysis store | DuckDB | **ทบทวนใหม่แล้ว → คงเดิม** ([§12.1](architecture/02-core-modules.md#121-analysis-store--ทำไมยังเป็น-duckdb)) |
 | SurrealDB deployment | embedded (Rust) | **เปลี่ยน → sidecar process** (Swift SDK เป็น network client) |
 | Multi-provider inference | named OpenAI-compatible endpoints ไม่ทำ native SDK ต่อเจ้า | คงเดิม + เพิ่ม Foundation Models เป็น provider ที่ 2 |
 | Long-horizon mode | explicit toggle ไม่ auto-detect | คงเดิม |
@@ -27,7 +27,7 @@
 | DB connector เพิ่มเติม (Redis/BigQuery/Snowflake/Redshift/Oracle) | ไม่ทำทั้ง 5 ตัว — 3 ตัวต้อง connector shape ใหม่, Oracle ไม่มี extension, Redshift verify ไม่ได้ | คงเดิม |
 | **ใหม่ v2**: ภาษา/แพลตฟอร์ม | Swift native ทั้ง stack, ไม่ใช้ Rust core ผ่าน FFI | ตัดสินใจ 2026-08-10 |
 | **ใหม่ v2**: AI Team model | supervisor + specialists + QA loop แทน agent เดี่ยวหลายตัว | ตัดสินใจ 2026-08-10 |
-| **ใหม่ v2**: web search T5 (เว็บทั่วไป) | ~~SearXNG self-hosted sidecar (ยอมรับ Python dependency)~~ → 🔄 **`WKWebView` แบบไม่มีหน้าต่างในแอปเอง** ([ARCH §1.2.1](../ARCHITECTURE.md#121-สะพานค้นเว็บด้วย-wkwebview-แบบไม่มีหน้าต่าง-p131)) · Apple ไม่มี web search API ให้นักพัฒนา (ข้อนี้ยังจริง) | **กลับคำตัดสิน 2026-08-14 (P13.1)** — venv ของ SearXNG ย้ายที่ไม่ได้ จึงก๊อปเข้า `.app` ไม่ได้: ใช้ได้บนเครื่องนักพัฒนาแล้วตายตรงที่ผู้ใช้ต้องใช้จริง · `WKWebView` เป็นเฟรมเวิร์กของระบบและรัน JavaScript ได้ · `SearXNGSource` ยังเป็น provider ที่ใช้ได้ถ้ามีคนรันเอง แต่ไม่ใช่ทางหลัก |
+| **ใหม่ v2**: web search T5 (เว็บทั่วไป) | ~~SearXNG self-hosted sidecar (ยอมรับ Python dependency)~~ → 🔄 **`WKWebView` แบบไม่มีหน้าต่างในแอปเอง** ([ARCH §1.2.1](architecture/01-foundations.md#121-สะพานค้นเว็บด้วย-wkwebview-แบบไม่มีหน้าต่าง-p131)) · Apple ไม่มี web search API ให้นักพัฒนา (ข้อนี้ยังจริง) | **กลับคำตัดสิน 2026-08-14 (P13.1)** — venv ของ SearXNG ย้ายที่ไม่ได้ จึงก๊อปเข้า `.app` ไม่ได้: ใช้ได้บนเครื่องนักพัฒนาแล้วตายตรงที่ผู้ใช้ต้องใช้จริง · `WKWebView` เป็นเฟรมเวิร์กของระบบและรัน JavaScript ได้ · `SearXNGSource` ยังเป็น provider ที่ใช้ได้ถ้ามีคนรันเอง แต่ไม่ใช่ทางหลัก |
 | **ใหม่ v2**: LLM layer กับ macOS 27 | **abstraction ของเราเอง** (`LLMExecutor`) implement 2 ตัวบน API ที่มีวันนี้ แล้วสลับไปใช้ `LanguageModelExecutor` ของ Apple เมื่อ macOS 27 ออก — ไม่ target beta, ไม่รอ, ไม่ผูกโค้ดตรง | ตัดสินใจ 2026-08-10 หลัง verify |
 | **ใหม่ v2**: SurrealDB Swift access | **คง SurrealDB + เขียน `SurrealClient` เอง** (JSON-RPC over WebSocket) ไม่พึ่ง `surrealdb.swift` ที่เป็น alpha — Plan B คือ SQLite+FTS5+sqlite-vec | ตัดสินใจ 2026-08-10 หลัง verify |
 | **ใหม่ v2**: Tier 0 usage pattern | on-device model **ใช้ผ่าน guided generation (`@Generable`) เท่านั้น** ห้ามพึ่ง instruction-following แบบ prose — พิสูจน์จากการรันจริงว่าโมเดล 3B ไม่ทำตามคำสั่งง่ายๆ | ตัดสินใจ 2026-08-10 หลัง verify |
@@ -41,6 +41,56 @@
 
 ---
 
+## C. คำตัดสินของเจ้าของโปรเจกต์ — 2026-08-17
+
+ตัดสินหลังรอบตรวจความสอดคล้อง ([`AUDIT_2026-08-17.md`](AUDIT_2026-08-17.md)) · **ทุกข้อมีผลกับงานที่กำลังจะทำ ไม่ใช่บันทึกเฉย ๆ**
+
+| # | คำถาม | คำตัดสิน | มีผลต่ออะไร |
+|---|---|---|---|
+| **C1** | รอบตรวจปกติควรยิง Tier 1 ด้วยไหม | ✅ **ยิง** — ยอมให้รอบยาวจาก 2.9 เป็น ~4 นาที | `check.sh` probe endpoint เอง แล้ว `swift test` สืบทอด `COAI_TEST_ENDPOINT` |
+| **C2** | เพดานบริบทที่แช่แข็งตอน boot (F-1b) | ✅ **`ContextManager.budget` เป็น `var` รอบนี้** · การถามเพดานตอนเริ่มเทิร์นไปพร้อม P16 | `ContextManager` · `AgentTurnRunner` |
+| **C2b** | ไม่มี paid LLM endpoint ให้ทดสอบ | ✅ **เขียนตรง ๆ ว่าทดสอบกับของจริงไม่ได้ หรือทำ mock server** ห้ามปล่อยเงียบ | เส้นทาง Tier 2 · `BudgetGovernor` · [กฎ E9](../RULES.md#8-เทส--การทดสอบ-end-to-end--เอกสาร) |
+| **C3** | ยังต้องมี `StaleConfigBanner` ไหมหลังแก้ F-1 ที่ต้นเหตุ | ✅ **ต้องมี** เพราะ `surrealPort` กับ `modelQuotaGigabytes` ยังไงก็ต้องรีสตาร์ท — **ทำทีหลัง ไม่บล็อก F-1** | [UX-1](UX_UI_DESIGN.md#11-ช่องว่างที่ต้องปิด--เรียงตามความเจ็บ) |
+| **C4** | ใครขับหน้าจอ L3 | ✅ **ขับด้วย `ScreenDriver` เอง** — สิทธิ์เปิดให้แล้ว | [กฎ M8 · E4](../RULES.md#1-กฎแม่-8-ข้อ) · [`TEST_PROTOCOL §4`](TEST_PROTOCOL.md#4-l3-ขับหน้าจอ) |
+| **C5** | Workflow Builder — ลำดับขั้น หรือ node canvas | ✅ **ทำสองอย่าง ไม่ใช่เลือกอย่างเดียว** (ดูข้างล่าง) | ARCH §14.2 · `WorkflowView` |
+| **C6** | agent ควรอ่าน/เขียนไฟล์เองได้ไหม | ✅ **ควรมี `read_file`/`write_file`** — ให้จบในที่เดียว · **เน้นปลอดภัย · performance ดี · กินทรัพยากรน้อย** · หา plugin มาช่วยได้ | `RiskScorer.notBuiltYet` · M6 ToolBelt |
+| **C7** | LM Studio ยังต้องรองรับไหม | ✅ **ไม่ใช้แล้ว** — ถอดออกจากค่าเริ่มต้นทุกที่ | `ExecutorContractTests` · `check.sh` · `EndpointsView` placeholder |
+
+### C5 — Workflow Builder มีสองหน้าที่ ไม่ใช่หนึ่ง
+
+ข้อขัดแย้งเดิม: ARCH §14.2 เขียนว่า "node-based editor + drag-and-drop" ส่วนโค้ดทำเป็นลำดับขั้นและประกาศว่า *"ไม่มี node canvas โดยตั้งใจ"* — **คำตอบคือทั้งคู่ถูก แต่เป็นคนละของ**
+
+| | หน้าที่ | รูปแบบ | ทำไม |
+|---|---|---|---|
+| **W-1 · ผังงานของโปรเจกต์** | ให้เห็นว่า**โปรเจกต์นี้ทำอะไร แบบไหน ใครส่งอะไรให้ใคร** — ดูก่อนลงมือ แก้ก่อนเริ่ม เพิ่มขั้นตรงไหนก็ได้ | **ผังที่เห็นเป็นภาพ** และแก้ได้ | เป็นเครื่องมือ*ตกลงกันก่อนทำ* ไม่ใช่ตัวสั่งงาน — คนต้องเห็นทั้งเส้นทางก่อนอนุมัติ |
+| **W-2 · งานตามเวลา/ตามทริกเกอร์** | Cron job และ trigger job ในรูป **AI Assistant** — ทำงานเองตามรอบหรือตามเหตุการณ์ | รายการงานที่ตั้งเวลา/ตั้งเงื่อนไขได้ | เป็นของที่ *ไม่มีคนนั่งดู* จึงต้องมีขอบเขตและบันทึกของตัวเอง |
+
+**สิ่งที่ยังไม่เปลี่ยน**: การแตกงานเป็น assignment ยังเป็นการตัดสินใจของหัวหน้าทีม (§2.2) ไม่ใช่เส้นที่คนลาก — W-1 แสดง*สิ่งที่จะเกิด* และให้แก้ ไม่ใช่แทนที่ orchestrator
+
+### C6 — `read_file` / `write_file` ที่ต้องปลอดภัย
+
+| ข้อกำหนด | เพราะ |
+|---|---|
+| เดินผ่าน `ToolGateway` เหมือนทูลอื่น | [กฎ T1](../RULES.md#2-ความปลอดภัยของการเรียกทูล) |
+| จำกัดอยู่ในโฟลเดอร์ที่ผู้ใช้เลือกเท่านั้น (App Sandbox scope เดียวกับ `run_shell`) | อ่านไฟล์นอกขอบเขตคือการรั่วข้อมูล |
+| `write_file` อยู่ในกลุ่มที่ต้องอนุมัติ · `read_file` อ่านอย่างเดียวจึงไม่ต้อง | ความเสี่ยงไม่เท่ากัน จึงไม่ควรอยู่ชั้นเดียวกัน |
+| **สตรีมแบบ chunk ไม่โหลดทั้งไฟล์เข้าหน่วยความจำ** | เครื่อง 16 GB · [กฎ U7](../RULES.md#6-หน้าจอ) วัดแล้วว่า decode 24 MB บน main actor ค้าง 81.6 ms |
+| ปฏิเสธไฟล์ไบนารีและไฟล์ที่ใหญ่เกินเพดาน โดยบอกเหตุผล | ไม่งั้นมันจะพยายามอ่าน `.mlx` ขนาด 7 GB |
+| มี `FileViewer` อยู่แล้ว — ใช้ตัวอ่านตัวเดียวกัน ไม่เขียนตัวที่สอง | [กฎ D2/D3](../RULES.md#4-ความถูกต้องของข้อมูลและตัวเลข) เรื่องสำเนาที่สอง |
+
+### C7 — ถอด LM Studio
+
+| ที่ที่ยังอ้างถึง | ต้องเปลี่ยนเป็น |
+|---|---|
+| `Tests/LLMProvidersTests/ExecutorContractTests.swift:31` ค่าเริ่มต้น `127.0.0.1:1234` | GX10 เป็นค่าเริ่มต้น · ไม่มี fallback ไป LM Studio |
+| `Sources/CoAIWorkspaceApp/EndpointsViewModel.swift` `beginAdding()` placeholder | `http://192.168.1.205:8000/v1` |
+| ลำดับ probe ใน `check.sh` (F-2) | `COAI_TEST_ENDPOINT` → GX10 → ไม่มี |
+| `docs/plan/README.md` บรรทัดสภาพแวดล้อม | ถอด "LM Studio :1234" ออก |
+
+**Tier 0.5 (MLX บนเครื่อง) ยังเป็นพื้นรับประกันเหมือนเดิม** — สิ่งที่ถอดคือ LM Studio ในฐานะ endpoint ของ Tier 1 ไม่ใช่การรันโมเดลบนเครื่อง
+
+---
+
 ## D. Open Questions — ปิดครบแล้ว
 
 คำถามที่ต้องตอบก่อนล็อกสถาปัตยกรรม · **ปิดครบทั้ง 10 ข้อ** โดยการวัดจริง ไม่ใช่การอ้างเอกสาร (หลักฐานอยู่ใน [ภาคผนวก E](VERIFICATION_LOG.md))
@@ -48,14 +98,14 @@
 
 | # | คำถาม | สถานะ | ข้อสรุป |
 |---|---|---|---|
-| D-1 | `NLTokenizer` ตัดคำไทยดีพอสำหรับ BM25 ไหม | ✅ **ทดสอบจริงแล้ว** ([E.3](VERIFICATION_LOG.md#e3-thai-tokenizer--รันจริงกับประโยคงานวิจัยการแพทย์)) | **ใช้ได้แต่ต้องเสริม** — ตัดคำไทยแท้ดี, แตกคำทับศัพท์ (`โลจิสติก`→`โล\|จิ\|สติ\|ก`) → ใช้ `NLTokenizer` + **dictionary merge layer** สำหรับศัพท์เฉพาะทาง; BM25 ยังทำงานได้เพราะ index/query ใช้ tokenizer เดียวกัน |
-| D-2 | Embedding ใช้ตัวไหน | ✅ **ปิดแล้ว — `bge-m3` @ 1024 มิติ** ([E.10](VERIFICATION_LOG.md#e10-d-2--เลือก-embedding-model-วัดจริง-ปิดแล้ว)) | Apple ไม่มี sentence embedding ไทย และ `NLContextualEmbedding` แยก vector space ตามสคริปต์ → cross-lingual เป็นไปไม่ได้; bge-m3 ได้ 100% ทุกมิติบนชุดทดสอบ |
-| D-3 | ผูก GX10 เข้า `LanguageModelSession` ได้ไหม | ✅ **ตอบแล้ว — ยังไม่ได้ในวันนี้** ([E.2](VERIFICATION_LOG.md#e2-foundation-models-api-surface-ที่มีจริงบนเครื่อง)) | API เป็นของ macOS 27 (ก.ย. 2026) → **แก้ด้วย `LLMExecutor` abstraction ของเราเอง** ([§9.1](../ARCHITECTURE.md#91-llm-abstraction-ของเราเอง-รองรับทั้งสองยุค)) ไม่ต้องรอ ไม่ต้องลง beta |
+| D-1 | `NLTokenizer` ตัดคำไทยดีพอสำหรับ BM25 ไหม | ✅ **ทดสอบจริงแล้ว** ([E.3](verification/01-e01-e15.md#e3-thai-tokenizer--รันจริงกับประโยคงานวิจัยการแพทย์)) | **ใช้ได้แต่ต้องเสริม** — ตัดคำไทยแท้ดี, แตกคำทับศัพท์ (`โลจิสติก`→`โล\|จิ\|สติ\|ก`) → ใช้ `NLTokenizer` + **dictionary merge layer** สำหรับศัพท์เฉพาะทาง; BM25 ยังทำงานได้เพราะ index/query ใช้ tokenizer เดียวกัน |
+| D-2 | Embedding ใช้ตัวไหน | ✅ **ปิดแล้ว — `bge-m3` @ 1024 มิติ** ([E.10](verification/01-e01-e15.md#e10-d-2--เลือก-embedding-model-วัดจริง-ปิดแล้ว)) | Apple ไม่มี sentence embedding ไทย และ `NLContextualEmbedding` แยก vector space ตามสคริปต์ → cross-lingual เป็นไปไม่ได้; bge-m3 ได้ 100% ทุกมิติบนชุดทดสอบ |
+| D-3 | ผูก GX10 เข้า `LanguageModelSession` ได้ไหม | ✅ **ตอบแล้ว — ยังไม่ได้ในวันนี้** ([E.2](verification/01-e01-e15.md#e2-foundation-models-api-surface-ที่มีจริงบนเครื่อง)) | API เป็นของ macOS 27 (ก.ย. 2026) → **แก้ด้วย `LLMExecutor` abstraction ของเราเอง** ([§9.1](architecture/02-core-modules.md#91-llm-abstraction-ของเราเอง-รองรับทั้งสองยุค)) ไม่ต้องรอ ไม่ต้องลง beta |
 | D-4 | DB connector ฝั่ง Swift ใช้อะไร | ✅ **ตรวจแล้ว** | DuckDB scanner เป็นหลัก (federated query ได้ด้วย) — PostgresNIO (ผ่าน SSWG) เป็นทางเลือกถ้าต้องการ native; MongoDB ใช้ `mongo-swift-driver` (wrap libmongoc) · **ผลจริงหลัง P6.2/P6.3**: ใช้ DuckDB scanner อย่างเดียว — SQLite ยืนยันกับไฟล์จริงแล้ว · PG/MySQL ใช้เส้นทางเดียวกันแต่ยังไม่ได้ยืนยันกับ server จริง · **MSSQL กับ MongoDB ยังต่อไม่ได้** (ไม่มี extension ทางการ / ยังไม่ได้เพิ่มไดรเวอร์เป็น dependency) และขึ้นในรายการพร้อมเหตุผล แทนที่จะเป็นตัวเลือกที่ล้มเงียบ |
 | D-5 | Compaction handoff สกัดยังไง | ✅ **ปิดแล้ว (P4.9)** | ทำตามที่เสนอ แต่แบ่งหน้าที่ชัดกว่า: **สามฟิลด์ที่ v1 ทำให้ไม่ว่างไม่ได้ (`key_decisions`/`open_issues`/`file_pointers`) สกัดจาก transcript ด้วย heuristic ล้วน ไม่ถามโมเดล** — การอนุมัติที่เกิดขึ้นจริง คำสั่งที่ล้มเหลว และ path ที่ถูกเปิด เป็นข้อเท็จจริงที่อยู่ในข้อความอยู่แล้ว ส่วนโมเดลที่ถูกถามว่า "ตัดสินอะไรไปบ้าง" จะแต่งคำตอบที่ฟังดูดี · Tier 0 ใช้เฉพาะ `completed_steps`/`remaining_steps` ที่ถูกคร่าวๆ ก็พอ และถ้าเรียกไม่ได้ ครึ่งที่เป็นหลักฐานยังมาครบ |
 | D-6 | SearXNG bundle ยังไง | ✅ **ปิดแล้ว — คำตอบคือ "แพ็กไม่ได้ จึงไม่แพ็ก"** | รอบแรกตอบว่าได้ (ติดตั้ง native ผ่าน Python venv แล้วให้ `SidecarManager` ดูแล lifecycle เหมือน `surreal`) และ **ติดตั้งกับค้นได้จริงบนเครื่องนักพัฒนา** · แต่ P3.1 พบว่า **venv ย้ายที่ไม่ได้** (สคริปต์ข้างในฝัง absolute path) จึงก๊อปเข้า `.app` ไม่ได้ → P13.1 เปลี่ยนไปใช้ `WKWebView` แทน ซึ่งไม่ต้องแพ็กอะไรเลย · **บทเรียน**: "ติดตั้งได้บนเครื่องนี้" กับ "แพ็กไปกับแอปได้" เป็นคนละคำถาม และเราตอบคำถามแรกแล้วนึกว่าตอบข้อที่สอง (รูปเดียวกับ P8.4/P9.6) |
-| D-7 | `@Generable` guided generation ทำงานจริงใน app target ไหม | ✅ **ปิดแล้ว — ทำงานได้ดี** ([E.6](VERIFICATION_LOG.md#e6-d-7-spike--guided-generation-ใน-app-target-จริง)) | ใน NSApplication runloop ทำงานปกติ **0.6–0.9 วิ** (การค้างใน CLI เป็นข้อจำกัดของ command-line context จริง) tool-calling และ streaming ก็ผ่าน |
+| D-7 | `@Generable` guided generation ทำงานจริงใน app target ไหม | ✅ **ปิดแล้ว — ทำงานได้ดี** ([E.6](verification/01-e01-e15.md#e6-d-7-spike--guided-generation-ใน-app-target-จริง)) | ใน NSApplication runloop ทำงานปกติ **0.6–0.9 วิ** (การค้างใน CLI เป็นข้อจำกัดของ command-line context จริง) tool-calling และ streaming ก็ผ่าน |
 | D-8 | latency ของ guided generation ยอมรับได้ไหม | ✅ **ปิดแล้ว — ยอมรับได้** | 0.7–1.8 วิ จาก 32 การเรียก, streaming เห็น snapshot แรกที่ **508ms** → ใช้กับงาน UX-critical ได้ |
-| D-9 | 🔴 **ใหม่ (พบจาก spike)**: guardrail ปฏิเสธงานวิจัยการแพทย์ | 🔴 **ยืนยันแล้วว่าเป็นปัญหาจริง** ([E.7](VERIFICATION_LOG.md#e7-guardrail-characterization--โดเมนการแพทย์)) | **12.5% ของ prompt งานวิจัยปกติถูกปฏิเสธ** ("May contain sensitive content"), เกิดแบบ**สุ่ม ไม่ deterministic**, และ `permissiveContentTransformations` **ไม่ช่วยเลย** → แก้ด้วยกลไกบังคับ 3 ข้อใน [§9.2](../ARCHITECTURE.md#92-model-router-tier-0--05--1) |
+| D-9 | 🔴 **ใหม่ (พบจาก spike)**: guardrail ปฏิเสธงานวิจัยการแพทย์ | 🔴 **ยืนยันแล้วว่าเป็นปัญหาจริง** ([E.7](verification/01-e01-e15.md#e7-guardrail-characterization--โดเมนการแพทย์)) | **12.5% ของ prompt งานวิจัยปกติถูกปฏิเสธ** ("May contain sensitive content"), เกิดแบบ**สุ่ม ไม่ deterministic**, และ `permissiveContentTransformations` **ไม่ช่วยเลย** → แก้ด้วยกลไกบังคับ 3 ข้อใน [§9.2](architecture/02-core-modules.md#92-model-router-tier-0--05--1) |
 | D-10 | 🔶 **ใหม่ (พบจาก spike)**: คุณภาพการ route ของ Tier 0 | 🔶 ปานกลาง — ยอมรับไม่ได้สำหรับ Team Lead | "แก้บั๊กใน main.swift" → `engineer` (ถูก) แต่รอบที่สอง → `researcher` (ผิด); prompt งานวิเคราะห์หลายอันได้ `researcher` แทน `analyst` → **ย้ายการ route ของ Team Lead ไป Tier 1** |
 

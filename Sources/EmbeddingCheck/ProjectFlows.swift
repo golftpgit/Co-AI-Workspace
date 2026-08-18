@@ -192,11 +192,11 @@ struct ProjectFlows {
             // and the same call that lands the edit opens the request. Two calls
             // would be one call somebody forgets (P10.16).
             let preview = await projects.proposal(for: .savePackage(extra), in: project.id)
-            guard let preview, preview.scopeImpact.contains("+1 ใบ") else {
+            guard let preview, preview.scopeImpact.contains("+1 packages") else {
                 throw CheckFailure("ตัวอย่างผลกระทบไม่บอกว่าเพิ่มกี่ใบ: \(String(describing: preview?.scopeImpact))")
             }
-            guard preview.timeImpact.contains("ยังประเมินไม่ได้"),
-                  preview.costImpact.contains("ยังประเมินไม่ได้") else {
+            guard preview.timeImpact.contains("cannot be estimated"),
+                  preview.costImpact.contains("cannot be estimated") else {
                 throw CheckFailure("ประเมินเวลา/เงินทั้งที่ยังไม่มีใบงานที่วัดได้ — \(preview.headline)")
             }
 
@@ -226,7 +226,7 @@ struct ProjectFlows {
             guard raised.count == 1, raised[0].dimension == .cost else {
                 throw CheckFailure("ไม่ได้ raise แกนค่าใช้จ่าย: \(raised.map(\.dimension))")
             }
-            guard raised[0].message.contains("ต้องการจากคุณ") else {
+            guard raised[0].message.contains("What we need from you") else {
                 throw CheckFailure("รายงานไม่ได้บอกว่าต้องการอะไรจากคน")
             }
 
@@ -286,7 +286,7 @@ struct ProjectFlows {
             guard pending.count == 2 else {
                 throw CheckFailure("คำขอที่รอตัดสินควรมี 2 ใบ (แผน + กรอบ): \(pending.map(\.title))")
             }
-            guard pending.allSatisfy({ $0.note.contains("กระทบ:") }) else {
+            guard pending.allSatisfy({ $0.note.contains("impact: scope") }) else {
                 throw CheckFailure("คำขอไม่ได้เก็บข้อความผลกระทบที่คนเห็นตอนยืนยัน")
             }
             guard let change = pending.first else { throw CheckFailure("ไม่มีคำขอให้ตัดสิน") }
@@ -384,7 +384,7 @@ struct ProjectFlows {
             // passes while checking one condition — and the eight are wired to
             // eight different stores, so this is where the wiring shows.
             var unmet = try await requireGate(projects, project.id).unmet
-            guard unmet.contains(where: { $0.contains("บันทึกบทเรียน") }) else {
+            guard unmet.contains(where: { $0.contains("lesson recorded") }) else {
                 throw CheckFailure("ไม่เห็นเงื่อนไขบทเรียน: \(unmet)")
             }
             try await projects.record(RegisterEntry(
@@ -396,7 +396,7 @@ struct ProjectFlows {
                 origin: .agent(.researcher)))
 
             unmet = try await requireGate(projects, project.id).unmet
-            guard unmet.contains("ตัดสินแล้วว่าข้อมูลและไฟล์ที่เหลือจะไปทางไหน") else {
+            guard unmet.contains(where: { $0.contains("where the remaining data and files go") }) else {
                 throw CheckFailure("ไม่เห็นเงื่อนไขข้อมูลที่เหลือ: \(unmet)")
             }
             // Half a disposition is not a disposition: the policy has to be
@@ -528,7 +528,7 @@ struct ProjectFlows {
                 throw CheckFailure("ออกรายงานปิดโครงการไม่สำเร็จ")
             }
             for expected in ["α = 0.74",                       // ส่งมอบอะไรบ้าง
-                             "ได้ 75% ของเป้า",                 // ประโยชน์ที่วัดได้
+                             "reached 75% of target",           // Benefits measured
                              "ขอฉบับเต็มจากผู้แปลตั้งแต่ต้น",     // บทเรียน
                              "ย้ายเข้าคลังเก็บถาวร"] {          // สิ่งที่ยกให้คนอื่นรับต่อ
                 guard report.rendered.contains(expected) else {
@@ -669,7 +669,7 @@ struct ProjectFlows {
                 throw CheckFailure("ชื่อ Executive หาย")
             }
             // The frame as it was *decided*, not the preset it started from: the
-            // status bar widened cost to ฿1,000 mid-project, and a decision that
+            // status bar widened cost to $1,000 mid-project, and a decision that
             // does not survive a relaunch is a decision the system forgot.
             guard reloaded.tolerances.limit(.cost) == 1_000 else {
                 throw CheckFailure("กรอบค่าใช้จ่ายที่ขยายไว้ไม่รอดข้ามการเปิดใหม่: \(reloaded.tolerances.limit(.cost))")

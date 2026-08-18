@@ -49,6 +49,15 @@ public enum ConflictRejection: Error, Sendable, Equatable {
     case modelSaidNo
     case modelUnavailable
     case unparseable
+    /// The answer was cut off before it finished — `finish_reason: length`.
+    ///
+    /// Kept apart from `unparseable` because they call for different things and
+    /// were indistinguishable until it was measured: three of the four hardest
+    /// pairs in the P9.1 set came back like this at exactly the token ceiling,
+    /// and both landed in the same silent `nil` (E.42). "We could not read the
+    /// answer" is a bug in us; "the answer never finished" is a budget, and a
+    /// person can be told to raise it.
+    case truncated(tokens: Int)
 }
 
 public struct ConflictDetector: Sendable {
@@ -67,12 +76,22 @@ public struct ConflictDetector: Sendable {
     /// work (E.25), so what is left is to require more before believing the
     /// answer, and to say in the criteria that a translation is not a
     /// disagreement.
+    /// The bar a cross-language pair has to clear.
+    ///
+    /// Was 0.9, and measured to be throwing away correct answers: an English
+    /// "within 60 minutes" against a Thai "at least three hours" came back as a
+    /// contradiction at 0.85 and was discarded (E.43). The reason the bar was
+    /// raised — that two sides in different scripts might be translations of
+    /// each other — is already handled specifically: the model is asked for
+    /// `isTranslation` and `examine` refuses on it outright, whatever the
+    /// confidence. A second, blunter guard on top of a precise one only costs
+    /// the answers the precise one was happy with (C6-adjacent decision, 2026-08-17).
     private let crossLanguageConfidence: Double
     private let log = AppLog.logger("conflict")
 
     public init(router: ModelRouter,
                 minimumConfidence: Double = 0.7,
-                crossLanguageConfidence: Double = 0.9) {
+                crossLanguageConfidence: Double = 0.8) {
         self.router = router
         self.minimumConfidence = minimumConfidence
         self.crossLanguageConfidence = max(minimumConfidence, crossLanguageConfidence)
@@ -87,18 +106,29 @@ public struct ConflictDetector: Sendable {
     /// questions" is a different card from "these disagree", which is exactly
     /// the distinction NLI research says is missed most often
     /// (*reference indeterminacy*).
+    /// **Field order is thinking order.** Guided decoding emits the properties
+    /// in the order they are declared, so whatever comes first is answered with
+    /// nothing behind it. The four booleans used to come first, and measured
+    /// (E.42): the same pair asked plainly as `{"contradicts":bool}` was judged
+    /// **correctly** in 191 tokens, and asked through this schema was judged
+    /// **wrongly** in 802 — with `reasoning_content` empty both times, so the
+    /// verdict really was the model's first token.
+    ///
+    /// `explanation` and `question` now come first: the model writes what the
+    /// two passages are arguing about before it rules on it. None of §11.7's
+    /// three conditions changed — only the order in which they are asked.
     private static let schema = #"""
     {"type":"object",
      "properties":{
+       "question":{"type":"string"},
+       "explanation":{"type":"string"},
        "sameQuestion":{"type":"boolean"},
        "mutuallyExclusive":{"type":"boolean"},
        "sameContext":{"type":"boolean"},
        "isTranslation":{"type":"boolean"},
-       "question":{"type":"string"},
-       "confidence":{"type":"number"},
-       "explanation":{"type":"string"}},
-     "required":["sameQuestion","mutuallyExclusive","sameContext","isTranslation",
-                 "question","confidence","explanation"]}
+       "confidence":{"type":"number"}},
+     "required":["question","explanation","sameQuestion","mutuallyExclusive",
+                 "sameContext","isTranslation","confidence"]}
     """#
 
     /// Returns a finding only when the model says the two disagree and is sure
@@ -130,7 +160,14 @@ public struct ConflictDetector: Sendable {
             """),
         ])
         request.responseSchema = (name: "ConflictCheck", schemaJSON: Self.schema)
-        request.maxTokens = 2_048
+        // Measured, not guessed (E.42): 2,048 was the ceiling and three of the
+        // four hardest pairs hit it exactly — at ~11 tokens/second that is 186
+        // seconds of work thrown away, reported as "unparseable", and swallowed
+        // as "no conflict". A guided answer to this schema costs ~800 tokens on
+        // a model that thinks first, so the budget has to leave room for the
+        // thinking as well as the JSON: the window is shared between them
+        // (§17.1, and the same arithmetic as `ContextManager.promptBudget`).
+        request.maxTokens = Self.answerBudget
         request.temperature = 0
 
         do {
@@ -143,6 +180,13 @@ public struct ConflictDetector: Sendable {
                   let sameQuestion = object["sameQuestion"] as? Bool,
                   let mutuallyExclusive = object["mutuallyExclusive"] as? Bool,
                   let sameContext = object["sameContext"] as? Bool else {
+                // Say which of the two it was. An answer that ran out of room
+                // is not an answer we failed to read, and the fix is different.
+                if completion.finishReason == "length" {
+                    let spent = completion.usage?.completionTokens ?? 0
+                    log.error("conflict check ran out of room at \(spent, privacy: .public) tokens")
+                    return .failure(.truncated(tokens: spent))
+                }
                 log.error("conflict check returned unparseable output")
                 return .failure(.unparseable)
             }
@@ -177,6 +221,14 @@ public struct ConflictDetector: Sendable {
         }
     }
 
+    /// Room for the answer *and* the thinking that precedes it.
+    ///
+    /// Not read from the endpoint like the prompt budget is, because this is an
+    /// output cap rather than a share of the context window — but chosen from
+    /// the same measurement: ~800 tokens of guided JSON, and models that reason
+    /// first spend several times that before the first brace.
+    static let answerBudget = 8_192
+
     /// §11.7's criteria, in the words the model is asked to apply them in.
     ///
     /// The language paragraph is only added when the two sides really are in
@@ -196,6 +248,11 @@ public struct ConflictDetector: Sendable {
 
         ถ้าข้อใดข้อหนึ่งเป็น false = ไม่ขัดแย้ง (neutral) และ neutral ไม่ต้องยกการ์ด
         ไม่แน่ใจ = ตั้ง confidence ต่ำ
+
+        **ตอบตามลำดับนี้ และใช้สองช่องแรกคิดก่อนตัดสิน**:
+        - question — คำถามที่ทั้งสองฝ่ายกำลังตอบคนละอย่างกัน เขียนเป็นคำถามสั้น ๆ ของคุณเอง         **ห้ามคัดลอกข้อความ A หรือ B มาใส่**
+        - explanation — ไล่เกณฑ์ทั้งสามข้อกับคู่นี้ทีละข้อ
+        - แล้วจึงตอบ sameQuestion / mutuallyExclusive / sameContext / isTranslation ตามที่เพิ่งไล่มา
         """
         if crossLanguage {
             text += """

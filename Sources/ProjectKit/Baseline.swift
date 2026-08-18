@@ -20,7 +20,7 @@ public struct Baseline: Sendable, Codable, Equatable, Identifiable {
     /// 1, 2, 3… Never reused, never rewritten.
     public let version: Int
     public let frozenAt: Date
-    /// Why this version exists. v1 says "ผ่าน G2"; later ones name the change
+    /// Why this version exists. v1 says "passed G2"; later ones name the change
     /// request that produced them, so the history reads as a sequence of
     /// decisions rather than a pile of snapshots.
     public let reason: String
@@ -76,12 +76,22 @@ public struct BaselineDiff: Sendable, Equatable {
     public var addedCount: Double { Double(added.count) }
 
     public var summary: String {
-        guard !isEmpty else { return "ตรงกับ baseline" }
+        guard !isEmpty else {
+            return t("matches the baseline", "Drift summary when the plan has not moved.")
+        }
         var parts: [String] = []
-        if !added.isEmpty { parts.append("เพิ่ม \(added.count)") }
-        if !removed.isEmpty { parts.append("ตัดออก \(removed.count)") }
-        if !changed.isEmpty { parts.append("แก้ \(changed.count)") }
-        if scopeChanged { parts.append("ขอบเขตเปลี่ยน") }
+        if !added.isEmpty {
+            parts.append(t("\(added.count) added", "Drift summary. Placeholder is a count."))
+        }
+        if !removed.isEmpty {
+            parts.append(t("\(removed.count) removed", "Drift summary. Placeholder is a count."))
+        }
+        if !changed.isEmpty {
+            parts.append(t("\(changed.count) changed", "Drift summary. Placeholder is a count."))
+        }
+        if scopeChanged {
+            parts.append(t("scope changed", "Drift summary when the scope statement moved."))
+        }
         return parts.joined(separator: " · ")
     }
 

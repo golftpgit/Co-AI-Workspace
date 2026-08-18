@@ -75,7 +75,7 @@ struct ConflictLedgerTests {
         #expect(conflict.b.provenance.year == 2024)
         // And a readable reason for the weight, not just a number.
         #expect(conflict.weightA.reasons.contains { $0.contains("T2") })
-        #expect(conflict.weightA.reasons.contains { $0.contains("สอดคล้อง") })
+        #expect(conflict.weightA.reasons.contains { $0.contains("other sources agree") })
         #expect(conflict.weightA.score > conflict.weightB.score)
     }
 

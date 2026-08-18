@@ -15,8 +15,8 @@ import AgentKit
 //
 // Three rules, each a way a cycle lies:
 //
-//  • **A report names the period it covers**, not the day it was made. "ตั้งแต่
-//    12 ส.ค." is what makes two reports comparable, and it is what the builder
+//  • **A report names the period it covers**, not the day it was made. "since
+//    12 Aug" is what makes two reports comparable, and it is what the builder
 //    already takes as `since`.
 //  • **Missed periods are said, not backfilled.** Three weeks away is not
 //    three reports; it is one report and a sentence saying the gap. Writing
@@ -32,10 +32,10 @@ public struct ReportSchedule: Sendable, Codable, Equatable {
 
         public var label: String {
             switch self {
-            case .off: "ไม่ออกเอง"
-            case .weekly: "ทุกสัปดาห์"
-            case .fortnightly: "ทุกสองสัปดาห์"
-            case .monthly: "ทุกเดือน"
+            case .off: t("never automatically", "How often reports are issued.")
+            case .weekly: t("weekly", "How often reports are issued.")
+            case .fortnightly: t("fortnightly", "How often reports are issued.")
+            case .monthly: t("monthly", "How often reports are issued.")
             }
         }
 
@@ -71,9 +71,8 @@ public struct ReportDue: Sendable, Equatable {
     /// nothing was missed — an ordinary report needs no apology.
     public var gapNote: String? {
         guard missedCycles > 0 else { return nil }
-        return "ช่วงที่ผ่านมามี \(missedCycles) รอบที่ไม่ได้ออกรายงาน — "
-            + "ฉบับนี้ครอบคลุมทั้งช่วง ไม่ได้ย้อนออกทีละรอบ "
-            + "เพราะรายงานย้อนหลังคือตัวเลขที่ใส่ไว้ใต้วันที่ที่ไม่มีใครทำงาน"
+        return t("\(missedCycles) cycles went by without a report — this one covers the whole period rather than backfilling each, because a backfilled report is numbers put under dates nobody worked on",
+                 "Explains why missed report cycles produce one report. Placeholder is how many were missed.")
     }
 }
 

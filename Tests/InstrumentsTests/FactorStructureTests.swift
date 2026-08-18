@@ -91,7 +91,7 @@ struct FactorClosedFormTests {
         #expect(adequacy.kmo == 0)
         #expect(adequacy.bartlettChiSquare == 0)
         #expect(!adequacy.isFactorable)
-        #expect(adequacy.summary.contains("รับไม่ได้"))
+        #expect(adequacy.summary.contains("unacceptable"))
     }
 
     @Test("principal axis recovers the loading a one-factor structure was built from")
@@ -220,7 +220,7 @@ struct FactorReferenceTests {
         // is said.
         let solution = try ExploratoryFactorAnalysis.analyse(
             scores: reference, itemIDs: itemNames(6))
-        #expect(solution.warnings.contains { $0.contains("ต่ำกว่า 100") })
+        #expect(solution.warnings.contains { $0.contains("under the 100") })
         #expect(!solution.warnings.contains { $0.contains("5:1") })
 
         let thin = try ExploratoryFactorAnalysis.analyse(
@@ -369,7 +369,7 @@ struct ConstructFitTests {
             "item3": "ค", "item4": "ค", "item5": "ค",
         ])
         #expect(fit.mergedConstructs == [["ก", "ข"]])
-        #expect(fit.summary.contains("แยกไม่ออก"))
+        #expect(fit.summary.contains("cannot tell apart"))
     }
 }
 

@@ -33,9 +33,9 @@ public enum DecisionOrigin: String, Sendable, Codable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .proposalStated: "โครงร่างระบุไว้"
-        case .humanConfirmed: "คนยืนยันแล้ว"
-        case .agentSuggested: "agent เสนอ"
+        case .proposalStated: localised("set by the protocol", "Where a decision in the analysis plan came from.")
+        case .humanConfirmed: localised("confirmed by a person", "Where a decision in the analysis plan came from.")
+        case .agentSuggested: localised("proposed by an agent", "Where a decision in the analysis plan came from.")
         }
     }
 }
@@ -51,9 +51,9 @@ public enum GapSeverity: String, Sendable, Codable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .critical: "วิกฤต — ไม่มีแล้ววิเคราะห์ไม่ได้"
-        case .ambiguous: "กำกวม — ตีความได้หลายแบบ"
-        case .assumptionNeeded: "ต้องเลือกวิธี"
+        case .critical: localised("critical — the analysis cannot proceed without it", "How serious a gap in the analysis plan is.")
+        case .ambiguous: localised("ambiguous — it can be read more than one way", "How serious a gap in the analysis plan is.")
+        case .assumptionNeeded: localised("a method has to be chosen", "How serious a gap in the analysis plan is.")
         }
     }
 
@@ -133,7 +133,7 @@ public enum PlanApprovalError: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .notReady(let reasons):
-            "ยังอนุมัติแผนไม่ได้:\n" + reasons.map { "• \($0)" }.joined(separator: "\n")
+            localised("the plan cannot be approved yet:\n", "Introduces why an analysis plan cannot be approved.") + reasons.map { "• \($0)" }.joined(separator: "\n")
         }
     }
 }
@@ -194,12 +194,12 @@ public struct AnalysisPlan: Sendable, Codable, Equatable, Identifiable {
     /// means ready.
     public var blockers: [String] {
         var reasons: [String] = []
-        if decisions.isEmpty { reasons.append("แผนยังไม่มีการตัดสินใจใดๆ") }
+        if decisions.isEmpty { reasons.append(localised("the plan holds no decisions yet", "Why an analysis plan cannot be approved.")) }
         for gap in blockingGaps {
             reasons.append("\(gap.severity.label): \(gap.subject)")
         }
         for decision in agentSuggestions {
-            reasons.append("ยังเป็นข้อเสนอของ agent ที่ยังไม่มีคนยืนยัน: \(decision.question)")
+            reasons.append(localised("still an agent's proposal that nobody has confirmed: \(decision.question)", "Why an analysis plan cannot be approved. Placeholder: the open question."))
         }
         return reasons
     }
@@ -215,7 +215,7 @@ public struct AnalysisPlan: Sendable, Codable, Equatable, Identifiable {
     public mutating func confirm(_ decisionID: String, value: String? = nil,
                                  note: String? = nil) -> Bool {
         guard let index = decisions.firstIndex(where: { $0.id == decisionID }) else { return false }
-        loseApprovalIfHeld("แก้การตัดสินใจ “\(decisions[index].question)” หลังอนุมัติ")
+        loseApprovalIfHeld(localised("changed the decision “\(decisions[index].question)” after approval", "An amendment to an approved plan. Placeholder: the question."))
         if let value { decisions[index].value = value }
         if let note { decisions[index].note = note }
         decisions[index].origin = .humanConfirmed
@@ -227,7 +227,7 @@ public struct AnalysisPlan: Sendable, Codable, Equatable, Identifiable {
     @discardableResult
     public mutating func resolve(gap gapID: String, with answer: String) -> Bool {
         guard let index = gaps.firstIndex(where: { $0.id == gapID }) else { return false }
-        loseApprovalIfHeld("ตอบช่องว่าง “\(gaps[index].subject)” หลังอนุมัติ")
+        loseApprovalIfHeld(localised("answered the gap “\(gaps[index].subject)” after approval", "An amendment to an approved plan. Placeholder: the gap."))
         gaps[index].resolution = answer
         let gap = gaps[index]
         if let existing = decisions.firstIndex(where: { $0.question == gap.subject }) {
@@ -242,12 +242,12 @@ public struct AnalysisPlan: Sendable, Codable, Equatable, Identifiable {
     }
 
     public mutating func add(_ decision: AnalysisDecision) {
-        loseApprovalIfHeld("เพิ่มการตัดสินใจ “\(decision.question)” หลังอนุมัติ")
+        loseApprovalIfHeld(localised("added the decision “\(decision.question)” after approval", "An amendment to an approved plan. Placeholder: the question."))
         decisions.append(decision)
     }
 
     public mutating func add(_ gap: AnalysisGap) {
-        loseApprovalIfHeld("พบช่องว่างใหม่ “\(gap.subject)” หลังอนุมัติ")
+        loseApprovalIfHeld(localised("found the new gap “\(gap.subject)” after approval", "An amendment to an approved plan. Placeholder: the gap."))
         gaps.append(gap)
     }
 

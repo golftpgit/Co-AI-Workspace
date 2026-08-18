@@ -1,0 +1,349 @@
+/* The base language. Keys are the English sentences. */
+
+/* ── Agreement ───────────────────────────────────────────────── */
+
+"%@ = %.3f (95%% CI %.3f to %.3f, n = %d, p = %.4f)" = "%@ = %.3f (95%% CI %.3f to %.3f, n = %d, p = %.4f)";
+" — **correlation is not agreement**: two instruments that read exactly double each other " = " — **correlation is not agreement**: two instruments that read exactly double each other ";
+"score r = 1.00 and never once agree · if the question is 'can one replace the other', use Bland–Altman" = "score r = 1.00 and never once agree · if the question is 'can one replace the other', use Bland–Altman";
+"worse than guessing" = "worse than guessing";
+"almost no agreement" = "almost no agreement";
+"slight agreement" = "slight agreement";
+"moderate agreement" = "moderate agreement";
+"substantial agreement" = "substantial agreement";
+"almost perfect agreement" = "almost perfect agreement";
+"κ%@ = %.3f (95%% CI %.3f to %.3f) — %@" = "κ%@ = %.3f (95%% CI %.3f to %.3f) — %@";
+" weighted" = " weighted";
+" · raw agreement %.1f%%, of which %.1f%% was the agreement chance alone would have produced" = " · raw agreement %.1f%%, of which %.1f%% was the agreement chance alone would have produced";
+"both sets must have the same number of values" = "both sets must have the same number of values";
+"at least 4 pairs are needed" = "at least 4 pairs are needed";
+"one of the sets is a single repeated value — there is no correlation to find" = "one of the sets is a single repeated value — there is no correlation to find";
+"the two raters must have rated the same items" = "the two raters must have rated the same items";
+"at least two items are needed" = "at least two items are needed";
+"there is only one category — agreement has nothing to measure" = "there is only one category — agreement has nothing to measure";
+"chance agreement is 100% — κ is undefined" = "chance agreement is 100% — κ is undefined";
+
+/* ── AnalysisStore ───────────────────────────────────────────── */
+
+"could not open the analysis database: %@" = "could not open the analysis database: %@";
+"the SQL statement failed: %@" = "the SQL statement failed: %@";
+
+/* ── Connectors ──────────────────────────────────────────────── */
+
+"DuckDB has no official SQL Server extension yet — §12.2 plans to go via ATTACH " = "DuckDB has no official SQL Server extension yet — §12.2 plans to go via ATTACH ";
+"once one exists; for now the connection genuinely cannot be made" = "once one exists; for now the connection genuinely cannot be made";
+"needs a native driver (v1 showed the community \"mongo\" extension " = "needs a native driver (v1 showed the community \"mongo\" extension ";
+"does not keep up with core builds) — it has not been added as a dependency" = "does not keep up with core builds) — it has not been added as a dependency";
+"no password has been set for this source (“%@”)" = "no password has been set for this source (“%@”)";
+"could not read the password “%@” from the Keychain (%@) — which does not mean it was never set" = "could not read the password “%@” from the Keychain (%@) — which does not mean it was never set";
+"could not connect to '%@': %@" = "could not connect to '%@': %@";
+
+/* ── CountModels ─────────────────────────────────────────────── */
+
+"fewer observations than parameters — overdispersion cannot be checked" = "fewer observations than parameters — overdispersion cannot be checked";
+"Pearson χ²/df = %.2f — the variance is close to the mean, as Poisson assumes" = "Pearson χ²/df = %.2f — the variance is close to the mean, as Poisson assumes";
+"Pearson χ²/df = %.2f (p = %.4f) — **the data are more spread out than Poisson allows** " = "Pearson χ²/df = %.2f (p = %.4f) — **the data are more spread out than Poisson allows** ";
+"Poisson intervals will be too narrow, and findings that are not real will look significant " = "Poisson intervals will be too narrow, and findings that are not real will look significant ";
+"· use a negative binomial instead" = "· use a negative binomial instead";
+"the data are not overdispersed — a negative binomial has nothing to add over Poisson" = "the data are not overdispersed — a negative binomial has nothing to add over Poisson";
+"there is no data" = "there is no data";
+"a count model needs non-negative whole numbers" = "a count model needs non-negative whole numbers";
+"there are not as many predictor values as observations" = "there are not as many predictor values as observations";
+"no events happened at all" = "no events happened at all";
+"there must be more observations than parameters" = "there must be more observations than parameters";
+"the fit did not converge — the predictors may be perfectly collinear" = "the fit did not converge — the predictors may be perfectly collinear";
+"the data matrix cannot be inverted" = "the data matrix cannot be inverted";
+
+/* ── DiagnosticAccuracy ──────────────────────────────────────── */
+
+"there is nobody with the disease in the data — sensitivity cannot be computed" = "there is nobody with the disease in the data — sensitivity cannot be computed";
+"there is nobody without the disease in the data — specificity cannot be computed" = "there is nobody without the disease in the data — specificity cannot be computed";
+"prevalence must be between 0 and 1, ends excluded" = "prevalence must be between 0 and 1, ends excluded";
+"this test separates nothing — predictive values cannot be computed" = "this test separates nothing — predictive values cannot be computed";
+"specificity is exactly 1 — LR+ is infinite, which is a fact about the sample size rather than about the test" = "specificity is exactly 1 — LR+ is infinite, which is a fact about the sample size rather than about the test";
+"specificity is zero — LR− cannot be computed" = "specificity is zero — LR− cannot be computed";
+"there are not as many scores as labels" = "there are not as many scores as labels";
+"both a diseased and a non-diseased group are needed" = "both a diseased and a non-diseased group are needed";
+"Hanley–McNeil 95% CI (the area equals Mann–Whitney)" = "Hanley–McNeil 95% CI (the area equals Mann–Whitney)";
+
+/* ── Epidemiology ────────────────────────────────────────────── */
+
+"a cell is zero — the log interval for a risk ratio cannot be computed" = "a cell is zero — the log interval for a risk ratio cannot be computed";
+"a cell is zero — Woolf's odds ratio cannot be computed until a continuity correction has been decided on" = "a cell is zero — Woolf's odds ratio cannot be computed until a continuity correction has been decided on";
+"the risk difference is zero — the number needed to treat is infinite" = "the risk difference is zero — the number needed to treat is infinite";
+"the interval around the risk difference crosses zero — " = "the interval around the risk difference crosses zero — ";
+"inverting it does not give one continuous interval, so it cannot be reported as a number needed to treat" = "inverting it does not give one continuous interval, so it cannot be reported as a number needed to treat";
+"NNH — how many must be exposed for one extra person to be harmed · " = "NNH — how many must be exposed for one extra person to be harmed · ";
+"inverted from the Wald 95% CI of the risk difference" = "inverted from the Wald 95% CI of the risk difference";
+"NNT — how many must be treated to prevent one case · " = "NNT — how many must be treated to prevent one case · ";
+"the population is zero" = "the population is zero";
+"the number of cases must be between 0 and the size of the population" = "the number of cases must be between 0 and the size of the population";
+"person-time must be greater than zero" = "person-time must be greater than zero";
+"there were no events — the rate is zero and a log interval cannot be computed" = "there were no events — the rate is zero and a log interval cannot be computed";
+"there are no age strata" = "there are no age strata";
+"every stratum must have person-time greater than zero" = "every stratum must have person-time greater than zero";
+"the standard population weights add up to zero" = "the standard population weights add up to zero";
+"one of the groups has nobody in it" = "one of the groups has nobody in it";
+"a count is negative" = "a count is negative";
+
+/* ── MetaAnalysis ────────────────────────────────────────────── */
+
+"heterogeneity is low — a fixed-effect pooled value is defensible" = "heterogeneity is low — a fixed-effect pooled value is defensible";
+"heterogeneity is moderate" = "heterogeneity is moderate";
+"heterogeneity is high — use random effects and say what the studies differ in" = "heterogeneity is high — use random effects and say what the studies differ in";
+"heterogeneity is very high — **pooling may not mean anything** " = "heterogeneity is very high — **pooling may not mean anything** ";
+"an average over things that are not the same thing is an average nobody could measure" = "an average over things that are not the same thing is an average nobody could measure";
+"Egger's test: intercept %.3f (p = %.4f) — **the funnel is asymmetric** " = "Egger's test: intercept %.3f (p = %.4f) — **the funnel is asymmetric** ";
+"the small studies here differ systematically from the large ones, which fits " = "the small studies here differ systematically from the large ones, which fits ";
+"publication bias (studies finding nothing often go unpublished) or with small studies simply being of different quality " = "publication bias (studies finding nothing often go unpublished) or with small studies simply being of different quality ";
+"· the pooled value is probably overstated" = "· the pooled value is probably overstated";
+"Egger's test: intercept %.3f (p = %.4f) — no asymmetry was found " = "Egger's test: intercept %.3f (p = %.4f) — no asymmetry was found ";
+"· **which is not the same as there being none** — this test has little power below ten studies" = "· **which is not the same as there being none** — this test has little power below ten studies";
+"pooling needs at least two studies" = "pooling needs at least two studies";
+"every study must have a standard error greater than zero" = "every study must have a standard error greater than zero";
+"heterogeneity cannot be measured with fewer than two studies" = "heterogeneity cannot be measured with fewer than two studies";
+"Egger's test needs at least three studies — and still has very little power below ten" = "Egger's test needs at least three studies — and still has very little power below ten";
+"every study has the same precision — asymmetry cannot be tested for" = "every study has the same precision — asymmetry cannot be tested for";
+
+/* ── MissingData ─────────────────────────────────────────────── */
+
+"%lld of %lld rows are complete on every variable " = "%lld of %lld rows are complete on every variable ";
+" · the variable missing most is %@ " = " · the variable missing most is %@ ";
+" · **a complete-case analysis throws away " = " · **a complete-case analysis throws away ";
+"%lld people** — more than any single variable is missing " = "%lld people** — more than any single variable is missing ";
+"because each row is missing something different" = "because each row is missing something different";
+"those missing %@ (%d people) have a mean %@ of %.3f " = "those missing %@ (%d people) have a mean %@ of %.3f ";
+"against %.3f for those not missing it (p = %.4f)" = "against %.3f for those not missing it (p = %.4f)";
+" — **the missingness is not random**: a complete-case analysis " = " — **the missingness is not random**: a complete-case analysis ";
+"therefore answers a question about a different group of people than the one being studied" = "therefore answers a question about a different group of people than the one being studied";
+" — no difference was found, **which does not mean the missingness is random**: " = " — no difference was found, **which does not mean the missingness is random**: ";
+"the reason people are missing is usually not in the file, so data can never prove MCAR — only the opposite" = "the reason people are missing is usually not in the file, so data can never prove MCAR — only the opposite";
+"there are no variables to check" = "there are no variables to check";
+"every variable must have the same number of rows" = "every variable must have the same number of rows";
+"both variables must have the same number of rows" = "both variables must have the same number of rows";
+"at least two rows are needed both where the value is missing and where it is present " = "at least two rows are needed both where the value is missing and where it is present ";
+"for a comparison — there are %lld and %lld" = "for a comparison — there are %lld and %lld";
+
+/* ── Mortality ───────────────────────────────────────────────── */
+
+"significantly above the reference population" = "significantly above the reference population";
+"significantly below the reference population" = "significantly below the reference population";
+"not yet distinguishable from the reference population" = "not yet distinguishable from the reference population";
+"SMR = %.2f (95%% CI %.2f–%.2f) · %d deaths observed " = "SMR = %.2f (95%% CI %.2f–%.2f) · %d deaths observed ";
+"against the %.1f the reference rates predict — %@" = "against the %.1f the reference rates predict — %@";
+" · **the interval is exact (Poisson)** because at these few deaths the normal approximation " = " · **the interval is exact (Poisson)** because at these few deaths the normal approximation ";
+"puts the lower bound below zero, which is not a number of deaths" = "puts the lower bound below zero, which is not a number of deaths";
+"there are no age bands" = "there are no age bands";
+"person-time, reference rates and death counts cannot be negative" = "person-time, reference rates and death counts cannot be negative";
+"the reference rates predict no deaths at all — there is nothing to divide by" = "the reference rates predict no deaths at all — there is nothing to divide by";
+"a life table needs at least two age bands" = "a life table needs at least two age bands";
+"age bands must be wider than zero and mortality rates cannot be negative" = "age bands must be wider than zero and mortality rates cannot be negative";
+"the age bands must be in ascending order" = "the age bands must be in ascending order";
+
+/* ── Multilevel ──────────────────────────────────────────────── */
+
+"at least two clusters are needed to separate the variance between them" = "at least two clusters are needed to separate the variance between them";
+"every cluster holds a single observation — within-cluster variance cannot be separated from between-cluster variance" = "every cluster holds a single observation — within-cluster variance cannot be separated from between-cluster variance";
+"ICC = %.3f · design effect = %.2f — the clustering barely matters" = "ICC = %.3f · design effect = %.2f — the clustering barely matters";
+"ICC = %.3f · design effect = %.2f — **the data are nested** " = "ICC = %.3f · design effect = %.2f — **the data are nested** ";
+"%d observations from %d clusters are worth only about %.1f independent ones " = "%d observations from %d clusters are worth only about %.1f independent ones ";
+"· a method that treats them all as independent gives intervals about %.2f times too narrow " = "· a method that treats them all as independent gives intervals about %.2f times too narrow ";
+"which is the commonest mistake in public health work" = "which is the commonest mistake in public health work";
+"the second half of P19.5" = "the second half of P19.5";
+
+/* ── MultipleComparisons ─────────────────────────────────────── */
+
+"the chance of **any** false positive in the set" = "the chance of **any** false positive in the set";
+"the **share** of the findings that are false positives" = "the **share** of the findings that are false positives";
+"%lld tests, corrected with %@ " = "%lld tests, corrected with %@ ";
+"which controls %@ · %lld remain significant" = "which controls %@ · %lld remain significant";
+" · **%lld with a raw p below %lf did not survive the correction** — " = " · **%lld with a raw p below %lf did not survive the correction** — ";
+"%lld tests on data containing nothing would produce that many on their own" = "%lld tests on data containing nothing would produce that many on their own";
+"there are no tests to correct" = "there are no tests to correct";
+"p-values must be between 0 and 1" = "p-values must be between 0 and 1";
+
+/* ── Notebook ────────────────────────────────────────────────── */
+
+"Untitled notebook" = "Untitled notebook";
+"needs confirming before it runs: %@" = "needs confirming before it runs: %@";
+"the cell is empty" = "the cell is empty";
+
+/* ── NotebookKernel ──────────────────────────────────────────── */
+
+"no Python was found on this machine (looked in: %@)" = "no Python was found on this machine (looked in: %@)";
+"the kernel has not been started — press 'Start kernel' first" = "the kernel has not been started — press 'Start kernel' first";
+"could not start the kernel: %@" = "could not start the kernel: %@";
+"the kernel replied in a form that could not be read: %@" = "the kernel replied in a form that could not be read: %@";
+"the kernel stopped: %@" = "the kernel stopped: %@";
+"the kernel sent no reply" = "the kernel sent no reply";
+"the request could not be encoded" = "the request could not be encoded";
+"it did not respond to the interrupt — the kernel has to be restarted" = "it did not respond to the interrupt — the kernel has to be restarted";
+"no reason given" = "no reason given";
+"\n… truncated at %d characters" = "\n… truncated at %d characters";
+"the request that arrived could not be read" = "the request that arrived could not be read";
+
+/* ── PairedCategorical ───────────────────────────────────────── */
+
+"pairs that went + to −: %lld · − to +: %lld" = "pairs that went + to −: %lld · − to +: %lld";
+"tested exactly (binomial) because so few pairs changed — p = %.4f" = "tested exactly (binomial) because so few pairs changed — p = %.4f";
+"%@ · %@ · **pairs that did not change are not counted** because they say nothing about change" = "%@ · %@ · **pairs that did not change are not counted** because they say nothing about change";
+" · proportions in order: " = " · proportions in order: ";
+" · **this test asks whether the proportions run in order**, not which group differs from which " = " · **this test asks whether the proportions run in order**, not which group differs from which ";
+"if the groups could be reordered without losing meaning, this is the wrong test" = "if the groups could be reordered without losing meaning, this is the wrong test";
+"pair counts cannot be negative" = "pair counts cannot be negative";
+"no pair changed — there is no change to test" = "no pair changed — there is no change to test";
+"a trend needs at least three groups that can be put in order" = "a trend needs at least three groups that can be put in order";
+"the number of cases must be between 0 and the size of the group" = "the number of cases must be between 0 and the size of the group";
+"there must be as many ordinal scores as groups" = "there must be as many ordinal scores as groups";
+"everyone is a case, or nobody is — there is no trend to test" = "everyone is a case, or nobody is — there is no trend to test";
+"every group has the same ordinal score — there is no order to follow" = "every group has the same ordinal score — there is no order to follow";
+
+/* ── SQLGuard ────────────────────────────────────────────────── */
+
+"read only" = "read only";
+"changes data" = "changes data";
+"deletes or overwrites data" = "deletes or overwrites data";
+"there is nothing to run" = "there is nothing to run";
+"%lld statements" = "%lld statements";
+"%lld change data" = "%lld change data";
+"%lld delete or overwrite" = "%lld delete or overwrite";
+"the named table" = "the named table";
+"deletes matching rows in %@" = "deletes matching rows in %@";
+"no WHERE — deletes every row in %@" = "no WHERE — deletes every row in %@";
+"changes matching rows in %@" = "changes matching rows in %@";
+"no WHERE — changes every row in %@" = "no WHERE — changes every row in %@";
+"overwrites the existing %@" = "overwrites the existing %@";
+"creates %@" = "creates %@";
+"overwrites clashing rows in %@" = "overwrites clashing rows in %@";
+"adds rows to %@" = "adds rows to %@";
+"drops %@ entirely — the app cannot bring it back" = "drops %@ entirely — the app cannot bring it back";
+"empties every row in %@" = "empties every row in %@";
+"changes the structure of %@" = "changes the structure of %@";
+"attaches an outside database read-only" = "attaches an outside database read-only";
+"attaches an outside database with writing allowed" = "attaches an outside database with writing allowed";
+"copies data to or from a file" = "copies data to or from a file";
+"the statement starts with a quoted name — assumed to change data until proven otherwise" = "the statement starts with a quoted name — assumed to change data until proven otherwise";
+"%@ is a statement this guard does not know — assumed to change data until proven otherwise" = "%@ is a statement this guard does not know — assumed to change data until proven otherwise";
+
+/* ── StatGate ────────────────────────────────────────────────── */
+
+"two-sample t-test (Student)" = "two-sample t-test (Student)";
+"two-sample t-test (Welch)" = "two-sample t-test (Welch)";
+"one-way ANOVA" = "one-way ANOVA";
+"chi-square" = "chi-square";
+"linear regression" = "linear regression";
+"logistic regression" = "logistic regression";
+"survival analysis" = "survival analysis";
+"multilevel model (nested data)" = "multilevel model (nested data)";
+"Poisson regression (count data)" = "Poisson regression (count data)";
+"negative binomial regression (overdispersed counts)" = "negative binomial regression (overdispersed counts)";
+"McNemar (paired proportions)" = "McNemar (paired proportions)";
+"chi-square for trend" = "chi-square for trend";
+"correlation (Pearson/Spearman)" = "correlation (Pearson/Spearman)";
+"inter-rater agreement (κ)" = "inter-rater agreement (κ)";
+"  → assumptions not met, suggested instead: " = "  → assumptions not met, suggested instead: ";
+" or " = " or ";
+" (changing method means going back to the Analysis Plan for approval)" = " (changing method means going back to the Analysis Plan for approval)";
+"Not enough data for this test: %@" = "Not enough data for this test: %@";
+"The data is the wrong shape: %@" = "The data is the wrong shape: %@";
+"This system cannot compute %@ itself yet (planned for %@) — " = "This system cannot compute %@ itself yet (planned for %@) — ";
+"so there is no result to report · if it is needed now, compute it with an external tool " = "so there is no result to report · if it is needed now, compute it with an external tool ";
+"and record where it came from; do not claim it as a result of this system" = "and record where it came from; do not claim it as a result of this system";
+"at least 2 values per group are needed" = "at least 2 values per group are needed";
+"group 1" = "group 1";
+"group 2" = "group 2";
+"mean %.4g vs %.4g (difference %.4g) · t = %.4f · p = %.4g" = "mean %.4g vs %.4g (difference %.4g) · t = %.4f · p = %.4g";
+"paired data must have the same number of values on both sides" = "paired data must have the same number of values on both sides";
+"at least 2 pairs are needed" = "at least 2 pairs are needed";
+"the per-pair differences" = "the per-pair differences";
+"mean difference %.4g · t = %.4f · p = %.4g" = "mean difference %.4g · t = %.4f · p = %.4g";
+"at least 2 groups with 2 values each are needed" = "at least 2 groups with 2 values each are needed";
+"group %lld" = "group %lld";
+"the table must be at least 2×2 with rows of equal length" = "the table must be at least 2×2 with rows of equal length";
+"the table is empty" = "the table is empty";
+"expected count in every cell ≥ 5" = "expected count in every cell ≥ 5";
+"the smallest expected count is %.2f" = "the smallest expected count is %.2f";
+"%d cells expect fewer than 5 (smallest %.2f) — " = "%d cells expect fewer than 5 (smallest %.2f) — ";
+"the chi-square approximation is not trustworthy at these counts" = "the chi-square approximation is not trustworthy at these counts";
+"McNemar takes a 2×2 table of *pairs* (before × after)" = "McNemar takes a 2×2 table of *pairs* (before × after)";
+"the order of the groups is meaningful" = "the order of the groups is meaningful";
+"This test assumes the groups are ordered by a real quantity — " = "This test assumes the groups are ordered by a real quantity — ";
+"if they could be shuffled without losing meaning, use an ordinary chi-square" = "if they could be shuffled without losing meaning, use an ordinary chi-square";
+"the relationship is linear" = "the relationship is linear";
+"Pearson and Spearman agree closely — no sign of curvature" = "Pearson and Spearman agree closely — no sign of curvature";
+"Spearman (%.3f) is well above Pearson (%.3f) — " = "Spearman (%.3f) is well above Pearson (%.3f) — ";
+"the relationship is probably curved; use Spearman or describe the shape first" = "the relationship is probably curved; use Spearman or describe the shape first";
+"Fisher's exact here supports 2×2 tables only" = "Fisher's exact here supports 2×2 tables only";
+"odds ratio ≈ %.4g · p = %.4g (two-sided)" = "odds ratio ≈ %.4g · p = %.4g (two-sided)";
+"no assumption about sample size" = "no assumption about sample size";
+"The probability is computed exactly from the table, not approximated" = "The probability is computed exactly from the table, not approximated";
+"U = %.1f · z = %.4f · p = %.4g (normal approximation, corrected for ties)" = "U = %.1f · z = %.4f · p = %.4g (normal approximation, corrected for ties)";
+"no normal distribution required" = "no normal distribution required";
+"The test works on ranks, so it does not depend on the shape of the distribution" = "The test works on ranks, so it does not depend on the shape of the distribution";
+"at least 2 pairs with a non-zero difference are needed" = "at least 2 pairs with a non-zero difference are needed";
+"W⁺ = %.1f · z = %.4f · p = %.4g (using %d differing pairs)" = "W⁺ = %.1f · z = %.4f · p = %.4g (using %d differing pairs)";
+"The test works on the ranks of the differences" = "The test works on the ranks of the differences";
+"at least 2 non-empty groups are needed" = "at least 2 non-empty groups are needed";
+"The test works on ranks pooled across the groups" = "The test works on ranks pooled across the groups";
+"there must be more rows than variables, and the variables must not be exact duplicates" = "there must be more rows than variables, and the variables must not be exact duplicates";
+"the residuals" = "the residuals";
+"R² = %.4f · intercept %.4g · %@" = "R² = %.4f · intercept %.4g · %@";
+"the outcome must be 0/1 and there must be more rows than variables" = "the outcome must be 0/1 and there must be more rows than variables";
+"no complete separation" = "no complete separation";
+"Some variable predicts the outcome perfectly, so its coefficient runs off to infinity " = "Some variable predicts the outcome perfectly, so its coefficient runs off to infinity ";
+"— the number you get is not an effect size" = "— the number you get is not an effect size";
+"The estimate converged in %lld iterations" = "The estimate converged in %lld iterations";
+"linearity of the logit" = "linearity of the logit";
+"This module cannot check it yet — look at it with Box–Tidwell or a plot before trusting the result" = "This module cannot check it yet — look at it with Box–Tidwell or a plot before trusting the result";
+"%@: OR = %.4g (p could not be computed)" = "%@: OR = %.4g (p could not be computed)";
+"mean %.4f (95%% CI %.4f–%.4f · corrected for clustering) " = "mean %.4f (95%% CI %.4f–%.4f · corrected for clustering) ";
+"· treated as independent it would be %.4f–%.4f, which is too narrow" = "· treated as independent it would be %.4f–%.4f, which is too narrow";
+"%@: rate ratio %.4f (SE of the log = %.4f)" = "%@: rate ratio %.4f (SE of the log = %.4f)";
+"The Cox model did not converge, so the assumption could not be checked — which is not the same as passing" = "The Cox model did not converge, so the assumption could not be checked — which is not the same as passing";
+"normal distribution of %@" = "normal distribution of %@";
+"only %lld values — too few to test" = "only %lld values — too few to test";
+"cannot be tested (all values identical, or n above 5000)" = "cannot be tested (all values identical, or n above 5000)";
+"Shapiro–Wilk W = %.4f, p = %.4g — no evidence against normality" = "Shapiro–Wilk W = %.4f, p = %.4g — no evidence against normality";
+"Shapiro–Wilk W = %.4f, p = %.4g — the data does not fit a normal distribution" = "Shapiro–Wilk W = %.4f, p = %.4g — the data does not fit a normal distribution";
+"equal variance across groups" = "equal variance across groups";
+"there is no spread within the groups, so it cannot be tested" = "there is no spread within the groups, so it cannot be tested";
+"Levene (Brown–Forsythe) W = %.4f, p = %.4g · variance per group: %@" = "Levene (Brown–Forsythe) W = %.4f, p = %.4g · variance per group: %@";
+" — use Welch instead of Student, or move to a rank-based method" = " — use Welch instead of Student, or move to a rank-based method";
+"no multicollinearity" = "no multicollinearity";
+"there is only one predictor, so nothing can be collinear" = "there is only one predictor, so nothing can be collinear";
+" — a VIF above 10 means the variables explain each other " = " — a VIF above 10 means the variables explain each other ";
+"so the individual coefficients cannot be read separately" = "so the individual coefficients cannot be read separately";
+"cannot be checked with this data" = "cannot be checked with this data";
+" — no curvature left over" = " — no curvature left over";
+" — curvature remains in the residuals; a linear model is not enough" = " — curvature remains in the residuals; a linear model is not enough";
+
+/* ── StudySize ───────────────────────────────────────────────── */
+
+"the difference to detect is zero — that would need an unlimited sample" = "the difference to detect is zero — that would need an unlimited sample";
+"the standard deviation must be greater than zero" = "the standard deviation must be greater than zero";
+"to detect a difference of %.4g at SD = %.4g" = "to detect a difference of %.4g at SD = %.4g";
+"proportions must be between 0 and 1" = "proportions must be between 0 and 1";
+"the two proportions are equal — there is no difference to detect" = "the two proportions are equal — there is no difference to detect";
+"to detect the difference between %.3g and %.3g" = "to detect the difference between %.3g and %.3g";
+"at least two people per group are needed" = "at least two people per group are needed";
+"power must be between 0.5 and 1 (usually 0.80 or 0.90)" = "power must be between 0.5 and 1 (usually 0.80 or 0.90)";
+"alpha must be between 0 and 1" = "alpha must be between 0 and 1";
+"these must be paired measurements on the same people — the counts differ" = "these must be paired measurements on the same people — the counts differ";
+"at least three pairs are needed" = "at least three pairs are needed";
+
+/* ── Survival ────────────────────────────────────────────────── */
+
+"there is no follow-up data" = "there is no follow-up data";
+"a follow-up time is negative" = "a follow-up time is negative";
+"a log-rank test needs data in both groups" = "a log-rank test needs data in both groups";
+"there are not enough events to compare the two groups" = "there are not enough events to compare the two groups";
+"log-rank χ² = %.3f · the first group had %.0f events " = "log-rank χ² = %.3f · the first group had %.0f events ";
+"against %.2f expected" = "against %.2f expected";
+"at least one variable is needed" = "at least one variable is needed";
+"there are not as many variable values as people followed" = "there are not as many variable values as people followed";
+"no events happened at all — nothing can be estimated" = "no events happened at all — nothing can be estimated";
+"the fit did not converge — the data may be perfectly separable" = "the fit did not converge — the data may be perfectly separable";
+"too few events to check the Schoenfeld residuals (at least 5 are needed) " = "too few events to check the Schoenfeld residuals (at least 5 are needed) ";
+"— not checked, which is not the same as passed" = "— not checked, which is not the same as passed";
+"the Schoenfeld residuals show no significant relationship with time (p = %.3f)" = "the Schoenfeld residuals show no significant relationship with time (p = %.3f)";
+"the Schoenfeld residuals do vary with time (p = %.3f) — " = "the Schoenfeld residuals do vary with time (p = %.3f) — ";
+"the hazard ratio changes over time, so one number cannot summarise it" = "the hazard ratio changes over time, so one number cannot summarise it";

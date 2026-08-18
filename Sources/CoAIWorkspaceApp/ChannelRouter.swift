@@ -12,7 +12,7 @@ import Observability
 // it is the **only** thing that connects an inbound message to the engine, it
 // lives in the app where the engine is assembled, and it does so by calling the
 // same `AgentTurnRunner` the chat window calls. Not a similar path — the same
-// object. §8.2's "ทุก channel วิ่งผ่าน Core เดียวกัน" is true here by
+// object. §8.2's "every channel runs through the same Core" is true here by
 // construction rather than by care.
 //
 // v1's bug B2 was the alternative: a bridge that grew its own way of running
@@ -74,11 +74,14 @@ actor ChannelRouter: InboundHandling {
                 // command that was refused must not read as one that ran.
                 if !executed {
                     await channel?.send(AgentMessage(kind: .progress,
-                                                     text: "· \(name): ไม่ได้รัน",
+                                                     text: t("· \(name): did not run",
+                                                             "Line in a channel reply naming a tool that was blocked. Placeholder is the tool name."),
                                                      conversationID: conversationID))
                 }
             case .failed(let reason):
-                await channel?.send(AgentMessage(kind: .error, text: "ผิดพลาด: \(reason)",
+                await channel?.send(AgentMessage(kind: .error,
+                                                 text: t("Error: \(reason)",
+                                                         "Error sent back over a channel. Placeholder is the reason."),
                                                  conversationID: conversationID))
             case .finished:
                 let text = answer.trimmingCharacters(in: .whitespacesAndNewlines)

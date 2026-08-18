@@ -44,7 +44,7 @@ struct EntityGraphTests {
         let graph = EntityGraph.around("ภาวะหมดไฟ", in: chain, hops: 2)
         #expect(graph.nodes.contains { $0.entity == "จังหวัดเชียงใหม่" } == false)
         #expect(graph.beyondHorizon == 1)
-        #expect(graph.summary.contains("อีก 1 สิ่งอยู่ไกลกว่าที่แสดง"))
+        #expect(graph.summary.contains("1 more lie beyond what is shown"))
     }
 
     @Test("raising the hop limit brings the far ones in")
@@ -129,7 +129,7 @@ struct EntityGraphTests {
     func isolatedFocusIsHonest() {
         let graph = EntityGraph.around("ไม่มีใครรู้จัก", in: chain, hops: 2)
         #expect(graph.isEmpty)
-        #expect(graph.summary.contains("ยังไม่มีความสัมพันธ์"))
+        #expect(graph.summary.contains("nothing has been extracted around"))
     }
 
     // A graph opened on a leaf shows one line and teaches nothing, so the

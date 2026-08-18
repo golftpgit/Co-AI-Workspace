@@ -161,6 +161,26 @@ struct NotebookKernelTests {
         #expect(version?.hasPrefix("3.") == true)
     }
 
+    /// The driver is a raw string, so the two sentences a person can actually
+    /// read out of it are pasted in rather than interpolated. Two things can
+    /// rot silently there: a renamed slot leaves `__TRUNCATED__` in the output,
+    /// and a translation containing a quote would end the Python literal early
+    /// and take the whole kernel down. This holds both ends.
+    @Test("the driver's translated sentences are filled in and stay valid Python")
+    func driverSlotsAreFilled() async throws {
+        #expect(!NotebookKernel.driver.contains("__TRUNCATED__"))
+        #expect(!NotebookKernel.driver.contains("__UNREADABLE__"))
+
+        guard let kernel = try await kernel() else { return }
+        defer { Task { await kernel.stop() } }
+
+        // Past the clip limit, so the substituted marker is the thing under
+        // test rather than a string that merely exists in the source.
+        let answer = try await kernel.execute("print('x' * 300_000)")
+        #expect(answer.stdout.contains("truncated at"))
+        #expect(answer.stdout.count < 300_000)
+    }
+
     @Test("a path that is not an interpreter fails at construction, not at the first cell")
     func missingInterpreter() {
         #expect(throws: KernelError.self) {

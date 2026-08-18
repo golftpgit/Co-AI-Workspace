@@ -33,7 +33,7 @@ public enum OfficeWriter {
     private static func wordDocument(_ document: RenderedDocument) -> String {
         var body = document.lines.map(paragraph(for:)).joined()
         if !document.bibliography.isEmpty {
-            body += paragraph(for: RenderedLine(style: .heading, text: "เอกสารอ้างอิง"))
+            body += paragraph(for: RenderedLine(style: .heading, text: localised("References", "Heading of the reference list.")))
             body += document.bibliography
                 .map { paragraph(for: RenderedLine(style: .body, text: $0)) }
                 .joined()
@@ -157,7 +157,7 @@ public enum OfficeWriter {
         }
         slides.append(Slide(title: title, bullets: bullets))
         if !document.bibliography.isEmpty {
-            slides.append(Slide(title: "เอกสารอ้างอิง", bullets: document.bibliography))
+            slides.append(Slide(title: localised("References", "Heading of the reference list."), bullets: document.bibliography))
         }
         return slides
     }

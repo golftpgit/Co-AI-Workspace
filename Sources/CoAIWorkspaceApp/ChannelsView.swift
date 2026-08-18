@@ -69,7 +69,7 @@ final class ChannelsViewModel {
             problem = nil
             reload()
         } catch {
-            problem = ReadableFailure.message(for: error, doing: "บันทึกรายชื่อบอท")
+            problem = ReadableFailure.message(for: error, doing: t("saving the bot list", "Names the action that failed."))
         }
     }
 
@@ -80,7 +80,7 @@ final class ChannelsViewModel {
             problem = nil
             reload()
         } catch {
-            problem = ReadableFailure.message(for: error, doing: "ลบบอทออกจากรายชื่อ")
+            problem = ReadableFailure.message(for: error, doing: t("removing the bot from the list", "Names the action that failed."))
         }
     }
 }
@@ -93,7 +93,8 @@ struct ChannelsView: View {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 if model.accounts.isEmpty {
-                    Text("ยังไม่มีบอทในรายการ — เพิ่มได้ด้วยปุ่มด้านบน")
+                    Text(localised: "No bot on the list yet — add one with the button above",
+                         "Empty state on the channels screen.")
                         .foregroundStyle(.secondary)
                 }
                 ForEach(model.accounts) { account in
@@ -115,12 +116,14 @@ struct ChannelsView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("ช่องทาง").font(.title2.bold())
-                Text("บอทที่คุยกับเวิร์กสเปซนี้ได้ — ทุกช่องทางเดินผ่านแกนเดียวกันและ hook chain เดียวกัน (§8.2)")
+                Text(localised: "Channels", "Sub-tab: ways the app reaches out, such as mail or chat.")
+                    .font(.title2.bold())
+                Text(localised: "Bots that can talk to this workspace — every channel goes through the same core and the same hook chain (§8.2)",
+                     "Explains what the channels screen configures.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Button("เพิ่มบอท") { model.startNew() }
+            Button(t("Add a bot", "Button that defines a new channel account.")) { model.startNew() }
                 .buttonStyle(.borderedProminent)
         }
     }
@@ -134,13 +137,14 @@ struct ChannelsView: View {
                 Text(account.name).fontWeight(.medium)
                 Text(account.platform.label).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("แก้") { model.edit(account) }
+                Button(t("Edit", "Button that opens an endpoint for editing.")) { model.edit(account) }
                     .buttonStyle(.borderless).font(.caption)
-                Button("ลบ", role: .destructive) { model.remove(account) }
+                Button(t("Delete", "Context-menu item that removes a file."),
+                       role: .destructive) { model.remove(account) }
                     .buttonStyle(.borderless).font(.caption)
             }
-            Text("รับจาก \(account.allowedChats.count) chat id"
-                 + (account.scope == .central ? " · ทั้งเวิร์กสเปซ" : " · เฉพาะโปรเจกต์"))
+            Text(localised: "accepts \(account.allowedChats.count) chat ids\(account.scope == .central ? t(" · the whole workspace", "Appended to a channel that is not scoped to one project.") : t(" · this project only", "Appended to a channel scoped to one project."))",
+                 "A channel row. Placeholder is how many chat ids it accepts.")
                 .font(.caption2).foregroundStyle(.secondary)
             // `blockers` distinguishes "not set" from "the Keychain would not
             // open" since P9.3 — sending somebody to re-enter a token they
@@ -154,12 +158,14 @@ struct ChannelsView: View {
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(account.name) · \(account.platform.label) · "
-                            + (account.isReady ? "พร้อมทำงาน" : "ยังไม่พร้อม"))
+                            + (account.isReady
+                               ? t("ready", "Channel status: it can run.")
+                               : t("not ready", "Channel status: something is missing.")))
     }
 
     private var footnote: some View {
-        Text("เปลี่ยนที่นี่แล้วมีผลตอนเปิดแอปครั้งถัดไป — ช่องทางถูกเริ่มครั้งเดียวตอนบูต "
-             + "หน้าจอที่ทำเหมือนมีผลทันทีทั้งที่บอทที่กำลังวิ่งยังถือรายการเมื่อวานอยู่ แย่กว่าการบอกตรง ๆ")
+        Text(localised: "Changes here take effect at the next launch — channels start once at boot, and a screen that pretends otherwise while the running bot still holds yesterday's list is worse than saying so",
+             "Explains why channel changes are not live.")
             .font(.caption2).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -174,42 +180,49 @@ private struct ChannelEditor: View {
         @Bindable var model = model
         let draft = $model.draft
         return VStack(alignment: .leading, spacing: 12) {
-                Text(draft.wrappedValue.name.isEmpty ? "เพิ่มบอท"
-                                                     : "แก้ \(draft.wrappedValue.name)")
+                Text(draft.wrappedValue.name.isEmpty
+                     ? t("Add a bot", "Sheet title when defining a channel account.")
+                     : t("Edit \(draft.wrappedValue.name)",
+                         "Sheet title when editing a channel account. Placeholder is its name."))
                     .font(.headline)
 
-                Picker("แพลตฟอร์ม", selection: draft.platform) {
+                Picker(t("Platform", "Picker: which chat platform this bot is on."), selection: draft.platform) {
                     ForEach(ChannelPlatform.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
 
-                LabeledContent("ชื่อ") {
-                    TextField("บอทกลุ่มวิจัย", text: draft.name)
+                LabeledContent(t("Name", "Field label: what to call this endpoint.")) {
+                    TextField(t("research group bot", "Example name for a channel account."),
+                              text: draft.name)
                 }
 
                 if !draft.wrappedValue.platform.isLocal {
-                    SecretField(name: draft.tokenVariable, title: "ชื่อโทเคนของบอท",
+                    SecretField(name: draft.tokenVariable,
+                                title: t("Name of the bot token",
+                                         "Label on the field naming the stored bot token."),
                                 placeholder: "TELEGRAM_BOT_TOKEN")
                     if draft.wrappedValue.platform == .line {
                         SecretField(name: draft.signingSecretVariable,
-                                    title: "ชื่อ channel secret (ตรวจลายเซ็น webhook)",
+                                    title: t("Name of the channel secret (checks the webhook signature)",
+                                             "Label on the field naming the stored channel secret."),
                                     placeholder: "LINE_CHANNEL_SECRET")
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
-                        LabeledContent("chat id ที่อนุญาต") {
+                        LabeledContent(t("Allowed chat ids", "Field label: which chats this bot answers.")) {
                             TextField("123456789, 987654321", text: draft.allowedChatsText)
                         }
-                        Text("คั่นด้วยจุลภาค เว้นวรรค หรือขึ้นบรรทัดใหม่ก็ได้ · "
-                             + "อ่านได้ \(draft.wrappedValue.allowedChats.count) รายการ")
+                        Text(localised: "Separate them with commas, spaces or new lines · \(draft.wrappedValue.allowedChats.count) read so far",
+                             "Help under the chat id field. Placeholder is how many were parsed.")
                             .font(.caption2).foregroundStyle(.secondary)
                     }
                 }
 
-                LabeledContent("โมเดลเฉพาะช่องทางนี้ (ว่าง = ตามตัวจัดเส้นทาง)") {
+                LabeledContent(t("Model for this channel only (empty = follow the router)",
+                                 "Field label: an optional per-channel model override.")) {
                     TextField("qwen3.6-27b", text: draft.modelOverride)
                 }
-                Toggle("เปิดใช้งาน", isOn: draft.isEnabled)
+                Toggle(t("Enabled", "Checkbox that turns a channel or server on."), isOn: draft.isEnabled)
 
                 ForEach(draft.wrappedValue.problems, id: \.self) { problem in
                     Text("• \(problem)").font(.caption).foregroundStyle(.red)
@@ -222,8 +235,10 @@ private struct ChannelEditor: View {
 
                 HStack {
                     Spacer()
-                    Button("ปิด") { model.isEditing = false }
-                    Button("บันทึก") { model.save() }
+                    Button(t("Close", "Button that dismisses the endpoint sheet without saving.")) {
+                        model.isEditing = false
+                    }
+                    Button(t("Save", "Button that stores the edited entities.")) { model.save() }
                         .buttonStyle(.borderedProminent)
                         .disabled(!draft.wrappedValue.canSave)
                 }

@@ -43,17 +43,20 @@ struct KnowledgeBaseView: View {
                 Task { await model.updateEntities(chunkID: chunk.id, to: entities) }
             }
         }
-        .confirmationDialog("ลบ “\(pendingDeletion?.title ?? "")” ออกจากคลัง?",
+        .confirmationDialog(t("Remove “\(pendingDeletion?.title ?? "")” from the knowledge base?",
+                              "Confirmation title. Placeholder is the document's title."),
                             isPresented: .init(get: { pendingDeletion != nil },
                                                set: { if !$0 { pendingDeletion = nil } }),
                             presenting: pendingDeletion) { document in
-            Button("ลบเอกสาร", role: .destructive) {
+            Button(t("Delete the document", "Confirming button that removes a document."),
+                   role: .destructive) {
                 Task { await model.delete(documentID: document.documentID) }
             }
-            Button("ยกเลิก", role: .cancel) { pendingDeletion = nil }
+            Button(t("Cancel", "Button that dismisses the delete confirmation."),
+                   role: .cancel) { pendingDeletion = nil }
         } message: { document in
-            Text("ทั้ง \(document.chunkCount) ส่วน entity และความสัมพันธ์ในกราฟของเอกสารนี้"
-                 + "จะถูกลบไปด้วย และย้อนกลับไม่ได้ — ต้องเพิ่มไฟล์ต้นฉบับเข้ามาใหม่")
+            Text(localised: "All \(document.chunkCount) passages, the entities and this document's edges in the graph go too, and it cannot be undone — the original file would have to be added again",
+                 "Says exactly what deleting a document takes with it. Placeholder is how many passages.")
         }
     }
 
@@ -67,7 +70,7 @@ struct KnowledgeBaseView: View {
                 DocumentRow(document: document,
                             classification: model.classification(of: document))
                     .contextMenu { rowMenu(for: document) }
-                    .accessibilityAction(named: "ลบเอกสารนี้") {
+                    .accessibilityAction(named: t("Delete this document", "Screen-reader action name.")) {
                         pendingDeletion = document
                     }
                     // The same corrections as the context menu, one action each:
@@ -75,9 +78,13 @@ struct KnowledgeBaseView: View {
                     // to be reachable from the rotor as well.
                     .accessibilityActions {
                         ForEach(Classifier.commonSubjects, id: \.self) { code in
-                            Button("จัดหมวดเป็น \(code)") { model.reclassify(document, to: [code]) }
+                            Button(t("Classify as \(code)",
+                                     "Menu item that files a document under a subject code. Placeholder is the code.")) {
+                                model.reclassify(document, to: [code])
+                            }
                         }
-                        Button("ทำเครื่องหมายว่ายังจัดหมวดไม่ได้") {
+                        Button(t("Mark it as not classifiable yet",
+                                 "Menu item that records that no subject code fits.")) {
                             model.reclassify(document, to: [])
                         }
                     }
@@ -85,11 +92,15 @@ struct KnowledgeBaseView: View {
             .listStyle(.sidebar)
             .overlay {
                 if model.shelvedDocuments.isEmpty, !model.documents.isEmpty {
-                    ContentUnavailableView("ไม่มีเอกสารในหมวดนี้", systemImage: "tray",
-                                           description: Text("กด “ทั้งหมด” เพื่อกลับไปดูทั้งคลัง"))
+                    ContentUnavailableView(t("No document in this category", "Empty state while a filter is on."),
+                                           systemImage: "tray",
+                                           description: Text(localised: "Press “All” to see the whole base again",
+                                                             "Empty-state instruction while a filter is on."))
                 } else if model.documents.isEmpty {
-                    ContentUnavailableView("ยังไม่มีเอกสารในคลัง", systemImage: "books.vertical",
-                                           description: Text("กด “เพิ่มเอกสาร” เพื่ออัปโหลด PDF, รูปสแกน, Word หรือข้อความ"))
+                    ContentUnavailableView(t("No documents in the knowledge base yet", "Empty state on the knowledge screen."),
+                                           systemImage: "books.vertical",
+                                           description: Text(localised: "Press “Add document” to upload a PDF, a scan, a Word file or plain text",
+                                                             "Empty-state instruction on the knowledge screen."))
                 }
             }
 
@@ -108,19 +119,23 @@ struct KnowledgeBaseView: View {
     private func rowMenu(for document: DocumentSummary) -> some View {
         // §11.9: a class the system guessed has to be correctable, and this is
         // where somebody notices it is wrong — looking at the shelf.
-        Menu("จัดหมวดใหม่") {
+        Menu(t("Reclassify", "Context menu for changing a document's subject code.")) {
             ForEach(Classifier.commonSubjects, id: \.self) { code in
                 Button(code) { model.reclassify(document, to: [code]) }
             }
             Divider()
-            Button("ยังจัดหมวดไม่ได้") { model.reclassify(document, to: []) }
+            Button(t("Not classifiable yet", "Menu item that clears a document's subject code.")) {
+                model.reclassify(document, to: [])
+            }
         }
-        Button("ลบเอกสารนี้…", role: .destructive) { pendingDeletion = document }
+        Button(t("Delete this document…", "Context-menu item that starts removing a document."),
+               role: .destructive) { pendingDeletion = document }
     }
 
     private var toolbar: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Picker("ขอบเขต", selection: Binding(
+            Picker(t("Scope", "Picker: which slice of the knowledge base is showing."),
+                   selection: Binding(
                 get: { ScopeChoice(model.scope) },
                 set: { choice in
                     // A project scope needs a project. Before P10.1 this read
@@ -136,44 +151,52 @@ struct KnowledgeBaseView: View {
             }
             .pickerStyle(.segmented)
             // A segmented picker still lays out its label, and the sidebar has
-            // no width to give it: "ขอบเขต" was being squeezed into a 20pt
+            // no width to give it: "Scope" was being squeezed into a 20pt
             // column and broken across three lines mid-word. The accessibility
             // label below is what carries the name.
             .labelsHidden()
-            .accessibilityLabel("เลือกขอบเขตของคลังความรู้")
+            .accessibilityLabel(t("Choose the knowledge base scope", "Screen-reader label."))
 
             HStack {
                 Button {
                     chooseFilesToIngest()
                 } label: {
-                    Label("เพิ่มเอกสาร", systemImage: "plus")
+                    Label(t("Add document", "Button that ingests a file into the knowledge base."),
+                          systemImage: "plus")
                 }
-                .accessibilityLabel("เพิ่มเอกสารเข้าคลัง")
+                .accessibilityLabel(t("Add a document to the knowledge base", "Screen-reader label."))
 
-                Picker("ชนิดเอกสาร", selection: $ingestKind) {
+                Picker(t("Document kind", "Picker: what kind of document is being added."),
+                       selection: $ingestKind) {
                     ForEach(DocumentKind.allCases, id: \.self) { kind in
                         Text(kind.label).tag(kind)
                     }
                 }
                 .labelsHidden()
                 .fixedSize()
-                .accessibilityLabel("ชนิดของเอกสารที่กำลังจะเพิ่ม")
-                .accessibilityHint("โครงร่างวิจัยคือชนิดที่หน้าวิเคราะห์ใช้ตั้งต้นแผนการวิเคราะห์")
+                .accessibilityLabel(t("Kind of the document being added", "Screen-reader label."))
+                .accessibilityHint(t("a research protocol is the kind the analysis screen builds a plan from",
+                                     "Screen-reader hint explaining why the kind matters."))
 
                 Spacer()
 
                 Menu {
-                    Button("ส่งออกคลัง…") { exportArchive() }
-                    Button("นำเข้าคลัง…") { importArchive() }
+                    Button(t("Export the base…", "Menu item that writes the knowledge base to a file.")) {
+                        exportArchive()
+                    }
+                    Button(t("Import a base…", "Menu item that reads a knowledge base from a file.")) {
+                        importArchive()
+                    }
                 } label: {
-                    Label("จัดการ", systemImage: "ellipsis.circle")
+                    Label(t("Manage", "Overflow menu on the knowledge screen."), systemImage: "ellipsis.circle")
                 }
-                .accessibilityLabel("ส่งออกหรือนำเข้าคลังความรู้")
+                .accessibilityLabel(t("Export or import the knowledge base", "Screen-reader label."))
                 .menuStyle(.borderlessButton)
                 .fixedSize()
             }
 
-            Text("\(model.documentCount) เอกสาร · \(model.chunkCount) ส่วน")
+            Text(localised: "\(model.documentCount) documents · \(model.chunkCount) passages",
+                 "Size of the knowledge base. Placeholders: how many documents and how many passages.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -186,11 +209,12 @@ struct KnowledgeBaseView: View {
     private var searchPane: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                TextField("ค้นในคลังความรู้", text: $model.query)
+                TextField(t("Search the knowledge base", "Placeholder in the knowledge search field."),
+                          text: $model.query)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { Task { await model.search() } }
-                    .accessibilityLabel("คำค้น")
-                Button("ค้น") { Task { await model.search() } }
+                    .accessibilityLabel(t("Search term", "Screen-reader label for the knowledge search field."))
+                Button(t("Search", "Button that runs the knowledge search.")) { Task { await model.search() } }
                     .keyboardShortcut(.return, modifiers: [])
             }
             .padding(Space.box)
@@ -212,8 +236,10 @@ struct KnowledgeBaseView: View {
             }
             .overlay {
                 if model.results.isEmpty {
-                    ContentUnavailableView("ยังไม่มีผลค้นหา", systemImage: "magnifyingglass",
-                                           description: Text("พิมพ์คำค้นแล้วกด Enter"))
+                    ContentUnavailableView(t("No results yet", "Empty state in the knowledge search pane."),
+                                           systemImage: "magnifyingglass",
+                                           description: Text(localised: "Type a search term and press Enter",
+                                                             "Empty-state instruction in the search pane."))
                 }
             }
         }
@@ -228,14 +254,15 @@ struct KnowledgeBaseView: View {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
-        panel.message = "เลือกเอกสารที่จะเพิ่มเข้าคลัง"
+        panel.message = t("Choose the documents to add to the knowledge base",
+                          "Message in the file picker that ingests documents.")
         guard panel.runModal() == .OK else { return }
         let urls = panel.urls
         // T3 by default, editable afterwards — §11.3 says an upload must not
         // skip the credibility question, not that the user answers it twice.
         // The kind is asked here rather than inferred later (§12.4): the
         // person choosing the file is the only one who knows whether it is a
-        // proposal, and `อื่น ๆ` is a real answer.
+        // proposal, and `other` is a real answer.
         Task { await model.ingest(urls, tier: .t3, kind: ingestKind) }
     }
 
@@ -268,10 +295,13 @@ private struct DocumentRow: View {
             HStack(spacing: 6) {
                 TierBadge(tier: document.tier, origin: document.origin)
                 ShelfBadge(classification: classification)
-                Text("\(document.chunkCount) ส่วน")
+                Text(localised: "\(document.chunkCount) passages",
+                     "How many passages a document was split into. Placeholder is a count.")
                 if !document.hasVectors {
-                    Label("ไม่มี vector", systemImage: "exclamationmark.circle")
-                        .help("เอกสารนี้ถูก index ตอนที่โมเดล embedding ใช้ไม่ได้ — ค้นได้เฉพาะแบบข้อความ")
+                    Label(t("no vectors", "Marker on a document indexed without embeddings."),
+                          systemImage: "exclamationmark.circle")
+                        .help(t("This document was indexed while the embedding model was unavailable — only text search reaches it",
+                                "Tooltip explaining what a missing vector index costs."))
                 }
             }
             .font(.caption)
@@ -302,18 +332,21 @@ private struct ResultRow: View {
             HStack(spacing: 8) {
                 TierBadge(tier: result.tier, origin: result.chunk.provenance.origin)
                 Text(result.provenance.title).lineLimit(1)
-                if let page = result.provenance.page { Text("น. \(page)") }
+                if let page = result.provenance.page {
+                    Text(localised: "p. \(page)", "Page number of a passage. Placeholder is the page.")
+                }
                 if result.provenance.section == "OCR" {
                     Label("OCR", systemImage: "text.viewfinder")
-                        .help("ข้อความนี้มาจากการอ่านภาพ อาจมีความคลาดเคลื่อน")
+                        .help(t("This text came from reading an image and may contain errors",
+                                "Tooltip on a passage recovered by OCR."))
                 }
                 Spacer()
                 // Why this row is here at all — a ranking nobody can explain is
                 // a ranking nobody trusts.
                 Text(rankExplanation).foregroundStyle(.tertiary)
-                Button("แก้ entity", action: edit)
+                Button(t("Edit entities", "Button that opens the entity editor for a passage."), action: edit)
                     .buttonStyle(.link)
-                    .accessibilityLabel("แก้ไข entity ของส่วนนี้")
+                    .accessibilityLabel(t("Edit the entities of this passage", "Screen-reader label."))
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -323,9 +356,13 @@ private struct ResultRow: View {
 
     private var rankExplanation: String {
         switch (result.lexicalRank, result.semanticRank) {
-        case (let lexical?, let semantic?): "ข้อความ #\(lexical) · ความหมาย #\(semantic)"
-        case (let lexical?, nil): "ข้อความ #\(lexical)"
-        case (nil, let semantic?): "ความหมาย #\(semantic)"
+        case (let lexical?, let semantic?):
+            t("text #\(lexical) · meaning #\(semantic)",
+              "Where a result ranked in each kind of search. Placeholders: its text rank and its semantic rank.")
+        case (let lexical?, nil):
+            t("text #\(lexical)", "Where a result ranked in text search. Placeholder is its rank.")
+        case (nil, let semantic?):
+            t("meaning #\(semantic)", "Where a result ranked in semantic search. Placeholder is its rank.")
         default: ""
         }
     }
@@ -335,7 +372,7 @@ private struct TierBadge: View {
     let tier: SourceTier?
     /// Needed only to say *why* there is no tier. Two origins legitimately
     /// have none and they are not the same thing: something the system wrote,
-    /// and an interview. Saying "ระบบเขียนเอง" over a participant's words —
+    /// and an interview. Saying "written by the system" over a participant's words —
     /// which is what this did until it was driven — describes the wrong thing
     /// to somebody deciding how much to trust it.
     var origin: Origin?
@@ -351,16 +388,21 @@ private struct TierBadge: View {
     }
 
     private var label: String {
-        if let tier { return "ระดับความน่าเชื่อถือ \(tier.rawValue.uppercased())" }
+        if let tier {
+            return t("trust tier \(tier.rawValue.uppercased())",
+                     "Screen-reader label for a source's trust tier. Placeholder is the tier code.")
+        }
         switch origin {
         case .fieldwork:
             // Not "low credibility". Primary data is not on that scale at all
             // (§11.3), and the scale is about published sources.
-            return "ข้อมูลปฐมภูมิของโครงการนี้ — ไม่ได้อยู่บนสเกลความน่าเชื่อถือของแหล่งภายนอก"
+            return t("primary data from this project — not on the external credibility scale at all",
+                     "Explains why fieldwork has no trust tier.")
         case .userAuthored:
-            return "ระบบเขียนเอง ไม่มีระดับความน่าเชื่อถือภายนอก"
+            return t("written by the system, with no external trust tier",
+                     "Explains why generated text has no trust tier.")
         default:
-            return "ไม่มีระดับความน่าเชื่อถือภายนอก"
+            return t("no external trust tier", "Screen-reader label when a source has no tier.")
         }
     }
 
@@ -393,7 +435,8 @@ private struct EntityEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("แก้ entity ของส่วนนี้").font(.headline)
+            Text(localised: "Edit the entities of this passage", "Title of the entity editor sheet.")
+                .font(.headline)
             Text(chunk.text)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -403,16 +446,17 @@ private struct EntityEditor: View {
                 .font(.body)
                 .frame(minHeight: 140)
                 .border(.separator)
-                .accessibilityLabel("รายชื่อ entity บรรทัดละหนึ่งรายการ")
+                .accessibilityLabel(t("Entity list, one per line", "Screen-reader label for the entity editor."))
 
-            Text("บรรทัดละหนึ่งรายการ — entity ถูก index ไปพร้อมเนื้อความ แก้แล้วผลค้นหาจะเปลี่ยนตาม")
+            Text(localised: "One per line — entities are indexed alongside the text, so editing them changes what search finds",
+                 "Explains the consequence of editing entities.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             HStack {
                 Spacer()
-                Button("ยกเลิก") { dismiss() }
-                Button("บันทึก") {
+                Button(t("Cancel", "Button that closes the entity editor without saving.")) { dismiss() }
+                Button(t("Save", "Button that stores the edited entities.")) {
                     save(text.components(separatedBy: .newlines))
                     dismiss()
                 }
@@ -429,7 +473,7 @@ private struct EntityEditor: View {
 /// Shared with the graph tab: both draw one library and both have to say which
 /// one. `private` while there was a single caller, `internal` now that there
 /// are two — a second copy would drift and the two tabs would disagree about
-/// what "โปรเจกต์" means.
+/// what "project" means.
 enum ScopeChoice: String, CaseIterable, Identifiable {
     case central, project, policy
 
@@ -448,7 +492,7 @@ enum ScopeChoice: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// `nil` when the choice cannot be made yet: "โปรเจกต์" with no project
+    /// `nil` when the choice cannot be made yet: "project" with no project
     /// selected is not a scope, and inventing an id for it is exactly the bug
     /// this replaced.
     func scope(of project: ProjectID?) -> Scope? {
@@ -461,9 +505,9 @@ enum ScopeChoice: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .central: "ส่วนกลาง"
-        case .project: "โปรเจกต์"
-        case .policy: "นโยบาย"
+        case .central: t("shared", "Notebook scope: visible everywhere.")
+        case .project: t("project", "Knowledge scope: this project only.")
+        case .policy: t("policy", "Notebook scope: belongs to policy work.")
         }
     }
 }
@@ -482,7 +526,8 @@ private struct ShelfBar: View {
         let shelf = model.shelf
         ScrollView(.horizontal) {
             HStack(spacing: 6) {
-                chip(code: nil, label: "ทั้งหมด", count: model.documents.count)
+                chip(code: nil, label: t("All", "Shelf filter that clears the subject filter."),
+                     count: model.documents.count)
                 ForEach(shelf.byCode, id: \.code) { entry in
                     chip(code: entry.code, label: "\(entry.code) \(entry.label)",
                          count: entry.count)
@@ -492,7 +537,8 @@ private struct ShelfBar: View {
                     // be filed under" is the question the shelf exists to make
                     // askable, and sweeping these into A would answer it wrongly.
                     chip(code: KnowledgeViewModel.unclassifiedFilter,
-                         label: "ยังจัดหมวดไม่ได้", count: shelf.unclassified)
+                         label: t("Not classifiable yet", "Shelf filter for documents with no subject code."),
+                         count: shelf.unclassified)
                 }
             }
             .padding(.horizontal, 10)
@@ -512,8 +558,8 @@ private struct ShelfBar: View {
         .padding(.horizontal, 8).padding(.vertical, 3)
         .background(isSelected ? AnyShapeStyle(.selection) : AnyShapeStyle(.quaternary),
                     in: Capsule())
-        .accessibilityLabel("\(label) — \(count) เอกสาร"
-                            + (isSelected ? " · กำลังกรองด้วยหมวดนี้" : " · กดเพื่อกรอง"))
+        .accessibilityLabel(t("\(label) — \(count) documents\(isSelected ? t(" · filtering by this category", "Appended to a shelf chip that is active.") : t(" · press to filter", "Appended to a shelf chip that is not active."))",
+                              "Screen-reader label for a shelf chip. Placeholders: the category, how many documents, and whether it is the active filter."))
     }
 }
 
@@ -529,15 +575,16 @@ private struct ShelfBadge: View {
                 // §11.9: a guess that cannot be told from a decision is a guess
                 // nobody will ever correct.
                 .help(classification.assignedBy == .user
-                      ? "จัดหมวดโดยผู้ใช้"
-                      : "ระบบเดา — \(classification.reason)")
+                      ? t("classified by the user", "How a document got its subject code.")
+                      : t("guessed by the system — \(classification.reason)",
+                          "How a document got its subject code. Placeholder is the reason given."))
                 .accessibilityLabel(
-                    "หมวด \(classification.subjects.map(\.code).joined(separator: " และ "))"
-                    + (classification.assignedBy == .user ? " · ผู้ใช้จัดเอง" : " · ระบบเดา"))
+                    t("category \(classification.subjects.map(\.code).joined(separator: " and "))\(classification.assignedBy == .user ? t(" · classified by the user", "Appended when a person set the category.") : t(" · guessed by the system", "Appended when the system set the category."))",
+                      "Screen-reader label for a document's category. Placeholder is the list of codes."))
         } else {
-            Text("ยังจัดหมวดไม่ได้")
+            Text(localised: "Not classifiable yet", "Shown on a document with no subject code.")
                 .foregroundStyle(.tertiary)
-                .accessibilityLabel("ยังจัดหมวดไม่ได้")
+                .accessibilityLabel(t("Not classifiable yet", "Shelf filter for documents with no subject code."))
         }
     }
 }

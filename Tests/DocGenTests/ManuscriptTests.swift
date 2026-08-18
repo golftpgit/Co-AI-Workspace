@@ -59,7 +59,7 @@ struct ResultBindingTests {
             return
         }
         #expect(failure == .cellNeverRan(meanAge))
-        #expect(failure.text.contains("ยังไม่เคยรัน"))
+        #expect(failure.text.contains("has never been run"))
     }
 
     @Test("a run whose statement has since been edited does not resolve")
@@ -72,7 +72,7 @@ struct ResultBindingTests {
             Issue.record("a stale run must not resolve")
             return
         }
-        #expect(failure.text.contains("ถูกแก้หลังจากนั้น"))
+        #expect(failure.text.contains("has been edited since"))
         // And it resolves again once the run matches what the cell now holds.
         let rerun = run(source: edited, rows: [["35.1", "7.9"]])
         let rebound = try? BoundResult.bind(meanAge, to: [rerun],
@@ -100,7 +100,7 @@ struct ResultBindingTests {
             Issue.record("expected a failure")
             return
         }
-        #expect(missingRow.text.contains("มี 1 แถว"))
+        #expect(missingRow.text.contains("but the result has 1"))
 
         guard case .failure(let null) = BoundResult.bind(
             meanAge, to: [run(rows: [[nil, "8.2"]])]) else {

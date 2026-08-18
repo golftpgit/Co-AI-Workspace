@@ -55,11 +55,11 @@ struct ProjectsView: View {
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .overview: "ภาพรวม"
-            case .plan: "แผนงาน + ลำดับ"
-            case .board: "กระดานงาน"
-            case .team: "ทีม & RACI"
-            case .closing: "ประโยชน์ & ปิดงาน"
+            case .overview: t("Overview", "Plan sub-tab: the project brief, scope and standards.")
+            case .plan: t("Plan + sequence", "Plan sub-tab: the work breakdown and what depends on what.")
+            case .board: t("Board", "Plan sub-tab: work packages as a kanban board.")
+            case .team: t("Team & RACI", "Plan sub-tab: who is accountable for each package.")
+            case .closing: t("Benefits & closing", "Plan sub-tab: measured benefits and the conditions for closing.")
             }
         }
     }
@@ -124,7 +124,7 @@ struct ProjectsView: View {
 
     private var list: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("พื้นที่ทำงาน")
+            Text(localised: "Workspaces", "Sidebar heading over General and the project list.")
                 .font(.headline)
                 .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 6)
 
@@ -133,14 +133,16 @@ struct ProjectsView: View {
                     Button {
                         Task { await model.focus(.general) }
                     } label: {
-                        Label("General — คุยทั่วไป", systemImage: "bubble.left")
+                        Label(t("General — everyday conversation",
+                                "Sidebar row: work outside any project. 'General' is that workspace's name."),
+                              systemImage: "bubble.left")
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .buttonStyle(.plain)
                     .fontWeight(model.selection == .general ? .semibold : .regular)
                 }
 
-                Section("โปรเจกต์") {
+                Section(t("Projects", "Sidebar section over the list of projects.")) {
                     ForEach(model.projects) { project in
                         Button {
                             Task { await model.open(project) }
@@ -161,28 +163,29 @@ struct ProjectsView: View {
                         }
                         .buttonStyle(.plain)
                         .fontWeight(model.selection == .project(project.id) ? .semibold : .regular)
-                        .accessibilityLabel("เปิดโปรเจกต์ \(project.name) ขั้น\(project.stage.label)")
+                        .accessibilityLabel(t("Open project \(project.name), stage \(project.stage.label)",
+                                              "Screen-reader label for a project row. Placeholders: its name and its stage."))
                     }
                 }
             }
 
             Divider()
             VStack(alignment: .leading, spacing: 6) {
-                TextField("ชื่อโปรเจกต์ใหม่", text: $newName)
+                TextField(t("New project name", "Text field for creating a project."), text: $newName)
                     // A placeholder is not a label: it disappears the moment
                     // somebody types, and VoiceOver announced this as an
                     // unnamed text field (measured with the driver, E.30).
-                    .accessibilityLabel("ชื่อโปรเจกต์ใหม่")
+                    .accessibilityLabel(t("New project name", "Screen-reader label for the new-project name field."))
                     .textFieldStyle(.roundedBorder)
                 HStack {
-                    Picker("ชนิด", selection: $newType) {
+                    Picker(t("Type", "Picker: which kind of project this is."), selection: $newType) {
                         ForEach(types) { type in
                             Text(type.label).tag(String?.some(type.type))
                         }
                     }
                     .labelsHidden()
-                    .accessibilityLabel("ชนิดของโปรเจกต์ใหม่")
-                    Button("สร้าง") {
+                    .accessibilityLabel(t("Type of the new project", "Screen-reader label for the project type picker."))
+                    Button(t("Create", "Button that creates the project.")) {
                         guard let chosen = types.first(where: { $0.type == newType })
                             ?? types.first else { return }
                         let name = newName
@@ -200,7 +203,8 @@ struct ProjectsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if types.isEmpty {
-                    Text("ยังโหลดชนิดโปรเจกต์ไม่ได้ — ดูข้อความที่ ระบบ → สถานะระบบ")
+                    Text(localised: "Project types could not be loaded — see System → System status for the message",
+                         "Shown when the project-type files failed to load, pointing at where the reason is.")
                         .font(.caption2).foregroundStyle(.orange)
                 }
             }
@@ -238,12 +242,11 @@ struct ProjectsView: View {
     private var generalDetail: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("General").font(.title3).bold()
-            Text("""
-                 คุยและสั่งงานสั้น ๆ ได้ทันที ไม่มีทีม ไม่มีบันทึกงาน ไม่มีขั้นของโครงการ \
-                 ความรู้ที่เก็บระหว่างคุยจะอยู่ในคลังส่วนกลาง
-                 """)
+            Text(localised: "Ask and give short instructions straight away. No team, no work record, no project stages. Anything learned along the way goes to the shared knowledge base.",
+                 "Explains what the General workspace is, on the screen that lists workspaces.")
                 .foregroundStyle(.secondary)
-            Text("งานที่มีเป้าหมายและวันจบ ให้สร้างเป็นโปรเจกต์ — เครื่องมือที่เปลี่ยนข้อมูลจะเดินตามขั้นของโครงการ")
+            Text(localised: "Work with a goal and an end date belongs in a project — there, tools that change data follow the project's stage",
+                 "Says when to create a project instead of using General.")
                 .font(.callout).foregroundStyle(.secondary)
         }
     }
@@ -253,7 +256,8 @@ struct ProjectsView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(project.name).font(.title3).bold()
             HStack(spacing: 8) {
-                Text("ขั้น\(project.stage.label)")
+                Text(localised: "Stage \(project.stage.label)",
+                     "Shows which stage a project is in. Placeholder is the stage name.")
                 if let closure = project.closure {
                     Text("· \(closure.label)").foregroundStyle(.secondary)
                 }
@@ -270,26 +274,27 @@ struct ProjectsView: View {
         if let gate = model.gate {
             gateBox(gate)
         } else {
-            Text("โครงการปิดแล้ว — อ่านได้ แต่เครื่องมือที่เปลี่ยนข้อมูลใช้ไม่ได้แล้ว")
+            Text(localised: "The project is closed — readable, but tools that change data no longer run",
+                 "Shown in place of the gate box for a closed project.")
                 .font(.callout).foregroundStyle(.secondary)
         }
 
         if let pending = model.pendingEdit { changeRequestBar(pending) }
 
-        Picker("ส่วนของแผน", selection: $tab) {
+        Picker(t("Section of the plan", "Picker over the Plan area's sub-tabs."), selection: $tab) {
             ForEach(PlanTab.allCases) { Text($0.label).tag($0) }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
-        .accessibilityLabel("เลือกส่วนของแผน")
+        .accessibilityLabel(t("Choose a section of the plan", "Screen-reader label for the plan sub-tab picker."))
 
         if tab == .overview {
-        GroupBox("เหตุผลที่ทำ") {
+        GroupBox(t("Why this is being done", "Box heading over the project brief.")) {
             VStack(alignment: .leading, spacing: 4) {
                 TextEditor(text: $draft.brief)
                     .frame(minHeight: 60)
                     .font(.body)
-                    .accessibilityLabel("เหตุผลที่ทำโครงการนี้")
+                    .accessibilityLabel(t("Why this project is being done", "Screen-reader label for the brief editor."))
                 savedHint
             }
         }
@@ -299,34 +304,40 @@ struct ProjectsView: View {
         // enforced, the type was there, and the screen had no door. That is
         // the fifth time this project has shipped something unreachable, and
         // the first time driving the screen caught it the same day.
-        GroupBox("หมวกที่คนถือ") {
+        GroupBox(t("Seats a person holds", "Box heading over the roles that can never be given to an agent.")) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text("ผู้รับผิดชอบทางธุรกิจ (Executive)")
+                    Text(localised: "Business owner (Executive)",
+                         "Row label. 'Executive' is the role name from the standard and stays as is.")
                         .font(.callout).frame(width: 220, alignment: .leading)
-                    TextField("ชื่อคน", text: $draft.executive)
+                    TextField(t("Person's name", "Text field for the business owner's name."), text: $draft.executive)
                         .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("ชื่อผู้รับผิดชอบทางธุรกิจ")
+                        .accessibilityLabel(t("Name of the business owner", "Screen-reader label."))
                 }
                 HStack {
-                    Text("ตัวแทนผู้ใช้ (Senior User)")
+                    Text(localised: "User representative (Senior User)",
+                         "Row label. 'Senior User' is the role name from the standard and stays as is.")
                         .font(.callout).frame(width: 220, alignment: .leading)
-                    TextField("ชื่อคน (ไม่บังคับ)", text: $draft.seniorUser)
+                    TextField(t("Person's name (optional)", "Text field for the user representative's name."),
+                              text: $draft.seniorUser)
                         .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("ชื่อตัวแทนผู้ใช้")
+                        .accessibilityLabel(t("Name of the user representative", "Screen-reader label."))
                 }
-                Text("ที่นั่งนี้เป็นของคนเสมอ — ไม่มีทางมอบให้ agent ได้ แม้จะอยากก็ตาม")
+                Text(localised: "These seats always belong to a person — there is no way to hand one to an agent, however much you might want to",
+                     "Note under the human-only roles.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
 
-        GroupBox("ขอบเขต") {
+        GroupBox(t("Scope", "Box heading over what the project will and will not do.")) {
             VStack(alignment: .leading, spacing: 10) {
-                lineEditor("ทำ", text: $draft.inScope)
-                lineEditor("ไม่ทำ", text: $draft.outOfScope)
-                lineEditor("เกณฑ์รับงาน", text: $draft.acceptance)
-                Text("บรรทัดละหนึ่งข้อ · ช่อง “ไม่ทำ” ว่างไม่ได้ — ขอบเขตที่ไม่เคยบอกว่าไม่ทำอะไร คือขอบเขตที่บานทุกครั้ง")
+                lineEditor(t("In", "Editor label: what the project will do."), text: $draft.inScope)
+                lineEditor(t("Out", "Editor label: what the project will not do."), text: $draft.outOfScope)
+                lineEditor(t("Acceptance criteria", "Editor label: what makes the work acceptable."),
+                           text: $draft.acceptance)
+                Text(localised: "One per line · “Out” may not be empty — a scope that never says what it will not do is a scope that grows every time",
+                     "Note under the scope editors, explaining why the out-of-scope list is required.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -369,7 +380,7 @@ struct ProjectsView: View {
     /// later; being able to produce one from real rows is the point.
     @ViewBuilder
     private func reportsBox() -> some View {
-        GroupBox("รายงาน") {
+        GroupBox(t("Reports", "Box heading over progress reports.")) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     ForEach(ReportKind.allCases, id: \.self) { kind in
@@ -380,21 +391,24 @@ struct ProjectsView: View {
                     // cycle never issues anything itself: it says one is due,
                     // and the button above is what issues it, so nothing can
                     // arrive by a path that skips what manual issuing checks.
-                    Picker("ออกเอง", selection: $model.reportCycle) {
+                    Picker(t("Issue automatically", "Picker: how often a progress report is issued on its own."),
+                           selection: $model.reportCycle) {
                         ForEach(ReportSchedule.Cycle.allCases, id: \.self) {
                             Text($0.label).tag($0)
                         }
                     }
                     .labelsHidden().fixedSize()
-                    .accessibilityLabel("รอบการออกรายงานความคืบหน้าอัตโนมัติ")
+                    .accessibilityLabel(t("How often progress reports are issued automatically",
+                                          "Screen-reader label for the report schedule picker."))
                 }
                 .controlSize(.small)
 
                 if let due = model.reportDue {
                     HStack(alignment: .firstTextBaseline, spacing: Space.row) {
-                        Label("ถึงรอบออกรายงานความคืบหน้าแล้ว", systemImage: "clock.badge")
+                        Label(t("A progress report is due", "Shown when the schedule says a report should be issued."),
+                              systemImage: "clock.badge")
                             .font(.callout).foregroundStyle(.orange)
-                        Button("ออกตอนนี้") { issue(.highlight) }
+                        Button(t("Issue now", "Button that writes the due progress report.")) { issue(.highlight) }
                             .buttonStyle(.borderedProminent).controlSize(.small)
                     }
                     if let gap = due.gapNote {
@@ -407,7 +421,8 @@ struct ProjectsView: View {
                 }
 
                 if model.reports.isEmpty {
-                    Text("ยังไม่มีรายงาน — ทุกบรรทัดในรายงานประกอบจากแผนงาน · ทะเบียน · span · baseline · ทะเบียนประโยชน์ ไม่ใช่ข้อความที่โมเดลแต่ง")
+                    Text(localised: "No reports yet — every line of a report is assembled from the plan, the register, spans, the baseline and the benefit ledger. None of it is text a model wrote.",
+                         "Shown when no report has been issued, and states where report content comes from.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 ForEach(model.reports) { report in
@@ -417,8 +432,8 @@ struct ProjectsView: View {
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } label: {
-                        Text("\(report.kind.label) · ขั้น\(report.stageAtIssue.label) · "
-                             + report.generatedAt.formatted(date: .abbreviated, time: .shortened))
+                        Text(localised: "\(report.kind.label) · stage \(report.stageAtIssue.label) · \(report.generatedAt.formatted(date: .abbreviated, time: .shortened))",
+                             "A report row. Placeholders: the kind of report, the stage it was issued in, and when.")
                             .font(.callout)
                     }
                 }
@@ -443,10 +458,11 @@ struct ProjectsView: View {
     /// project to record what it achieved gets the review skipped.
     @ViewBuilder
     private func benefitsBox() -> some View {
-        GroupBox("ประโยชน์ที่จะได้ (benefit)") {
+        GroupBox(t("Benefits", "Box heading over what the project is meant to achieve, measured.")) {
             VStack(alignment: .leading, spacing: 8) {
                 if model.benefits.isEmpty {
-                    Text("ยังไม่มีรายการ — โครงการที่ส่งมอบครบทุกใบงานแล้วยังไร้ประโยชน์ได้ ถ้าไม่มีใครเขียนไว้ว่าอยากได้อะไร")
+                    Text(localised: "Nothing listed yet — a project can deliver every work package and still achieve nothing, if nobody wrote down what was wanted",
+                         "Shown when the benefit ledger is empty.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 ForEach(model.benefits.benefits) { benefit in
@@ -455,36 +471,44 @@ struct ProjectsView: View {
                             Text(benefit.title).font(.callout)
                             Spacer()
                             if let achieved = benefit.achievement {
-                                Text("\(Int(achieved * 100))% ของเป้า")
+                                Text(localised: "\(Int(achieved * 100))% of target",
+                                     "How much of a benefit's target has been reached. Placeholder is a percentage.")
                                     .font(.system(.caption, design: .monospaced))
                                     .foregroundStyle(achieved >= 1 ? Color.green : Color.orange)
                             } else {
-                                Text(benefit.isDue() ? "ถึงกำหนดวัดแล้ว" : "ยังไม่ถึงกำหนดวัด")
+                                Text(benefit.isDue()
+                                     ? t("due to be measured", "Benefit status: the review date has arrived.")
+                                     : t("not due to be measured yet", "Benefit status: the review date is still ahead."))
                                     .font(.caption)
                                     .foregroundStyle(benefit.isDue() ? Color.orange : Color.secondary)
                             }
-                            Button("ลบ") { Task { await model.removeBenefit(benefit) } }
+                            Button(t("Delete", "Button that removes a benefit from the ledger.")) {
+                                Task { await model.removeBenefit(benefit) }
+                            }
                                 .controlSize(.small)
                         }
-                        Text("\(benefit.measure) · จาก \(format(benefit.baselineValue)) → \(format(benefit.target))"
-                             + " · วัดโดย \(benefit.owner.label)"
-                             + " · กำหนด \(benefit.reviewAt.formatted(date: .abbreviated, time: .omitted))")
+                        Text(localised: "\(benefit.measure) · from \(format(benefit.baselineValue)) → \(format(benefit.target)) · measured by \(benefit.owner.label) · due \(benefit.reviewAt.formatted(date: .abbreviated, time: .omitted))",
+                             "A benefit's definition. Placeholders: what is measured, the baseline value, the target, who measures it, and when it is due.")
                             .font(.caption2).foregroundStyle(.secondary)
                         if let result = benefit.result {
-                            Text("วัดได้ \(format(result.value)) โดย \(result.measuredBy)"
-                                 + (result.note.isEmpty ? "" : " — \(result.note)"))
+                            Text(localised: "measured \(format(result.value)) by \(result.measuredBy)\(result.note.isEmpty ? "" : " — \(result.note)")",
+                                 "A recorded benefit measurement. Placeholders: the value, who measured it, and an optional note.")
                                 .font(.caption).foregroundStyle(.secondary)
                         } else {
                             HStack {
-                                TextField("ค่าที่วัดได้", text: Binding(
+                                TextField(t("Measured value", "Text field for recording what a benefit measured."),
+                                          text: Binding(
                                     get: { measurements[benefit.id] ?? "" },
                                     set: { measurements[benefit.id] = $0 }))
                                     .textFieldStyle(.roundedBorder)
                                     .frame(maxWidth: 120)
-                                TextField("ชื่อคนที่วัด", text: $decider)
+                                TextField(t("Name of who measured it", "Text field beside a benefit measurement."),
+                                          text: $decider)
                                     .textFieldStyle(.roundedBorder)
                                     .frame(maxWidth: 160)
-                                Button("บันทึกผล") { recordMeasurement(benefit) }
+                                Button(t("Record", "Button that saves a benefit measurement.")) {
+                                    recordMeasurement(benefit)
+                                }
                                     .disabled(Double(measurements[benefit.id] ?? "") == nil
                                               || decider.trimmingCharacters(in: .whitespaces).isEmpty)
                             }
@@ -496,25 +520,31 @@ struct ProjectsView: View {
                 Divider()
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        TextField("ประโยชน์ที่อยากได้", text: $benefitDraft.title)
+                        TextField(t("Benefit wanted", "Text field naming a new benefit."), text: $benefitDraft.title)
                             .textFieldStyle(.roundedBorder)
-                        TextField("ตัววัด + หน่วย", text: $benefitDraft.measure)
+                        TextField(t("Measure + unit", "Text field: what is measured and in what unit."),
+                                  text: $benefitDraft.measure)
                             .textFieldStyle(.roundedBorder)
                     }
                     HStack {
-                        TextField("ค่าฐานวันนี้", text: $benefitDraft.baseline)
+                        TextField(t("Baseline today", "Text field: the value before the project."),
+                                  text: $benefitDraft.baseline)
                             .textFieldStyle(.roundedBorder).frame(maxWidth: 110)
-                        TextField("ค่าเป้าหมาย", text: $benefitDraft.target)
+                        TextField(t("Target value", "Text field: the value being aimed at."),
+                                  text: $benefitDraft.target)
                             .textFieldStyle(.roundedBorder).frame(maxWidth: 110)
-                        DatePicker("วัดเมื่อ", selection: $benefitDraft.reviewAt,
+                        DatePicker(t("Measure on", "Date picker: when the benefit is reviewed."),
+                                   selection: $benefitDraft.reviewAt,
                                    displayedComponents: .date)
                             .labelsHidden()
-                        TextField("ใครวัด", text: $benefitDraft.owner)
+                        TextField(t("Who measures it", "Text field: who is responsible for the measurement."),
+                                  text: $benefitDraft.owner)
                             .textFieldStyle(.roundedBorder).frame(maxWidth: 130)
-                        Button("เพิ่ม") { addBenefit() }
+                        Button(t("Add", "Button that adds the benefit to the ledger.")) { addBenefit() }
                             .disabled(!benefitDraft.isReady)
                     }
-                    Text("ค่าฐานบังคับ เพราะ “ดีขึ้น” ที่ไม่มีจุดเริ่มต้น ตรวจย้อนหลังไม่ได้ · เป้าที่ต่ำกว่าค่าฐานก็ได้ (เช่นลดเวลา) ระบบคิดทิศทางให้เอง")
+                    Text(localised: "A baseline is required, because “better” with no starting point cannot be checked afterwards · a target below the baseline is fine (reducing time, say) — the direction is worked out for you",
+                     "Note under the new-benefit fields, explaining why a baseline is mandatory.")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 .controlSize(.small)
@@ -529,7 +559,8 @@ struct ProjectsView: View {
     @ViewBuilder
     private func conformanceBox() -> some View {
         let gaps = model.conformance.filter { !$0.satisfied }
-        GroupBox("ความครบตามมาตรฐาน (ISO 21502 · 17 practice)") {
+        GroupBox(t("Conformance to the standard (ISO 21502 · 17 practices)",
+                   "Box heading over the conformance matrix. The standard's name and number stay as they are.")) {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(model.conformance) { status in
                     HStack(alignment: .top, spacing: 8) {
@@ -544,10 +575,12 @@ struct ProjectsView: View {
                         if let evidence = status.evidence {
                             Text(evidence).font(.caption).foregroundStyle(.secondary)
                         } else if let record = status.tailoring {
-                            Text("ไม่ทำ: \(record.reason) — ตัดสินโดย \(record.decidedBy)")
+                            Text(localised: "not done: \(record.reason) — decided by \(record.decidedBy)",
+                                 "A conformance row satisfied by a recorded decision not to do the practice. Placeholders: the reason and who decided.")
                                 .font(.caption).foregroundStyle(.secondary)
                         } else {
-                            Text("ยังไม่มีทั้งของจริงและบันทึกว่าไม่ทำ")
+                            Text(localised: "neither evidence nor a decision not to do it",
+                                 "A conformance row with nothing behind it either way.")
                                 .font(.caption).foregroundStyle(.orange)
                         }
                     }
@@ -557,17 +590,22 @@ struct ProjectsView: View {
                 if !gaps.isEmpty {
                     Divider()
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("บันทึกว่าไม่ทำ practice ไหน พร้อมเหตุผล — ปิดโครงการไม่ได้ถ้ายังมีข้อที่ไม่ได้ตอบ")
+                        Text(localised: "Record which practice is not being done, and why — a project cannot close while any of them is unanswered",
+                             "Instruction above the tailoring fields.")
                             .font(.caption).foregroundStyle(.secondary)
                         ForEach(gaps) { status in
                             HStack {
                                 Text(status.practice.label)
                                     .font(.callout).frame(width: 180, alignment: .leading)
-                                TextField("เหตุผลที่ไม่ทำ", text: $tailoringReason)
+                                TextField(t("Reason for not doing it", "Text field: why a practice is being skipped."),
+                                          text: $tailoringReason)
                                     .textFieldStyle(.roundedBorder)
-                                TextField("ชื่อคนที่ตัดสิน", text: $decider)
+                                TextField(t("Name of who decided", "Text field beside a decision that must carry a person's name."),
+                                          text: $decider)
                                     .textFieldStyle(.roundedBorder).frame(maxWidth: 150)
-                                Button("บันทึก") { tailor(status.practice) }
+                                Button(t("Record", "Button that saves the decision not to do a practice.")) {
+                                    tailor(status.practice)
+                                }
                                     .disabled(tailoringReason.trimmingCharacters(in: .whitespaces).isEmpty
                                               || decider.trimmingCharacters(in: .whitespaces).isEmpty)
                             }
@@ -582,32 +620,40 @@ struct ProjectsView: View {
 
     @ViewBuilder
     private func dispositionBox(_ project: Project) -> some View {
-        GroupBox("ข้อมูลและไฟล์ที่เหลือ") {
+        GroupBox(t("Data and files left behind", "Box heading over what happens to the project's data when it closes.")) {
             VStack(alignment: .leading, spacing: 6) {
                 if let decided = project.dataDisposition, decided.isDecided {
-                    Text("\(decided.action.label) · ตามนโยบาย “\(decided.policy)” · ตัดสินโดย \(decided.decidedBy)")
+                    Text(localised: "\(decided.action.label) · under policy “\(decided.policy)” · decided by \(decided.decidedBy)",
+                         "A recorded data-disposition decision. Placeholders: the action, the policy it followed, and who decided.")
                         .font(.callout)
                 } else {
-                    Text("ยังไม่ได้ตัดสิน — ข้อนี้เป็นเงื่อนไขข้อที่ 8 ของการปิดโครงการ")
+                    Text(localised: "Not decided yet — this is the eighth condition for closing the project",
+                         "Shown when nobody has said what happens to the data.")
                         .font(.callout).foregroundStyle(.orange)
                 }
                 HStack {
-                    Picker("ทำอะไรกับของที่เหลือ", selection: $dispositionAction) {
+                    Picker(t("What happens to what is left", "Picker over data-disposition actions."),
+                           selection: $dispositionAction) {
                         ForEach(DataDisposition.Action.allCases, id: \.self) { action in
                             Text(action.label).tag(action)
                         }
                     }
                     .labelsHidden()
-                    TextField("นโยบายที่ใช้", text: $dispositionPolicy)
+                    TextField(t("Policy applied", "Text field: which policy the disposition follows."),
+                              text: $dispositionPolicy)
                         .textFieldStyle(.roundedBorder)
-                    TextField("ชื่อคนที่ตัดสิน", text: $decider)
+                    TextField(t("Name of who decided", "Text field beside a decision that must carry a person's name."),
+                              text: $decider)
                         .textFieldStyle(.roundedBorder).frame(maxWidth: 150)
-                    Button("บันทึก") { decideDisposition() }
+                    Button(t("Record", "Button that saves the data-disposition decision.")) {
+                        decideDisposition()
+                    }
                         .disabled(dispositionPolicy.trimmingCharacters(in: .whitespaces).isEmpty
                                   || decider.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 .controlSize(.small)
-                Text("ระบบบันทึกการตัดสิน ไม่ลบไฟล์ให้เอง — การลบของคนอื่นย้อนกลับไม่ได้")
+                Text(localised: "The decision is recorded; no file is deleted for you — deleting somebody else's data cannot be undone",
+                     "Note under the disposition control, saying plainly what the app will and will not do.")
                     .font(.caption2).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -658,26 +704,33 @@ struct ProjectsView: View {
                 Text(proposal.headline)
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("ส่วนต่างจาก baseline หลังแก้: \(proposal.driftAfter)")
+                Text(localised: "Difference from the baseline after this edit: \(proposal.driftAfter)",
+                     "States the drift the pending edit would create. Placeholder summarises it.")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
-                    Button("ยืนยันและเปิดคำขอ") { Task { await model.confirmPendingEdit() } }
+                    Button(t("Confirm and open a change request",
+                             "Button that applies the edit and files the change request it requires.")) {
+                        Task { await model.confirmPendingEdit() }
+                    }
                         .keyboardShortcut(.defaultAction)
-                    Button("ยกเลิก") { model.cancelPendingEdit() }
+                    Button(t("Cancel", "Button that abandons the pending plan edit.")) { model.cancelPendingEdit() }
                     Spacer()
-                    Text("ประตูขั้นถัดไปจะยังไม่เปิดจนกว่าจะมีคนตัดสินคำขอนี้")
+                    Text(localised: "The next gate stays shut until somebody decides this request",
+                         "States the consequence of filing a change request, where the hand already is.")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 .controlSize(.small)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } label: {
-            Label("แผนนี้ตกลงกันไว้แล้ว — การแก้จะกลายเป็นคำขอเปลี่ยนแปลง",
+            Label(t("This plan has been agreed — editing it becomes a change request",
+                    "Heading of the bar shown when editing a baselined plan."),
                   systemImage: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("คำขอเปลี่ยนแปลงที่รอการยืนยัน: \(proposal.headline)")
+        .accessibilityLabel(t("Change request awaiting confirmation: \(proposal.headline)",
+                              "Screen-reader label for the change-request bar. Placeholder summarises the change."))
     }
 
     /// §21.1 layer 3 / P12.8 — what each role has actually been able to do.
@@ -689,7 +742,8 @@ struct ProjectsView: View {
     /// teaches people either to trust it wrongly or to stop reading it.
     @ViewBuilder private var proficiencyPanel: some View {
         if !model.proficiency.isEmpty {
-            DisclosureGroup("ความชำนาญเครื่องมือของแต่ละบทบาท") {
+            DisclosureGroup(t("Each role's proficiency with the tools",
+                              "Collapsed panel beside RACI: what each role has actually been able to do.")) {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Role.allCases, id: \.self) { role in
                         let rows = model.proficiency(for: role)
@@ -706,9 +760,8 @@ struct ProjectsView: View {
                     // The threshold from the type, not a number typed again
                     // here: two copies of it drift, and the caption is the only
                     // place a reader learns why some rows have no percentage.
-                    Text("นับข้ามโปรเจกต์ · การเรียกที่ถูกกฎหยุดไว้ไม่นับเป็นความผิดของบทบาท "
-                         + "และเครื่องมือที่ใช้ไม่ถึง \(ToolProficiency.leastMeaningfulSample) ครั้ง "
-                         + "ไม่แสดงเปอร์เซ็นต์ เพราะ 1 จาก 1 คือ 100% และไม่ได้บอกอะไร")
+                    Text(localised: "Counted across projects · a call a rule stopped is not held against the role, and a tool used fewer than \(ToolProficiency.leastMeaningfulSample) times shows no percentage, because 1 out of 1 is 100% and says nothing",
+                         "Caption under the proficiency panel. Placeholder is the smallest sample the panel will put a percentage on.")
                         .font(.caption2).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -735,15 +788,18 @@ struct ProjectsView: View {
         let critical = Set(paths.flatMap { $0 })
         let ready = Set(Schedule.ready(model.wbs).map(\.id))
 
-        GroupBox("ลำดับงานและเส้นทางวิกฤต") {
+        GroupBox(t("Order of work and the critical path",
+                   "Box heading over the sequence view. Deliberately not called a Gantt.")) {
             VStack(alignment: .leading, spacing: 6) {
                 // §19.2.4, said out loud rather than only enforced by the absence
                 // of a gesture: the end date is a result, so there is nothing here
                 // to drag. Wanting it sooner means changing what it depends on.
-                Text("แถบพวกนี้ลากไม่ได้โดยตั้งใจ — วันจบเป็นผลของลำดับงานกับความเร็วจริง ไม่ใช่ค่าที่ตั้ง · อยากให้จบเร็วขึ้นให้แก้สิ่งที่มันขึ้นกับ: ตัดขอบเขต ลดเส้นพึ่งพา หรือเปลี่ยน tier ของโมเดล")
+                Text(localised: "These bars cannot be dragged, on purpose — the end date is a result of the order and the real pace, not a value you set · to finish sooner, change what it depends on: cut scope, remove a dependency, or move to a different tier",
+                     "Explains why the sequence view has no drag gesture. 'tier' is a term of art in this app.")
                     .font(.caption2).foregroundStyle(.secondary)
                 if ordered.isEmpty {
-                    Text("ยังไม่มีใบงาน").font(.callout).foregroundStyle(.secondary)
+                    Text(localised: "No work packages yet", "Shown when the plan is empty.")
+                        .font(.callout).foregroundStyle(.secondary)
                 } else {
                     ForEach(Array(ordered.enumerated()), id: \.element.id) { index, package in
                         HStack(spacing: 8) {
@@ -768,25 +824,32 @@ struct ProjectsView: View {
                                     .foregroundStyle(.secondary)
                             }
                             if critical.contains(package.id) {
-                                Text("เส้นทางวิกฤต").font(.caption2)
+                                Text(localised: "critical path",
+                                     "Tag on a work package that sits on the chain deciding the end date.")
+                                    .font(.caption2)
                                     .padding(.horizontal, 5).padding(.vertical, 1)
                                     .background(Color.accentColor.opacity(0.15), in: Capsule())
                             }
                             if ready.contains(package.id) {
-                                Text("เริ่มได้แล้ว").font(.caption2).foregroundStyle(.green)
+                                Text(localised: "ready to start",
+                                     "Tag on a work package whose dependencies are all finished.")
+                                    .font(.caption2).foregroundStyle(.green)
                             }
                             Spacer()
                             dependencyPicker(package)
                         }
                     }
                     if paths.isEmpty {
-                        Text("ยังไม่มีเส้นพึ่งพา — ทุกใบเริ่มพร้อมกันได้ จึงยังไม่มีเส้นทางไหนเป็นตัวตัดสิน")
+                        Text(localised: "No dependencies yet — every package could start at once, so no chain decides the end",
+                             "Shown when there is no critical path because nothing depends on anything.")
                             .font(.caption2).foregroundStyle(.secondary)
                     } else if paths.count > 1 {
-                        Text("มี \(paths.count) เส้นทางที่ยาวเท่ากัน — ช้าเส้นไหนก็ช้าทั้งโครงการ")
+                        Text(localised: "\(paths.count) chains are equally long — a delay on any of them delays the project",
+                             "Shown when several critical paths tie. Placeholder is how many.")
                             .font(.caption2).foregroundStyle(.secondary)
                     }
-                    Text("แกนนอนตรงนี้คือลำดับ ไม่ใช่เวลา — แกนเวลาจริงอยู่ในกล่องถัดไป")
+                    Text(localised: "The horizontal axis here is order, not time — the real time axis is in the next box",
+                     "Says plainly what this view's axis means, so it is not read as a Gantt chart.")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             }
@@ -806,10 +869,11 @@ struct ProjectsView: View {
     private func projectionBox() -> some View {
         if let projection = model.projection,
            !(projection.leaves.isEmpty && projection.unforecastable.isEmpty) {
-            GroupBox("งานที่ยังไม่เริ่ม — ถ้าเริ่มตอนนี้") {
+            GroupBox(t("Work not started — if it started now",
+                       "Box heading over the forecast for unstarted work.")) {
                 VStack(alignment: .leading, spacing: Space.row) {
-                    Text("ช่วง p50–p90 จากงานจริงที่เคยเสร็จในระบบนี้ ไม่ใช่วันที่ตั้งไว้ · "
-                         + "งานที่เริ่มไปแล้วไม่อยู่ในนี้ เพราะของจริงวัดได้แล้วจากแกนเวลาด้านบน")
+                    Text(localised: "p50–p90 ranges from work that really finished in this system, not dates somebody set · work already under way is not here, because the real thing is already measured on the time axis above",
+                         "Caption over the forecast rows, saying where the ranges come from.")
                         .font(.caption2).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -819,18 +883,18 @@ struct ProjectsView: View {
                             Spacer(minLength: Space.row)
                             Text(dayRange(row.p50Finish, row.p90Finish))
                                 .font(.system(.caption, design: .monospaced))
-                            Text("จาก \(row.sampleCount) งาน")
+                            Text(localised: "from \(row.sampleCount) tasks",
+                                 "Names the sample a forecast row was computed from. Placeholder is a count.")
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel("\(row.title) น่าจะเสร็จระหว่าง "
-                                            + dayRange(row.p50Finish, row.p90Finish))
+                        .accessibilityLabel(t("\(row.title) would likely finish between \(dayRange(row.p50Finish, row.p90Finish))",
+                                              "Screen-reader label for a forecast row. Placeholders: the package title and a date range."))
                     }
 
                     if let finish = projection.p90Finish, !projection.leaves.isEmpty {
-                        Text("ถ้าทุกอย่างเดินตามลำดับนี้ งานที่ประมาณได้จะจบราว "
-                             + finish.formatted(date: .abbreviated, time: .omitted)
-                             + " (ขอบบน p90)")
+                        Text(localised: "If everything runs in this order, the work that can be estimated finishes around \(finish.formatted(date: .abbreviated, time: .omitted)) (the p90 edge)",
+                             "Summary line under the forecast rows. Placeholder is a date.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
 
@@ -863,25 +927,29 @@ struct ProjectsView: View {
     @ViewBuilder
     private func timelineBox() -> some View {
         if let timeline = model.timeline {
-            GroupBox("แกนเวลาจริง — งานที่เกิดขึ้นจริงบนปฏิทิน") {
+            GroupBox(t("Real time axis — work that actually happened, on a calendar",
+                       "Box heading over the timeline of recorded work.")) {
                 VStack(alignment: .leading, spacing: 6) {
                     if timeline.isEmpty {
-                        Text("ยังไม่มีงานที่บันทึกเวลาไว้ในโปรเจกต์นี้ — แถบจะขึ้นเองเมื่อมีงานจบ")
+                        Text(localised: "No work with recorded time in this project yet — marks appear on their own once work finishes",
+                             "Shown when the timeline has nothing to draw.")
                             .font(.callout).foregroundStyle(.secondary)
                     } else {
-                        Text("ช่วง \(axisLabel(timeline)) · แต่ละขีดคือหนึ่งงานที่เกิดขึ้นจริง **ช่องว่างระหว่างขีดคือช่วงที่ไม่มีใครทำงานนี้** ไม่ใช่งานที่ยืดยาว")
+                        Text(localised: "\(axisLabel(timeline)) · each mark is one piece of work that really happened **a gap between marks is time nobody spent on this** — not work that dragged on",
+                             "Caption over the timeline. Placeholder is the span the axis covers. The bold half is the thing the picture is most often misread as.")
                             .font(.caption2).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                         ForEach(timeline.rows) { row in
                             timelineRow(row)
                         }
                         if model.timelineBeyondLimit > 0 {
-                            Text("ยังมีอีก \(model.timelineBeyondLimit) ชิ้นที่เก่ากว่านี้และไม่ได้วาด — "
-                                 + "ภาพนี้จึงไม่ใช่ทั้งหมดของประวัติ")
+                            Text(localised: "\(model.timelineBeyondLimit) older pieces are not drawn — so this picture is not the whole history",
+                                 "Says what the timeline left out. Placeholder is how many.")
                                 .font(.caption2).foregroundStyle(.orange)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        Text("แถบสีจางคืองานที่ไม่ผ่านหรือถูกยกเลิก — มันใช้เวลาไปจริง จึงยังอยู่บนแกน")
+                        Text(localised: "Faded marks are work that failed or was cancelled — it really took time, so it stays on the axis",
+                             "Legend under the timeline.")
                             .font(.caption2).foregroundStyle(.secondary)
                     }
                 }
@@ -895,11 +963,13 @@ struct ProjectsView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(row.title).font(.callout).lineLimit(1)
                 if row.hasStarted {
-                    Text("ทำจริง \(formatDuration(row.workedSeconds))")
+                    Text(localised: "worked \(formatDuration(row.workedSeconds))",
+                         "How much real time a timeline row cost. Placeholder is a duration.")
                         .font(.system(.caption2, design: .monospaced))
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("ยังไม่เริ่ม").font(.caption2).foregroundStyle(.secondary)
+                    Text(localised: "not started", "Timeline row for work nothing has been recorded against.")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
             }
             .frame(width: 200, alignment: .leading)
@@ -940,9 +1010,12 @@ struct ProjectsView: View {
     /// A chart is not readable by a screen reader, so the row says in words what
     /// the marks say in pixels — including the gap, which is the whole point.
     private func rowSpokenLabel(_ row: ScheduleTimeline.Row) -> String {
-        guard row.hasStarted else { return "\(row.title) — ยังไม่เริ่ม" }
-        let base = "\(row.title) — \(row.segments.count) ช่วงงาน "
-            + "รวมเวลาที่ทำจริง \(formatDuration(row.workedSeconds))"
+        guard row.hasStarted else {
+            return t("\(row.title) — not started",
+                     "Screen-reader label for a timeline row with no recorded work. Placeholder is the title.")
+        }
+        let base = t("\(row.title) — \(row.segments.count) stretches of work, \(formatDuration(row.workedSeconds)) of real time in total",
+                     "Screen-reader label for a timeline row. Placeholders: the title, how many stretches, and the total duration.")
         guard let note = row.gapNote else { return base }
         return base + " · " + note
     }
@@ -954,7 +1027,9 @@ struct ProjectsView: View {
     }
 
     private func formatDuration(_ seconds: TimeInterval) -> String {
-        seconds < 90 ? "\(Int(seconds)) วิ" : "\(Int(seconds / 60)) นาที"
+        seconds < 90
+            ? t("\(Int(seconds)) s", "A short duration in seconds. Placeholder is a whole number.")
+            : t("\(Int(seconds / 60)) min", "A duration in minutes. Placeholder is a whole number.")
     }
 
     private func dependencyPicker(_ package: WorkPackage) -> some View {
@@ -974,19 +1049,23 @@ struct ProjectsView: View {
                 }
             }
         } label: {
-            Text(package.dependsOn.isEmpty ? "รอ: —" : "รอ \(package.dependsOn.count) ใบ")
+            Text(package.dependsOn.isEmpty
+                 ? t("waits on: —", "Dependency picker label when a package waits on nothing.")
+                 : t("waits on \(package.dependsOn.count)",
+                     "Dependency picker label. Placeholder is how many packages it waits on."))
                 .font(.caption)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .accessibilityLabel("เลือกใบงานที่ \(package.title) ต้องรอ")
+        .accessibilityLabel(t("Choose the packages \(package.title) must wait for",
+                              "Screen-reader label for the dependency picker. Placeholder is the package title."))
     }
 
     /// §19.8 — the columns are the ledger's statuses, and the WIP limit is the
     /// fan-out cap that already exists in config rather than a second number.
     @ViewBuilder
     private func kanbanBox() -> some View {
-        GroupBox("กระดานงาน") {
+        GroupBox(t("Board", "Box heading over work packages arranged as a kanban board.")) {
             ScrollView(.horizontal) {
                 HStack(alignment: .top, spacing: 10) {
                     ForEach(WorkPackageStatus.allCases, id: \.self) { status in
@@ -1040,18 +1119,21 @@ struct ProjectsView: View {
                         .background(.quaternary, in: Capsule())
                 }
                 if !package.evidence.isEmpty {
-                    Text("หลักฐาน \(package.evidence.count)").font(.caption2)
+                    Text(localised: "evidence \(package.evidence.count)",
+                         "Count of evidence items on a board card. Placeholder is how many.")
+                        .font(.caption2)
                         .foregroundStyle(.green)
                 }
             }
-            Menu("ย้าย") {
+            Menu(t("Move", "Menu on a board card for moving it to another column.")) {
                 ForEach(WorkPackageStatus.allCases, id: \.self) { target in
                     Button(target.label) { move(package, to: target) }
                 }
             }
             .menuStyle(.borderlessButton)
             .font(.caption2)
-            .accessibilityLabel("ย้ายใบงาน \(package.title)")
+            .accessibilityLabel(t("Move work package \(package.title)",
+                                  "Screen-reader label for the move menu. Placeholder is the package title."))
         }
         .padding(Space.row)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1060,7 +1142,7 @@ struct ProjectsView: View {
     }
 
     /// Moving a card is not a way around the evidence rule (§19.15 invariant
-    /// 4): "เสร็จ" goes through the same refusal an agent gets.
+    /// 4): "done" goes through the same refusal an agent gets.
     private func move(_ package: WorkPackage, to status: WorkPackageStatus) {
         guard status == .done else {
             var next = package
@@ -1082,12 +1164,14 @@ struct ProjectsView: View {
     private func raciTableBox() -> some View {
         let matrix = RACIMatrix.build(model.wbs)
         if !matrix.rows.isEmpty && !matrix.actors.isEmpty {
-            GroupBox("ตาราง RACI ทั้งโครงการ") {
+            GroupBox(t("RACI across the whole project",
+                       "Box heading over the responsibility matrix. RACI is the standard's term and stays as is.")) {
                 ScrollView(.horizontal) {
                     Grid(alignment: .leading, horizontalSpacing: Space.box,
                          verticalSpacing: Space.tight) {
                         GridRow {
-                            Text("ใบงาน").font(.caption.weight(.semibold))
+                            Text(localised: "Work package", "Column heading in the RACI matrix.")
+                                .font(.caption.weight(.semibold))
                             ForEach(Array(matrix.actors.enumerated()), id: \.offset) { _, actor in
                                 VStack(alignment: .leading, spacing: 0) {
                                     Text(actor.label).font(.caption.weight(.semibold))
@@ -1104,7 +1188,8 @@ struct ProjectsView: View {
                                 HStack(spacing: Space.tight) {
                                     Text(row.title).font(.callout).lineLimit(1)
                                     if row.isUnassigned {
-                                        Text("ไม่มีคนทำ").font(.caption2)
+                                        Text(localised: "nobody", "RACI cell with no role assigned.")
+                                            .font(.caption2)
                                             .foregroundStyle(.orange)
                                     }
                                 }
@@ -1126,8 +1211,8 @@ struct ProjectsView: View {
                     .padding(.vertical, Space.tight)
                 }
                 if !matrix.uninvolved.isEmpty {
-                    Text("อยู่ในโครงการแต่ไม่ได้ถือตัวอักษรไหนเลย: "
-                         + matrix.uninvolved.map(\.label).joined(separator: ", "))
+                    Text(localised: "In the project but holding no letter at all: \(matrix.uninvolved.map(\.label).joined(separator: ", "))",
+                         "Names roles that appear in the project with no RACI letter. Placeholder is the list of them.")
                         .font(.caption2).foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1141,33 +1226,40 @@ struct ProjectsView: View {
         let parts = zip(actors, row.cells).compactMap { actor, letters -> String? in
             letters.isEmpty ? nil : "\(actor.label) \(letters.map(\.rawValue).joined(separator: " "))"
         }
-        return "\(row.title): " + (parts.isEmpty ? "ยังไม่ได้กำหนดใคร" : parts.joined(separator: " · "))
+        return "\(row.title): " + (parts.isEmpty
+                                  ? t("nobody assigned yet", "Screen-reader text for a RACI row with no assignments.")
+                                  : parts.joined(separator: " · "))
     }
 
     /// §19.9 — one accountable per package, and the screen cannot express two.
     @ViewBuilder
     private func raciBox(_ project: Project) -> some View {
-        GroupBox("ทีม & RACI") {
+        GroupBox(t("Team & RACI", "Box heading over per-package accountability.")) {
             VStack(alignment: .leading, spacing: 8) {
                 proficiencyPanel
                 if model.wbs.leaves.isEmpty {
-                    Text("ยังไม่มีใบงานให้มอบหมาย").font(.callout).foregroundStyle(.secondary)
+                    Text(localised: "No work packages to assign yet", "Shown when the plan has nothing to give anyone.")
+                        .font(.callout).foregroundStyle(.secondary)
                 }
                 ForEach(model.wbs.leaves) { package in
                     HStack(spacing: 8) {
                         Text(package.title).font(.callout).frame(width: 220, alignment: .leading)
                         Picker("A", selection: accountableBinding(package, project: project)) {
-                            Text("— ยังไม่มี —").tag(Accountable?.none)
-                            Text("หัวหน้าทีม").tag(Accountable?.some(.teamLead))
+                            Text(localised: "— none yet —", "Picker option: nobody is accountable yet.")
+                                .tag(Accountable?.none)
+                            Text(localised: "Team lead", "Picker option: the team lead is accountable.")
+                                .tag(Accountable?.some(.teamLead))
                             if let person = project.executive?.person, !person.isEmpty {
                                 Text(person).tag(Accountable?.some(.human(person)))
                             }
                         }
                         .labelsHidden()
                         .frame(width: 180)
-                        .accessibilityLabel("ผู้รับผิดชอบผลของ \(package.title)")
+                        .accessibilityLabel(t("Accountable for the outcome of \(package.title)",
+                                              "Screen-reader label for the accountable picker. Placeholder is the package title."))
                         if package.riskClass >= .high, package.raci?.accountable.isHuman != true {
-                            Text("งานเสี่ยงสูงต้องให้คนรับผิดชอบ")
+                            Text(localised: "High-risk work needs a person accountable",
+                                 "Shown beside a high-risk package with no accountable person.")
                                 .font(.caption2).foregroundStyle(.orange)
                         }
                         Spacer()
@@ -1176,7 +1268,7 @@ struct ProjectsView: View {
                 Divider()
                 // R/C/I, which P10.5 left for later. Toggles rather than text:
                 // the set of people and agents a project has is known, and a
-                // free-text field here is how "อนาลิสต์" and "analyst" end up
+                // free-text field here is how "analist" and "analyst" end up
                 // being two different people in the same table.
                 ForEach(model.wbs.leaves) { package in
                     VStack(alignment: .leading, spacing: 2) {
@@ -1198,7 +1290,8 @@ struct ProjectsView: View {
                     .padding(.vertical, 1)
                 }
 
-                Text("A มีได้คนเดียวต่อใบงาน — ตัวเลือกนี้จึงเป็นค่าเดียว ไม่ใช่รายการติ๊กถูก · R/C/I เป็นรายการได้")
+                Text(localised: "There is exactly one A per work package — so this is a single choice, not a set of checkboxes · R/C/I may be lists",
+                     "Explains why the accountable control differs from the others. A, R, C and I are the RACI letters.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1231,9 +1324,9 @@ struct ProjectsView: View {
         case responsible, consulted, informed
         var label: String {
             switch self {
-            case .responsible: "R ทำ"
-            case .consulted: "C ปรึกษา"
-            case .informed: "I แจ้งให้ทราบ"
+            case .responsible: t("R does the work", "RACI letter R, with what it means.")
+            case .consulted: t("C is consulted", "RACI letter C, with what it means.")
+            case .informed: t("I is kept informed", "RACI letter I, with what it means.")
             }
         }
     }
@@ -1285,7 +1378,7 @@ struct ProjectsView: View {
 
     @ViewBuilder
     private func registerBox() -> some View {
-        GroupBox("ทะเบียน") {
+        GroupBox(t("Register", "Box heading over risks, issues, decisions and change requests.")) {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(model.registers) { entry in
                     VStack(alignment: .leading, spacing: 3) {
@@ -1298,18 +1391,23 @@ struct ProjectsView: View {
                             Spacer()
                             Text(entry.status.label).font(.caption).foregroundStyle(.secondary)
                         }
-                        Text("เสนอโดย \(entry.origin.label)"
-                             + (entry.decidedBy.map { " · ตัดสินโดย \($0)" } ?? ""))
+                        Text(localised: "raised by \(entry.origin.label)\(entry.decidedBy.map { t(" · decided by \($0)", "Appended to a register row once somebody has decided it. Placeholder is their name.") } ?? "")",
+                             "A register row's provenance. Placeholders: who raised it, and optionally who decided it.")
                             .font(.caption2).foregroundStyle(.secondary)
 
                         // Only a change is decided, and only by a person.
                         if entry.kind == .change, entry.status == .proposed {
                             HStack {
-                                TextField("ชื่อผู้ตัดสิน", text: $decider)
+                                TextField(t("Name of the decider", "Text field beside approve/reject on a register entry."),
+                                          text: $decider)
                                     .textFieldStyle(.roundedBorder)
                                     .frame(maxWidth: 160)
-                                Button("อนุมัติ") { decide(entry, approve: true) }
-                                Button("ปฏิเสธ") { decide(entry, approve: false) }
+                                Button(t("Approve", "Button that approves a register entry.")) {
+                                    decide(entry, approve: true)
+                                }
+                                Button(t("Reject", "Button that rejects a register entry.")) {
+                                    decide(entry, approve: false)
+                                }
                             }
                             .controlSize(.small)
                             .disabled(decider.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -1317,20 +1415,21 @@ struct ProjectsView: View {
                     }
                 }
                 if model.registers.isEmpty {
-                    Text("ยังไม่มีรายการ").font(.callout).foregroundStyle(.secondary)
+                    Text(localised: "Nothing recorded yet", "Shown when the register is empty.")
+                        .font(.callout).foregroundStyle(.secondary)
                 }
 
                 HStack {
-                    TextField("บันทึกรายการใหม่", text: $registerTitle)
+                    TextField(t("Record a new entry", "Text field for adding to the register."), text: $registerTitle)
                         .textFieldStyle(.roundedBorder)
-                    Picker("ชนิด", selection: $registerKind) {
+                    Picker(t("Kind", "Picker: which kind of register entry this is."), selection: $registerKind) {
                         ForEach(RegisterKind.allCases, id: \.self) { kind in
                             Text(kind.label).tag(kind)
                         }
                     }
                     .labelsHidden()
-                    .accessibilityLabel("ชนิดของรายการที่จะบันทึก")
-                    Button("บันทึก") { addRegister() }
+                    .accessibilityLabel(t("Kind of entry being recorded", "Screen-reader label for the register kind picker."))
+                    Button(t("Record", "Button that adds the entry to the register.")) { addRegister() }
                         .disabled(registerTitle.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 .controlSize(.small)
@@ -1342,18 +1441,22 @@ struct ProjectsView: View {
     @ViewBuilder
     private func baselineBox() -> some View {
         if !model.baselines.isEmpty {
-            GroupBox("แผนที่ตกลงไว้ (baseline)") {
+            GroupBox(t("The agreed plan (baseline)",
+                       "Box heading over frozen versions of the plan. 'baseline' is the standard's term.")) {
                 VStack(alignment: .leading, spacing: 5) {
                     if let drift = model.drift {
-                        Text("ตอนนี้เทียบกับ v\(model.baselines.first?.version ?? 1): \(drift.summary)")
+                        Text(localised: "Against v\(model.baselines.first?.version ?? 1) today: \(drift.summary)",
+                             "Current drift from the latest baseline. Placeholders: the version number and a summary.")
                             .font(.callout)
                             .foregroundStyle(drift.isEmpty ? Color.secondary : Color.orange)
                     }
                     ForEach(model.baselines) { baseline in
-                        Text("v\(baseline.version) · \(baseline.reason) · \(baseline.packages.count) ใบงาน")
+                        Text(localised: "v\(baseline.version) · \(baseline.reason) · \(baseline.packages.count) work packages",
+                             "A baseline row. Placeholders: its version, why it was frozen, and how many packages it holds.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
-                    Text("เวอร์ชันเก่ายังอ่านได้เสมอ — จำนวนเวอร์ชันคือคำตอบของ “แผนเปลี่ยนไปกี่ครั้ง”")
+                    Text(localised: "Older versions stay readable — the number of them answers “how many times did the plan change”",
+                         "Note under the baseline list.")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1383,7 +1486,8 @@ struct ProjectsView: View {
 
     @ViewBuilder
     private func toleranceBox() -> some View {
-        GroupBox("กรอบที่ทีมเดินเองได้") {
+        GroupBox(t("How far the team may go on its own",
+                   "Box heading over the tolerances that decide when work stops for a person.")) {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(model.tolerances) { status in
                     let measured = model.measured.contains(status.dimension)
@@ -1401,17 +1505,18 @@ struct ProjectsView: View {
                         // One text field and one read-only number, side by side,
                         // is the clearest statement of that line this screen can
                         // make.
-                        TextField("กรอบ", text: Binding(
+                        TextField(t("Limit", "Text field holding one tolerance's limit."), text: Binding(
                             get: { limitDrafts[status.dimension.rawValue] ?? format(status.limit) },
                             set: { limitDrafts[status.dimension.rawValue] = $0 }))
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.caption, design: .monospaced))
                             .frame(width: 70)
-                            .accessibilityLabel("กรอบของ\(status.dimension.label) ตั้งได้")
+                            .accessibilityLabel(t("Limit for \(status.dimension.label), editable",
+                                                  "Screen-reader label for a tolerance field. Placeholder is which tolerance."))
                             .onSubmit { commitLimit(status.dimension) }
 
                         if noTarget {
-                            Text("ยังไม่ได้ตั้งเป้า")
+                            Text(localised: "no target set yet", "Tolerance row for benefits before a target exists.")
                                 .font(.callout).foregroundStyle(.secondary)
                         } else if measured {
                             Text("\(format(status.current)) / \(format(status.limit))")
@@ -1420,7 +1525,8 @@ struct ProjectsView: View {
                             ProgressView(value: min(status.fraction, 1))
                                 .frame(maxWidth: 120)
                         } else {
-                            Text("กรอบ \(format(status.limit)) · ยังไม่ได้วัด")
+                            Text(localised: "limit \(format(status.limit)) · not measured yet",
+                                 "A tolerance that is enforced but has no source of data yet. Placeholder is the limit.")
                                 .font(.callout).foregroundStyle(.secondary)
                         }
                         Text(status.dimension.unit)
@@ -1429,26 +1535,38 @@ struct ProjectsView: View {
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel({
-                        if noTarget { "กรอบประโยชน์ ยังไม่ได้ตั้งเป้า" }
-                        else if measured {
-                            "กรอบ\(status.dimension.label) ตอนนี้ \(format(status.current)) จาก \(format(status.limit))"
-                                + (status.breached ? " — ทะลุแล้ว" : "")
+                        if noTarget {
+                            t("Benefit tolerance, no target set yet", "Screen-reader label for the benefit tolerance row.")
+                        } else if measured {
+                            t("\(status.dimension.label) tolerance is at \(format(status.current)) of \(format(status.limit))\(status.breached ? " — breached" : "")",
+                              "Screen-reader label for a measured tolerance. Placeholders: which tolerance, the current value, the limit, and whether it has been breached.")
                         } else {
-                            "กรอบ\(status.dimension.label) ตั้งไว้ \(format(status.limit)) แต่ระบบยังไม่ได้วัดค่านี้"
+                            t("\(status.dimension.label) tolerance is set to \(format(status.limit)) but nothing measures it yet",
+                              "Screen-reader label for an enforced tolerance with no data. Placeholders: which tolerance and its limit.")
                         }
                     }())
                 }
 
-                Text("แกนที่ขึ้นว่า “ยังไม่ได้วัด” มีกรอบและบังคับอยู่จริง แต่ยังไม่มีข้อมูลต้นทาง — ประโยชน์จะวัดได้เมื่อมีคนบันทึกผลในแท็บ “ประโยชน์ & ปิดงาน”")
+                Text(localised: "A row saying “not measured yet” still has a limit and still enforces it — it just has no source of data. Benefits become measurable once somebody records a result in the “Benefits & closing” tab.",
+                     "Note under the tolerances, so an unmeasured row is not read as an inactive one.")
                     .font(.caption2).foregroundStyle(.secondary)
 
                 HStack {
-                    Text("ตั้งกรอบทั้งชุด").font(.caption).foregroundStyle(.secondary)
-                    Button("ขออนุมัติทุกขั้น") { Task { await model.setTolerances(.approvalRequired) } }
-                    Button("สมดุล") { Task { await model.setTolerances(.balanced) } }
-                    Button("ทำงานเองทั้งหมด") { Task { await model.setTolerances(.fullAutonomous) } }
+                    Text(localised: "Set them all at once", "Label before the tolerance presets.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button(t("Ask me every step", "Tolerance preset: stop for a person at every step.")) {
+                        Task { await model.setTolerances(.approvalRequired) }
+                    }
+                    Button(t("Balanced", "Tolerance preset: the middle setting.")) {
+                        Task { await model.setTolerances(.balanced) }
+                    }
+                    Button(t("Fully autonomous", "Tolerance preset: let the team run without stopping.")) {
+                        Task { await model.setTolerances(.fullAutonomous) }
+                    }
                     Spacer()
-                    Button("ตรวจกรอบตอนนี้") { checkTolerances() }
+                    Button(t("Check tolerances now", "Button that measures the tolerances immediately.")) {
+                        checkTolerances()
+                    }
                 }
                 .controlSize(.small)
             }
@@ -1456,16 +1574,18 @@ struct ProjectsView: View {
         }
 
         ForEach(model.openExceptions) { report in
-            GroupBox("ทะลุกรอบ\(report.dimension.label) — โครงการหยุดรอคุณ") {
+            GroupBox(t("\(report.dimension.label) tolerance breached — the project is waiting on you",
+                       "Box heading over an open exception. Placeholder is which tolerance was breached.")) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(report.message)
                         .font(.callout)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     HStack {
-                        TextField("คำตัดสินของคุณ", text: $decision)
+                        TextField(t("Your decision", "Text field where a person settles a blocked exception."),
+                                  text: $decision)
                             .textFieldStyle(.roundedBorder)
-                        Button("ปิดข้อยกเว้น") {
+                        Button(t("Close the exception", "Button that records the decision and lets work resume.")) {
                             let text = decision
                             decision = ""
                             Task { await model.resolve(report, decision: text) }
@@ -1506,10 +1626,12 @@ struct ProjectsView: View {
 
     @ViewBuilder
     private func wbsBox(_ project: Project) -> some View {
-        GroupBox("แผนงาน (WBS) — ใบสุดท้ายคือสิ่งที่ส่งมอบได้") {
+        GroupBox(t("Work breakdown (WBS) — a leaf is something deliverable",
+                   "Box heading over the work breakdown structure. WBS is the standard's term.")) {
             VStack(alignment: .leading, spacing: 8) {
                 if model.wbs.isEmpty {
-                    Text("ยังไม่มีใบงาน — G2 ต้องการอย่างน้อย 1 ใบ")
+                    Text(localised: "No work packages yet — G2 needs at least one",
+                         "Shown when the breakdown is empty. G2 is the name of the second gate.")
                         .font(.callout).foregroundStyle(.secondary)
                 } else {
                     ForEach(model.wbs.ordered) { package in
@@ -1531,18 +1653,20 @@ struct ProjectsView: View {
                 }
 
                 HStack {
-                    TextField("เพิ่มงานที่ส่งมอบได้", text: $newPackageTitle)
+                    TextField(t("Add something deliverable", "Text field for adding a work package."),
+                              text: $newPackageTitle)
                         .textFieldStyle(.roundedBorder)
                         .onSubmit { addPackage(under: selectedParent) }
-                    Picker("อยู่ใต้", selection: $selectedParent) {
-                        Text("บนสุด").tag(String?.none)
+                    Picker(t("Under", "Picker: which package the new one sits beneath."), selection: $selectedParent) {
+                        Text(localised: "Top level", "Picker option: the new package has no parent.")
+                            .tag(String?.none)
                         ForEach(model.wbs.ordered) { package in
                             Text(package.title).tag(String?.some(package.id))
                         }
                     }
                     .labelsHidden()
-                    .accessibilityLabel("เลือกงานแม่ของใบงานใหม่")
-                    Button("เพิ่ม") { addPackage(under: selectedParent) }
+                    .accessibilityLabel(t("Choose the parent of the new work package", "Screen-reader label."))
+                    Button(t("Add", "Button that creates the work package.")) { addPackage(under: selectedParent) }
                         .disabled(newPackageTitle.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
 
@@ -1568,12 +1692,13 @@ struct ProjectsView: View {
                 // The title is edited where it is read (§19.2.4). Buffered like
                 // every other field on this screen, because a write per keystroke
                 // is what ate Thai characters here before.
-                TextField("ชื่อสิ่งที่ส่งมอบ", text: Binding(
+                TextField(t("Name of the deliverable", "Text field holding a work package's title."), text: Binding(
                     get: { titleDrafts[package.id] ?? package.title },
                     set: { titleDrafts[package.id] = $0 }))
                     .textFieldStyle(.plain)
                     .font(leaf ? .callout : .callout.bold())
-                    .accessibilityLabel("ชื่อใบงาน \(package.title)")
+                    .accessibilityLabel(t("Title of work package \(package.title)",
+                                          "Screen-reader label. Placeholder is the current title."))
                     .onSubmit { commitTitle(for: package) }
                 Spacer()
                 if leaf {
@@ -1586,14 +1711,19 @@ struct ProjectsView: View {
                     // P10.4's missing half: the leaf could describe itself as
                     // an assignment and nothing could start one, so the plan
                     // and the team were joined by a field nobody could act on.
-                    Button("เปิดงานใบนี้") { _ = startWork(package) }
+                    Button(t("Start this one", "Button that hands the package to the team as work.")) {
+                        _ = startWork(package)
+                    }
                         .buttonStyle(.borderless)
                         .font(.caption)
                         .disabled(package.acceptanceCriteria.isEmpty)
                         .help(package.acceptanceCriteria.isEmpty
-                              ? "ใบที่ไม่มีเกณฑ์ตรวจรับ ส่งให้ใครทำไม่ได้ — ไม่มีอะไรให้ตรวจว่าเสร็จ"
-                              : "เอาใบนี้ไปเป็นงานของทีม แล้วตรวจเกณฑ์ก่อนสั่งเริ่ม")
-                        .accessibilityLabel("เปิดงาน \(package.title) กับทีม")
+                              ? t("A package with no acceptance criteria cannot be given to anyone — there is nothing to check it against",
+                                  "Tooltip on a disabled start button.")
+                              : t("Give this to the team, checking the criteria before it starts",
+                                  "Tooltip on the start button."))
+                        .accessibilityLabel(t("Start \(package.title) with the team",
+                                              "Screen-reader label for the start button. Placeholder is the package title."))
                 }
                 Button {
                     Task { await model.removePackage(package.id) }
@@ -1601,7 +1731,8 @@ struct ProjectsView: View {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel("ลบใบงาน \(package.title) และทุกใบที่อยู่ข้างใน")
+                .accessibilityLabel(t("Delete work package \(package.title) and everything inside it",
+                                      "Screen-reader label for the delete button. Placeholder is the package title."))
             }
 
             if leaf {
@@ -1610,7 +1741,8 @@ struct ProjectsView: View {
                     // things a person sets, and `riskClass` decides whether a
                     // human has to be accountable (§19.9), so it cannot stay a
                     // field only the tests can reach.
-                    TextField("ส่งมอบเป็นอะไร", text: Binding(
+                    TextField(t("Delivered as what", "Text field: the kind of thing the package produces."),
+                              text: Binding(
                         get: { package.deliverableType },
                         set: { value in
                             var next = package; next.deliverableType = value
@@ -1619,9 +1751,10 @@ struct ProjectsView: View {
                         .textFieldStyle(.roundedBorder)
                         .font(.caption)
                         .frame(maxWidth: 160)
-                        .accessibilityLabel("ชนิดของสิ่งที่ส่งมอบสำหรับ \(package.title)")
+                        .accessibilityLabel(t("Kind of deliverable for \(package.title)",
+                                              "Screen-reader label. Placeholder is the package title."))
 
-                    Picker("ความเสี่ยง", selection: Binding(
+                    Picker(t("Risk", "Picker: how risky this package's work is."), selection: Binding(
                         get: { package.riskClass },
                         set: { level in
                             var next = package; next.riskClass = level
@@ -1633,40 +1766,47 @@ struct ProjectsView: View {
                     }
                     .labelsHidden()
                     .frame(maxWidth: 110)
-                    .accessibilityLabel("ระดับความเสี่ยงของ \(package.title)")
+                    .accessibilityLabel(t("Risk level of \(package.title)",
+                                          "Screen-reader label. Placeholder is the package title."))
 
-                    Picker("ผูกกับขอบเขต", selection: Binding(
+                    Picker(t("Tied to scope", "Picker: which scope line this package delivers."),
+                           selection: Binding(
                         get: { package.scopeRef },
                         set: { ref in
                             var next = package; next.scopeRef = ref
                             Task { await model.update(next) }
                         })) {
-                        Text("— ยังไม่ผูก —").tag(String?.none)
+                        Text(localised: "— not tied —", "Picker option: this package is not tied to a scope line.")
+                            .tag(String?.none)
                         ForEach(project.statement.inScope, id: \.self) { line in
                             Text(line).tag(String?.some(line))
                         }
                     }
                     .labelsHidden()
-                    .accessibilityLabel("ผูกใบงาน \(package.title) กับข้อในขอบเขต")
+                    .accessibilityLabel(t("Tie work package \(package.title) to a scope line",
+                                          "Screen-reader label. Placeholder is the package title."))
 
-                    Picker("บทบาท", selection: Binding(
+                    Picker(t("Role", "Picker: which role does this package."), selection: Binding(
                         get: { package.role },
                         set: { role in
                             var next = package; next.role = role
                             Task { await model.update(next) }
                         })) {
-                        Text("— ยังไม่มอบหมาย —").tag(Role?.none)
+                        Text(localised: "— unassigned —", "Picker option: no role does this package yet.")
+                            .tag(Role?.none)
                         ForEach(Role.allCases, id: \.self) { role in
                             Text(role.rawValue).tag(Role?.some(role))
                         }
                     }
                     .labelsHidden()
-                    .accessibilityLabel("มอบหมายใบงาน \(package.title)")
+                    .accessibilityLabel(t("Assign work package \(package.title)",
+                                          "Screen-reader label. Placeholder is the package title."))
                 }
 
                 // Same buffer-and-commit as the project fields: writing on
                 // every keystroke is what ate characters here too.
-                TextField("เสร็จแปลว่าอะไร — คั่นด้วย ·",
+                TextField(t("What done means — separated by ·",
+                            "Text field for the acceptance criteria of one package."),
                           text: Binding(
                             get: {
                                 criteriaDrafts[package.id]
@@ -1676,7 +1816,8 @@ struct ProjectsView: View {
                           axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .font(.caption)
-                    .accessibilityLabel("เกณฑ์เสร็จของใบงาน \(package.title)")
+                    .accessibilityLabel(t("Acceptance criteria of \(package.title)",
+                                          "Screen-reader label. Placeholder is the package title."))
                     .onSubmit { commitCriteria(for: package) }
 
                 // Dependencies, edited as "which of these must finish first"
@@ -1687,7 +1828,7 @@ struct ProjectsView: View {
                 let candidates = model.wbs.leaves.filter { $0.id != package.id }
                 if !candidates.isEmpty {
                     HStack(spacing: 4) {
-                        Text("ต้องเสร็จก่อน")
+                        Text(localised: "Must finish first", "Heading over the packages this one waits for.")
                             .font(.caption2).foregroundStyle(.secondary)
                         ForEach(candidates) { other in
                             Toggle(other.title, isOn: Binding(
@@ -1704,7 +1845,8 @@ struct ProjectsView: View {
                                 }))
                                 .toggleStyle(.button)
                                 .controlSize(.mini)
-                                .accessibilityLabel("\(other.title) ต้องเสร็จก่อน \(package.title)")
+                                .accessibilityLabel(t("\(other.title) must finish before \(package.title)",
+                                                      "Screen-reader label for a dependency toggle. Placeholders: the two package titles."))
                         }
                         Spacer()
                     }
@@ -1724,9 +1866,9 @@ struct ProjectsView: View {
     /// hook chain logs; this screen is read by a person.
     private func riskLabel(_ level: RiskLevel) -> String {
         switch level {
-        case .low: "เสี่ยงต่ำ"
-        case .medium: "เสี่ยงกลาง"
-        case .high: "เสี่ยงสูง"
+        case .low: t("low risk", "Risk level of a work package.")
+        case .medium: t("medium risk", "Risk level of a work package.")
+        case .high: t("high risk", "Risk level of a work package.")
         }
     }
 
@@ -1755,18 +1897,21 @@ struct ProjectsView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("ขั้นของโครงการ ตอนนี้อยู่ขั้น\(current.label)")
+        .accessibilityLabel(t("Project stage, currently \(current.label)",
+                              "Screen-reader label for the stage strip. Placeholder is the current stage."))
     }
 
     private func gateBox(_ gate: GateEvaluation) -> some View {
-        GroupBox("\(gate.gate) → ขั้น\(gate.to.label)") {
+        GroupBox(t("\(gate.gate) → stage \(gate.to.label)",
+                   "Box heading over the next gate. Placeholders: the gate's name and the stage it leads to.")) {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(gate.conditions.enumerated()), id: \.offset) { _, condition in
                     Label {
                         HStack(spacing: 6) {
                             Text(condition.text)
                             if condition.vacuous {
-                                Text("ยังไม่มีอะไรให้ตรวจ")
+                                Text(localised: "nothing to check",
+                                     "A gate condition that is satisfied because there was nothing to test — not because a test passed.")
                                     .font(.caption2).foregroundStyle(.secondary)
                             }
                         }
@@ -1782,14 +1927,22 @@ struct ProjectsView: View {
                 }
 
                 HStack {
-                    Button("ผ่านขั้นนี้") { Task { await model.advance() } }
+                    Button(t("Pass this gate", "Button that advances the project to the next stage.")) {
+                        Task { await model.advance() }
+                    }
                         .disabled(!gate.passed)
                         .keyboardShortcut(.return, modifiers: [.command])
-                    Button("ยุติโครงการ") { Task { await model.terminate(reason: "ผู้ใช้สั่งยุติ") } }
+                    Button(t("Terminate the project", "Button that stops the project for good.")) {
+                        Task {
+                            await model.terminate(reason: t("terminated by the user",
+                                                            "Recorded as the reason when a person ends a project from this button."))
+                        }
+                    }
                     Spacer()
                 }
                 if !gate.passed {
-                    Text("ขั้นนี้ยังใช้เครื่องมือที่\(allowedText(gate.from))")
+                    Text(localised: "In this stage, tools may \(allowedText(gate.from))",
+                         "Says what the current stage permits. Placeholder completes the sentence.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -1798,11 +1951,14 @@ struct ProjectsView: View {
 
     private func allowedText(_ stage: ProjectStage) -> String {
         switch stage {
-        case .initiation: "อ่านอย่างเดียว"
-        case .planning: "อ่านและร่างเอกสารได้ แต่ยังเปลี่ยนข้อมูลไม่ได้"
-        case .execution: "ทำได้ทุกอย่างตามระดับความเสี่ยง"
-        case .closing: "เขียนรายงานได้ แต่ตัวเลขต้องไม่ขยับแล้ว"
-        case .closed: "อ่านอย่างเดียว"
+        case .initiation: t("only read", "What tools may do in the initiation stage. Completes “In this stage, tools may …”.")
+        case .planning: t("read and draft documents, but not change data",
+                          "What tools may do in the planning stage. Completes “In this stage, tools may …”.")
+        case .execution: t("do anything their risk level allows",
+                           "What tools may do in the execution stage. Completes “In this stage, tools may …”.")
+        case .closing: t("write reports, but the numbers must stop moving",
+                         "What tools may do in the closing stage. Completes “In this stage, tools may …”.")
+        case .closed: t("only read", "What tools may do once the project is closed. Completes “In this stage, tools may …”.")
         }
     }
 
@@ -1871,7 +2027,9 @@ struct ProjectsView: View {
 
     @ViewBuilder
     private var savedHint: some View {
-        Text(saving ? "กำลังบันทึก…" : "บันทึกเองหลังหยุดพิมพ์")
+        Text(saving
+             ? t("saving…", "Shown while an edit is being written.")
+             : t("saves on its own once you stop typing", "Shown beside an editor that autosaves."))
             .font(.caption2).foregroundStyle(.secondary)
     }
 
@@ -1880,7 +2038,8 @@ struct ProjectsView: View {
             Text(title).font(.caption).foregroundStyle(.secondary)
             TextEditor(text: text)
                 .frame(minHeight: 52)
-                .accessibilityLabel("รายการ\(title) หนึ่งบรรทัดต่อหนึ่งข้อ")
+                .accessibilityLabel(t("\(title) list, one item per line",
+                                      "Screen-reader label for a line editor. Placeholder is the editor's title."))
         }
     }
 
@@ -1900,7 +2059,8 @@ struct ProjectsView: View {
         let criteria = text.split(separator: "·", omittingEmptySubsequences: true)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-            .map { Criterion(text: $0, evidenceRequired: "หลักฐานที่ตรวจได้") }
+            .map { Criterion(text: $0, evidenceRequired: t("checkable evidence",
+                                                            "Default evidence requirement on a criterion typed as free text.")) }
         guard criteria != package.acceptanceCriteria else {
             criteriaDrafts.removeValue(forKey: package.id)
             return

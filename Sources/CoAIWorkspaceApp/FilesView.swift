@@ -4,7 +4,7 @@ import ToolBelt
 
 // ─────────────────────────────────────────────────────────────
 // File Viewer/Editor (ARCHITECTURE §14.2, P8.6) — the project's folder, in the
-// app. Sits beside the notebook in "สคริปต์ + คอนโซล" because it answers the
+// app. Sits beside the notebook in "Script + console" because it answers the
 // question the notebook creates: the cell wrote a file, so where is it.
 //
 // The rules live in `WorkspaceFiles` (ToolBelt), which `swift test` can reach.
@@ -16,7 +16,7 @@ import ToolBelt
 // Two things the screen is responsible for on its own, both about honesty:
 //
 // - **The save button is disabled with the reason beside it, not hidden.** A
-//   rule you cannot see reads as a broken screen (the P11 "ลบร่างเครื่องมือ"
+//   rule you cannot see reads as a broken screen (the P11 "delete this draft"
 //   lesson). A `.docx` shows its extracted text *and* says why it cannot be
 //   written back.
 // - **Unsaved edits are visible before you leave.** Selecting another file
@@ -60,7 +60,7 @@ final class FilesViewModel {
             problem = nil
         } catch {
             entries = []
-            problem = ReadableFailure.message(for: error, doing: "อ่านรายการไฟล์")
+            problem = ReadableFailure.message(for: error, doing: t("listing the files", "Names the action that failed, in a sentence like “could not …”."))
         }
     }
 
@@ -76,7 +76,7 @@ final class FilesViewModel {
             reload()
             problem = nil
         } catch {
-            problem = ReadableFailure.message(for: error, doing: "สร้างไฟล์")
+            problem = ReadableFailure.message(for: error, doing: t("creating the file", "Names the action that failed."))
         }
     }
 
@@ -90,7 +90,7 @@ final class FilesViewModel {
             if selected?.url == entry.url { closeSelection() }
             reload()
         } catch {
-            problem = ReadableFailure.message(for: error, doing: "เปลี่ยนชื่อ")
+            problem = ReadableFailure.message(for: error, doing: t("renaming it", "Names the action that failed."))
         }
     }
 
@@ -101,7 +101,7 @@ final class FilesViewModel {
             if selected?.url == entry.url { closeSelection() }
             reload()
         } catch {
-            problem = ReadableFailure.message(for: error, doing: "ลบ")
+            problem = ReadableFailure.message(for: error, doing: t("deleting it", "Names the action that failed."))
         }
     }
 
@@ -145,7 +145,7 @@ final class FilesViewModel {
         } catch {
             content = nil
             draft = ""; loaded = ""
-            problem = ReadableFailure.message(for: error, doing: "เปิดไฟล์นี้")
+            problem = ReadableFailure.message(for: error, doing: t("opening this file", "Names the action that failed."))
         }
     }
 
@@ -163,7 +163,7 @@ final class FilesViewModel {
             // the message that matters most here — so `message(for:)` passes our
             // own sentences straight through and only translates the OS's
             // (a full disk, a folder we may not write to · P9.4).
-            problem = ReadableFailure.message(for: error, doing: "บันทึกไฟล์นี้")
+            problem = ReadableFailure.message(for: error, doing: t("saving this file", "Names the action that failed."))
         }
     }
 
@@ -192,44 +192,63 @@ struct FilesView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: root) { model.attach(root: root) }
-        .confirmationDialog("ยังไม่ได้บันทึก", isPresented: .constant(pendingSelection != nil)) {
-            Button("ทิ้งการแก้ไข แล้วเปิดไฟล์ใหม่", role: .destructive) {
+        .confirmationDialog(t("Not saved", "Confirmation title when leaving an edited file."),
+                            isPresented: .constant(pendingSelection != nil)) {
+            Button(t("Discard the edits and open the other file",
+                     "Confirming button that abandons unsaved changes."),
+                   role: .destructive) {
                 if let next = pendingSelection { model.select(next) }
                 pendingSelection = nil
             }
-            Button("กลับไปแก้ต่อ", role: .cancel) { pendingSelection = nil }
+            Button(t("Go back to editing", "Button that keeps the unsaved file open."),
+                   role: .cancel) { pendingSelection = nil }
         } message: {
-            Text("\(model.selected?.name ?? "ไฟล์นี้") มีการแก้ที่ยังไม่ได้บันทึก")
+            Text(localised: "\(model.selected?.name ?? t("this file", "Stand-in when the file has no name to show.")) has edits that are not saved",
+                 "Message in the unsaved-changes confirmation. Placeholder is the file name.")
         }
-        .alert(createIsDirectory ? "โฟลเดอร์ใหม่" : "ไฟล์ใหม่", isPresented: $creating) {
-            TextField("ชื่อ", text: $newName)
-            Button("สร้าง") { model.create(named: newName, directory: createIsDirectory) }
+        .alert(createIsDirectory
+               ? t("New folder", "Title of the create-folder prompt.")
+               : t("New file", "Title of the create-file prompt."),
+               isPresented: $creating) {
+            TextField(t("Name", "Text field for the new file or folder's name."), text: $newName)
+            Button(t("Create", "Button that creates the project.")) {
+                model.create(named: newName, directory: createIsDirectory)
+            }
                 .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
-            Button("ยกเลิก", role: .cancel) {}
+            Button(t("Cancel", "Button that dismisses the create prompt."), role: .cancel) {}
         } message: {
-            Text("สร้างในโฟลเดอร์ที่เปิดอยู่ · ถ้ามีชื่อนี้แล้วจะไม่เขียนทับให้")
+            Text(localised: "Created in the folder that is open · an existing name is not overwritten",
+                 "Message under the create-file prompt.")
         }
-        .alert("เปลี่ยนชื่อ", isPresented: .constant(renaming != nil)) {
-            TextField("ชื่อใหม่", text: $newName)
-            Button("เปลี่ยน") {
+        .alert(t("Rename", "Title of the rename prompt."), isPresented: .constant(renaming != nil)) {
+            TextField(t("New name", "Text field for the new name."), text: $newName)
+            Button(t("Rename it", "Button that applies the new name.")) {
                 if let entry = renaming { model.rename(entry, to: newName) }
                 renaming = nil
             }
             .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
-            Button("ยกเลิก", role: .cancel) { renaming = nil }
+            Button(t("Cancel", "Button that dismisses the rename prompt."),
+                   role: .cancel) { renaming = nil }
         } message: {
-            Text(renaming.map { "เปลี่ยนชื่อ \($0.name)" } ?? "")
+            Text(renaming.map {
+                t("Rename \($0.name)", "Message in the rename prompt. Placeholder is the current name.")
+            } ?? "")
         }
-        .confirmationDialog("ลบ \(deleting?.name ?? "")", isPresented: .constant(deleting != nil)) {
-            Button("ย้ายไปถังขยะ", role: .destructive) {
+        .confirmationDialog(t("Delete \(deleting?.name ?? "")",
+                              "Confirmation title. Placeholder is the file name."),
+                            isPresented: .constant(deleting != nil)) {
+            Button(t("Move it to the Trash", "Confirming button — says where the file goes, not “delete”."),
+                   role: .destructive) {
                 if let entry = deleting { model.remove(entry) }
                 deleting = nil
             }
-            Button("ยกเลิก", role: .cancel) { deleting = nil }
+            Button(t("Cancel", "Button that dismisses the delete confirmation."),
+                   role: .cancel) { deleting = nil }
         } message: {
             // Said, because the difference between this and `rm` is the whole
             // reason the button is allowed to exist.
-            Text("ย้ายไปถังขยะของเครื่อง — กู้คืนจาก Finder ได้ ไม่ได้ลบทิ้งถาวร")
+            Text(localised: "It goes to the system Trash — recoverable from the Finder, not erased",
+                 "Message in the delete confirmation, stating what actually happens.")
         }
     }
 
@@ -240,22 +259,30 @@ struct FilesView: View {
             HStack(spacing: 6) {
                 ForEach(Array(model.breadcrumb.enumerated()), id: \.offset) { index, url in
                     if index > 0 { Text("›").foregroundStyle(.secondary) }
-                    Button(index == 0 ? "พื้นที่ทำงาน" : url.lastPathComponent) {
+                    Button(index == 0
+                           ? t("Workspace", "First crumb of the file path: the workspace root.")
+                           : url.lastPathComponent) {
                         model.jump(to: index)
                     }
                     .buttonStyle(.plain)
                     .fontWeight(index == model.breadcrumb.count - 1 ? .semibold : .regular)
                     .accessibilityLabel(Text(index == 0
-                                             ? "ขึ้นไปที่โฟลเดอร์บนสุดของพื้นที่ทำงาน"
-                                             : "ขึ้นไปที่โฟลเดอร์ \(url.lastPathComponent)"))
+                                             ? t("Go up to the top folder of the workspace",
+                                                 "Screen-reader label on the first path crumb.")
+                                             : t("Go up to the folder \(url.lastPathComponent)",
+                                                 "Screen-reader label on a path crumb. Placeholder is the folder name.")))
                 }
                 Spacer()
                 Menu {
-                    Button("ไฟล์ใหม่…") { createIsDirectory = false; newName = ""; creating = true }
-                    Button("โฟลเดอร์ใหม่…") { createIsDirectory = true; newName = ""; creating = true }
+                    Button(t("New file…", "Menu item that creates a file.")) {
+                        createIsDirectory = false; newName = ""; creating = true
+                    }
+                    Button(t("New folder…", "Menu item that creates a folder.")) {
+                        createIsDirectory = true; newName = ""; creating = true
+                    }
                 } label: {
                     Image(systemName: "plus")
-                        .accessibilityLabel("สร้างไฟล์หรือโฟลเดอร์ใหม่")
+                        .accessibilityLabel(t("Create a new file or folder", "Screen-reader label."))
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
@@ -266,18 +293,20 @@ struct FilesView: View {
                     // because that is the form the rest of this app uses and the
                     // one `accessibility-audit.py` checks for.
                     Image(systemName: "arrow.clockwise")
-                        .accessibilityLabel("อ่านโฟลเดอร์ใหม่")
+                        .accessibilityLabel(t("Reload the folder", "Screen-reader label."))
                 }
                 .buttonStyle(.borderless)
-                .help("อ่านโฟลเดอร์นี้ใหม่")
+                .help(t("Read this folder again", "Tooltip on the reload button."))
             }
             .padding(Space.box)
 
             Divider()
 
             if model.entries.isEmpty {
-                ContentUnavailableView("โฟลเดอร์นี้ว่าง", systemImage: "folder",
-                                       description: Text("ไฟล์ที่คำสั่งในสมุดงานหรือ `run_shell` เขียนไว้ จะมาโผล่ที่นี่"))
+                ContentUnavailableView(t("This folder is empty", "Empty state in the file list."),
+                                       systemImage: "folder",
+                                       description: Text(localised: "Files written by a notebook cell or by `run_shell` turn up here",
+                                                         "Empty-state explanation in the file list."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(model.entries, selection: .constant(model.selected?.id)) { entry in
@@ -319,7 +348,8 @@ struct FilesView: View {
             }
             Spacer()
             if entry.kind == .document {
-                Text("อ่านอย่างเดียว").font(.caption2).foregroundStyle(.secondary)
+                Text(localised: "read-only", "Marker on a file that cannot be written back.")
+                    .font(.caption2).foregroundStyle(.secondary)
             }
         }
         .contentShape(Rectangle())
@@ -328,11 +358,16 @@ struct FilesView: View {
         // renamed is. An `.accessibilityAction` for each, because a context
         // menu is a gesture and a menu somebody cannot reach is not a feature.
         .contextMenu {
-            Button("เปลี่ยนชื่อ…") { renaming = entry; newName = entry.name }
-            Button("ลบ", role: .destructive) { deleting = entry }
+            Button(t("Rename…", "Context-menu item that renames a file.")) {
+                renaming = entry; newName = entry.name
+            }
+            Button(t("Delete", "Context-menu item that removes a file."),
+                   role: .destructive) { deleting = entry }
         }
-        .accessibilityAction(named: "เปลี่ยนชื่อ") { renaming = entry; newName = entry.name }
-        .accessibilityAction(named: "ลบ") { deleting = entry }
+        .accessibilityAction(named: t("Rename", "Title of the rename prompt.")) {
+            renaming = entry; newName = entry.name
+        }
+        .accessibilityAction(named: t("Delete", "Context-menu item that removes a file.")) { deleting = entry }
     }
 
     private func icon(for entry: FileEntry) -> String {
@@ -346,7 +381,9 @@ struct FilesView: View {
     }
 
     private func label(for entry: FileEntry) -> String {
-        entry.isDirectory ? "โฟลเดอร์ \(entry.name)" : "ไฟล์ \(entry.name)"
+        entry.isDirectory
+            ? t("folder \(entry.name)", "Screen-reader label for a folder row. Placeholder is its name.")
+            : t("file \(entry.name)", "Screen-reader label for a file row. Placeholder is its name.")
     }
 
     private func open(_ entry: FileEntry) {
@@ -366,7 +403,8 @@ struct FilesView: View {
             case .editable:
                 TextEditor(text: $model.draft)
                     .font(.system(.body, design: .monospaced))
-                    .accessibilityLabel("เนื้อหาไฟล์ \(model.selected?.name ?? "")")
+                    .accessibilityLabel(t("Contents of \(model.selected?.name ?? "")",
+                                          "Screen-reader label for the file editor. Placeholder is the file name."))
             case .readOnly(let text, _):
                 ScrollView {
                     Text(text)
@@ -384,24 +422,29 @@ struct FilesView: View {
                             .frame(maxWidth: .infinity)
                             .padding(Space.box)
                     }
-                    .accessibilityLabel("รูป \(name)")
+                    .accessibilityLabel(t("image \(name)", "Screen-reader label for an image. Placeholder is its name."))
                     // Said, because a picture is the one thing on this screen
                     // a screen reader cannot describe: the app knows the file
                     // name and the size and nothing about what is in it.
-                    .accessibilityHint("แอปไม่ทราบว่าในรูปมีอะไร — แสดงไฟล์ตามที่อยู่บนดิสก์")
+                    .accessibilityHint(t("the app does not know what the image shows — it displays the file as it is on disk",
+                                         "Screen-reader hint that no description of the image exists."))
                 } else {
-                    ContentUnavailableView("เปิดรูปนี้ไม่ได้", systemImage: "photo.badge.exclamationmark",
-                                           description: Text("ไฟล์นามสกุลรูป แต่ระบบถอดรหัสไม่ได้ — "
-                                                             + "อาจเป็นไฟล์เสียหรือชนิดที่ macOS ไม่รองรับ"))
+                    ContentUnavailableView(t("This image cannot be opened", "Empty state for an undecodable image."),
+                                           systemImage: "photo.badge.exclamationmark",
+                                           description: Text(localised: "It has an image extension but cannot be decoded — it may be damaged, or a kind macOS does not support",
+                                                             "Explains why an image would not open."))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             case .cannotShow(let why):
-                ContentUnavailableView("เปิดในหน้านี้ไม่ได้", systemImage: "doc.questionmark",
+                ContentUnavailableView(t("This cannot be opened here", "Empty state for a file the viewer cannot show."),
+                                       systemImage: "doc.questionmark",
                                        description: Text(why))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case nil:
-                ContentUnavailableView("ยังไม่ได้เลือกไฟล์", systemImage: "sidebar.left",
-                                       description: Text("เลือกไฟล์จากรายการทางซ้ายเพื่อเปิดดู"))
+                ContentUnavailableView(t("No file selected", "Empty state before a file is chosen."),
+                                       systemImage: "sidebar.left",
+                                       description: Text(localised: "Choose a file from the list on the left to open it",
+                                                         "Empty-state instruction in the file viewer."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             if let problem = model.problem {
@@ -420,7 +463,8 @@ struct FilesView: View {
         HStack(spacing: 10) {
             Text(model.selected?.name ?? "—").fontWeight(.semibold)
             if model.isDirty {
-                Text("แก้แล้วยังไม่บันทึก").font(.caption).foregroundStyle(.orange)
+                Text(localised: "edited, not saved", "Marker on a file with unsaved changes.")
+                    .font(.caption).foregroundStyle(.orange)
             }
             Spacer()
             // The reason a save is impossible sits next to the button rather
@@ -430,9 +474,9 @@ struct FilesView: View {
                     .frame(maxWidth: 420, alignment: .trailing)
             }
             if model.isDirty {
-                Button("ย้อนกลับ") { model.revert() }
+                Button(t("Revert", "Button that discards unsaved edits.")) { model.revert() }
             }
-            Button("บันทึก") { model.save() }
+            Button(t("Save", "Button that stores the edited entities.")) { model.save() }
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!model.canSave)
         }

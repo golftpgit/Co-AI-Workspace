@@ -105,9 +105,8 @@ public struct DefaultRiskScorer: RiskScoring {
     /// reachable from nothing — found by reading the plan by hand (2026-08-12),
     /// which is not a method anybody should have to rely on.
     static let notBuiltYet: [String: String] = [
-        "read_file": "M6 FileTool — ยังไม่มี task ผูก",
-        "write_file": "M6 FileTool — ยังไม่มี task ผูก",
-
+        // `read_file` and `write_file` left this list on 2026-08-17 (C6): they
+        // are `ToolBelt.FileTools` now, scoped to the workspace's own folder.
         "fetch_docs": "M6 — ต้องมีแหล่งเอกสารก่อน",
     ]
 

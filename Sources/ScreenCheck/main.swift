@@ -74,7 +74,7 @@ struct ScreenCheck {
         }
 
         do {
-            let snapshot = try await navigator.snapshot()
+            let snapshot = try await navigator.stableSnapshot()
             print("window: \(snapshot.windowTitle)")
 
             // What the screen says about one thing, for watching a value

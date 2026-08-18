@@ -25,12 +25,12 @@ public enum ToleranceDimension: String, Sendable, Codable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .time: "เวลา"
-        case .cost: "ค่าใช้จ่าย"
-        case .scope: "ขอบเขต"
-        case .quality: "คุณภาพ"
-        case .risk: "ความเสี่ยง"
-        case .benefit: "ประโยชน์"
+        case .time: t("Time", "Status bar cell: time spent on this project.")
+        case .cost: t("Cost", "Name of an ISO 21502 practice.")
+        case .scope: t("Scope", "Name of an ISO 21502 practice.")
+        case .quality: t("Quality", "Name of an ISO 21502 practice.")
+        case .risk: t("Risk", "Name of an ISO 21502 practice.")
+        case .benefit: t("Benefit", "Name of a tolerance dimension.")
         }
     }
 
@@ -39,12 +39,15 @@ public enum ToleranceDimension: String, Sendable, Codable, CaseIterable {
     /// is the whole of §19.10's claim that the slider stops being a mood.
     public var unit: String {
         switch self {
-        case .time: "เท่าของ p90 ที่งานแบบเดียวกันเคยใช้"
-        case .cost: "บาทต่อขั้น"
-        case .scope: "ใบงานที่เพิ่มได้จาก baseline"
-        case .quality: "รอบ rework ต่อใบงาน"
-        case .risk: "ระดับความเสี่ยงสูงสุดที่ทำเองได้ (0 ต่ำ · 1 กลาง · 2 สูง)"
-        case .benefit: "ค่าต่ำสุดของตัววัดที่ยอมรับได้"
+        case .time: t("multiples of the p90 that work of this kind has taken",
+                      "Unit of the time tolerance.")
+        case .cost: t("per stage, in the endpoint's currency", "Unit of the cost tolerance.")
+        case .scope: t("work packages that may be added beyond the baseline",
+                       "Unit of the scope tolerance.")
+        case .quality: t("rounds of rework per work package", "Unit of the quality tolerance.")
+        case .risk: t("highest risk level the team may take on its own (0 low · 1 medium · 2 high)",
+                      "Unit of the risk tolerance.")
+        case .benefit: t("lowest acceptable value of the measure", "Unit of the benefit tolerance.")
         }
     }
 }
@@ -256,19 +259,22 @@ public struct ExceptionReport: Sendable, Codable, Equatable, Identifiable {
     /// channel so the version that reaches a phone is the version on screen.
     public var message: String {
         var lines = [
-            "⚠️ ทะลุกรอบ\(dimension.label) — โครงการหยุดรอคุณตัดสิน",
+            t("⚠️ The \(dimension.label) tolerance was breached — the project is waiting on your decision",
+              "First line of an exception report. Placeholder is which tolerance."),
             "",
-            "สาเหตุ: \(cause)",
-            "ผลกระทบ: \(impact)",
+            t("Cause: \(cause)", "Exception report line. Placeholder is the cause."),
+            t("Effect: \(impact)", "Exception report line. Placeholder is the effect."),
         ]
         if !options.isEmpty {
             lines.append("")
-            lines.append("ทางเลือก:")
+            lines.append(t("Options:", "Exception report heading before the list of options."))
             lines.append(contentsOf: options.enumerated().map { "  \($0.offset + 1). \($0.element)" })
         }
         lines.append("")
-        lines.append("ข้อเสนอของหัวหน้าทีม: \(recommendation)")
-        lines.append("ต้องการจากคุณ: \(needsFromHuman)")
+        lines.append(t("The team lead suggests: \(recommendation)",
+                       "Exception report line. Placeholder is the suggestion."))
+        lines.append(t("What we need from you: \(needsFromHuman)",
+                       "Exception report line. Placeholder is what is needed."))
         return lines.joined(separator: "\n")
     }
 
@@ -283,13 +289,19 @@ public struct ExceptionReport: Sendable, Codable, Equatable, Identifiable {
         return ExceptionReport(
             projectID: projectID,
             dimension: dimension,
-            cause: "\(dimension.label)ทะลุกรอบที่ตั้งไว้ — ตอนนี้ \(format(status.current)) จากกรอบ \(format(status.limit)) (\(dimension.unit))",
-            impact: "ทีมหยุดรับงานใหม่ในขั้นนี้จนกว่าจะมีคำตัดสิน",
-            options: ["ขยายกรอบ\(dimension.label) แล้วทำต่อ",
-                      "ลดขอบเขตให้พอดีกับกรอบเดิม",
-                      "ยุติโครงการก่อนกำหนด"],
-            recommendation: "ยังไม่มีข้อเสนอจากหัวหน้าทีม — รายงานนี้ระบบสร้างจากตัวเลขที่วัดได้",
-            needsFromHuman: "เลือกทางใดทางหนึ่ง หรือแก้กรอบแล้วปิดข้อยกเว้นนี้",
+            cause: t("The \(dimension.label) tolerance was exceeded — now \(format(status.current)) against a limit of \(format(status.limit)) (\(dimension.unit))",
+                     "Cause of an exception. Placeholders: which tolerance, its current value, its limit and its unit."),
+            impact: t("The team takes on no new work in this stage until it is decided",
+                      "Effect of an exception."),
+            options: [t("Widen the \(dimension.label) tolerance and carry on",
+                        "Option offered in an exception report. Placeholder is which tolerance."),
+                      t("Cut scope back to fit the existing tolerance",
+                        "Option offered in an exception report."),
+                      t("End the project early", "Option offered in an exception report.")],
+            recommendation: t("No suggestion from the team lead yet — this report was assembled from measured numbers",
+                              "Default recommendation on a system-generated exception."),
+            needsFromHuman: t("Choose one of the options, or change the tolerance and close this exception",
+                              "What an exception needs from a person."),
             raisedAt: raisedAt)
     }
 

@@ -112,12 +112,12 @@ struct ScheduleTests {
         let assignments = try! #require(
             Schedule.estimate(from: [600, 900, 1_200], basis: .assignments(kind: "รายงานสรุป")))
         #expect(assignments.basis == .assignments(kind: "รายงานสรุป"))
-        #expect(assignments.unit == "งาน")
-        #expect(assignments.label.contains("3 งาน"))
+        #expect(assignments.unit == "tasks")
+        #expect(assignments.label.contains("3 tasks"))
 
         let turns = try! #require(Schedule.estimate(from: [10, 20, 30], basis: .turns))
-        #expect(turns.unit == "เทิร์น")
-        #expect(turns.label.contains("3 เทิร์น"))
+        #expect(turns.unit == "turns")
+        #expect(turns.label.contains("3 turns"))
         // A band of turns and a band of assignments are different claims even
         // when the numbers coincide.
         #expect(Schedule.estimate(from: [10, 20, 30], basis: .assignments(kind: "x")) != turns)

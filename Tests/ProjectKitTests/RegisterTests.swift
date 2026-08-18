@@ -71,7 +71,7 @@ struct RegisterTests {
             projectID: ProjectID("pj_1"),
             title: "ตัดข้อ 14 และ 17",
             detail: .change(scopeImpact: "นิยามตัวแปรเปลี่ยน",
-                            timeImpact: "+0.5 วัน", costImpact: "+฿40"),
+                            timeImpact: "+0.5 วัน", costImpact: "+$40"),
             origin: .agent(.analyst))
 
         // An agent may raise it, and it starts as a proposal without anyone
@@ -108,7 +108,7 @@ struct RegisterTests {
 
         let change = RegisterEntry(projectID: project.id, title: "เพิ่มงานตรวจความเที่ยง",
                                    detail: .change(scopeImpact: "+1 ใบ", timeImpact: "+1 วัน",
-                                                   costImpact: "+฿40"),
+                                                   costImpact: "+$40"),
                                    origin: .agent(.analyst))
         try await service.record(change)
         try await service.decideChange(change, approve: true, by: "ผู้ใช้")
@@ -130,7 +130,7 @@ struct RegisterTests {
 
         let change = RegisterEntry(projectID: project.id, title: "ขยายไปอีก รพ.",
                                    detail: .change(scopeImpact: "+3 ใบ", timeImpact: "+2 สัปดาห์",
-                                                   costImpact: "+฿800"),
+                                                   costImpact: "+$800"),
                                    origin: .agent(.teamLead))
         try await service.record(change)
         try await service.decideChange(change, approve: false, by: "ผู้ใช้")

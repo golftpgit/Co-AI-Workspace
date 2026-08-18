@@ -62,12 +62,12 @@ public struct ScoredResponses: Sendable, Equatable {
             case .single, .multiple, .ranking:
                 skipped.append(SkippedItem(
                     itemID: item.id, prompt: item.prompt.thai,
-                    reason: "ตัวเลือกไม่มีลำดับในตัวเอง — การให้เลข 1, 2, 3 แทนตัวเลือก "
-                        + "คือการสร้างลำดับที่ไม่มีใครกำหนดไว้"))
+                    reason: localised("the options have no order of their own — numbering them 1, 2, 3 ", "Why an item cannot be scored.")
+                        + localised("invents an order nobody defined", "Ends the reason an item cannot be scored.")))
             case .openText, .date, .fileUpload, .matrix:
                 skipped.append(SkippedItem(
                     itemID: item.id, prompt: item.prompt.thai,
-                    reason: "ชนิด “\(item.kind.label)” ไม่ใช่คะแนนที่นำมาหาความเที่ยงได้"))
+                    reason: localised("a “\(item.kind.label)” item is not a score reliability can be computed from", "Why an item cannot be scored. Placeholder: the item type.")))
             }
         }
 

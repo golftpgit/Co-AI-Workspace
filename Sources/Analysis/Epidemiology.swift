@@ -92,7 +92,7 @@ public enum Epidemiology {
         try requireCounts(table)
         guard table.unexposedCases > 0, table.exposedCases > 0 else {
             throw StatError.notEnoughData(
-                "มีเซลล์ที่เป็นศูนย์ — RR คำนวณช่วงความเชื่อมั่นแบบ log ไม่ได้")
+                localised("a cell is zero — the log interval for a risk ratio cannot be computed", "Why a risk ratio cannot be reported."))
         }
         let ratio = table.riskExposed / table.riskUnexposed
         // Katz: SE(ln RR) = √(1/a − 1/(a+b) + 1/c − 1/(c+d))
@@ -113,7 +113,7 @@ public enum Epidemiology {
         try requireCounts(table)
         guard !table.hasEmptyCell else {
             throw StatError.notEnoughData(
-                "มีเซลล์ที่เป็นศูนย์ — OR แบบ Woolf คำนวณไม่ได้ (ต้องตัดสินใจเรื่อง continuity correction ก่อน)")
+                localised("a cell is zero — Woolf's odds ratio cannot be computed until a continuity correction has been decided on", "Why an odds ratio cannot be reported."))
         }
         let ratio = (Double(table.exposedCases) * Double(table.unexposedNonCases))
             / (Double(table.exposedNonCases) * Double(table.unexposedCases))
@@ -153,12 +153,12 @@ public enum Epidemiology {
     public static func numberNeededToTreat(_ table: TwoByTwo) throws -> Estimate {
         let difference = try riskDifference(table)
         guard difference.value != 0 else {
-            throw StatError.notEnoughData("ผลต่างความเสี่ยงเป็นศูนย์ — NNT เป็นอนันต์")
+            throw StatError.notEnoughData(localised("the risk difference is zero — the number needed to treat is infinite", "Why the number needed to treat cannot be reported."))
         }
         guard !difference.includes(0) else {
             throw StatError.notEnoughData(
-                "ช่วงความเชื่อมั่นของผลต่างความเสี่ยงคร่อมศูนย์ — "
-                    + "NNT ที่กลับด้านจากช่วงนี้ไม่ใช่ช่วงเดียวที่ต่อเนื่อง จึงรายงานเป็น NNT ไม่ได้")
+                localised("the interval around the risk difference crosses zero — ", "Why the number needed to treat cannot be reported.")
+                    + localised("inverting it does not give one continuous interval, so it cannot be reported as a number needed to treat", "Ends the explanation of why the number needed to treat cannot be reported."))
         }
         // Reported as a count of people, which is a positive number, with the
         // direction in the name: a negative "NNT" is the kind of value whose
@@ -169,10 +169,10 @@ public enum Epidemiology {
         return Estimate(value: abs(1 / difference.value),
                         lower: ends[0], upper: ends[1],
                         method: harms
-                            ? "NNH — จำนวนที่ต้องได้รับจนเกิดอันตรายเพิ่ม 1 ราย · "
-                                + "กลับด้านจากช่วง Wald ของผลต่างความเสี่ยง 95% CI"
-                            : "NNT — จำนวนที่ต้องรักษาจนป้องกันได้ 1 ราย · "
-                                + "กลับด้านจากช่วง Wald ของผลต่างความเสี่ยง 95% CI")
+                            ? localised("NNH — how many must be exposed for one extra person to be harmed · ", "Label for the number needed to harm.")
+                                + localised("inverted from the Wald 95% CI of the risk difference", "How the interval around a number needed to treat or harm was obtained.")
+                            : localised("NNT — how many must be treated to prevent one case · ", "Label for the number needed to treat.")
+                                + localised("inverted from the Wald 95% CI of the risk difference", "How the interval around a number needed to treat or harm was obtained."))
     }
 
     // MARK: - one group
@@ -184,9 +184,9 @@ public enum Epidemiology {
     /// observations. Wilson gives [0, 0.161], which is what twenty
     /// observations actually support.
     public static func prevalence(cases: Int, population: Int) throws -> Estimate {
-        guard population > 0 else { throw StatError.notEnoughData("ประชากรเป็นศูนย์") }
+        guard population > 0 else { throw StatError.notEnoughData(localised("the population is zero", "Why a rate cannot be computed.")) }
         guard cases >= 0, cases <= population else {
-            throw StatError.badShape("จำนวนผู้ป่วยต้องอยู่ระหว่าง 0 ถึงจำนวนประชากร")
+            throw StatError.badShape(localised("the number of cases must be between 0 and the size of the population", "Why a rate cannot be computed."))
         }
         return wilson(successes: cases, trials: population)
     }
@@ -214,10 +214,10 @@ public enum Epidemiology {
     ///   denominator the caller and the screen disagree about is the classic
     ///   way an incidence becomes a hundred times what it is.
     public static func incidenceRate(cases: Int, personTime: Double) throws -> Estimate {
-        guard personTime > 0 else { throw StatError.notEnoughData("person-time ต้องมากกว่าศูนย์") }
+        guard personTime > 0 else { throw StatError.notEnoughData(localised("person-time must be greater than zero", "Why a rate cannot be computed.")) }
         guard cases > 0 else {
             throw StatError.notEnoughData(
-                "ไม่มีเหตุการณ์เลย — อัตราเป็นศูนย์และช่วงแบบ log คำนวณไม่ได้")
+                localised("there were no events — the rate is zero and a log interval cannot be computed", "Why a rate cannot be reported with an interval."))
         }
         let rate = Double(cases) / personTime
         // SE(ln rate) = 1/√cases — the count carries all the uncertainty.
@@ -252,12 +252,12 @@ public enum Epidemiology {
     /// full of retirees has more cancer than a university town for reasons that
     /// have nothing to do with either place, and a crude rate cannot say so.
     public static func ageStandardisedRate(_ strata: [Stratum]) throws -> Estimate {
-        guard !strata.isEmpty else { throw StatError.notEnoughData("ไม่มีชั้นอายุ") }
+        guard !strata.isEmpty else { throw StatError.notEnoughData(localised("there are no age strata", "Why an age-standardised rate cannot be computed.")) }
         guard strata.allSatisfy({ $0.personTime > 0 }) else {
-            throw StatError.notEnoughData("ทุกชั้นต้องมี person-time มากกว่าศูนย์")
+            throw StatError.notEnoughData(localised("every stratum must have person-time greater than zero", "Why an age-standardised rate cannot be computed."))
         }
         let totalWeight = strata.reduce(0) { $0 + $1.standardWeight }
-        guard totalWeight > 0 else { throw StatError.badShape("น้ำหนักประชากรมาตรฐานรวมเป็นศูนย์") }
+        guard totalWeight > 0 else { throw StatError.badShape(localised("the standard population weights add up to zero", "Why an age-standardised rate cannot be computed.")) }
 
         var rate = 0.0
         var variance = 0.0
@@ -281,11 +281,11 @@ public enum Epidemiology {
 
     private static func requireCounts(_ table: TwoByTwo) throws {
         guard table.exposedTotal > 0, table.unexposedTotal > 0 else {
-            throw StatError.notEnoughData("มีกลุ่มที่ไม่มีคนอยู่เลย")
+            throw StatError.notEnoughData(localised("one of the groups has nobody in it", "Why a measure cannot be computed."))
         }
         guard table.exposedCases >= 0, table.exposedNonCases >= 0,
               table.unexposedCases >= 0, table.unexposedNonCases >= 0 else {
-            throw StatError.badShape("จำนวนนับติดลบ")
+            throw StatError.badShape(localised("a count is negative", "Why a measure cannot be computed."))
         }
     }
 }

@@ -301,14 +301,14 @@ public extension KnowledgeView {
 
     /// The view in the words a person reviewing this work would need.
     var describedForReview: String {
-        var parts = ["ขอบเขต " + visibleScopes.map(\.rawValue).sorted().joined(separator: "+")]
-        if let minTier { parts.append("แหล่งอย่างน้อย \(minTier.rawValue.uppercased())") }
-        if requiresCompleteProvenance { parts.append("เฉพาะที่อ้างอิงได้ครบ") }
-        if evidenceOnly { parts.append("เฉพาะหลักฐานที่ระบบสร้าง") }
+        var parts = [localised("scope ", "Prefix of a search filter chip.") + visibleScopes.map(\.rawValue).sorted().joined(separator: "+")]
+        if let minTier { parts.append(localised("\(minTier.rawValue.uppercased()) sources and above", "A search filter chip. Placeholder: the lowest tier allowed.")) }
+        if requiresCompleteProvenance { parts.append(localised("fully citable only", "A search filter chip.")) }
+        if evidenceOnly { parts.append(localised("system-generated evidence only", "A search filter chip.")) }
         if !entityTypes.isEmpty {
-            parts.append("ชนิด " + entityTypes.sorted().prefix(4).joined(separator: "/"))
+            parts.append(localised("kind ", "Prefix of a search filter chip.") + entityTypes.sorted().prefix(4).joined(separator: "/"))
         }
-        parts.append("เดินกราฟ \(hops) ชั้น")
+        parts.append(localised("\(hops) hops through the graph", "A search filter chip. Placeholder: how many hops."))
         return parts.joined(separator: " · ")
     }
 }

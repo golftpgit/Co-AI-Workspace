@@ -8,7 +8,7 @@ import Persistence
 // Assembling the five-chapter manuscript (ARCHITECTURE §20.8, P11.9).
 //
 // The screen is organised around the one thing that separates this from a text
-// editor: **a number is inserted, never typed.** "เพิ่มตัวเลขจากการรัน" opens a
+// editor: **a number is inserted, never typed.** "Insert a number from a run" opens a
 // picker over cells that have actually run, and choosing one writes both the
 // placeholder and the reference — see `SentenceComposer` for why that is one
 // action rather than two fields.
@@ -31,12 +31,13 @@ struct ManuscriptPane: View {
                 editor.frame(minWidth: 420)
             } else {
                 ContentUnavailableView(
-                    "ยังไม่ได้เลือกต้นฉบับ",
+                    t("No manuscript selected", "Empty state on the manuscript screen."),
                     systemImage: "doc.text",
                     // One literal, not a concatenation: SwiftUI parses markdown
                     // only in a string literal, and `"a" + "b"` prints its own
                     // asterisks (the rule check.sh enforces).
-                    description: Text("ต้นฉบับ 5 บทเก็บ **ตัวเลขที่ผูกกับเซลล์ที่รันจริง** ไม่ใช่ตัวเลขที่พิมพ์เข้าไป — รันวิเคราะห์ใหม่แล้วเล่มเปลี่ยนตาม"))
+                    description: Text(localised: "A five-chapter manuscript holds **numbers bound to cells that really ran**, not numbers somebody typed — re-run the analysis and the manuscript follows",
+                                      "Empty-state explanation of what makes this manuscript editor different."))
                     .frame(maxWidth: .infinity)
             }
         }
@@ -54,10 +55,10 @@ struct ManuscriptPane: View {
 
     private var list: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("ต้นฉบับ 5 บท").font(.headline)
+            Text(localised: "Five-chapter manuscript", "Heading of the manuscript screen.").font(.headline)
             HStack {
-                TextField("ชื่อเล่ม", text: $newTitle)
-                Button("สร้าง") {
+                TextField(t("Manuscript title", "Text field for naming a manuscript."), text: $newTitle)
+                Button(t("Create", "Button that creates the project.")) {
                     Task { await model.create(title: newTitle); newTitle = "" }
                 }
                 .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -77,7 +78,8 @@ struct ManuscriptPane: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(manuscript.title).fontWeight(.medium)
-                            Text("ตัวเลขที่รายงาน \(manuscript.references.count) ค่า")
+                            Text(localised: "\(manuscript.references.count) reported numbers",
+                                 "How many bound numbers a manuscript holds. Placeholder is a count.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -87,15 +89,16 @@ struct ManuscriptPane: View {
                     .background(manuscript.id == model.selected?.id
                                 ? Color.accentColor.opacity(0.15) : Color.clear)
                     .contextMenu {
-                        Button("ลบเล่มนี้", role: .destructive) {
+                        Button(t("Delete this manuscript", "Context-menu item that removes a manuscript."),
+                               role: .destructive) {
                             Task { await model.delete(manuscript) }
                         }
                     }
-                    .accessibilityAction(named: "ลบต้นฉบับเล่มนี้") {
+                    .accessibilityAction(named: t("Delete this manuscript", "Screen-reader action name.")) {
                         Task { await model.delete(manuscript) }
                     }
-                    .accessibilityLabel("\(manuscript.title) · ตัวเลขที่รายงาน "
-                                        + "\(manuscript.references.count) ค่า")
+                    .accessibilityLabel(t("\(manuscript.title) · \(manuscript.references.count) reported numbers",
+                                          "Screen-reader label for a manuscript row. Placeholders: its title and how many numbers."))
                 }
             }
             if let status = model.status {
@@ -130,34 +133,42 @@ struct ManuscriptPane: View {
         HStack(alignment: .firstTextBaseline) {
             Text(manuscript.title).font(.title2.bold())
             Spacer()
-            Button("ตรวจใหม่") { Task { await model.refreshPreview() } }
-            Button("ส่งออก .docx") { exporting = true }
+            Button(t("Check again", "Button that re-verifies every bound number.")) {
+                Task { await model.refreshPreview() }
+            }
+            Button(t("Export .docx", "Button that writes the document out.")) { exporting = true }
                 .buttonStyle(.borderedProminent)
                 .disabled(!model.isExportable)
                 .help(model.isExportable
-                      ? "ตัวเลขทุกตัวผูกกับการรันจริงแล้ว"
-                      : "ยังมีตัวเลขที่ผูกไม่ได้ — ดูรายการด้านล่าง")
+                      ? t("every number is bound to a real run", "Manuscript status when export is possible.")
+                      : t("some numbers cannot be bound — see the list below",
+                          "Manuscript status when export is blocked."))
         }
     }
 
     @ViewBuilder private var problems: some View {
         if let preview = model.preview {
             if preview.isExportable {
-                Label("ตัวเลขทุกตัวในเล่มผูกกับเซลล์ที่รันจริงแล้ว", systemImage: "checkmark.seal")
+                Label(t("Every number in the manuscript is bound to a cell that really ran",
+                        "Shown when the manuscript is ready to export."),
+                      systemImage: "checkmark.seal")
                     .font(.callout).foregroundStyle(.green)
             } else {
                 VStack(alignment: .leading, spacing: 4) {
-                    Label("ยังส่งออกไม่ได้", systemImage: "exclamationmark.triangle")
+                    Label(t("Not exportable yet", "Shown when the manuscript has unbound numbers."),
+                          systemImage: "exclamationmark.triangle")
                         .font(.callout).foregroundStyle(.orange)
                     ForEach(preview.failures) { failure in
                         Text("• \(failure.text)").font(.caption)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     ForEach(preview.unfilled, id: \.self) { name in
-                        Text("• ช่อง “{\(name)}” ยังไม่มีผลรองรับ").font(.caption)
+                        Text(localised: "• the slot “{\(name)}” has no result behind it",
+                             "One unbound placeholder. Placeholder is the slot name.")
+                            .font(.caption)
                     }
-                    Text("เอกสารถูกปฏิเสธแทนที่จะพิมพ์ช่องว่างหรือเลขเก่า — "
-                         + "เล่มที่มีรูโหว่คือเล่มที่ถูกส่งต่อไปอยู่ดี")
+                    Text(localised: "The document is refused rather than printing a blank or a stale number — a manuscript with a hole in it is a manuscript that gets sent on anyway",
+                         "Explains why export is blocked instead of degrading.")
                         .font(.caption2).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -173,13 +184,17 @@ struct ManuscriptPane: View {
             HStack {
                 Text(chapter.title).font(.headline)
                 Spacer()
-                Button("เพิ่มหัวข้อ") { Task { await model.addSection(to: chapter) } }
+                Button(t("Add a section", "Button that appends a section to a chapter.")) {
+                    Task { await model.addSection(to: chapter) }
+                }
                     .buttonStyle(.borderless).font(.caption)
-                    .accessibilityLabel("เพิ่มหัวข้อใน\(chapter.title)")
+                    .accessibilityLabel(t("Add a section to \(chapter.title)",
+                                          "Screen-reader label. Placeholder is the chapter title."))
             }
             let sections = manuscript.sections[chapter] ?? []
             if sections.isEmpty {
-                Text("ยังไม่มีหัวข้อในบทนี้").font(.caption).foregroundStyle(.secondary)
+                Text(localised: "No section in this chapter yet", "Shown for an empty chapter.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             ForEach(Array(sections.enumerated()), id: \.offset) { index, section in
                 SectionEditor(model: model, chapter: chapter, index: index, section: section)
@@ -203,7 +218,7 @@ private struct SectionEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                TextField("หัวข้อ", text: Binding(
+                TextField(t("Section heading", "Text field holding a section's heading."), text: Binding(
                     get: { section.heading },
                     set: { heading in
                         var updated = section
@@ -211,7 +226,7 @@ private struct SectionEditor: View {
                         Task { await model.update(updated, at: index, in: chapter) }
                     }))
                 .textFieldStyle(.roundedBorder)
-                Button("ลบหัวข้อ", role: .destructive) {
+                Button(t("Delete the section", "Button that removes a section."), role: .destructive) {
                     Task { await model.removeSection(at: index, in: chapter) }
                 }
                 .buttonStyle(.borderless).font(.caption)
@@ -227,19 +242,22 @@ private struct SectionEditor: View {
                 }))
             .frame(minHeight: 60)
             .font(.body)
-            .accessibilityLabel("ย่อหน้าของ\(section.heading)")
+            .accessibilityLabel(t("Paragraphs of \(section.heading)",
+                                  "Screen-reader label. Placeholder is the section heading."))
 
             ForEach(Array(section.reported.enumerated()), id: \.offset) { position, sentence in
                 sentenceRow(position, sentence)
             }
 
-            Button("เพิ่มประโยคที่มีตัวเลข") {
+            Button(t("Add a sentence with numbers in it",
+                     "Button that appends a sentence able to hold bound numbers.")) {
                 var updated = section
                 updated.reported.append(ReportedSentence("", references: []))
                 Task { await model.update(updated, at: index, in: chapter) }
             }
             .buttonStyle(.borderless).font(.caption)
-            .accessibilityLabel("เพิ่มประโยคที่มีตัวเลขใน\(section.heading)")
+            .accessibilityLabel(t("Add a sentence with numbers to \(section.heading)",
+                                  "Screen-reader label. Placeholder is the section heading."))
         }
         .padding(Space.box)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
@@ -248,7 +266,9 @@ private struct SectionEditor: View {
     private func sentenceRow(_ position: Int, _ sentence: ReportedSentence) -> some View {
         let composer = SentenceComposer(sentence)
         return VStack(alignment: .leading, spacing: 4) {
-            TextField("ประโยค — ตัวเลขจะถูกใส่ให้เอง ไม่ต้องพิมพ์เอง", text: Binding(
+            TextField(t("The sentence — numbers are inserted for you, never typed",
+                        "Placeholder in the sentence editor, stating the rule the editor enforces."),
+                      text: Binding(
                 get: { sentence.text },
                 set: { text in
                     var updated = section
@@ -259,7 +279,9 @@ private struct SectionEditor: View {
             .textFieldStyle(.roundedBorder)
 
             HStack(spacing: 8) {
-                Button("เพิ่มตัวเลขจากการรัน") { picking = true; editingSentence = position }
+                Button(t("Insert a number from a run", "Button that opens the run picker.")) {
+                    picking = true; editingSentence = position
+                }
                     .buttonStyle(.borderless).font(.caption)
                 ForEach(sentence.references) { reference in
                     Button {
@@ -273,9 +295,10 @@ private struct SectionEditor: View {
                             .font(.caption2)
                     }
                     .buttonStyle(.borderless)
-                    .accessibilityLabel("เอา \(reference.label) ออกจากประโยคนี้")
+                    .accessibilityLabel(t("Remove \(reference.label) from this sentence",
+                                          "Screen-reader label. Placeholder is the number's name."))
                 }
-                Button("ลบประโยค", role: .destructive) {
+                Button(t("Delete the sentence", "Button that removes a sentence."), role: .destructive) {
                     var updated = section
                     updated.reported.remove(at: position)
                     Task { await model.update(updated, at: index, in: chapter) }
@@ -331,35 +354,41 @@ private struct ResultPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("เลือกตัวเลขจากเซลล์ที่รันแล้ว").font(.headline)
+            Text(localised: "Choose a number from a cell that has run", "Title of the run picker sheet.")
+                .font(.headline)
             if runs.isEmpty {
-                Text("ยังไม่มีเซลล์ไหนถูกรัน — ตัวเลขในเล่มต้องมาจากการรันจริง "
-                     + "ไปรันสมุดงานก่อนแล้วกลับมา")
+                Text(localised: "No cell has run yet — a number in the manuscript has to come from a real run, so run the notebook first and come back",
+                     "Shown in the run picker when there is nothing to bind to.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                Picker("เซลล์", selection: $selectedRunID) {
-                    Text("— เลือก —").tag(String?.none)
+                Picker(t("Cell", "Picker: which notebook run to take a number from."),
+                       selection: $selectedRunID) {
+                    Text(localised: "— choose —", "Picker option before a run is chosen.")
+                        .tag(String?.none)
                     ForEach(runs) { run in
                         Text(preview(run)).tag(String?.some(run.id))
                     }
                 }
                 if let run = selectedRun {
-                    Picker("คอลัมน์", selection: $column) {
+                    Picker(t("Column", "Picker: which column of the result to take."), selection: $column) {
                         ForEach(run.columns, id: \.self) { Text($0).tag($0) }
                     }
-                    Stepper("แถวที่ \(row) (มี \(run.rows.count) แถว)", value: $row,
+                    Stepper(t("Row \(row) (of \(run.rows.count))",
+                              "Stepper over result rows. Placeholders: the chosen row and how many there are."),
+                            value: $row,
                             in: 0...max(0, run.rows.count - 1))
                     if let value = value(in: run) {
-                        Text("ค่าที่จะถูกใส่: \(value)")
+                        Text(localised: "The value that will be inserted: \(value)",
+                             "Preview of the number about to be bound. Placeholder is the value.")
                             .font(.callout).foregroundStyle(.secondary)
                     }
                 }
-                LabeledContent("ชื่อของตัวเลขนี้") {
-                    TextField("ค่าเฉลี่ยอายุ", text: $label)
+                LabeledContent(t("Name for this number", "Field label: what to call the bound number.")) {
+                    TextField(t("mean age", "Example placeholder for a bound number's name."), text: $label)
                 }
-                Text("ชื่อนี้คือสิ่งที่ปรากฏในข้อความแจ้ง เมื่อวันหนึ่งเซลล์ถูกแก้แล้วผูกไม่ได้ — "
-                     + "“ค่าเฉลี่ยอายุ” อ่านง่ายกว่า “คอลัมน์ที่ 2”")
+                Text(localised: "This name is what the warning says on the day the cell changes and the number can no longer be bound — “mean age” reads better than “column 2”",
+                     "Explains why the bound number needs a human name.")
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -369,8 +398,9 @@ private struct ResultPicker: View {
             }
             HStack {
                 Spacer()
-                Button("ยกเลิก", role: .cancel) { dismiss() }
-                Button("ใส่ลงประโยค") { add() }
+                Button(t("Cancel", "Button that closes the run picker without inserting anything."),
+                       role: .cancel) { dismiss() }
+                Button(t("Insert it into the sentence", "Button that binds the number into the text.")) { add() }
                     .buttonStyle(.borderedProminent)
                     .disabled(selectedRun == nil
                               || label.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -394,7 +424,7 @@ private struct ResultPicker: View {
     private func value(in run: CellRun) -> String? {
         guard let index = run.columns.firstIndex(of: column),
               row < run.rows.count, index < run.rows[row].count else { return nil }
-        return run.rows[row][index] ?? "(ว่าง)"
+        return run.rows[row][index] ?? t("(empty)", "Stand-in for a result cell with no value.")
     }
 
     private func add() {
@@ -424,7 +454,7 @@ private struct EmptyDocument: FileDocument {
 
 // ─────────────────────────────────────────────────────────────
 
-/// The "ผลลัพธ์ + เอกสาร" sub-tab: the pre-registered method and the manuscript
+/// The "Results + documents" sub-tab: the pre-registered method and the manuscript
 /// it becomes.
 ///
 /// One picker rather than two sub-tabs because §12.4's plan and §20.8's
@@ -448,15 +478,15 @@ struct ResultsPane<AnalysisContent: View>: View {
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .plan: "แผนวิเคราะห์"
-            case .manuscript: "ต้นฉบับ 5 บท"
+            case .plan: t("Analysis plan", "Analysis pane: the plan a statistical analysis follows.")
+            case .manuscript: t("Five-chapter manuscript", "Heading of the manuscript screen.")
             }
         }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("มุมมอง", selection: $showing) {
+            Picker(t("View", "Picker over the panes of the console sub-tab."), selection: $showing) {
                 ForEach(Half.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)

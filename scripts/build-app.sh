@@ -69,6 +69,26 @@ for bundle in "$BUILD_BUNDLES"/*.bundle; do
   echo "    resource bundle: $name"
 done
 
+# **Where `Bundle.module` actually looks, and why nothing here can satisfy it.**
+#
+# SwiftPM generates the same accessor for every target, library or executable:
+#
+#     Bundle.main.bundleURL.appendingPathComponent("<pkg>_<target>.bundle")
+#     ?? Bundle(path: "<this machine's build directory>/<pkg>_<target>.bundle")
+#     ?? fatalError
+#
+# For an app, `Bundle.main.bundleURL` is the `.app` itself — so it looks at the
+# **bundle root**, where a `.app` may not have loose contents: `codesign` fails
+# with "unsealed contents present in the bundle root". So the bundles go in
+# `Contents/Resources` (the only valid place) and the code finds them through
+# `Localisation.bundle(named:)` instead of `Bundle.module`.
+#
+# Measured on 2026-08-18: with only `Bundle.module`, the packaged app hit
+# `Swift.fatalError("could not load resource bundle")` on the first localised
+# `Text` and died before drawing anything, while the same binary run straight
+# from the terminal was fine — there the build-path fallback resolved. That is
+# the P9.6 trap exactly: works here, traps everywhere else.
+
 # §14.3 — App Intents. Siri, Shortcuts and Spotlight find intents by reading
 # Contents/Resources/Metadata.appintents, not by looking at the binary: an app
 # without this bundle has no intents as far as the system is concerned, however

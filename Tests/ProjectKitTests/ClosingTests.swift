@@ -114,7 +114,7 @@ struct ClosingTests {
         var open = delivered
         open.status = .inProgress
         expectBlocked(project, wbs: WorkBreakdown([open]), closing: facts(),
-                      because: "ไม่มีใบงานที่ยังไม่เสร็จ")
+                      because: "No unfinished work package")
 
         // 2 — delivered, but QA never accepted anything. Evidence that *failed*
         // is not the same as evidence, which is the whole reason the condition
@@ -122,25 +122,25 @@ struct ClosingTests {
         var rejected = delivered
         rejected.evidence = [Evidence(kind: .commandExit, summary: "exit 1", passed: false)]
         expectBlocked(project, wbs: WorkBreakdown([rejected]), closing: facts(),
-                      because: "ทุกใบงานที่เสร็จมีหลักฐานที่ QA รับแล้ว")
+                      because: "Every finished package has evidence QA accepted")
 
         // 3 — a risk, issue or change still open.
         var stillOpen = facts()
         stillOpen.openRegisterEntries = 1
         expectBlocked(project, wbs: WorkBreakdown([delivered]), closing: stillOpen,
-                      because: "ไม่มีความเสี่ยง/ปัญหา/คำขอเปลี่ยนแปลงที่ยังเปิดอยู่")
+                      because: "No open risk, issue or change request")
 
         // 4 — a contradiction nobody resolved.
         var conflicted = facts()
         conflicted.openConflicts = 2
         expectBlocked(project, wbs: WorkBreakdown([delivered]), closing: conflicted,
-                      because: "ไม่มีข้อขัดแย้งค้างในคลังความรู้")
+                      because: "No conflict left open in the knowledge base")
 
         // 5 — an assumption the agent made and nobody confirmed.
         var guessed = facts()
         guessed.pendingAssumptions = 1
         expectBlocked(project, wbs: WorkBreakdown([delivered]), closing: guessed,
-                      because: "ไม่มีสมมติฐานที่ agent เดาไว้แล้วยังไม่มีใครยืนยัน")
+                      because: "No assumption an agent guessed is still unconfirmed")
 
         // 6 — a practice with neither a real thing nor a record of skipping it.
         var incomplete = facts()
@@ -150,19 +150,19 @@ struct ClosingTests {
         #expect(!sixth.passed)
         // Named, not counted: "conformance ไม่ผ่าน" sends somebody hunting
         // through seventeen rows for the two that are empty.
-        #expect(sixth.unmet.contains { $0.contains("การจัดซื้อจัดหา") })
+        #expect(sixth.unmet.contains { $0.contains("Procurement") })
 
         // 7 — nothing learned, or nothing written down, which are the same thing
         // by the time the next project searches for it.
         expectBlocked(project, wbs: WorkBreakdown([delivered]), hasLessons: false,
                       closing: facts(),
-                      because: "บันทึกบทเรียนอย่างน้อย 1 ข้อ (ไหลเข้าคลังส่วนกลางตอนปิด)")
+                      because: "At least one lesson recorded (it flows into the shared base at closing)")
 
         // 8 — nobody decided what happens to the data.
         var undecided = facts()
         undecided.dataDisposition = nil
         expectBlocked(project, wbs: WorkBreakdown([delivered]), closing: undecided,
-                      because: "ตัดสินแล้วว่าข้อมูลและไฟล์ที่เหลือจะไปทางไหน")
+                      because: "It has been decided where the remaining data and files go")
     }
 
     @Test("a condition nobody could check does not read as satisfied")
@@ -181,8 +181,8 @@ struct ClosingTests {
         // Three of them say why they could not be answered, in the text a person
         // reads — "ค้าง: ไม่มีข้อขัดแย้งค้าง" would read as the opposite of what
         // happened, which is that nobody looked.
-        #expect(unwired.unmet.count { $0.contains("ตรวจไม่ได้") || $0.contains("ยังไม่ได้ตรวจ") } == 3)
-        #expect(unwired.unmet.contains("ตัดสินแล้วว่าข้อมูลและไฟล์ที่เหลือจะไปทางไหน"))
+        #expect(unwired.unmet.count { $0.contains("cannot be checked") || $0.contains("not checked yet") } == 3)
+        #expect(unwired.unmet.contains("It has been decided where the remaining data and files go"))
     }
 
     @Test("a disposition with no policy or nobody attached does not count")
@@ -441,7 +441,7 @@ struct ClosingTests {
             detail: .issue(severity: 3, kind: .problem), origin: .human("ผู้ใช้")))
 
         let gate = try #require(await service.gate(for: project.id))
-        #expect(gate.unmet.contains("ไม่มีความเสี่ยง/ปัญหา/คำขอเปลี่ยนแปลงที่ยังเปิดอยู่"))
+        #expect(gate.unmet.contains("No open risk, issue or change request"))
     }
 }
 

@@ -137,11 +137,11 @@ struct ListStoreVersionTests {
     @Test("refusing to overwrite says the file is fine and this app is behind")
     func refusalExplainsItself() {
         let refusal = FileStoreError.fileFromNewerBuild
-        #expect(refusal.description.contains("รุ่นใหม่กว่า"))
-        #expect(refusal.description.contains("ไม่บันทึกทับ"))
+        #expect(refusal.description.contains("a newer version of the app"))
+        #expect(refusal.description.contains("has not been written over"))
 
         let incident = ReadableFailure.newerSchema(doing: "ช่องทาง", version: 4)
-        #expect(incident.whatToDo.contains("ไม่ได้เขียนทับ"))
+        #expect(incident.whatToDo.contains("has not been written over"))
         // Not the same advice as a corrupt file, which says a copy was kept
         // and the list was replaced.
         #expect(incident.whatToDo.contains("สำรอง") == false)

@@ -74,7 +74,18 @@ public actor AgentTurnRunner {
     /// than where it is used, so it is on the wiring diagram like everything
     /// else — a compactor nothing calls is the shape this project has already
     /// shipped four times.
-    private let contextManager: ContextManager
+    ///
+    /// A `var` because the window is the server's to declare, not ours: it is
+    /// read from `/v1/models` at boot (P15.3), and the person can point the app
+    /// at a different endpoint — or restart vLLM with another `--max-model-len`
+    /// — without quitting. It stayed frozen at whatever the first probe said
+    /// until the app was restarted (AUDIT F-1b, C2).
+    ///
+    /// `private(set)` and behind an actor: a turn that is already running reads
+    /// its own copy, taken once at the top of `execute`, so a budget that
+    /// changes mid-answer cannot compact a transcript against one number and
+    /// report it against another.
+    private var contextManager: ContextManager
 
     public init(router: ModelRouter,
                 gateway: ToolGateway,
@@ -91,6 +102,21 @@ public actor AgentTurnRunner {
         self.maxToolRounds = maxToolRounds
         self.contextManager = contextManager
     }
+
+    /// Points the runner at a new prompt budget — what the settings screen calls
+    /// when the endpoint it just saved reports a different window.
+    ///
+    /// Only the budget changes; `compactAt` and `keepRecent` are ours, not the
+    /// server's, so they are carried over rather than reset to defaults.
+    public func setPromptBudget(_ budget: Int) {
+        guard budget != contextManager.budget else { return }
+        contextManager = ContextManager(budget: budget,
+                                        compactAt: contextManager.compactAt,
+                                        keepRecent: contextManager.keepRecent)
+    }
+
+    /// What the budget is right now, for the screen and for tests.
+    public var promptBudget: Int { contextManager.budget }
 
     /// The narrative half of §5.6's handoff. Routed as low impact on purpose:
     /// it runs on every compaction, and being approximately right about what
@@ -191,6 +217,11 @@ public actor AgentTurnRunner {
                          workPackage: String?,
                          policy: RoutingPolicy,
                          emit: @Sendable (TurnEvent) -> Void) async {
+        // One reading for the whole turn. The budget can change under us while
+        // an answer is streaming (`setPromptBudget`), and a turn that compacted
+        // against 24k then reported 32k on screen would be describing a
+        // transcript that never existed.
+        let contextManager = self.contextManager
         // The turn's own span is attributed too, not just the tool calls it
         // makes: thinking time against a promise is still time against it.
         var turnSpan = Span(name: "turn", role: role, scope: scope,

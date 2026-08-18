@@ -62,7 +62,7 @@ struct MetaAnalysisTests {
         // (9.342753 − 6) / 9.342753 = 35.78%, checkable by hand.
         #expect(isClose(spread.iSquared, 35.779100, 1e-4))
         #expect(isClose(spread.tauSquared, 0.014304, 1e-6))
-        #expect(spread.interpretation.contains("ปานกลาง"))
+        #expect(spread.interpretation.contains("heterogeneity is moderate"))
     }
 
     @Test("studies that disagree completely are described as such, not just pooled")
@@ -77,7 +77,7 @@ struct MetaAnalysisTests {
         #expect(spread.iSquared > 95)
         // Pooling still returns a number — which is the danger, and why the
         // reading is words rather than a value somebody has to interpret.
-        #expect(spread.interpretation.contains("อาจไม่มีความหมาย"))
+        #expect(spread.interpretation.contains("may not mean anything"))
     }
 
     @Test("studies that agree more closely than chance report no between-study variance")
@@ -115,9 +115,9 @@ struct MetaAnalysisTests {
         let test = try MetaAnalysis.funnelAsymmetry(skewed)
         #expect(isClose(test.intercept, -6.162517, 1e-4))
         #expect(test.isAsymmetric)
-        #expect(test.summary.contains("funnel ไม่สมมาตร"))
+        #expect(test.summary.contains("the funnel is asymmetric"))
         #expect(test.summary.contains("publication bias"))
-        #expect(test.summary.contains("เกินจริง"))
+        #expect(test.summary.contains("the pooled value is probably overstated"))
     }
 
     /// A negative result from a weak test is not the same as evidence of
@@ -133,8 +133,8 @@ struct MetaAnalysisTests {
         ]
         let test = try MetaAnalysis.funnelAsymmetry(symmetric)
         #expect(test.isAsymmetric == false)
-        #expect(test.summary.contains("ไม่ได้แปลว่าไม่มี"))
-        #expect(test.summary.contains("พลังต่ำ"))
+        #expect(test.summary.contains("not the same as there being none"))
+        #expect(test.summary.contains("little power"))
     }
 
     @Test("too few studies to pool, or to test, is refused rather than answered")

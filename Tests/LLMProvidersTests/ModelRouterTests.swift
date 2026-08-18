@@ -311,3 +311,111 @@ struct RoutingSpanTests {
         #expect(winner?.promptTokens == 10)
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// The chain can be changed while the app is running (AUDIT F-1).
+//
+// It used to be a `let` assembled during boot, so an endpoint added on the
+// settings screen was saved to disk and then ignored — the composer's model
+// switch offers `offered`, and the GX10 somebody had just added was not in it.
+// These are the promises that make swapping it safe rather than merely possible.
+// ─────────────────────────────────────────────────────────────
+
+@Suite("A chain that can be changed while the app runs")
+struct SwappableChainTests {
+    private func stub(_ id: String,
+                      _ tier: ModelTier,
+                      _ calls: CallLog,
+                      behaviour: StubExecutor.Behaviour = .succeed("ok")) -> StubExecutor {
+        StubExecutor(id, tier: tier, behaviour: behaviour, calls: calls)
+    }
+
+    @Test("what the screen offers changes when the chain does")
+    func offeredFollowsTheChain() async {
+        let calls = CallLog()
+        let router = ModelRouter(executors: [stub("mlx", .localMLX, calls)])
+        #expect(await router.offered.map(\.identifier) == ["mlx"])
+
+        await router.replaceExecutors([stub("mlx", .localMLX, calls),
+                                       stub("gx10", .selfHosted, calls)])
+        #expect(await router.offered.map(\.identifier).contains("gx10"))
+    }
+
+    @Test("an endpoint that was removed is gone, and is never called again")
+    func removedEndpointIsNotCalled() async throws {
+        let calls = CallLog()
+        let router = ModelRouter(executors: [
+            stub("mlx", .localMLX, calls, behaviour: .fail(.refused("no"))),
+            stub("gx10", .selfHosted, calls),
+        ])
+        _ = try await router.complete(ask())
+        #expect(await calls.order.contains("gx10"))
+
+        // Deleting it on the settings screen has to mean deleted, not hidden.
+        await router.replaceExecutors([stub("mlx", .localMLX, calls)])
+        #expect(await router.offered.map(\.identifier) == ["mlx"])
+        let before = await calls.order.filter { $0 == "gx10" }.count
+        _ = try? await router.complete(ask())
+        #expect(await calls.order.filter { $0 == "gx10" }.count == before,
+                "an executor that was taken out of the chain was still called")
+    }
+
+    @Test("a corrected endpoint is retried at once, not after the cache expires")
+    func swapClearsTheAvailabilityCache() async throws {
+        let calls = CallLog()
+        // A long TTL, so a stale cache would be plainly visible as a skip.
+        let router = ModelRouter(executors: [
+            stub("gx10", .selfHosted, calls, behaviour: .offline),
+        ], availabilityTTL: .seconds(600))
+        _ = try? await router.complete(ask())
+        #expect(await calls.order.contains("gx10") == false, "an offline executor was called")
+
+        // Same identifier, different server — which is exactly what editing the
+        // URL on the settings screen does.
+        await router.replaceExecutors([stub("gx10", .selfHosted, calls)])
+        _ = try await router.complete(ask())
+        #expect(await calls.order.contains("gx10"),
+                "the corrected endpoint stayed skipped because the cache outlived it")
+    }
+
+    @Test("the cheapest tier is still tried first after a swap")
+    func orderSurvivesASwap() async {
+        let calls = CallLog()
+        let router = ModelRouter(executors: [stub("paid", .paid, calls)])
+        // Handed over in the wrong order on purpose.
+        await router.replaceExecutors([
+            stub("paid", .paid, calls),
+            stub("gx10", .selfHosted, calls),
+            stub("mlx", .localMLX, calls),
+        ])
+        #expect(await router.offered.map(\.identifier) == ["mlx", "gx10", "paid"])
+    }
+
+    @Test("a turn already streaming is not killed by a swap")
+    func swapDoesNotKillARunningTurn() async throws {
+        let calls = CallLog()
+        let router = ModelRouter(executors: [stub("gx10", .selfHosted, calls)])
+        let run = try await router.stream(ask())
+
+        // The screen saves an endpoint while the answer is arriving.
+        await router.replaceExecutors([stub("mlx", .localMLX, calls)])
+
+        var text = ""
+        for try await event in run.events {
+            if case .textDelta(let chunk) = event { text += chunk }
+        }
+        #expect(text == "ok", "changing the chain cut an answer that was already in flight")
+    }
+
+    @Test("asking for an endpoint that no longer exists changes nothing")
+    func vanishedPreferenceIsNotAnError() async throws {
+        let calls = CallLog()
+        let router = ModelRouter(executors: [stub("mlx", .localMLX, calls)])
+        // A conversation remembers `gx10` from before it was deleted (E.37's
+        // fourth rule): the turn runs down the ordinary chain rather than failing.
+        let choice = await router.explain(ask(), policy: RoutingPolicy().asking(for: "gx10"))
+        #expect(choice.order.first == "mlx")
+        let text = try await router.complete(ask()).text
+        #expect(text == "ok")
+    }
+}

@@ -40,7 +40,7 @@ struct FileStoreIncidentTests {
         // And now there is something to show a person.
         #expect(incidents.all.count == 1)
         #expect(failure.whatToDo.contains("channels.unreadable.backup.json"))
-        #expect(failure.whatToDo.contains("ยังไม่มีอะไรหาย"))
+        #expect(failure.whatToDo.contains("nothing is lost"))
     }
 
     // A store read on every screen change would otherwise stack up the same
@@ -74,6 +74,6 @@ struct FileStoreIncidentTests {
         let failure = FileStoreSafety.reportUnreadable(missing, describedAs: "เทมเพลต")
 
         #expect(failure.whatToDo.contains("สำรอง") == false)
-        #expect(failure.whatToDo.contains("อย่าเพิ่งบันทึกทับ"))
+        #expect(failure.whatToDo.contains("do not save over it"))
     }
 }

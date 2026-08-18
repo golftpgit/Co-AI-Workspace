@@ -214,7 +214,7 @@ struct SecretsInMessagesAuditTests {
         #expect(unreadable.tone == .problem)
         #expect(absent.text != unreadable.text)
         // And it tells the person not to do the thing that loses the key.
-        #expect(unreadable.text.contains("ยังไม่ได้แปลว่ายังไม่ได้ตั้ง"))
+        #expect(unreadable.text.contains("which does not mean it was never set"))
     }
 
     // Honest about the weaker of the two sources rather than showing one tick

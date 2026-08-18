@@ -99,7 +99,7 @@ struct StatGateTests {
     func theDoneWhen() throws {
         let result = try StatGate.twoSample(skewed, skewed.map { $0 * 1.4 + 1 })
         #expect(!result.isClean)
-        #expect(result.warnings.contains { $0.name.contains("การแจกแจงปกติ") })
+        #expect(result.warnings.contains { $0.name.contains("normal distribution") })
         #expect(result.alternatives == [.mannWhitney])
         // And it goes back to the plan, because changing the test is a change
         // of methodology (§12.3).
@@ -136,11 +136,11 @@ struct StatGateTests {
         let tight = idealNormalSample(15)
         let wide = idealNormalSample(15).map { $0 * 8 }
         let student = try StatGate.twoSample(tight, wide, assumingEqualVariance: true)
-        #expect(student.warnings.contains { $0.name.contains("ความแปรปรวน") })
+        #expect(student.warnings.contains { $0.name.contains("equal variance") })
         #expect(student.report.contains("Levene"))
 
         let welch = try StatGate.twoSample(tight, wide)
-        #expect(!welch.assumptions.contains { $0.name.contains("ความแปรปรวน") })
+        #expect(!welch.assumptions.contains { $0.name.contains("equal variance") })
         #expect(welch.isClean)
     }
 
@@ -154,7 +154,7 @@ struct StatGateTests {
         let after = zip(skewed, idealNormalSample(skewed.count)).map { $0 + 1 + $1 * 0.1 }
         let result = try StatGate.paired(before, after)
         #expect(result.assumptions.count == 1)
-        #expect(result.assumptions[0].name.contains("ผลต่าง"))
+        #expect(result.assumptions[0].name.contains("differences"))
         #expect(result.isClean)
     }
 
@@ -200,7 +200,7 @@ struct StatGateTests {
     func chiSquareWithThinCells() throws {
         let result = try StatGate.chiSquare([[1, 9], [8, 2]])
         #expect(!result.isClean)
-        #expect(result.warnings[0].detail.contains("ต่ำกว่า 5"))
+        #expect(result.warnings[0].detail.contains("fewer than 5"))
         #expect(result.alternatives == [.fisherExact])
     }
 
@@ -225,7 +225,7 @@ struct StatGateTests {
         let before: [Double] = [1, 2, 3, 4, 5, 6, 7, 8, 9]
         let after: [Double] = [2, 3, 4, 5, 6, 7, 8, 9, 9]   // last pair unchanged
         let result = try StatGate.wilcoxonSignedRank(before, after)
-        #expect(result.summary.contains("8 คู่"))
+        #expect(result.summary.contains("8 differing pairs"))
         #expect(result.pValue < 0.05)
     }
 
@@ -264,7 +264,7 @@ struct StatGateTests {
         let x = (1...40).map(Double.init)
         let y = x.map { $0 * $0 }                  // a parabola, fitted with a line
         let result = try StatGate.linearRegression(y: y, predictors: [x])
-        let linearity = try #require(result.assumptions.first { $0.name.contains("เส้นตรง") })
+        let linearity = try #require(result.assumptions.first { $0.name.contains("the relationship is linear") })
         #expect(!linearity.passed)
         #expect(!result.isClean)
     }
@@ -290,8 +290,8 @@ struct StatGateTests {
     @Test("a test that is not implemented refuses, and says what to do instead")
     func unimplementedTestsRefuse() {
         let message = StatError.notImplemented(test: .survival, plannedIn: "P19.4").description
-        #expect(message.contains("ยังคำนวณ"))
-        #expect(message.contains("เครื่องมือภายนอก"), "the refusal does not say what to do instead")
+        #expect(message.contains("cannot compute"))
+        #expect(message.contains("external tool"), "the refusal does not say what to do instead")
     }
 
     /// P19.3 — the gate now answers the survival question, with the assumption

@@ -169,10 +169,12 @@ public final class AnalysisViewModel {
             let template = try TemplateParser.parse(docx: url)
             templates = try templateStore.add(template)
             selectedTemplateID = template.id
-            status = Status(message: "อ่านแม่แบบ '\(template.name)' แล้ว — "
-                            + "\(template.sections.count) หัวข้อ", isError: false)
+            status = Status(message: t("Read the template ‘\(template.name)’ — \(template.sections.count) headings",
+                                       "Status message after learning a template. Placeholders: its name and how many headings."),
+                            isError: false)
         } catch {
-            status = Status(message: "ใช้ไฟล์นี้เป็นแม่แบบไม่ได้: "
+            status = Status(message: t("This file cannot be used as a template: ",
+                                       "Prefix of a status message when a template file is rejected.")
                             + ((error as? TemplateError)?.description ?? "\(error)"),
                             isError: true)
         }
@@ -197,14 +199,15 @@ public final class AnalysisViewModel {
     public func editTemplate(_ id: String, _ change: (DocumentTemplate) -> DocumentTemplate?) {
         guard let templateStore, let current = templates.first(where: { $0.id == id }) else { return }
         guard let edited = change(current) else {
-            status = Status(message: "แก้ไม่ได้ — หัวข้อว่าง ซ้ำกับหัวข้ออื่น หรือย้ายไปตำแหน่งที่ไม่มี",
+            status = Status(message: t("Cannot edit — the heading is empty, duplicates another, or was moved to a position that does not exist",
+                                       "Status message when a template edit is refused."),
                             isError: true)
             return
         }
         do {
             templates = try templateStore.replace(edited)
         } catch {
-            status = Status(message: "บันทึกแม่แบบไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not save the template: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -225,9 +228,12 @@ public final class AnalysisViewModel {
         }
         knowledgeDocuments = seen
             .map { (id: $0.key, title: $0.value.isProposal
-                    ? "\($0.value.title) — โครงร่างวิจัย" : $0.value.title) }
+                    ? t("\($0.value.title) — research protocol",
+                        "Marks a document as a protocol in the picker. Placeholder is its title.")
+                    : $0.value.title) }
             .sorted { lhs, rhs in
-                let lp = lhs.title.hasSuffix("โครงร่างวิจัย"), rp = rhs.title.hasSuffix("โครงร่างวิจัย")
+                let marker = t("research protocol", "Suffix used to sort protocols first in the document picker.")
+                let lp = lhs.title.hasSuffix(marker), rp = rhs.title.hasSuffix(marker)
                 return lp == rp ? lhs.title < rhs.title : lp
             }
     }
@@ -239,7 +245,7 @@ public final class AnalysisViewModel {
         let chunks = ((try? await knowledge.load(scope: scope)) ?? [])
             .filter { $0.provenance.documentID == documentID }
         guard !chunks.isEmpty else {
-            status = Status(message: "อ่านเอกสารนี้จากคลังความรู้ไม่ได้", isError: true)
+            status = Status(message: t("This document could not be read from the knowledge base", "Status message."), isError: true)
             return
         }
         proposalText = chunks.map(\.text).joined(separator: "\n")
@@ -263,7 +269,8 @@ public final class AnalysisViewModel {
             runner = NotebookRunner(store: store, kernel: kernel)
         }
         if kernel == nil {
-            kernelState = .unavailable("ไม่พบ Python บนเครื่องนี้ — เซลล์ SQL ยังใช้ได้ตามปกติ")
+            kernelState = .unavailable(t("No Python on this machine — SQL cells still work as usual",
+                                         "Kernel status when Python is missing, saying what still works."))
         } else if let kernel, await kernel.isRunning {
             kernelState = .ready(version: await kernel.pythonVersion ?? "?")
         }
@@ -294,7 +301,7 @@ public final class AnalysisViewModel {
             attached = try await store.attachedDatabases()
         } catch {
             log.error("catalogue: \(error)")
-            status = Status(message: "อ่านรายชื่อตารางไม่ได้: \(error)", isError: true)
+            status = Status(message: t("Could not read the table list: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -330,7 +337,7 @@ public final class AnalysisViewModel {
             notebooks = library.list()
         } catch {
             log.error("save notebook: \(error)")
-            status = Status(message: "บันทึกสมุดงานไม่ได้: \(error)", isError: true)
+            status = Status(message: t("Could not save the notebook: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -453,7 +460,7 @@ public final class AnalysisViewModel {
             kernelState = .ready(version: await kernel.pythonVersion ?? "?")
             // Say it plainly: a restart is how the state goes away, and that is
             // usually the reason for pressing it.
-            status = Status(message: "เริ่มเคอร์เนลใหม่แล้ว — ตัวแปรทั้งหมดหายไป", isError: false)
+            status = Status(message: t("The kernel restarted — every variable is gone", "Status message after restarting the Python kernel."), isError: false)
         } catch {
             kernelState = .unavailable("\(error)")
         }
@@ -517,7 +524,8 @@ public final class AnalysisViewModel {
         do {
             _ = try await runner.run(cell, confirmed: confirmed)
             await refresh()
-            status = Status(message: "นำเข้า \(url.lastPathComponent) เป็นตาราง \(table) แล้ว",
+            status = Status(message: t("Imported \(url.lastPathComponent) as the table \(table)",
+                                       "Status message after importing a data file. Placeholders: the file name and the table name."),
                             isError: false)
         } catch let error as NotebookError {
             if case .needsConfirmation(let assessment) = error {
@@ -540,11 +548,11 @@ public final class AnalysisViewModel {
     static func importFailure(_ error: any Error, file: URL) -> String {
         let raw = "\(error)"
         if raw.contains("Cannot open file") || raw.contains("IO Error") {
-            return "อ่านไฟล์ \(file.lastPathComponent) ไม่ได้ — "
-                + "แอปเข้าถึงไฟล์นี้ไม่ได้ (สิทธิ์ของ sandbox) ลองเลือกไฟล์ใหม่อีกครั้ง "
-                + "หรือย้ายไฟล์ไปโฟลเดอร์เอกสารก่อน"
+            return t("Could not read \(file.lastPathComponent) — the app has no access to it (sandbox permissions). Choose the file again, or move it to the Documents folder first.",
+                     "Import failure caused by sandboxing, with the two things that fix it. Placeholder is the file name.")
         }
-        return "นำเข้า \(file.lastPathComponent) ไม่สำเร็จ: \(raw)"
+        return t("Could not import \(file.lastPathComponent): \(raw)",
+                 "Import failure. Placeholders: the file name and the underlying error.")
     }
 
     // MARK: - external databases (§12.2)
@@ -567,7 +575,7 @@ public final class AnalysisViewModel {
                 $0.scope == scope || $0.scope == .central
             }
         } catch {
-            status = Status(message: "บันทึกแหล่งข้อมูลไม่ได้: \(error)", isError: true)
+            status = Status(message: t("Could not save the source: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -591,8 +599,9 @@ public final class AnalysisViewModel {
             try await store.attach(connector)
             externalTables[connector.alias] = try await store.tables(in: connector.alias)
             await refresh()
-            status = Status(message: "ต่อ \(connector.alias) แล้ว — "
-                            + "\(externalTables[connector.alias]?.count ?? 0) ตาราง", isError: false)
+            status = Status(message: t("Connected to \(connector.alias) — \(externalTables[connector.alias]?.count ?? 0) tables",
+                                       "Status message after connecting. Placeholders: the alias and how many tables it has."),
+                            isError: false)
         } catch {
             // Whatever comes back here has already had any password scrubbed
             // out of it (P6.3).
@@ -619,7 +628,9 @@ public final class AnalysisViewModel {
         do {
             _ = try await runner.run(NotebookCell(kind: .sql, source: sql))
             await refresh()
-            status = Status(message: "ดึง \(alias).\(table) เข้ามาแล้ว", isError: false)
+            status = Status(message: t("Pulled \(alias).\(table) in",
+                                       "Status message after copying an external table. Placeholders: the alias and the table."),
+                            isError: false)
         } catch let error as NotebookError {
             if case .needsConfirmation(let assessment) = error {
                 confirmation = Confirmation(assessment: assessment, source: .explorer)
@@ -668,17 +679,24 @@ public final class AnalysisViewModel {
             "\(decision.question): \(decision.value) — \(decision.origin.label)"
                 + (decision.note.map { " (\($0))" } ?? "")
         }
-        var sections = [Section(heading: "การตัดสินใจในแผน",
+        var sections = [Section(heading: t("Decisions in the plan",
+                                           "Heading over choices recorded in an analysis plan."),
                                 paragraphs: [.bullets(decisions)])]
         if !plan.openGaps.isEmpty {
-            sections.append(Section(heading: "ช่องว่างที่ยังเปิดอยู่", paragraphs: [
+            sections.append(Section(heading: t("Gaps still open",
+                                               "Document heading over unresolved gaps in the analysis plan."),
+                                    paragraphs: [
                 .bullets(plan.openGaps.map { "\($0.severity.label): \($0.subject) — \($0.detail)" }),
             ]))
         }
-        sections.append(Section(heading: "สถานะการอนุมัติ", paragraphs: [
+        sections.append(Section(heading: t("Approval status",
+                                           "Document heading over whether the analysis plan is approved."),
+                                paragraphs: [
             .plain(plan.isApproved
-                   ? "อนุมัติแล้วโดย \(plan.approvedBy ?? "-") — การแก้แผนหลังจากนี้จะถอนการอนุมัติเอง"
-                   : "ยังไม่อนุมัติ: " + plan.blockers.joined(separator: " · ")),
+                   ? t("Approved by \(plan.approvedBy ?? "-") — editing the plan after this withdraws the approval on its own",
+                       "Line in the generated document. Placeholder is who approved it.")
+                   : t("Not approved: ", "Prefix before the list of blockers in the generated document.")
+                       + plan.blockers.joined(separator: " · ")),
         ]))
 
         var draft = DocumentDraft(title: plan.title,
@@ -694,9 +712,12 @@ public final class AnalysisViewModel {
            let template = templates.first(where: { $0.id == selectedTemplateID }) {
             let applied = TemplateFiller.apply(template, to: draft)
             draft = applied.draft
-            note = " · แม่แบบ '\(template.name)'"
+            note = t(" · template ‘\(template.name)’",
+                     "Appended to a status message when a template was applied. Placeholder is its name.")
             if !applied.missing.isEmpty {
-                note += " — ยังไม่มีเนื้อหาใน: " + applied.missing.joined(separator: ", ")
+                note += t(" — nothing written yet under: ",
+                          "Appended when template headings have no content. The list follows.")
+                    + applied.missing.joined(separator: ", ")
             }
         }
 
@@ -711,10 +732,11 @@ public final class AnalysisViewModel {
             try await Task.detached(priority: .userInitiated) {
                 try OfficeWriter.docx(rendered).write(to: url)
             }.value
-            status = Status(message: "บันทึกเอกสารที่ \(url.lastPathComponent) แล้ว" + note,
+            status = Status(message: t("Saved the document to \(url.lastPathComponent)",
+                                       "Status message after export. Placeholder is the file name.") + note,
                             isError: false)
         } catch {
-            status = Status(message: "สร้างเอกสารไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not create the document: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -756,8 +778,9 @@ public final class AnalysisViewModel {
 
     public func exportManuscript(_ manuscript: Manuscript, to url: URL) async {
         guard let cellRuns else {
-            status = Status(message: "ยังไม่ได้ต่อกับที่เก็บผลการรัน — "
-                            + "ตัวเลขในเล่มต้องมาจากเซลล์ที่รันจริง", isError: true)
+            status = Status(message: t("Not connected to the store of run results — a number in the manuscript has to come from a cell that really ran",
+                                       "Status message when the manuscript cannot verify its numbers."),
+                            isError: true)
             return
         }
         let (runs, currentSources) = await manuscriptEvidence()
@@ -771,7 +794,8 @@ public final class AnalysisViewModel {
             let table = ManuscriptBuilder.provenanceTable(manuscript, runs: runs,
                                                           currentSources: currentSources)
             if !table.isEmpty {
-                draft.sections.append(Section(heading: "ภาคผนวก: ที่มาของตัวเลขในบทที่ 4",
+                draft.sections.append(Section(heading: t("Appendix: where the numbers in chapter 4 came from",
+                                                         "Heading of the generated provenance appendix."),
                                               paragraphs: [.bullets(table)]))
             }
             let rendered = try DocumentBuilder.render(draft)
@@ -781,8 +805,8 @@ public final class AnalysisViewModel {
             try await Task.detached(priority: .userInitiated) {
                 try OfficeWriter.docx(rendered).write(to: url)
             }.value
-            status = Status(message: "บันทึกต้นฉบับ 5 บทที่ \(url.lastPathComponent) แล้ว — "
-                            + "ตัวเลขทุกตัวในบทที่ 4 ผูกกับเซลล์ที่รันจริง และมีภาคผนวกบอกว่ามาจากคำสั่งไหน",
+            status = Status(message: t("Saved the five-chapter manuscript to \(url.lastPathComponent) — every number in chapter 4 is bound to a cell that really ran, and an appendix says which statement each came from",
+                                       "Status message after exporting the manuscript. Placeholder is the file name."),
                             isError: false)
         } catch {
             status = Status(message: "\(error)", isError: true)
@@ -811,15 +835,17 @@ public final class AnalysisViewModel {
         guard let detector else { return }
         let text = proposalText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard text.count > 40 else {
-            status = Status(message: "วางข้อความโครงร่างก่อน (ยาวกว่านี้)", isError: true)
+            status = Status(message: t("Paste the protocol text first (longer than this)",
+                                   "Status message when the pasted protocol is too short to read."), isError: true)
             return
         }
         isReadingProposal = true
         defer { isReadingProposal = false }
 
         guard let reading = await detector.read(proposal: text) else {
-            status = Status(message: "อ่านโครงร่างไม่สำเร็จ — โมเดลตอบไม่ได้ ยังไม่สร้างแผน "
-                            + "(แผนที่ว่างเพราะอ่านไม่ได้ อันตรายกว่าไม่มีแผน)", isError: true)
+            status = Status(message: t("Could not read the protocol — the model did not answer, so no plan was created (an empty plan caused by a failed read is more dangerous than no plan)",
+                                       "Status message when protocol extraction failed, saying why nothing was created."),
+                            isError: true)
             return
         }
         await refresh()
@@ -828,12 +854,15 @@ public final class AnalysisViewModel {
                                                      type: $0.type) }
         })
         let built = GapDetector.plan(
-            title: planTitle.isEmpty ? "แผนวิเคราะห์จากโครงร่าง" : planTitle,
+            title: planTitle.isEmpty
+                ? t("Analysis plan from the protocol", "Default title for a plan built by reading a protocol.")
+                : planTitle,
             scope: scope, reading: reading, proposalText: text,
             proposalDocumentID: proposalDocumentID, schema: snapshot)
         plan = built
         await savePlan()
-        status = Status(message: "อ่านโครงร่างแล้ว — พบช่องว่าง \(built.openGaps.count) จุด",
+        status = Status(message: t("Read the protocol — \(built.openGaps.count) gaps found",
+                                   "Status message after extracting a plan. Placeholder is how many gaps."),
                         isError: false)
     }
 
@@ -853,9 +882,10 @@ public final class AnalysisViewModel {
     public func approvePlan() async {
         guard plan != nil else { return }
         do {
-            try plan?.approve(by: "ผู้ใช้")
+            try plan?.approve(by: t("the user", "Recorded as the origin of a register entry a person made."))
             await savePlan()
-            status = Status(message: "อนุมัติแผนแล้ว — การแก้แผนหลังจากนี้จะถอนการอนุมัติเอง",
+            status = Status(message: t("The plan is approved — editing it after this withdraws the approval on its own",
+                                       "Status message after approving an analysis plan."),
                             isError: false)
         } catch {
             status = Status(message: "\(error)", isError: true)
@@ -869,7 +899,7 @@ public final class AnalysisViewModel {
             await loadPlans()
         } catch {
             log.error("save plan: \(error)")
-            status = Status(message: "บันทึกแผนไม่ได้: \(error)", isError: true)
+            status = Status(message: t("Could not save the plan: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 

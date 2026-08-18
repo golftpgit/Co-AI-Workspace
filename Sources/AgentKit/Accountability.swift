@@ -29,7 +29,7 @@ public enum RACIActor: Sendable, Codable, Equatable, Hashable {
     public var label: String {
         switch self {
         case .agent(let role): role.rawValue
-        case .human(let name): name.isEmpty ? "คน" : name
+        case .human(let name): name.isEmpty ? localised("a person", "Stands in for an unnamed human, where a name would go.") : name
         }
     }
 
@@ -49,8 +49,8 @@ public enum Accountable: Sendable, Codable, Equatable, Hashable {
 
     public var label: String {
         switch self {
-        case .teamLead: "หัวหน้าทีม"
-        case .human(let name): name.isEmpty ? "คน" : name
+        case .teamLead: localised("team lead", "A role.")
+        case .human(let name): name.isEmpty ? localised("a person", "Stands in for an unnamed human, where a name would go.") : name
         }
     }
 
@@ -100,8 +100,8 @@ public struct BoardRole: Sendable, Codable, Equatable, Identifiable {
 
         public var label: String {
             switch self {
-            case .executive: "ผู้รับผิดชอบทางธุรกิจ (Executive)"
-            case .seniorUser: "ตัวแทนผู้ใช้ (Senior User)"
+            case .executive: localised("business owner (Executive)", "A PRINCE2 project-board role.")
+            case .seniorUser: localised("user representative (Senior User)", "A PRINCE2 project-board role.")
             }
         }
     }

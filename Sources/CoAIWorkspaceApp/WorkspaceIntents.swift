@@ -34,16 +34,30 @@ private func ask(_ text: String, timeout: Duration = .seconds(60)) async -> Stri
     return await channel.ask(text, timeout: timeout).spoken
 }
 
+// **Why these strings are English literals rather than `t(...)`.**
+//
+// An intent's `title`, `description` and `@Parameter(title:)` are
+// `LocalizedStringResource`, and they are read twice: once by
+// `appintentsmetadataprocessor` at build time, to write the metadata Siri and
+// Shortcuts index, and once at run time against **`Bundle.main`** — not this
+// module's bundle. `t(...)` returns a `String` that has already been looked up
+// in the module catalogue, which is the wrong bundle and the wrong moment.
+//
+// Making them translatable therefore needs a strings table in the app's own
+// bundle, which is a second catalogue with its own build step. Until that
+// exists these are English only, deliberately, and this comment is the record
+// of that rather than a silence somebody has to rediscover (2026-08-18).
+
 struct AskWorkspaceIntent: AppIntent {
-    static let title: LocalizedStringResource = "ถาม Co-AI Workspace"
+    static let title: LocalizedStringResource = "Ask Co-AI Workspace"
     static let description = IntentDescription(
-        "ถามคำถามกับ workspace แล้วได้คำตอบกลับ เหมือนพิมพ์ในหน้าสนทนา")
+        "Ask the workspace a question and get an answer back, the same as typing in Chat")
     /// The app has to be running for there to be an engine at all, and
     /// launching it takes longer than Siri will wait — so the answer for a
     /// cold start is "still starting", not a blank screen.
     static let openAppWhenRun = false
 
-    @Parameter(title: "คำถาม", requestValueDialog: "อยากถามอะไร")
+    @Parameter(title: "Question", requestValueDialog: "What would you like to ask?")
     var question: String
 
     @MainActor
@@ -54,16 +68,17 @@ struct AskWorkspaceIntent: AppIntent {
 }
 
 struct ProjectProgressIntent: AppIntent {
-    static let title: LocalizedStringResource = "สรุปความคืบหน้าโปรเจกต์"
-    static let description = IntentDescription("สรุปว่าโปรเจกต์ที่ระบุไปถึงไหนแล้ว")
+    static let title: LocalizedStringResource = "Summarise project progress"
+    static let description = IntentDescription("Summarise how far the named project has got")
     static let openAppWhenRun = false
 
-    @Parameter(title: "โปรเจกต์", requestValueDialog: "โปรเจกต์ไหน")
+    @Parameter(title: "Project", requestValueDialog: "Which project?")
     var project: String
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
-        let answer = await ask("สรุปความคืบหน้าของโปรเจกต์ \(project) แบบสั้น ๆ")
+        let answer = await ask(t("Briefly summarise the progress of the project \(project)",
+                                 "Prompt sent to the model by the progress-summary intent. Placeholder is the project name."))
         return .result(value: answer, dialog: IntentDialog(stringLiteral: answer))
     }
 }
@@ -73,12 +88,12 @@ struct ProjectProgressIntent: AppIntent {
 /// is telling the truth is more useful than one that reports "finished" after
 /// timing out.
 struct StartResearchIntent: AppIntent {
-    static let title: LocalizedStringResource = "เริ่มงานวิจัย"
+    static let title: LocalizedStringResource = "Start research"
     static let description = IntentDescription(
-        "สั่งให้ทีมเริ่มค้นเรื่องที่ระบุ แล้วมาดูผลในแอปทีหลัง")
+        "Tell the team to start researching a topic, and look at the result in the app later")
     static let openAppWhenRun = false
 
-    @Parameter(title: "หัวข้อ", requestValueDialog: "อยากให้ค้นเรื่องอะไร")
+    @Parameter(title: "Topic", requestValueDialog: "What should it research?")
     var topic: String
 
     @MainActor
@@ -88,11 +103,14 @@ struct StartResearchIntent: AppIntent {
         }
         // A short wait, for the honest reason: long enough to find out the
         // workspace took the job, short enough that Siri is still listening.
-        let answer = await channel.ask("เริ่มงานวิจัยเรื่อง \(topic)", timeout: .seconds(20))
+        let answer = await channel.ask(t("Start research on \(topic)",
+                                         "Prompt sent to the team by the start-research intent. Placeholder is the topic."),
+                                       timeout: .seconds(20))
         let spoken: String
         switch answer {
         case .answered(let text): spoken = text
-        case .timedOut: spoken = "เริ่มค้นเรื่อง \(topic) ให้แล้ว ผลอยู่ในแอป"
+        case .timedOut: spoken = t("Research on \(topic) has started — the result is in the app",
+                                   "Spoken reply when the team is still working. Placeholder is the topic.")
         case .needsApproval, .notRunning: spoken = answer.spoken
         }
         return .result(dialog: IntentDialog(stringLiteral: spoken))
@@ -104,19 +122,19 @@ struct StartResearchIntent: AppIntent {
 struct WorkspaceShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(intent: AskWorkspaceIntent(),
-                    phrases: ["ถาม \(.applicationName)",
+                    phrases: ["Ask \(.applicationName)",
                               "Ask \(.applicationName)"],
-                    shortTitle: "ถาม workspace",
+                    shortTitle: "Ask the workspace",
                     systemImageName: "bubble.left.and.text.bubble.right")
         AppShortcut(intent: ProjectProgressIntent(),
-                    phrases: ["สรุปความคืบหน้าใน \(.applicationName)",
+                    phrases: ["Summarise progress in \(.applicationName)",
                               "Project progress in \(.applicationName)"],
-                    shortTitle: "ความคืบหน้า",
+                    shortTitle: "Progress",
                     systemImageName: "chart.bar.doc.horizontal")
         AppShortcut(intent: StartResearchIntent(),
-                    phrases: ["เริ่มงานวิจัยใน \(.applicationName)",
+                    phrases: ["Start research in \(.applicationName)",
                               "Start research in \(.applicationName)"],
-                    shortTitle: "เริ่มงานวิจัย",
+                    shortTitle: "Start research",
                     systemImageName: "magnifyingglass")
     }
 }

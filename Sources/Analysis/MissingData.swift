@@ -50,16 +50,16 @@ public struct MissingnessReport: Sendable, Equatable {
     /// far more of the sample than any single column's gap suggests.
     public var summary: String {
         let worst = columns.max { $0.share < $1.share }
-        var text = "แถวที่ครบทุกตัวแปร \(completeRows) จาก \(totalRows) "
+        var text = localised("\(completeRows) of \(totalRows) rows are complete on every variable ", "Summary of how much data is missing. Placeholders: complete rows and total rows.")
             + String(format: "(%.1f%%)", completeShare * 100)
         if let worst, worst.missing > 0 {
-            text += " · ตัวแปรที่ขาดมากที่สุดคือ \(worst.name) "
+            text += localised(" · the variable missing most is \(worst.name) ", "Names the worst-affected variable. Placeholder: its name.")
                 + String(format: "(%.1f%%)", worst.share * 100)
         }
         if completeShare < 1 {
-            text += " · **การวิเคราะห์เฉพาะแถวที่ครบ ทิ้งคนไป "
-                + "\(totalRows - completeRows) คน** ซึ่งมากกว่าช่องว่างของตัวแปรใดตัวแปรหนึ่ง "
-                + "เพราะแต่ละแถวขาดคนละที่กัน"
+            text += localised(" · **a complete-case analysis throws away ", "Warns how many people a complete-case analysis drops.")
+                + localised("\(totalRows - completeRows) people** — more than any single variable is missing ", "Continues the complete-case warning. Placeholder: the number of people dropped.")
+                + localised("because each row is missing something different", "Ends the complete-case warning.")
         }
         return text
     }
@@ -77,15 +77,15 @@ public struct MissingnessSignal: Sendable, Equatable {
     public var looksRelated: Bool { pValue < 0.05 }
 
     public var summary: String {
-        let base = String(format: "คนที่ขาด %@ (%d คน) มีค่าเฉลี่ยของ %@ = %.3f "
-                          + "ส่วนคนที่ไม่ขาดได้ %.3f (p = %.4f)",
+        let base = String(format: localised("those missing %@ (%d people) have a mean %@ of %.3f ", "Compares people with and without a missing value. Placeholders: the missing variable, how many people, the compared variable and its mean.")
+                          + localised("against %.3f for those not missing it (p = %.4f)", "Ends the comparison. Placeholders: the other mean and the p-value."),
                           missingIn, missingCount, comparedWith,
                           meanWhenMissing, meanWhenPresent, pValue)
         return looksRelated
-            ? base + " — **การขาดหายไม่ได้สุ่ม**: การวิเคราะห์เฉพาะแถวที่ครบ "
-                   + "จึงตอบคำถามเกี่ยวกับกลุ่มตัวอย่างคนละกลุ่มกับที่ตั้งใจศึกษา"
-            : base + " — ไม่พบความต่าง **ซึ่งไม่ได้แปลว่าการขาดหายสุ่ม**: "
-                   + "เหตุผลที่คนหายไปมักไม่ได้อยู่ในไฟล์ ข้อมูลจึงพิสูจน์ MCAR ไม่ได้ พิสูจน์ได้แต่ตรงข้าม"
+            ? base + localised(" — **the missingness is not random**: a complete-case analysis ", "Verdict when missingness is related to another variable.")
+                   + localised("therefore answers a question about a different group of people than the one being studied", "Ends the verdict that missingness is not random.")
+            : base + localised(" — no difference was found, **which does not mean the missingness is random**: ", "Verdict when no relationship to missingness is found.")
+                   + localised("the reason people are missing is usually not in the file, so data can never prove MCAR — only the opposite", "Ends the verdict that no relationship to missingness was found.")
     }
 }
 
@@ -95,11 +95,11 @@ public enum MissingData {
     public static func describe(_ columns: [(name: String, values: [Double?])]) throws
         -> MissingnessReport {
         guard !columns.isEmpty else {
-            throw StatError.notEnoughData("ไม่มีตัวแปรให้ตรวจ")
+            throw StatError.notEnoughData(localised("there are no variables to check", "Why the missingness check cannot run."))
         }
         let rows = columns[0].values.count
         guard columns.allSatisfy({ $0.values.count == rows }) else {
-            throw StatError.badShape("ทุกตัวแปรต้องมีจำนวนแถวเท่ากัน")
+            throw StatError.badShape(localised("every variable must have the same number of rows", "Why the missingness check cannot run."))
         }
 
         let described = columns.map { column in
@@ -122,7 +122,7 @@ public enum MissingData {
                               comparedWith other: (name: String, values: [Double?])) throws
         -> MissingnessSignal {
         guard missingIn.values.count == other.values.count else {
-            throw StatError.badShape("ทั้งสองตัวแปรต้องมีจำนวนแถวเท่ากัน")
+            throw StatError.badShape(localised("both variables must have the same number of rows", "Why the missingness check cannot run."))
         }
         var whenPresent: [Double] = [], whenMissing: [Double] = []
         for index in missingIn.values.indices {
@@ -132,8 +132,8 @@ public enum MissingData {
         }
         guard whenMissing.count >= 2, whenPresent.count >= 2 else {
             throw StatError.notEnoughData(
-                "ต้องมีอย่างน้อยสองแถวในทั้งกลุ่มที่ขาดและกลุ่มที่ไม่ขาด "
-                    + "จึงจะเทียบกันได้ — ตอนนี้มี \(whenMissing.count) กับ \(whenPresent.count)")
+                localised("at least two rows are needed both where the value is missing and where it is present ", "Why the missingness comparison cannot run.")
+                    + localised("for a comparison — there are \(whenMissing.count) and \(whenPresent.count)", "Ends the reason the missingness comparison cannot run. Placeholders: the two group sizes."))
         }
         let result = try StatGate.twoSample(whenPresent, whenMissing, assumingEqualVariance: false)
         return MissingnessSignal(missingIn: missingIn.name, comparedWith: other.name,

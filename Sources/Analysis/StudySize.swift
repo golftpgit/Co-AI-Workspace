@@ -39,10 +39,10 @@ public enum StudySize {
                                 power: Double = 0.8,
                                 alpha: Double = 0.05) throws -> SampleSize {
         guard difference != 0 else {
-            throw StatError.badShape("ผลต่างที่ต้องการตรวจจับเป็นศูนย์ — ต้องใช้ตัวอย่างไม่จำกัด")
+            throw StatError.badShape(localised("the difference to detect is zero — that would need an unlimited sample", "Why a sample size cannot be computed."))
         }
         guard standardDeviation > 0 else {
-            throw StatError.badShape("ส่วนเบี่ยงเบนมาตรฐานต้องมากกว่าศูนย์")
+            throw StatError.badShape(localised("the standard deviation must be greater than zero", "Why a sample size cannot be computed."))
         }
         try validate(power: power, alpha: alpha)
 
@@ -53,7 +53,7 @@ public enum StudySize {
         let perGroup = Int(n.rounded(.up))
         return SampleSize(
             perGroup: perGroup, total: perGroup * 2, power: power, alpha: alpha,
-            assumption: String(format: "ตรวจจับผลต่าง %.4g เมื่อ SD = %.4g",
+            assumption: String(format: localised("to detect a difference of %.4g at SD = %.4g", "What the sample size was computed for. Placeholders: the difference and the standard deviation."),
                                difference, standardDeviation))
     }
 
@@ -62,10 +62,10 @@ public enum StudySize {
                                       power: Double = 0.8,
                                       alpha: Double = 0.05) throws -> SampleSize {
         guard first > 0, first < 1, second > 0, second < 1 else {
-            throw StatError.badShape("สัดส่วนต้องอยู่ระหว่าง 0 ถึง 1")
+            throw StatError.badShape(localised("proportions must be between 0 and 1", "Why a sample size cannot be computed."))
         }
         guard first != second else {
-            throw StatError.badShape("สองสัดส่วนเท่ากัน — ไม่มีผลต่างให้ตรวจจับ")
+            throw StatError.badShape(localised("the two proportions are equal — there is no difference to detect", "Why a sample size cannot be computed."))
         }
         try validate(power: power, alpha: alpha)
 
@@ -78,7 +78,7 @@ public enum StudySize {
         let perGroup = Int(n.rounded(.up))
         return SampleSize(
             perGroup: perGroup, total: perGroup * 2, power: power, alpha: alpha,
-            assumption: String(format: "ตรวจจับความต่างระหว่าง %.3g กับ %.3g", first, second))
+            assumption: String(format: localised("to detect the difference between %.3g and %.3g", "What the sample size was computed for. Placeholders: the two proportions."), first, second))
     }
 
     /// The other direction: given the sample somebody actually has, what can
@@ -90,9 +90,9 @@ public enum StudySize {
     public static func power(perGroup: Int, difference: Double,
                              standardDeviation: Double,
                              alpha: Double = 0.05) throws -> Double {
-        guard perGroup > 1 else { throw StatError.notEnoughData("ต้องมีอย่างน้อยสองคนต่อกลุ่ม") }
+        guard perGroup > 1 else { throw StatError.notEnoughData(localised("at least two people per group are needed", "Why power cannot be computed.")) }
         guard standardDeviation > 0 else {
-            throw StatError.badShape("ส่วนเบี่ยงเบนมาตรฐานต้องมากกว่าศูนย์")
+            throw StatError.badShape(localised("the standard deviation must be greater than zero", "Why a sample size cannot be computed."))
         }
         let zAlpha = Statistics.normalQuantile(1 - alpha / 2)
         let standardError = standardDeviation * (2 / Double(perGroup)).squareRoot()
@@ -101,10 +101,10 @@ public enum StudySize {
 
     private static func validate(power: Double, alpha: Double) throws {
         guard power > 0.5, power < 1 else {
-            throw StatError.badShape("power ต้องอยู่ระหว่าง 0.5 ถึง 1 (ปกติ 0.80 หรือ 0.90)")
+            throw StatError.badShape(localised("power must be between 0.5 and 1 (usually 0.80 or 0.90)", "Why a sample size cannot be computed."))
         }
         guard alpha > 0, alpha < 1 else {
-            throw StatError.badShape("alpha ต้องอยู่ระหว่าง 0 ถึง 1")
+            throw StatError.badShape(localised("alpha must be between 0 and 1", "Why a sample size cannot be computed."))
         }
     }
 }
@@ -151,10 +151,10 @@ public enum MethodAgreement {
     /// they are on one patient, which is what the limits of agreement say.
     public static func blandAltman(_ first: [Double], _ second: [Double]) throws -> BlandAltman {
         guard first.count == second.count else {
-            throw StatError.badShape("ต้องเป็นการวัดคู่กันบนคนเดียวกัน — จำนวนไม่เท่ากัน")
+            throw StatError.badShape(localised("these must be paired measurements on the same people — the counts differ", "Why a paired sample size cannot be computed."))
         }
         guard first.count >= 3 else {
-            throw StatError.notEnoughData("ต้องมีอย่างน้อยสามคู่")
+            throw StatError.notEnoughData(localised("at least three pairs are needed", "Why a paired sample size cannot be computed."))
         }
         let differences = zip(first, second).map(-)
         let n = Double(differences.count)

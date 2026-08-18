@@ -52,20 +52,20 @@ public enum ClosingHandoverPolicy {
         case .fieldwork:
             // §20.7 and M16. Not "because it is unstructured" and not "because
             // it is large" — because the people in it agreed to one study.
-            return .stays(reason: "ข้อมูลจากผู้เข้าร่วม — ผู้ให้ข้อมูลยินยอมกับงานนี้ งานเดียว")
+            return .stays(reason: localised("participant data — the people in it consented to this study, and only this one", "Why fieldwork data does not move to the central knowledge base."))
 
         case .database:
             // A pulled table may be anything, including a patient extract, and
             // the system cannot tell from here. Refusing is the answer that is
             // wrong in the recoverable direction.
-            return .stays(reason: "ตารางที่ดึงมาจากฐานข้อมูล — ระบบบอกไม่ได้ว่ามีข้อมูลบุคคลหรือไม่")
+            return .stays(reason: localised("a table pulled from a database — the system cannot tell whether it holds personal data", "Why a pulled table does not move to the central knowledge base."))
 
         case .userAuthored:
             // §19.1.1's "working drafts, rejected hypotheses". A lesson is
             // authored too, and lessons reach central by their own path
             // (`LessonPublishing`) precisely because *being a lesson* is a
             // decision somebody made, not a property of the text.
-            return .stays(reason: "ร่างและบันทึกระหว่างทางของโปรเจกต์ — บทเรียนขึ้นไปทางของมันเอง")
+            return .stays(reason: localised("the project's drafts and working notes — lessons go up by their own path", "Why authored material does not move to the central knowledge base."))
 
         case .upload, .web:
             // An external reference: a paper, a guideline, a page. It was
@@ -73,9 +73,9 @@ public enum ClosingHandoverPolicy {
             // document that arrives centrally without the credibility it was
             // ranked by would be re-ranked as if nobody had ever assessed it.
             guard chunk.provenance.tier != nil else {
-                return .stays(reason: "เอกสารภายนอกที่ไม่มี tier — ขึ้นไปแล้วจะถูกจัดอันดับใหม่เหมือนไม่เคยมีใครประเมิน")
+                return .stays(reason: localised("an outside document with no tier — sent up it would be re-ranked as if nobody had ever assessed it", "Why an untiered outside document does not move to the central knowledge base."))
             }
-            return .movesUp(reason: "เอกสารอ้างอิงภายนอก พร้อม tier เดิม")
+            return .movesUp(reason: localised("an outside reference, with the tier it already had", "Why a tiered outside document moves to the central knowledge base."))
         }
     }
 

@@ -55,10 +55,10 @@ public struct CodingReliability: Sendable, Equatable {
     public var summary: String {
         var parts = [overall.summary]
         if incompleteUnits > 0 {
-            parts.append("ไม่นำมาคำนวณ \(incompleteUnits) หน่วยที่ยังลงรหัสไม่ครบทุกคน")
+            parts.append(localised("\(incompleteUnits) units are left out because not everyone has coded them yet", "Says what the agreement figure excludes. Placeholder: the number of units."))
         }
         if let weakest = perCode.min(by: { $0.kappa < $1.kappa }), weakest.kappa < 0.61 {
-            parts.append(String(format: "รหัสที่ตกลงกันได้น้อยที่สุด: “%@” κ %.2f",
+            parts.append(String(format: localised("least agreed-on code: “%@” κ %.2f", "Names the worst-agreed code. Placeholders: the code and its kappa."),
                                 weakest.name, weakest.kappa))
         }
         return parts.joined(separator: " · ")
@@ -105,13 +105,13 @@ public struct SaturationCurve: Sendable, Equatable {
     }
 
     public var summary: String {
-        guard let last = points.last else { return "ยังไม่มีการลงรหัส" }
-        var parts = ["ลงรหัสแล้ว \(points.count) ฉบับ · รหัสที่ใช้ \(last.cumulative) รหัส"]
+        guard let last = points.last else { return localised("nothing has been coded yet", "Shown when no coding has happened.") }
+        var parts = [localised("\(points.count) documents coded · \(last.cumulative) codes used", "Coding progress. Placeholders: documents coded and codes used.")]
         if let flat = flattenedAfter() {
-            parts.append("ไม่มีรหัสใหม่หลังฉบับที่ \(flat) — เป็นข้อสังเกต ไม่ใช่ข้อสรุปว่าอิ่มตัว "
-                         + "การศึกษาที่หยุดที่ฉบับที่ \(points.count) ไม่มีหลักฐานเรื่องฉบับถัดไป")
+            parts.append(localised("no new code has appeared since document \(flat) — an observation, not a finding of saturation ", "Comment on the saturation curve. Placeholder: the document number.")
+                         + localised("a study that stopped at document \(points.count) has no evidence about the next one", "Ends the saturation comment. Placeholder: the document count."))
         } else {
-            parts.append("ยังมีรหัสใหม่โผล่อยู่ในฉบับท้าย ๆ")
+            parts.append(localised("new codes are still appearing in the most recent documents", "Comment on the saturation curve."))
         }
         return parts.joined(separator: " · ")
     }

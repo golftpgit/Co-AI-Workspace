@@ -56,12 +56,12 @@ public enum Multilevel {
     public static func randomIntercept(_ clusters: [[Double]]) throws -> MultilevelFit {
         let nonEmpty = clusters.filter { !$0.isEmpty }
         guard nonEmpty.count >= 2 else {
-            throw StatError.notEnoughData("ต้องมีอย่างน้อยสองกลุ่มถึงจะแยกความแปรปรวนระหว่างกลุ่มได้")
+            throw StatError.notEnoughData(localised("at least two clusters are needed to separate the variance between them", "Why the intraclass correlation cannot be computed."))
         }
         let total = nonEmpty.reduce(0) { $0 + $1.count }
         guard total > nonEmpty.count else {
             throw StatError.notEnoughData(
-                "ทุกกลุ่มมีข้อมูลเดียว — แยกความแปรปรวนภายในกลุ่มออกจากระหว่างกลุ่มไม่ได้")
+                localised("every cluster holds a single observation — within-cluster variance cannot be separated from between-cluster variance", "Why the intraclass correlation cannot be computed."))
         }
 
         let grandMean = nonEmpty.flatMap { $0 }.reduce(0, +) / Double(total)
@@ -121,12 +121,12 @@ public enum Multilevel {
             statistic: fit.designEffect,
             pValue: nil,
             detail: passed
-                ? String(format: "ICC = %.3f · design effect = %.2f — การจับกลุ่มแทบไม่มีผล",
+                ? String(format: localised("ICC = %.3f · design effect = %.2f — the clustering barely matters", "Clustering verdict when the design effect is small. Placeholders: the ICC and the design effect."),
                          fit.intraclassCorrelation, fit.designEffect)
-                : String(format: "ICC = %.3f · design effect = %.2f — **ข้อมูลซ้อนชั้น** "
-                         + "ข้อมูล %d ชิ้นจาก %d กลุ่ม มีค่าเท่ากับข้อมูลอิสระราว %.1f ชิ้นเท่านั้น "
-                         + "· วิธีที่ถือว่าทุกชิ้นอิสระจะให้ช่วงความเชื่อมั่นแคบเกินจริงราว %.2f เท่า "
-                         + "ซึ่งเป็นความผิดพลาดที่พบบ่อยที่สุดในงานสาธารณสุข",
+                : String(format: localised("ICC = %.3f · design effect = %.2f — **the data are nested** ", "Clustering verdict when the design effect is large. Placeholders: the ICC and the design effect.")
+                         + localised("%d observations from %d clusters are worth only about %.1f independent ones ", "Continues the clustering verdict. Placeholders: the observation count, the cluster count and the effective sample size.")
+                         + localised("· a method that treats them all as independent gives intervals about %.2f times too narrow ", "Continues the clustering verdict. Placeholder: how many times too narrow the interval would be.")
+                         + localised("which is the commonest mistake in public health work", "Ends the clustering verdict."),
                          fit.intraclassCorrelation, fit.designEffect,
                          fit.observations, fit.clusters, fit.effectiveSampleSize,
                          fit.standardErrorInflation))
@@ -138,6 +138,6 @@ public enum Multilevel {
     /// and an approximation of it would produce a number that reads exactly
     /// like the real thing — which is the failure P19.0 was about.
     public static func randomSlope(_ clusters: [[Double]]) throws -> MultilevelFit {
-        throw StatError.notImplemented(test: .mixedModel, plannedIn: "P19.5 ครึ่งหลัง")
+        throw StatError.notImplemented(test: .mixedModel, plannedIn: localised("the second half of P19.5", "Names the phase a feature is planned for."))
     }
 }

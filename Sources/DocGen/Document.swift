@@ -93,7 +93,7 @@ public struct RenderedDocument: Sendable, Equatable {
     public let bibliography: [String]
 
     public var plainText: String {
-        (lines.map(\.text) + (bibliography.isEmpty ? [] : ["", "เอกสารอ้างอิง"] + bibliography))
+        (lines.map(\.text) + (bibliography.isEmpty ? [] : ["", localised("References", "Heading of the reference list.")] + bibliography))
             .joined(separator: "\n")
     }
 }
@@ -104,10 +104,14 @@ public enum DocumentError: Error, CustomStringConvertible, Equatable {
 
     public var description: String {
         switch self {
-        case .empty: "ยังไม่มีเนื้อหาให้สร้างเอกสาร"
+        case .empty: localised("there is no content to build a document from", "Why a document cannot be built.")
         case .incompleteCitations(let audit):
-            "สร้างเอกสารไม่ได้ — มีแหล่งอ้างอิงที่ข้อมูลไม่ครบ:\n"
-                + audit.missing.map { "• \($0.title): ขาด\($0.fields.joined(separator: ", "))" }
+            localised("the document cannot be built — some sources are missing details:\n", "Why a document cannot be built.")
+                + audit.missing.map { row in
+                    let fields = row.fields.joined(separator: ", ")
+                    return localised("• \(row.title): missing \(fields)",
+                                     "One incomplete source. Placeholders: its title and the fields it lacks.")
+                }
                     .joined(separator: "\n")
         }
     }
@@ -157,7 +161,7 @@ public enum DocumentBuilder {
         // §14.1: the Limitations section is part of the document, not an
         // appendix somebody remembers to add.
         if let limitations = draft.limitations, !limitations.isEmpty {
-            lines.append(RenderedLine(style: .heading, text: "ข้อจำกัดของการศึกษานี้"))
+            lines.append(RenderedLine(style: .heading, text: localised("Limitations of this study", "Heading of the limitations section.")))
             lines.append(contentsOf: limitations.items.map {
                 RenderedLine(style: .bullet, text: $0.text)
             })

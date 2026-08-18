@@ -96,7 +96,7 @@ struct AgreementTests {
         // value that is not on a boundary rather than with this one.
         #expect(try Agreement.cohensKappa(["a", "a", "a", "b", "b", "b", "a", "b"],
                                           ["a", "a", "a", "b", "b", "a", "b", "b"])
-            .interpretation.contains("ปานกลาง"))
+            .interpretation.contains("moderate"))
     }
 
     @Test("κ near zero on high agreement is reported honestly, not hidden")
@@ -115,7 +115,7 @@ struct AgreementTests {
         // Both numbers are in the summary, which is the whole point: a reader
         // who sees only κ concludes the coders were incompetent, and a reader
         // who sees only agreement concludes they were excellent.
-        #expect(agreement.summary.contains("ตรงกันจริง"))
+        #expect(agreement.summary.contains("observed agreement"))
         #expect(agreement.summary.contains("κ"))
     }
 
@@ -133,7 +133,7 @@ struct AgreementTests {
         let agreement = try Agreement.cohensKappa(["a", "b", "a", "b"],
                                                   ["b", "a", "b", "a"])
         #expect(agreement.kappa < 0)
-        #expect(agreement.interpretation.contains("แย่กว่าการเดา"))
+        #expect(agreement.interpretation.contains("worse than guessing"))
     }
 
     @Test("coders who looked at different numbers of units cannot be compared")
