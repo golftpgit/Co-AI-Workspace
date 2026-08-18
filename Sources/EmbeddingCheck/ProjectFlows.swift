@@ -530,7 +530,7 @@ struct ProjectFlows {
             for expected in ["α = 0.74",                       // ส่งมอบอะไรบ้าง
                              "reached 75% of target",           // Benefits measured
                              "ขอฉบับเต็มจากผู้แปลตั้งแต่ต้น",     // บทเรียน
-                             "ย้ายเข้าคลังเก็บถาวร"] {          // สิ่งที่ยกให้คนอื่นรับต่อ
+                             "moved to the archive"] {         // สิ่งที่ยกให้คนอื่นรับต่อ
                 guard report.rendered.contains(expected) else {
                     throw CheckFailure("รายงานปิดโครงการไม่มี '\(expected)'")
                 }
