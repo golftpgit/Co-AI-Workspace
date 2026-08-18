@@ -110,7 +110,7 @@ struct RetentionGateTests {
             Issue.record("expected it to pass, got \(result)"); return
         }
         #expect(obligation.dueOn == nil)
-        #expect(obligation.summary.contains("ไม่ได้ระบุระยะเวลา"))
+        #expect(obligation.summary.contains("the policy states no period"))
     }
 }
 
@@ -164,7 +164,7 @@ struct RetentionClosingGateTests {
             retentionRules: RetentionPolicyReader.rules(in: [policy("เก็บไว้ 5 ปีแล้วทำลาย")]))
 
         let evaluation = ProjectLifecycle.evaluate(project(), hasLessons: true, closing: facts)
-        let retentionCondition = evaluation?.conditions.first { $0.text.contains("ไม่พบนโยบาย") }
+        let retentionCondition = evaluation?.conditions.first { $0.text.contains("is not among the retention policies") }
         #expect(retentionCondition?.satisfied == false, "free text passed the closing gate")
     }
 
@@ -178,7 +178,7 @@ struct RetentionClosingGateTests {
                                  dataDisposition: disposition("เก็บ 5 ปี"),
                                  heldHumanData: nil)
         let evaluation = ProjectLifecycle.evaluate(project(), hasLessons: true, closing: facts)
-        let condition = evaluation?.conditions.first { $0.text.contains("ยังไม่ได้ตรวจว่า") }
+        let condition = evaluation?.conditions.first { $0.text.contains("It has been decided where the remaining data") }
         #expect(condition?.vacuous == true)
         #expect(condition?.satisfied == true, "an unwired reader must not block every close")
     }
@@ -192,7 +192,7 @@ struct RetentionClosingGateTests {
                                  pendingAssumptions: 0, conformanceGaps: [],
                                  dataDisposition: nil, heldHumanData: false)
         let evaluation = ProjectLifecycle.evaluate(project(), hasLessons: true, closing: facts)
-        let condition = evaluation?.conditions.first { $0.text.contains("ข้อมูลและไฟล์ที่เหลือ") }
+        let condition = evaluation?.conditions.first { $0.text.contains("remaining data and files") }
         #expect(condition?.satisfied == false)
     }
 }

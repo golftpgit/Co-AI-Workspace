@@ -9,7 +9,7 @@ import WebSearch
 // The registry has decided every citation's tier since P3, and until now nobody
 // could see it. That matters more here than for most tables: §14.1's rule is
 // that a claim needs corroboration from a good enough tier, so a person reading
-// "ยังไม่ผ่าน QA เพราะแหล่งอ่อน" had no way to find out what the system thinks
+// "QA rejected it because the sources are weak" had no way to find out what the system thinks
 // is strong.
 //
 // Read-only for now, and it says so. Turning a source off is a setting that has
@@ -43,18 +43,22 @@ struct SourcesView: View {
         VStack(alignment: .leading, spacing: 0) {
             if let search { searchPanel(search) ; Divider() }
             HStack(spacing: 10) {
-                Text("แหล่งและชั้นความน่าเชื่อถือ").font(.headline)
-                Picker("สาขา", selection: $discipline) {
-                    Text("ทุกสาขา").tag(Discipline?.none)
+                Text(localised: "Sources and their trust tiers", "Heading of the sources screen.")
+                    .font(.headline)
+                Picker(t("Discipline", "Picker: filter sources by field of study."), selection: $discipline) {
+                    Text(localised: "All disciplines", "Picker option: no discipline filter.")
+                        .tag(Discipline?.none)
                     ForEach(Discipline.allCases, id: \.self) { subject in
                         Text(subject.label).tag(Discipline?.some(subject))
                     }
                 }
                 .labelsHidden()
                 .frame(maxWidth: 200)
-                .accessibilityLabel("กรองแหล่งตามสาขา")
+                .accessibilityLabel(t("Filter sources by discipline", "Screen-reader label."))
                 Spacer()
-                Text("\(shown.count) แหล่ง").font(.caption).foregroundStyle(.secondary)
+                Text(localised: "\(shown.count) sources",
+                     "How many sources are listed. Placeholder is a count.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             .padding(Space.box)
             Divider()
@@ -75,9 +79,8 @@ struct SourcesView: View {
             }
 
             Divider()
-            Text("โดเมนที่ไม่อยู่ในทะเบียนนี้ถือเป็น T5 (เว็บทั่วไป) ไม่ใช่ \"ไม่รู้จัก\" — "
-                 + "หน้าที่ไม่มีใครรับรองคือเว็บทั่วไป และการปล่อยให้มันไม่มี tier "
-                 + "จะทำให้มันหลุดตัวกรองที่ตรวจ tier · แก้รายการยังทำไม่ได้ (P13)")
+            Text(localised: "A domain not in this register counts as T5 (the open web), not as “unknown” — a page nobody vouches for is the open web, and leaving it without a tier would let it slip past the filters that check tiers · editing the list is not possible yet (P13)",
+                 "Explains the default tier and why it is not “unknown”.")
                 .font(.caption2).foregroundStyle(.secondary)
                 .padding(Space.box)
         }
@@ -97,17 +100,21 @@ struct SourcesView: View {
     private func searchPanel(_ source: any WebSearching) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Text("ค้นเว็บทั่วไป (T5)").font(.headline)
-                Text("ผ่าน \(source.name) ในเบราว์เซอร์ของแอปเอง")
+                Text(localised: "Search the open web (T5)", "Heading over the web search box.")
+                    .font(.headline)
+                Text(localised: "Through \(source.name), in the app's own browser",
+                     "Says which search service is used. Placeholder is its name.")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
             }
             HStack(spacing: 8) {
-                TextField("คำค้น เช่น ความชุกภาวะหมดไฟในพยาบาลไทย", text: $query)
+                TextField(t("Search terms, for example: prevalence of burnout among nurses",
+                            "Placeholder in the open-web search field."),
+                          text: $query)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { run(source) }
-                    .accessibilityLabel("คำค้นสำหรับค้นเว็บทั่วไป")
-                Button("ค้น") { run(source) }
+                    .accessibilityLabel(t("Search terms for the open web", "Screen-reader label."))
+                Button(t("Search", "Button that runs the knowledge search.")) { run(source) }
                     .disabled(searching || query.trimmingCharacters(in: .whitespaces).isEmpty)
                 if searching { ProgressView().controlSize(.small) }
             }
@@ -132,7 +139,9 @@ struct SourcesView: View {
                         Text(result.title).font(.callout).lineLimit(1)
                         Spacer()
                         if read != nil {
-                            Button(reading == result.url.absoluteString ? "กำลังอ่าน…" : "อ่านหน้านี้") {
+                            Button(reading == result.url.absoluteString
+                                   ? t("reading…", "Button label while a page is being fetched.")
+                                   : t("Read this page", "Button that fetches and reads a search result.")) {
                                 readPage(result.url)
                             }
                             .controlSize(.small)
@@ -148,23 +157,25 @@ struct SourcesView: View {
                     }
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("ผลค้น \(result.title) ชั้น \(result.tier.rawValue) จาก \(result.url.host() ?? "")")
+                .accessibilityLabel(t("Result \(result.title), tier \(result.tier.rawValue), from \(result.url.host() ?? "")",
+                                      "Screen-reader label for a search result. Placeholders: its title, tier and host."))
             }
 
             if let page {
                 Divider()
-                Text("อ่านแล้ว: \(page.title ?? page.finalURL.absoluteString)")
+                Text(localised: "Read: \(page.title ?? page.finalURL.absoluteString)",
+                     "Says which page was read. Placeholder is its title or address.")
                     .font(.callout).bold()
-                Text("\(page.paragraphs.count) ย่อหน้า · tier \(page.provenance.tier?.rawValue ?? "—") · "
-                     + "เข้าท่อ ingest เส้นเดิมได้ทั้งหมด")
+                Text(localised: "\(page.paragraphs.count) paragraphs · tier \(page.provenance.tier?.rawValue ?? "—") · all of it can go through the usual ingest path",
+                     "Summary of a page that was read. Placeholders: how many paragraphs and its tier.")
                     .font(.caption2).foregroundStyle(.secondary)
                 Text(page.paragraphs.prefix(3).joined(separator: "\n\n"))
                     .font(.caption).textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text("snippet ใช้เลือกว่าจะเปิดอันไหน ห้ามอ้างอิง — ต้องอ่านหน้าจริงก่อนเสมอ (§1.4) · "
-                 + "ระบบไม่แก้ CAPTCHA: เจอด่านแล้วจะบอกให้คนไปเปิดเอง")
+            Text(localised: "A snippet is for choosing which page to open, never for citing — the real page has to be read first (§1.4) · the system does not solve CAPTCHAs: when it meets one it says so and asks a person to open it",
+                 "States two rules about web search results.")
                 .font(.caption2).foregroundStyle(.secondary)
         }
         .padding(Space.box)
@@ -215,32 +226,36 @@ struct SourcesView: View {
                 Text(source.domain).font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 if !source.isEnabled {
-                    Text("ปิดอยู่").font(.caption2).foregroundStyle(.orange)
+                    Text(localised: "off", "Marker on a source that is switched off.")
+                        .font(.caption2).foregroundStyle(.orange)
                 }
             }
             Text(source.disciplines.map(\.label).joined(separator: " · ")
-                 + " · เข้าถึงโดย \(accessLabel(source.access))")
+                 + t(" · reached by \(accessLabel(source.access))",
+                     "Appended to a source row. Placeholder is how the source is reached."))
                 .font(.caption2).foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(source.name) โดเมน \(source.domain) ชั้น \(source.tier.rawValue)")
+        .accessibilityLabel(t("\(source.name), domain \(source.domain), tier \(source.tier.rawValue)",
+                              "Screen-reader label for a source row. Placeholders: its name, domain and tier."))
     }
 
     private func tierMeaning(_ tier: SourceTier) -> String {
         switch tier {
-        case .t1: "เอกสารทางการ · มาตรฐาน · กฎหมาย"
-        case .t2: "ผ่าน peer review"
-        case .t3: "preprint และรายงานกึ่งทางการ"
-        case .t4: "ชุมชนที่ตรวจกันเอง"
-        case .t5: "เว็บทั่วไป — ต้องมีแหล่งชั้นบนยืนยัน"
+        case .t1: t("official documents · standards · law", "What a T1 source is.")
+        case .t2: t("peer reviewed", "What a T2 source is.")
+        case .t3: t("preprints and semi-official reports", "What a T3 source is.")
+        case .t4: t("communities that review each other", "What a T4 source is.")
+        case .t5: t("the open web — needs a higher tier to confirm it", "What a T5 source is.")
         }
     }
 
     private func accessLabel(_ access: AccessMethod) -> String {
         switch access {
-        case .api(let name): "API ของ \(name)"
-        case .siteQuery: "ค้นเฉพาะโดเมน"
-        case .metaSearch: "meta-search แล้วอ่านหน้าจริง"
+        case .api(let name): t("the \(name) API",
+                               "How a source is reached. Placeholder is the service name.")
+        case .siteQuery: t("a search restricted to the domain", "How a source is reached.")
+        case .metaSearch: t("meta-search, then reading the real page", "How a source is reached.")
         }
     }
 }

@@ -147,7 +147,7 @@ struct PlanningGateTests {
         let gate = try #require(ProjectLifecycle.evaluate(briefed()))
         #expect(gate.gate == "G2")
         #expect(!gate.passed)
-        #expect(gate.unmet.contains("มีใบงานอย่างน้อย 1 ใบ"))
+        #expect(gate.unmet.contains("At least one work package"))
     }
 
     @Test("a plan whose leaves are complete passes")
@@ -167,7 +167,7 @@ struct PlanningGateTests {
 
         let gate = try #require(ProjectLifecycle.evaluate(project, wbs: wbs))
         #expect(!gate.passed)
-        #expect(gate.unmet == ["ทุกข้อในขอบเขต 'ทำ' มีใบงานรองรับ"])
+        #expect(gate.unmet == ["Every in-scope line has a work package behind it"])
     }
 
     @Test("G3 counts open leaves rather than trusting a number passed in")

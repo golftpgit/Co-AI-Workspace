@@ -34,9 +34,13 @@ struct EndpointsView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            Text("โมเดลระยะไกล (Tier 1)").font(.headline)
-            Button("เพิ่ม endpoint") { model.beginAdding() }
-            Button("ตรวจใหม่ทั้งหมด") { Task { await model.recheckAll() } }
+            Text(localised: "Remote models (Tier 1)",
+                 "Heading of the endpoints screen. 'Tier 1' is the name of that tier.")
+                .font(.headline)
+            Button(t("Add endpoint", "Button that starts defining a new server.")) { model.beginAdding() }
+            Button(t("Re-check all", "Button that probes every configured endpoint again.")) {
+                Task { await model.recheckAll() }
+            }
             Spacer()
             if let status = model.status {
                 Text(status.message)
@@ -53,10 +57,10 @@ struct EndpointsView: View {
     private var endpointList: some View {
         if model.registry.endpoints.isEmpty {
             ContentUnavailableView(
-                "ยังไม่มี endpoint",
+                t("No endpoint yet", "Empty state on the endpoints screen."),
                 systemImage: "network",
-                description: Text("Tier 0.5 ทำงานได้อยู่แล้วโดยไม่ต้องมีอันนี้ — "
-                                  + "endpoint คือของที่ทำให้งานหนักไปรันบนเครื่องที่แรงกว่าได้"))
+                description: Text(localised: "Tier 0.5 already works without one — an endpoint is what lets heavy work run on a stronger machine",
+                                  "Empty-state explanation on the endpoints screen. 'Tier 0.5' is the name of the on-device tier."))
                 .frame(height: 150)
         } else {
             ForEach(model.registry.endpoints) { endpoint in
@@ -69,46 +73,54 @@ struct EndpointsView: View {
 
     @ViewBuilder
     private var budgetSection: some View {
-        Text("เพดานค่าใช้จ่าย").font(.subheadline).bold()
+        Text(localised: "Spending ceilings", "Heading over the per-request, per-day and per-month limits.")
+            .font(.subheadline).bold()
         if model.hasMeteredEndpoint {
             // Four ceilings, whichever is reached first (§9.5).
             VStack(alignment: .leading, spacing: 8) {
-                CeilingField(label: "ต่อครั้ง", value: model.limits.perRequestUSD) { new in
+                CeilingField(label: t("per request", "Spending ceiling: the most one call may cost."),
+                             value: model.limits.perRequestUSD) { new in
                     var limits = model.limits; limits.perRequestUSD = new
                     Task { await model.setLimits(limits) }
                 }
-                CeilingField(label: "ต่อ session", value: model.limits.perSessionUSD,
+                CeilingField(label: t("per session", "Spending ceiling: the most one session may cost."),
+                             value: model.limits.perSessionUSD,
                              used: model.spend.session) { new in
                     var limits = model.limits; limits.perSessionUSD = new
                     Task { await model.setLimits(limits) }
                 }
-                CeilingField(label: "ต่อวัน", value: model.limits.perDayUSD,
+                CeilingField(label: t("per day", "Spending ceiling: the most one day may cost."),
+                             value: model.limits.perDayUSD,
                              used: model.spend.today) { new in
                     var limits = model.limits; limits.perDayUSD = new
                     Task { await model.setLimits(limits) }
                 }
-                CeilingField(label: "ต่อเดือน", value: model.limits.perMonthUSD,
+                CeilingField(label: t("per month", "Spending ceiling: the most one month may cost."),
+                             value: model.limits.perMonthUSD,
                              used: model.spend.month) { new in
                     var limits = model.limits; limits.perMonthUSD = new
                     Task { await model.setLimits(limits) }
                 }
-                Text("เกินเพดานไม่ใช่ error — งานจะตกไป Tier 1a หรือ 0.5 แล้วทำต่อ "
-                     + "และเหตุผลถูกบันทึกลง span")
+                Text(localised: "Going over a ceiling is not an error — the work drops to Tier 1a or 0.5 and carries on, and the reason is written to the span",
+                     "Explains what happens at a spending ceiling. The tier names stay as they are.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .padding(Space.box)
             .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
         } else {
-            Text("ยังไม่มี endpoint ที่คิดเงิน — เพดานจึงยังไม่มีผลกับอะไร")
+            Text(localised: "No paid endpoint yet — so the ceilings apply to nothing",
+                 "Shown when spending limits exist but nothing can spend.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
 
     @ViewBuilder
     private var spendSection: some View {
-        Text("ใช้ไปกับอะไร (เดือนนี้)").font(.subheadline).bold()
+        Text(localised: "What it went on (this month)", "Heading over the spending breakdown.")
+            .font(.subheadline).bold()
         if model.breakdown.isEmpty {
-            Text("ยังไม่มีการใช้จ่าย").font(.caption).foregroundStyle(.secondary)
+            Text(localised: "No spending yet", "Shown when nothing has been charged this month.")
+                .font(.caption).foregroundStyle(.secondary)
         } else {
             ForEach(model.breakdown, id: \.key) { row in
                 HStack {
@@ -127,28 +139,46 @@ struct EndpointsView: View {
 
     private var editor: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(model.draft.name.isEmpty ? "เพิ่ม endpoint" : "แก้ \(model.draft.name)")
+            Text(model.draft.name.isEmpty
+                 ? t("Add endpoint", "Sheet title when defining a new server.")
+                 : t("Edit \(model.draft.name)", "Sheet title when editing a server. Placeholder is its name."))
                 .font(.headline)
 
-            LabeledContent("ชื่อ") { TextField("GX10", text: $model.draft.name) }
-            LabeledContent("URL") {
-                TextField("http://gx10:8000/v1", text: $model.draft.baseURL)
+            // `LabeledContent` puts its label beside the field, not *on* it:
+            // the text field itself is announced as nothing, and Tab lands on
+            // twenty anonymous stops. Found by driving this sheet — the audit
+            // script never reached it because it only walks the main window.
+            LabeledContent(t("Name", "Field label: what to call this endpoint.")) {
+                TextField("GX10", text: $model.draft.name)
+                    .accessibilityLabel(t("Endpoint name", "Screen-reader label for the endpoint name field."))
             }
-            LabeledContent("โมเดล") {
-                TextField("เว้นว่าง = ใช้ที่เซิร์ฟเวอร์เสิร์ฟอยู่", text: $model.draft.model)
+            LabeledContent("URL") {
+                TextField("http://192.168.1.205:8000/v1", text: $model.draft.baseURL)
+                    .accessibilityLabel(t("Endpoint URL", "Screen-reader label for the endpoint URL field."))
+                    .accessibilityHint(t("ends with /v1", "Screen-reader hint about the expected URL shape."))
+            }
+            LabeledContent(t("Model", "Field label: which model this endpoint serves.")) {
+                TextField(t("leave empty = whatever the server is serving",
+                            "Placeholder in the model field."),
+                          text: $model.draft.model)
+                    .accessibilityLabel(t("Model name", "Screen-reader label for the model field."))
+                    .accessibilityHint(t("may be left empty if the server serves one model",
+                                         "Screen-reader hint for the model field."))
             }
             // §17.1 / P15.1 — the recommended setting for a server that serves
             // one model, which is what every self-hosted one does. A name
             // written here becomes wrong the day the checkpoint is swapped, and
             // the symptom is not an error: the endpoint drops out of the chain
             // and the app answers from the small model on this Mac instead.
-            Text("เว้นช่องโมเดลว่างได้ถ้าเซิร์ฟเวอร์เสิร์ฟโมเดลเดียว — แอปจะถาม "
-                 + "`/v1/models` เอาชื่อจริงทุกครั้ง จึงไม่พังตอนสลับ checkpoint · "
-                 + "เซิร์ฟเวอร์ที่เสิร์ฟหลายโมเดลต้องระบุชื่อ")
+                Text(localised: "The model field may be left empty when the server serves one model — the app asks `/v1/models` for the real name every time, so switching checkpoints does not break it · a server that serves several models needs the name",
+                     "Explains when the model field can be blank.")
                 .font(.caption).foregroundStyle(.secondary)
-            Picker("ชนิด", selection: $model.draft.kind) {
-                Text("self-hosted (ฟรี)").tag(InferenceEndpoint.Kind.selfHosted)
-                Text("paid (คิดเงิน)").tag(InferenceEndpoint.Kind.paid)
+            Picker(t("Kind", "Picker: whether this endpoint charges money."),
+                   selection: $model.draft.kind) {
+                Text(localised: "self-hosted (free)", "Endpoint kind: a server you run yourself.")
+                    .tag(InferenceEndpoint.Kind.selfHosted)
+                Text(localised: "paid (charges money)", "Endpoint kind: a provider that bills per token.")
+                    .tag(InferenceEndpoint.Kind.paid)
             }
             .pickerStyle(.segmented)
 
@@ -159,28 +189,37 @@ struct EndpointsView: View {
                 SecretField(name: Binding(
                     get: { model.draft.apiKeyEnvironmentVariable ?? "" },
                     set: { model.draft.apiKeyEnvironmentVariable = $0.isEmpty ? nil : $0 }),
-                            title: "ชื่อคีย์ API",
+                            title: t("API key name", "Label on the field naming the stored API key."),
                             placeholder: "OPENAI_API_KEY")
-                LabeledContent("ราคา / ล้านโทเคน (เข้า)") {
+                LabeledContent(t("Price / million tokens (in)",
+                                 "Field label: what the provider charges for input tokens.")) {
                     TextField("3.00", value: $model.draft.inputPricePerMillion,
                               format: .number)
+                        .accessibilityLabel(t("Price per million input tokens", "Screen-reader label."))
                 }
-                LabeledContent("ราคา / ล้านโทเคน (ออก)") {
+                LabeledContent(t("Price / million tokens (out)",
+                                 "Field label: what the provider charges for output tokens.")) {
                     TextField("15.00", value: $model.draft.outputPricePerMillion,
                               format: .number)
+                        .accessibilityLabel(t("Price per million output tokens", "Screen-reader label."))
                 }
-                Text("ไม่ใส่ราคา = Budget Governor ประเมินไม่ได้ และจะไม่ยอมใช้ endpoint นี้เลย")
+                Text(localised: "No price means the Budget Governor cannot estimate anything, and it will refuse to use this endpoint at all",
+                     "Warning under the price fields. 'Budget Governor' is a component name and stays as is.")
                     .font(.caption).foregroundStyle(.orange)
             }
 
             HStack {
                 Spacer()
-                Button("ปิด") { model.editing = false }
-                Button("ตรวจแล้วบันทึก") { Task { await model.save() } }
+                Button(t("Close", "Button that dismisses the endpoint sheet without saving.")) {
+                    model.editing = false
+                }
+                Button(t("Check and save", "Button that probes the endpoint and saves it only if it answers.")) {
+                    Task { await model.save() }
+                }
                     .keyboardShortcut(.defaultAction)
             }
-            Text("บันทึกได้ต่อเมื่อ endpoint ตอบ และมีโมเดลชื่อนี้จริง — "
-                 + "เซิร์ฟเวอร์ยอมรับชื่อโมเดลที่ไม่มีอยู่ แล้วไปพังตอนใช้")
+            Text(localised: "It saves only if the endpoint answers and really serves a model by that name — a server will accept a model name that does not exist and then fail when you use it",
+                 "Explains why saving probes the server first.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(Space.section)
@@ -199,13 +238,13 @@ private struct EndpointRow: View {
                 HStack(spacing: 6) {
                     Text(endpoint.name).font(.body).bold()
                     if endpoint.kind == .paid {
-                        Text("คิดเงิน")
+                        Text(localised: "paid", "Tag on an endpoint that charges money.")
                             .font(.caption2)
                             .padding(.horizontal, 6).padding(.vertical, 2)
                             .background(.orange.opacity(0.2), in: Capsule())
                     }
                     if model.isDefault(endpoint) {
-                        Text("ค่าเริ่มต้น")
+                        Text(localised: "default", "Tag on the endpoint used unless something says otherwise.")
                             .font(.caption2)
                             .padding(.horizontal, 6).padding(.vertical, 2)
                             .background(.tint.opacity(0.15), in: Capsule())
@@ -227,11 +266,13 @@ private struct EndpointRow: View {
             }
             Spacer()
             if !model.isDefault(endpoint) {
-                Button("ตั้งเป็นค่าเริ่มต้น") { model.makeDefault(endpoint) }
+                Button(t("Make default", "Button that makes this the endpoint used by default.")) {
+                    model.makeDefault(endpoint)
+                }
             }
-            Button("แก้") { model.beginEditing(endpoint) }
+            Button(t("Edit", "Button that opens an endpoint for editing.")) { model.beginEditing(endpoint) }
             Button(role: .destructive) { model.remove(endpoint) } label: {
-                Label("ลบ", systemImage: "trash")
+                Label(t("Delete", "Button that removes an endpoint."), systemImage: "trash")
             }
             .labelStyle(.iconOnly)
         }
@@ -240,12 +281,15 @@ private struct EndpointRow: View {
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
     }
 
-    /// What to show before anything has been asked of the server. "(ตามที่
-    /// เซิร์ฟเวอร์เสิร์ฟ)" rather than an empty gap, because an empty model
+    /// What to show before anything has been asked of the server. "(whatever
+    /// the server serves)" rather than an empty gap, because an empty model
     /// field is a deliberate setting here and a row that shows nothing reads
     /// like a row that is broken.
     private var servedNameFallback: String {
-        endpoint.model.isEmpty ? "(ตามที่เซิร์ฟเวอร์เสิร์ฟ)" : endpoint.model
+        endpoint.model.isEmpty
+            ? t("(whatever the server serves)",
+                "Stand-in for an endpoint's model name before the server has been asked.")
+            : endpoint.model
     }
 
     /// §9.3 asks for a permanent dot rather than a probe per request: it costs
@@ -260,7 +304,8 @@ private struct EndpointRow: View {
                 .frame(width: 9, height: 9)
                 .padding(.top, 6)
                 .accessibilityLabel(model.check(for: endpoint)?.isUsable == true
-                                    ? "ต่อได้" : "ต่อไม่ได้")
+                                    ? t("reachable", "Endpoint probe result: the server answered.")
+                                    : t("not reachable", "Endpoint probe result: the server did not answer."))
         }
     }
 }
@@ -278,7 +323,7 @@ private struct CeilingField: View {
     var body: some View {
         HStack {
             Text(label).frame(width: column, alignment: .leading)
-            TextField("ไม่จำกัด", text: $text)
+            TextField(t("no limit", "Placeholder in a spending ceiling field left empty."), text: $text)
                 .frame(width: column)
                 .onSubmit { onChange(Double(text)) }
             if let used, let value {
@@ -286,7 +331,9 @@ private struct CeilingField: View {
                 // the current number beside it is a setting, not a budget.
                 ProgressView(value: min(used / max(value, 0.0001), 1))
                     .frame(maxWidth: 200)
-                Text(String(format: "ใช้ไป $%.4f / $%.2f", used, value))
+                Text(String(format: t("spent $%.4f / $%.2f",
+                                      "How much of a spending ceiling has been used. Placeholders: the amount spent and the ceiling, both in the endpoint's own currency."),
+                            used, value))
                     .font(.caption).monospacedDigit().foregroundStyle(.secondary)
             }
             Spacer()

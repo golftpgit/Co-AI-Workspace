@@ -33,9 +33,13 @@ struct ChatView: View {
     /// by the root view because creating a project changes which workspace the
     /// whole app is in, which is not chat's decision to make.
     let promote: (DraftedBrief, String?) async -> Void
+    /// Bumped whenever the model chain changes, so the switch in the composer
+    /// can refresh without the view being rebuilt (AUDIT F-1).
+    var modelChainGeneration: Int = 0
 
     var body: some View {
-        ChatScreen(model: model, promote: promote)
+        ChatScreen(model: model, promote: promote,
+                   modelChainGeneration: modelChainGeneration)
             // Idempotent, and it has to be: this runs again every time the view
             // is rebuilt, and a second subscribe would be the same delivered-to-
             // nobody bug arriving the other way round.
@@ -46,6 +50,7 @@ struct ChatView: View {
 private struct ChatScreen: View {
     @Bindable var model: ChatViewModel
     let promote: (DraftedBrief, String?) async -> Void
+    var modelChainGeneration: Int = 0
     @State private var choosingFolder = false
     @State private var draft: DraftedBrief?
     @State private var drafting = false
@@ -102,8 +107,11 @@ private struct ChatScreen: View {
     @ViewBuilder
     private var workPackagePicker: some View {
         if !model.workPackages.isEmpty {
-            Picker("ใบงาน", selection: $model.workPackage) {
-                Text("ไม่ผูกกับใบงาน").tag(String?.none)
+            Picker(t("Work package", "Picker: which planned unit of work this conversation counts against."),
+                   selection: $model.workPackage) {
+                Text(localised: "Not tied to a work package",
+                     "Picker option: this conversation is a question, not work against a promise.")
+                    .tag(String?.none)
                 ForEach(model.workPackages) { package in
                     Text(package.title).tag(String?.some(package.id))
                 }
@@ -111,8 +119,10 @@ private struct ChatScreen: View {
             .pickerStyle(.menu)
             .frame(maxWidth: 220)
             .labelsHidden()
-            .accessibilityLabel("เลือกใบงานที่การสนทนานี้ทำอยู่")
-            .help("เวลาและค่าใช้จ่ายของเทิร์นนี้จะถูกนับเข้าใบงานที่เลือก")
+            .accessibilityLabel(t("Choose the work package this conversation is working on",
+                                  "Screen-reader label for the work package picker."))
+            .help(t("Time and cost of this turn are counted against the work package you pick",
+                    "Tooltip explaining the consequence of choosing a work package."))
         }
     }
 
@@ -128,10 +138,12 @@ private struct ChatScreen: View {
                     drafting = false
                 }
             } label: {
-                Label("ยกระดับเป็นโปรเจกต์", systemImage: "square.stack.3d.up")
+                Label(t("Promote to project", "Button: turn this chat into a tracked project."),
+                      systemImage: "square.stack.3d.up")
             }
             .disabled(drafting)
-            .accessibilityLabel("ยกระดับบทสนทนานี้เป็นโปรเจกต์")
+            .accessibilityLabel(t("Promote this conversation to a project",
+                                  "Screen-reader label for the promote button."))
         }
     }
 
@@ -143,7 +155,7 @@ private struct ChatScreen: View {
             Divider()
             conversationRows
         }
-        .navigationTitle("บทสนทนา")
+        .navigationTitle(t("Conversations", "Window title over the list of past conversations."))
     }
 
     // MARK: - history (§19.2.1)
@@ -156,10 +168,12 @@ private struct ChatScreen: View {
             // toolbar it was pushed into the `»` overflow the moment the area
             // switch arrived (P10.12) — a primary action behind a chevron.
             HStack(spacing: 6) {
-                Text("บทสนทนา").font(.subheadline).bold()
+                Text(localised: "Conversations", "Heading over the list of past conversations.")
+                    .font(.subheadline).bold()
                 Spacer()
                 Button { Task { await model.newConversation() } } label: {
-                    Label("บทสนทนาใหม่", systemImage: "square.and.pencil")
+                    Label(t("New conversation", "Button: start an empty conversation."),
+                          systemImage: "square.and.pencil")
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.borderless)
@@ -169,24 +183,30 @@ private struct ChatScreen: View {
                 // all of them text fields or the list (E.30). Starting a
                 // conversation was mouse-only, which is §14.4's whole point.
                 .keyboardShortcut("n", modifiers: .command)
-                .accessibilityLabel("สร้างบทสนทนาใหม่ (⌘N)")
+                .accessibilityLabel(t("New conversation (⌘N)",
+                                      "Screen-reader label naming the keyboard shortcut too."))
             }
             HStack(spacing: 6) {
-                TextField("ค้นในบทสนทนา", text: $model.query)
+                TextField(t("Search conversations", "Placeholder in the conversation search field."),
+                          text: $model.query)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { Task { await model.search() } }
-                    .accessibilityLabel("ค้นข้อความในบทสนทนาเก่า")
+                    .accessibilityLabel(t("Search the text of past conversations",
+                                          "Screen-reader label for the search field."))
                 if !model.query.isEmpty {
                     Button { model.clearSearch() } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .accessibilityLabel("ล้างคำค้น")
+                            .accessibilityLabel(t("Clear search",
+                                                  "Screen-reader label for the button that empties the search field."))
                     }
                     .buttonStyle(.borderless)
                 }
             }
             // A different question, not a wider default: inside a project the
             // list belongs to the project.
-            Toggle("ค้นข้ามโปรเจกต์", isOn: $model.searchesEverywhere)
+            Toggle(t("Search across projects",
+                     "Checkbox: widen the search past the project you are inside."),
+                   isOn: $model.searchesEverywhere)
                 .font(.caption)
                 .toggleStyle(.checkbox)
                 .onChange(of: model.searchesEverywhere) { _, _ in
@@ -218,7 +238,7 @@ private struct ChatScreen: View {
                     Task { await model.select(match.conversation) }
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(match.conversation.title ?? "บทสนทนาใหม่")
+                        Text(match.conversation.title ?? t("New conversation", "Stand-in title for a conversation nobody has named yet."))
                             .lineLimit(1).font(.callout)
                         // The line that matched, because "which conversations
                         // exist" is not the question somebody searching asked.
@@ -241,27 +261,32 @@ private struct ChatScreen: View {
                         if conversation.pinned {
                             Image(systemName: "pin.fill").font(.caption2)
                                 .foregroundStyle(.secondary)
-                                .accessibilityLabel("ปักหมุดไว้")
+                                .accessibilityLabel(t("Pinned", "Screen-reader label on the pin marker beside a conversation."))
                         }
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(conversation.title ?? "บทสนทนาใหม่").lineLimit(1)
+                            Text(conversation.title ?? t("New conversation", "Stand-in title for a conversation nobody has named yet.")).lineLimit(1)
                             Text(conversation.updatedAt, format: .relative(presentation: .named))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     .tag(conversation.id)
                     .contextMenu {
-                        Button(conversation.pinned ? "เลิกปักหมุด" : "ปักหมุด") {
+                        Button(conversation.pinned
+                               ? t("Unpin", "Context-menu item: stop keeping this conversation at the top.")
+                               : t("Pin", "Context-menu item: keep this conversation at the top of the list.")) {
                             Task { await model.togglePin(conversation) }
                         }
-                        Button("ลบบทสนทนา", role: .destructive) {
+                        Button(t("Delete conversation", "Context-menu item: remove this conversation for good."),
+                               role: .destructive) {
                             Task { await model.delete(conversation) }
                         }
                     }
-                    .accessibilityAction(named: conversation.pinned ? "เลิกปักหมุด" : "ปักหมุดบทสนทนานี้") {
+                    .accessibilityAction(named: conversation.pinned
+                                         ? t("Unpin this conversation", "Screen-reader action name.")
+                                         : t("Pin this conversation", "Screen-reader action name.")) {
                         Task { await model.togglePin(conversation) }
                     }
-                    .accessibilityAction(named: "ลบบทสนทนานี้") {
+                    .accessibilityAction(named: t("Delete this conversation", "Screen-reader action name.")) {
                         Task { await model.delete(conversation) }
                     }
                 }
@@ -273,7 +298,8 @@ private struct ChatScreen: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            Picker("ระดับการทำงานเอง", selection: $model.modes.autonomy) {
+            Picker(t("Autonomy level", "Picker: how far the assistant may go without asking."),
+                   selection: $model.modes.autonomy) {
                 ForEach(OperatingModes.Autonomy.allCases, id: \.self) { level in
                     Text(level.label).tag(level)
                 }
@@ -282,9 +308,11 @@ private struct ChatScreen: View {
             .frame(maxWidth: 240)
 
             Toggle("Plan-only", isOn: $model.modes.planOnly)
-                .help("คิดและเสนอแผนได้ แต่ไม่รันเครื่องมือใด ๆ ทั้ง session")
+                .help(t("May think and propose a plan, but runs no tools for the whole session",
+                        "Tooltip on the Plan-only switch. 'Plan-only' is a mode name and stays untranslated."))
             Toggle("Run-until-done", isOn: $model.modes.runUntilDone)
-                .help("ทำงานต่อกันหลายขั้นโดยไม่รอให้พิมพ์ใหม่")
+                .help(t("Keeps working through several steps without waiting for you to type again",
+                        "Tooltip on the Run-until-done switch. 'Run-until-done' is a mode name and stays untranslated."))
 
             Spacer()
 
@@ -293,10 +321,12 @@ private struct ChatScreen: View {
             promotionButton
 
             Button { choosingFolder = true } label: {
-                Label(model.workingDirectory?.lastPathComponent ?? "เลือกโฟลเดอร์งาน",
+                Label(model.workingDirectory?.lastPathComponent
+                      ?? t("Choose working folder", "Button when no folder has been granted yet."),
                       systemImage: "folder")
             }
-            .accessibilityLabel("เลือกโฟลเดอร์ที่ให้รันคำสั่ง")
+            .accessibilityLabel(t("Choose the folder commands may run in",
+                                  "Screen-reader label for the working-folder button."))
 
             if let routed = model.routedVia {
                 // §24.3 / P20.5 — the tier, and why that tier. The reason is
@@ -304,7 +334,8 @@ private struct ChatScreen: View {
                 // a sentence a model wrote about its own choice would not be.
                 Text(routed).font(.caption).foregroundStyle(.secondary)
                     .help(model.routedWhy.joined(separator: "\n"))
-                    .accessibilityLabel("ตอบโดย \(routed)")
+                    .accessibilityLabel(t("Answered by \(routed)",
+                                          "Screen-reader label naming the tier that answered. Placeholder is a tier name."))
                     .accessibilityHint(model.routedWhy.joined(separator: " · "))
             }
         }
@@ -328,12 +359,12 @@ private struct ChatScreen: View {
                     // that has no conversations yet (U23-7). One line, and it
                     // points at the button that starts one.
                     if model.bubbles.isEmpty, model.loadError == nil {
-                        Text("ยังไม่มีข้อความในบทสนทนานี้ — พิมพ์ด้านล่างเพื่อเริ่ม "
-                             + "หรือกด ✎ ที่หัวรายการทางซ้ายเพื่อเปิดบทสนทนาใหม่")
+                        Text(localised: "No messages here yet — type below to begin, or press ✎ at the top of the list on the left to open a new conversation",
+                             "Shown in place of an empty transcript, so it cannot be mistaken for a screen that failed to load.")
                             .font(.callout).foregroundStyle(.secondary)
                     }
                     ForEach(model.bubbles) { bubble in
-                        // "กำลังทำงาน…" on a card that is really waiting for a
+                        // "running…" on a card that is really waiting for a
                         // human tells the user nothing about why nothing is
                         // happening. Say which of the two it is.
                         BubbleView(bubble: bubble,
@@ -362,48 +393,64 @@ private struct ChatScreen: View {
     private var composer: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .bottom, spacing: 10) {
-                TextField("พิมพ์ข้อความ…", text: $model.input, axis: .vertical)
+                TextField(t("Type a message…", "Placeholder in the message composer."),
+                          text: $model.input, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...8)
                     .padding(Space.box)
                     .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: Radius.box))
                     .onSubmit { Task { await model.send() } }
-                    .accessibilityLabel("ข้อความถึงผู้ช่วย")
+                    .accessibilityLabel(t("Message to the assistant",
+                                          "Screen-reader label for the composer text field."))
 
                 // "Run this one on something bigger", which is what the
                 // routing chain was correct about and unreachable for: it sends
                 // every chat turn to the cheapest tier that can serve it, and
                 // until now nothing let a person overrule that for one question
                 // (E.36). Beside the text because it is a fact about this turn.
-                Picker("โมเดล", selection: $model.chosenModel) {
-                    Text("อัตโนมัติ").tag(String?.none)
-                    ForEach(model.offeredModels, id: \.identifier) { entry in
+                Picker(t("Model", "Picker: which model answers this one question."),
+                       selection: $model.chosenModel) {
+                    Text(localised: "Automatic",
+                         "Picker option: let the router choose the tier, which is the default.")
+                        .tag(String?.none)
+                    ForEach(model.offeredModels) { entry in
                         Text(entry.label).tag(String?.some(entry.identifier))
                     }
                 }
                 .labelsHidden()
                 .frame(maxWidth: 210)
-                .accessibilityLabel("โมเดลที่จะตอบคำถามนี้")
-                .accessibilityHint("เลือกไว้เฉพาะคำถามนี้ — ถ้าเรียกไม่ได้ ระบบจะไล่ต่อตามลำดับเดิม")
+                .accessibilityLabel(t("Model that answers this question",
+                                      "Screen-reader label for the per-turn model picker."))
+                .accessibilityHint(t("Applies to this question only — if it cannot be reached, the usual order resumes",
+                                     "Screen-reader hint explaining that the override is not sticky and not a guarantee."))
 
                 if model.isRunning {
                     Button(role: .destructive) { model.stop() } label: {
-                        Label("หยุด", systemImage: "stop.fill")
+                        Label(t("Stop", "Button that cancels the turn the assistant is running right now."), systemImage: "stop.fill")
                     }
-                    .accessibilityLabel("หยุดการทำงานรอบนี้")
+                    .accessibilityLabel(t("Stop this turn",
+                                          "Screen-reader label for the button that cancels the running turn."))
                 } else {
                     Button { Task { await model.send() } } label: {
-                        Label("ส่ง", systemImage: "arrow.up.circle.fill")
+                        Label(t("Send", "Button that sends the typed message."),
+                              systemImage: "arrow.up.circle.fill")
                     }
                     .disabled(model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .keyboardShortcut(.return, modifiers: .command)
-                    .accessibilityLabel("ส่งข้อความ")
+                    .accessibilityLabel(t("Send message", "Screen-reader label for the send button."))
                 }
             }
             composerFooter
         }
         .padding(Space.section)
-        .task {
+        // `id:` rather than a bare `.task` plus an `.onChange`, because the two
+        // of them together still miss the case this is for. Driving it found the
+        // gap: the chain is rebuilt while the person is *on* the settings screen,
+        // so chat is not in the view hierarchy and `.onChange` never sees the
+        // value move; and coming back does not re-run a plain `.task`, because
+        // the view's identity did not change. `task(id:)` runs on appear **and**
+        // whenever the id differs from the last run, which covers both.
+        .task(id: modelChainGeneration) {
             await model.refreshLocalModels()
             await model.refreshOfferedModels()
         }
@@ -416,19 +463,25 @@ private struct ChatScreen: View {
                 // The eject button, in the sense LM Studio means it: the
                 // weights are holding gigabytes and the user may want them
                 // back without quitting anything.
-                Button("ปลดจากหน่วยความจำ") { Task { await model.unloadLocalModel() } }
+                Button(t("Unload from memory",
+                         "Link button: free the gigabytes the local model weights are holding.")) {
+                    Task { await model.unloadLocalModel() }
+                }
                     .buttonStyle(.link)
-                    .accessibilityLabel("ปลดโมเดลออกจากหน่วยความจำ")
+                    .accessibilityLabel(t("Unload the model from memory",
+                                          "Screen-reader label for the unload button."))
             }
             Spacer()
             if model.contextBudget > 0 {
-                Text("บริบท \(compact(model.contextTokens)) / \(compact(model.contextBudget))")
+                Text(localised: "Context \(compact(model.contextTokens)) / \(compact(model.contextBudget))",
+                     "Meter of tokens used against the prompt budget. Both placeholders are short token counts such as 1.2K.")
                     .monospacedDigit()
                     .foregroundStyle(model.contextTokens > model.contextBudget * 3 / 4
                                      ? Color.orange : Color.secondary)
                     // Orange from the point compaction starts (§5.6 compacts at
                     // 75%), so the summarising is never a surprise.
-                    .help("ระบบจะย่อบทสนทนาเมื่อถึง 75% ของงบ")
+                    .help(t("The conversation is summarised once it reaches 75% of the budget",
+                            "Tooltip on the context meter, so compaction is never a surprise."))
             }
         }
         .font(.caption)
@@ -438,7 +491,9 @@ private struct ChatScreen: View {
     @ViewBuilder
     private var localModelPicker: some View {
         if model.localModels.isEmpty {
-            Label("ยังไม่มีโมเดลบนเครื่อง", systemImage: "cpu")
+            Label(t("No model on this machine",
+                    "Shown where the local model picker would be when nothing is downloaded."),
+                  systemImage: "cpu")
                 .foregroundStyle(.orange)
         } else {
             Menu {
@@ -454,13 +509,17 @@ private struct ChatScreen: View {
                     }
                 }
             } label: {
-                Label(model.localModelName.map(shortModelName) ?? "เลือกโมเดล",
+                Label(model.localModelName.map(shortModelName)
+                      ?? t("Choose model", "Menu label when no local model has been picked yet."),
                       systemImage: model.localModelResident ? "cpu.fill" : "cpu")
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .help("โมเดลบนเครื่องสำหรับ Tier 0.5" +
-                  (model.localModelResident ? " — โหลดอยู่ในหน่วยความจำ" : ""))
+            .help(t("On-device model for Tier 0.5",
+                    "Tooltip on the local model menu. 'Tier 0.5' is the name of the guarantee floor and stays as is.")
+                  + (model.localModelResident
+                     ? t(" — loaded in memory", "Appended to the local model tooltip when the weights are resident.")
+                     : ""))
         }
     }
 
@@ -514,7 +573,7 @@ private struct BubbleView: View {
     /// Streamed and shown rather than dropped, and kept out of the answer:
     /// this is a separate bubble because the moment thinking joins the reply it
     /// gets stored as the reply. It says how long rather than how much, since
-    /// "12 วินาที" is the thing somebody watching a spinner wants to know.
+    /// "12 seconds" is the thing somebody watching a spinner wants to know.
     private var reasoningCard: some View {
         DisclosureGroup {
             Text(bubble.text)
@@ -524,13 +583,18 @@ private struct BubbleView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, Space.tight)
         } label: {
-            Label(String(format: "คิดอยู่ %.0f วินาที", bubble.seconds),
+            Label(String(format: t("Thinking for %.0f seconds",
+                                   "Label on the collapsed reasoning card. Placeholder is a whole number of seconds."),
+                                bubble.seconds),
                   systemImage: "brain")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(Space.row)
-        .accessibilityLabel(String(format: "ความคิดของโมเดล %.0f วินาที", bubble.seconds))
-        .accessibilityHint("กางเพื่ออ่าน — ส่วนนี้ไม่ใช่คำตอบ และไม่ถูกบันทึกไว้ในบทสนทนา")
+        .accessibilityLabel(String(format: t("The model's thinking, %.0f seconds",
+                                             "Screen-reader label for the reasoning card. Placeholder is a whole number of seconds."),
+                                          bubble.seconds))
+        .accessibilityHint(t("Expand to read — this is not the answer, and it is not stored in the conversation",
+                             "Screen-reader hint telling the reader that reasoning is separate from the reply."))
     }
 
     /// Collapsed by default with the raw output one click away — §14.2 asks for
@@ -565,14 +629,21 @@ private struct BubbleView: View {
         }
         .padding(Space.box)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: Radius.box))
-        .accessibilityLabel("เครื่องมือ \(bubble.toolName ?? "") — \(status)")
+        .accessibilityLabel(t("Tool \(bubble.toolName ?? "") — \(status)",
+                              "Screen-reader label for a tool card. First placeholder is the tool name, second is its status."))
         .accessibilityHint(bubble.why.joined(separator: " · "))
     }
 
     private var status: String {
-        if awaitingApproval { return "รออนุมัติจากคุณ" }
-        if bubble.running { return "กำลังทำงาน…" }
-        return bubble.blocked ? "ไม่ได้รัน" : "เสร็จแล้ว"
+        if awaitingApproval {
+            return t("waiting for your approval", "Tool card status: stopped until a person says yes.")
+        }
+        if bubble.running {
+            return t("running…", "Tool card status: the tool is executing right now.")
+        }
+        return bubble.blocked
+            ? t("did not run", "Tool card status: the call was refused or blocked.")
+            : t("done", "Tool card status: the tool finished.")
     }
 }
 
@@ -609,24 +680,32 @@ private struct PromotionSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("ยกระดับบทสนทนานี้เป็นโปรเจกต์").font(.headline)
-            Text("ร่างจากสิ่งที่คุยกันไว้ — แก้ได้ทุกช่องก่อนสร้าง")
+            Text(localised: "Promote this conversation to a project",
+                 "Title of the sheet that turns a chat into a tracked project.")
+                .font(.headline)
+            Text(localised: "Drafted from what you discussed — every field is editable before you create it",
+                 "Subtitle of the promote sheet, making clear the draft is a starting point, not a decision.")
                 .font(.callout).foregroundStyle(.secondary)
 
-            TextField("ชื่อโปรเจกต์", text: $name)
+            TextField(t("Project name", "Text field in the promote sheet."), text: $name)
                 .textFieldStyle(.roundedBorder)
 
-            field("เหตุผลที่ทำ", text: $brief, height: 54)
-            field("ขอบเขต — ทำ (บรรทัดละข้อ)", text: $inScope, height: 54)
-            field("ขอบเขต — ไม่ทำ (บรรทัดละข้อ)", text: $outOfScope, height: 54)
+            field(t("Why this is being done", "Field label in the promote sheet: the project brief."),
+                  text: $brief, height: 54)
+            field(t("Scope — in (one per line)", "Field label: what the project will do."),
+                  text: $inScope, height: 54)
+            field(t("Scope — out (one per line)", "Field label: what the project will not do."),
+                  text: $outOfScope, height: 54)
 
             if !draft.openQuestions.isEmpty {
-                GroupBox("บทสนทนายังไม่ได้ตอบ") {
+                GroupBox(t("The conversation did not answer these",
+                           "Box heading over questions the chat left open.")) {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(draft.openQuestions, id: \.self) { question in
                             Text("• " + question).font(.callout)
                         }
-                        Text("สร้างได้เลย แล้วเติมทีหลังก็ได้ — แต่ G1 จะยังไม่ผ่านจนกว่าจะครบ")
+                        Text(localised: "You can create it now and fill these in later — but G1 will not pass until they are answered",
+                             "Note under the open questions. 'G1' is the name of the first gate and stays as is.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -635,9 +714,10 @@ private struct PromotionSheet: View {
 
             HStack {
                 Spacer()
-                Button("ยกเลิก", role: .cancel) { cancel() }
+                Button(t("Cancel", "Button that closes the promote sheet without creating anything."),
+                       role: .cancel) { cancel() }
                     .keyboardShortcut(.cancelAction)
-                Button("สร้างโปรเจกต์") { confirm(edited) }
+                Button(t("Create project", "Button that creates the project from the draft.")) { confirm(edited) }
                     .keyboardShortcut(.defaultAction)
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
             }

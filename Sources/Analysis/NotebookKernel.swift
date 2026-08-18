@@ -66,12 +66,19 @@ public enum KernelError: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .interpreterMissing(let tried):
-            "ไม่พบ Python บนเครื่องนี้ (ลองหาที่: \(tried.joined(separator: ", ")))"
+            {
+                // Joined first: an interpolation whose value is not statically
+                // knowable emits no key at all, and the phrase would silently
+                // stay untranslatable (U20).
+                let places = tried.joined(separator: ", ")
+                return localised("no Python was found on this machine (looked in: \(places))",
+                                 "No Python interpreter could be found. Placeholder: the paths that were searched.")
+            }()
         case .interpreterUnusable(let reason): reason
-        case .notRunning: "เคอร์เนลยังไม่ได้เริ่ม — กด 'เริ่มเคอร์เนล' ก่อน"
-        case .startFailed(let message): "เริ่มเคอร์เนลไม่สำเร็จ: \(message)"
-        case .protocolBroken(let message): "เคอร์เนลตอบมาในรูปแบบที่อ่านไม่ออก: \(message)"
-        case .died(let message): "เคอร์เนลหยุดทำงาน: \(message)"
+        case .notRunning: localised("the kernel has not been started — press 'Start kernel' first", "Why a cell could not be run.")
+        case .startFailed(let message): localised("could not start the kernel: \(message)", "Starting the kernel failed. Placeholder: the underlying message.")
+        case .protocolBroken(let message): localised("the kernel replied in a form that could not be read: \(message)", "The kernel's reply could not be parsed. Placeholder: the underlying message.")
+        case .died(let message): localised("the kernel stopped: \(message)", "The kernel died. Placeholder: the underlying message.")
         }
     }
 }
@@ -155,7 +162,7 @@ public actor NotebookKernel {
             let reason = kernel.errorOutput().trimmingCharacters(in: .whitespacesAndNewlines)
             kernel.terminate()
             process = nil
-            throw KernelError.startFailed(reason.isEmpty ? "ไม่มีคำตอบจากเคอร์เนล" : reason)
+            throw KernelError.startFailed(reason.isEmpty ? localised("the kernel sent no reply", "The kernel returned nothing.") : reason)
         }
         version = reply.version
         log.info("kernel up: python \(reply.version ?? "?", privacy: .public)")
@@ -186,7 +193,7 @@ public actor NotebookKernel {
         let request = ["code": code]
         guard let data = try? JSONSerialization.data(withJSONObject: request),
               let line = String(data: data, encoding: .utf8) else {
-            throw KernelError.protocolBroken("เข้ารหัสคำสั่งไม่ได้")
+            throw KernelError.protocolBroken(localised("the request could not be encoded", "Sending a request to the kernel failed."))
         }
         do {
             try kernel.send(line)
@@ -209,7 +216,7 @@ public actor NotebookKernel {
         let reason = kernel.errorOutput()
         stop()
         throw KernelError.died(reason.isEmpty
-            ? "ไม่ตอบสนองต่อการขัดจังหวะ — ต้องเริ่มเคอร์เนลใหม่" : reason)
+            ? localised("it did not respond to the interrupt — the kernel has to be restarted", "Interrupting the kernel did not work.") : reason)
     }
 
     // MARK: - the wire
@@ -236,12 +243,29 @@ public actor NotebookKernel {
         return CellOutput(stdout: reply.stdout ?? "",
                           stderr: reply.stderr ?? "",
                           value: reply.value,
-                          error: reply.ok == false ? (reply.error ?? "ไม่ทราบสาเหตุ") : nil)
+                          error: reply.ok == false ? (reply.error ?? localised("no reason given", "Stands in for a missing error message.")) : nil)
     }
 
     /// The driver, passed on the command line so there is no file to install,
     /// lose, or have go stale against this source.
-    static let driver = #"""
+    ///
+    /// Its two person-facing sentences are filled in from this module's
+    /// catalogue afterwards rather than interpolated: the script is a raw
+    /// string, so `\(…)` is Python text here, not Swift. The replacer that
+    /// migrated this file did not know that and rewrote two Python literals
+    /// into Swift calls; the check caught it because the compiler emitted no
+    /// key for either (2026-08-18).
+    static var driver: String {
+        template
+            .replacingOccurrences(of: "__TRUNCATED__",
+                                  value: localised("\n… truncated at %d characters",
+                                                   "Marks where long kernel output was cut. Placeholder: the character limit."))
+            .replacingOccurrences(of: "__UNREADABLE__",
+                                  value: localised("the request that arrived could not be read",
+                                                   "The kernel received something it could not parse."))
+    }
+
+    private static let template = #"""
     import sys, os, io, json, ast, contextlib, traceback
 
     # Replies go out on a private copy of fd 1, and fd 1 itself is pointed at
@@ -264,7 +288,7 @@ public actor NotebookKernel {
     def _clip(text):
         if len(text) <= _LIMIT:
             return text
-        return text[:_LIMIT] + "\n… ตัดที่ %d ตัวอักษร" % _LIMIT
+        return text[:_LIMIT] + __TRUNCATED__ % _LIMIT
 
     def _reply(payload):
         _channel.write(json.dumps(payload) + "\n")
@@ -297,7 +321,7 @@ public actor NotebookKernel {
         try:
             request = json.loads(line)
         except Exception:
-            _reply({"ok": False, "error": "คำสั่งที่ส่งมาอ่านไม่ออก", "stdout": "", "stderr": ""})
+            _reply({"ok": False, "error": __UNREADABLE__, "stdout": "", "stderr": ""})
             continue
         out, err = io.StringIO(), io.StringIO()
         payload = {}
@@ -316,4 +340,17 @@ public actor NotebookKernel {
         payload["stderr"] = _clip(err.getvalue())
         _reply(payload)
     """#
+}
+
+private extension String {
+    /// Replace a slot in the driver with a *Python literal* for `value`.
+    ///
+    /// JSON-encoded, because a JSON string is also a valid Python string
+    /// literal — so a translation containing a quote or a backslash ends up as
+    /// data rather than ending the literal early and breaking the kernel.
+    func replacingOccurrences(of slot: String, value: String) -> String {
+        let encoded = String(data: (try? JSONEncoder().encode(value)) ?? Data(),
+                             encoding: .utf8) ?? "\"\""
+        return replacingOccurrences(of: slot, with: encoded)
+    }
 }

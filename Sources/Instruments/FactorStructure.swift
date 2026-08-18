@@ -46,20 +46,20 @@ public enum FactorAnalysisError: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .tooFewItems(let count):
-            "วิเคราะห์องค์ประกอบต้องมีอย่างน้อย \(ExploratoryFactorAnalysis.minimumItems) ข้อ (มี \(count)) — "
-                + "โครงสร้างของสองข้อคือสหสัมพันธ์ ไม่ใช่องค์ประกอบ"
+            localised("factor analysis needs at least \(ExploratoryFactorAnalysis.minimumItems) items (there are \(count)) — ", "Why a factor analysis cannot run. Placeholders: the minimum and the actual item count.")
+                + localised("the structure of two items is a correlation, not a factor", "Ends the reason a factor analysis cannot run.")
         case .tooFewRespondents(let respondents, let items):
-            "ผู้ตอบ \(respondents) คนกับ \(items) ข้อ — ต้องมีผู้ตอบมากกว่าจำนวนข้อ "
-                + "ไม่เช่นนั้นเมทริกซ์สหสัมพันธ์เป็นเอกฐานโดยโครงสร้าง และตัวเลขที่ได้จะเป็นสิ่งประดิษฐ์ของขนาดตัวอย่าง"
+            localised("\(respondents) respondents against \(items) items — there must be more respondents than items ", "Why a factor analysis cannot run. Placeholders: respondent and item counts.")
+                + localised("otherwise the correlation matrix is singular by construction, and every number out of it is an artefact of the sample size", "Ends the reason a factor analysis cannot run.")
         case .raggedData:
-            "แต่ละแถวมีจำนวนข้อไม่เท่ากัน"
+            localised("the rows do not all have the same number of items", "Why a factor analysis cannot run.")
         case .constantItems(let items):
-            "ทุกคนตอบข้อเหล่านี้เหมือนกันหมด จึงไม่มีความแปรปรวนให้วิเคราะห์: "
+            localised("everyone answered these items identically, so there is no variance to analyse: ", "Why a factor analysis cannot run.")
                 + items.joined(separator: ", ")
         case .singularCorrelation(let detail):
-            "เมทริกซ์สหสัมพันธ์กลับด้านไม่ได้ — \(detail)"
+            localised("the correlation matrix cannot be inverted — \(detail)", "Why a factor analysis cannot run. Placeholder: the underlying reason.")
         case .extractionFailed(let detail):
-            "สกัดองค์ประกอบไม่สำเร็จ — \(detail)"
+            localised("factor extraction failed — \(detail)", "Why a factor analysis cannot run. Placeholder: the underlying reason.")
         }
     }
 }
@@ -88,12 +88,12 @@ public struct SamplingAdequacy: Sendable, Equatable {
     /// because that is how they are reported.
     public var kmoLabel: String {
         switch kmo {
-        case ..<0.50: "รับไม่ได้ (unacceptable)"
-        case ..<0.60: "แย่ (miserable)"
-        case ..<0.70: "พอไปได้ (mediocre)"
-        case ..<0.80: "ปานกลาง (middling)"
-        case ..<0.90: "ดี (meritorious)"
-        default: "ดีมาก (marvellous)"
+        case ..<0.50: localised("unacceptable", "KMO band.")
+        case ..<0.60: localised("miserable", "KMO band.")
+        case ..<0.70: localised("mediocre", "KMO band.")
+        case ..<0.80: localised("middling", "KMO band.")
+        case ..<0.90: localised("meritorious", "KMO band.")
+        default: localised("marvellous", "KMO band.")
         }
     }
 
@@ -116,11 +116,12 @@ public struct SamplingAdequacy: Sendable, Equatable {
                                 : String(format: "= %.3f", bartlettPValue))]
         if !isFactorable {
             parts.append(kmo < 0.50
-                         ? "ข้อมูลชุดนี้ยังไม่เหมาะกับการวิเคราะห์องค์ประกอบ"
-                         : "Bartlett ไม่มีนัยสำคัญ — ข้อต่าง ๆ ไม่สัมพันธ์กันพอจะมีองค์ประกอบร่วม")
+                         ? localised("this data is not yet suitable for factor analysis", "Verdict on sampling adequacy.")
+                         : localised("Bartlett's test is not significant — the items are not related enough to share a factor", "Why the data is unsuitable for factor analysis."))
         }
         if !weakItems.isEmpty {
-            parts.append("ข้อที่ MSA ต่ำกว่า .50: \(weakItems.joined(separator: ", "))")
+            parts.append(localised("items with an MSA below .50: \(weakItems.joined(separator: ", "))",
+                                   "Lists items with poor sampling adequacy. Placeholder: the item names."))
         }
         return parts.joined(separator: " · ")
     }
@@ -147,9 +148,9 @@ public enum RetentionRule: Sendable, Equatable, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case .kaiser: "เกณฑ์ Kaiser (eigenvalue > 1)"
-        case .parallelAnalysis: "parallel analysis (เปอร์เซ็นไทล์ที่ 95 ของข้อมูลสุ่ม)"
-        case .fixed(let count): "กำหนดเอง \(count) องค์ประกอบ"
+        case .kaiser: localised("Kaiser's criterion (eigenvalue > 1)", "How the number of factors was chosen.")
+        case .parallelAnalysis: localised("parallel analysis (95th percentile of random data)", "How the number of factors was chosen.")
+        case .fixed(let count): localised("fixed at \(count) factors", "How the number of factors was chosen. Placeholder: the count.")
         }
     }
 }
@@ -237,36 +238,39 @@ public struct FactorSolution: Sendable, Equatable {
         var found: [String] = []
         let ratio = Double(respondents) / Double(loadings.count)
         if respondents < 100 {
-            found.append("ผู้ตอบ \(respondents) คน — ต่ำกว่า 100 ซึ่งเป็นขั้นต่ำที่ตำราส่วนใหญ่ระบุ "
-                         + "ผลที่ได้ไม่คงที่พอจะสรุปโครงสร้าง")
+            found.append(localised("\(respondents) respondents — under the 100 most textbooks give as a floor ", "Warning about sample size. Placeholder: the respondent count.")
+                         + localised("the result is not stable enough to conclude a structure from", "Ends the sample-size warning."))
         }
         if ratio < 5 {
-            found.append(String(format: "อัตราส่วนผู้ตอบต่อข้อ %.1f:1 — ต่ำกว่า 5:1", ratio))
+            found.append(String(format: localised("a respondent-to-item ratio of %.1f:1 — below 5:1", "Warning about sample size. Placeholder: the ratio."), ratio))
         }
         if !converged {
-            found.append(String(format: "การสกัดไม่ลู่เข้าใน %d รอบ — ค่าความร่วมยังขยับอยู่ %.4f "
-                                + "ต่อรอบตอนหยุด ตัวเลขข้างล่างจึงเป็นค่าที่หยุดกลางทาง",
+            found.append(String(format: localised("extraction did not converge in %d iterations — the communalities were still moving by %.4f ", "Warning that extraction stopped early. Placeholders: the iteration count and the remaining movement.")
+                                + localised("per iteration when it stopped, so the figures below are where it was cut off", "Ends the non-convergence warning."),
                                 iterations, convergenceGap))
         }
         if !heywoodItems.isEmpty {
-            found.append("Heywood case ที่ข้อ \(heywoodItems.joined(separator: ", "))"
-                         + " — ค่าความร่วมเกิน 1 ตามคณิตศาสตร์ แปลว่าจำนวนองค์ประกอบหรือขนาดตัวอย่างยังไม่เข้ากับข้อมูล")
+            found.append(localised("a Heywood case at \(heywoodItems.joined(separator: ", "))",
+                                   "Warns of a communality above 1. Placeholder: the item names.")
+                         + localised(" — a communality above 1 is mathematically impossible, so either the number of factors or the sample size does not fit the data", "Ends the Heywood-case warning."))
         }
         if kaiserSuggests != parallelSuggests {
-            found.append("สองเกณฑ์ให้จำนวนองค์ประกอบไม่ตรงกัน (Kaiser \(kaiserSuggests) · "
-                         + "parallel analysis \(parallelSuggests)) — ต้องเลือกและอธิบายว่าเลือกเพราะอะไร")
+            found.append(localised("the two criteria disagree on how many factors there are (Kaiser \(kaiserSuggests) · ", "Warns that the factor-count criteria disagree. Placeholder: Kaiser's answer.")
+                         + localised("parallel analysis \(parallelSuggests)) — one has to be chosen, and the choice explained", "Ends the disagreement warning. Placeholder: parallel analysis's answer."))
         }
         if !unplacedItems.isEmpty {
-            found.append("ข้อที่ไม่เกาะองค์ประกอบไหนเลย: \(unplacedItems.joined(separator: ", "))")
+            found.append(localised("items that load on no factor at all: \(unplacedItems.joined(separator: ", "))",
+                                   "Lists items with no factor loading. Placeholder: the item names."))
         }
         if !crossLoadingItems.isEmpty {
-            found.append("ข้อที่เกาะมากกว่าหนึ่งองค์ประกอบ: \(crossLoadingItems.joined(separator: ", "))")
+            found.append(localised("items that load on more than one factor: \(crossLoadingItems.joined(separator: ", "))",
+                                   "Lists cross-loading items. Placeholder: the item names."))
         }
         return found
     }
 
     public var summary: String {
-        String(format: "%d องค์ประกอบ (%@) · อธิบายความแปรปรวนได้ %.1f%% · %d ข้อ · ผู้ตอบ %d คน",
+        String(format: localised("%d factors (%@) · %.1f%% of the variance explained · %d items · %d respondents", "Summary of a factor analysis. Placeholders: factor count, how they were chosen, variance explained, item count and respondent count."),
                retained, rule.description, cumulativeVariance * 100,
                loadings.count, respondents)
     }
@@ -329,8 +333,8 @@ public enum ExploratoryFactorAnalysis {
         guard retained >= 1, retained < items else {
             throw FactorAnalysisError.extractionFailed(
                 retained < 1
-                    ? "เกณฑ์ที่เลือกให้ 0 องค์ประกอบ — ไม่มีองค์ประกอบร่วมเหนือระดับข้อมูลสุ่ม"
-                    : "ขอ \(retained) องค์ประกอบจาก \(items) ข้อ — ต้องน้อยกว่าจำนวนข้อ")
+                    ? localised("the chosen criterion gives 0 factors — nothing shared rises above the level of random data", "Why a factor analysis produced nothing.")
+                    : localised("\(retained) factors were asked for from \(items) items — there must be fewer factors than items", "Why a factor analysis cannot run. Placeholders: the factor and item counts."))
         }
 
         // Squared multiple correlations, the standard starting communalities for
@@ -720,13 +724,17 @@ public struct ConstructFit: Sendable, Equatable {
     public let retained: Int
 
     public var summary: String {
-        var parts = ["\(constructs.count { $0.isClean })/\(constructs.count) construct "
-                     + "ที่ข้อทุกข้อลงองค์ประกอบเดียวกัน"]
+        // One key, not a count glued to a phrase: split across the number the
+        // English reads "3/3 construct every item loads on the same factor".
+        var parts = [localised("\(constructs.count { $0.isClean })/\(constructs.count) constructs have every item on one factor",
+                               "How many constructs came out clean. Placeholders: the clean count and the total.")]
         if !misplaced.isEmpty {
-            parts.append("ข้อที่ลงคนละองค์ประกอบกับที่ประกาศไว้: \(misplaced.joined(separator: ", "))")
+            parts.append(localised("items loading on a different factor than declared: \(misplaced.joined(separator: ", "))",
+                                   "Lists items that do not match the declared structure. Placeholder: the item names."))
         }
         for merged in mergedConstructs {
-            parts.append("construct ที่ข้อมูลแยกไม่ออกจากกัน: \(merged.joined(separator: " + "))")
+            parts.append(localised("constructs the data cannot tell apart: \(merged.joined(separator: " + "))",
+                                   "Lists constructs that did not separate. Placeholder: the construct names."))
         }
         return parts.joined(separator: " · ")
     }
@@ -801,7 +809,7 @@ public struct OmegaReliability: Sendable, Equatable {
     public var passes: Bool { omega >= 0.70 }
 
     public var summary: String {
-        String(format: "ω %.3f · องค์ประกอบเดียวอธิบายความแปรปรวนได้ %.1f%% · ผู้ตอบ %d คน",
+        String(format: localised("ω %.3f · a single factor explains %.1f%% of the variance · %d respondents", "Summary of McDonald's omega. Placeholders: omega, variance explained and respondent count."),
                omega, varianceExplained * 100, respondents)
     }
 }

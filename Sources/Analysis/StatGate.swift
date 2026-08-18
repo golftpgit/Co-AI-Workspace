@@ -24,7 +24,7 @@ import Foundation
 //    have, so it is reported as unchecked and the result is not called clean.
 //  • **No silent n.** Shapiro–Wilk below n = 3, a chi-square with an empty
 //    row — these come back as "could not be checked", never as a p-value.
-//  • **The numbers travel with the verdict.** "ข้อมูลไม่ปกติ" with no W and no
+//  • **The numbers travel with the verdict.** "not normal" with no W and no
 //    p is something a reader has to take on trust, and §2.5's whole point is
 //    that they should not have to.
 // ─────────────────────────────────────────────────────────────
@@ -66,25 +66,25 @@ public enum StatisticalTest: String, Sendable, Codable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .studentT: "t-test สองกลุ่ม (Student)"
-        case .welchT: "t-test สองกลุ่ม (Welch)"
+        case .studentT: localised("two-sample t-test (Student)", "Name of a statistical test.")
+        case .welchT: localised("two-sample t-test (Welch)", "Name of a statistical test.")
         case .pairedT: "paired t-test"
-        case .oneWayANOVA: "ANOVA ทางเดียว"
-        case .chiSquare: "ไคสแควร์"
-        case .linearRegression: "การถดถอยเชิงเส้น"
-        case .logisticRegression: "การถดถอยโลจิสติก"
-        case .survival: "การวิเคราะห์การรอดชีพ"
-        case .mixedModel: "โมเดลหลายระดับ (ข้อมูลซ้อนชั้น)"
-        case .poissonRegression: "การถดถอยปัวซง (ข้อมูลนับ)"
-        case .negativeBinomialRegression: "การถดถอย negative binomial (ข้อมูลนับที่กระจายเกิน)"
+        case .oneWayANOVA: localised("one-way ANOVA", "Name of a statistical test.")
+        case .chiSquare: localised("chi-square", "Name of a statistical test.")
+        case .linearRegression: localised("linear regression", "Name of a statistical test.")
+        case .logisticRegression: localised("logistic regression", "Name of a statistical test.")
+        case .survival: localised("survival analysis", "Name of a statistical test.")
+        case .mixedModel: localised("multilevel model (nested data)", "Name of a statistical test.")
+        case .poissonRegression: localised("Poisson regression (count data)", "Name of a statistical test.")
+        case .negativeBinomialRegression: localised("negative binomial regression (overdispersed counts)", "Name of a statistical test.")
         case .mannWhitney: "Mann–Whitney U"
         case .wilcoxonSignedRank: "Wilcoxon signed-rank"
         case .kruskalWallis: "Kruskal–Wallis"
         case .fisherExact: "Fisher's exact"
-        case .mcNemar: "McNemar (สัดส่วนแบบจับคู่)"
-        case .chiSquareTrend: "ไคสแควร์สำหรับแนวโน้ม"
-        case .correlation: "ความสัมพันธ์ (Pearson/Spearman)"
-        case .kappa: "ความตรงกันระหว่างผู้ให้คะแนน (κ)"
+        case .mcNemar: localised("McNemar (paired proportions)", "Name of a statistical test.")
+        case .chiSquareTrend: localised("chi-square for trend", "Name of a statistical test.")
+        case .correlation: localised("correlation (Pearson/Spearman)", "Name of a statistical test.")
+        case .kappa: localised("inter-rater agreement (κ)", "Name of a statistical test.")
         }
     }
 
@@ -152,9 +152,9 @@ public struct StatResult: Sendable {
             lines.append("  \(mark) \(assumption.name) — \(assumption.detail)")
         }
         if !alternatives.isEmpty {
-            lines.append("  → ข้อสมมติไม่ผ่าน เสนอให้ใช้: "
-                         + alternatives.map(\.label).joined(separator: " หรือ ")
-                         + " (เปลี่ยนวิธี = ต้องกลับไปอนุมัติที่ Analysis Plan)")
+            lines.append(localised("  → assumptions not met, suggested instead: ", "Prefix before a list of alternative tests.")
+                         + alternatives.map(\.label).joined(separator: localised(" or ", "Joins alternative test names."))
+                         + localised(" (changing method means going back to the Analysis Plan for approval)", "Says that switching test needs re-approval."))
         }
         return lines.joined(separator: "\n")
     }
@@ -177,12 +177,12 @@ public enum StatError: Error, CustomStringConvertible, Equatable {
 
     public var description: String {
         switch self {
-        case .notEnoughData(let message): "ข้อมูลไม่พอสำหรับการทดสอบนี้: \(message)"
-        case .badShape(let message): "รูปร่างข้อมูลไม่ถูกต้อง: \(message)"
+        case .notEnoughData(let message): localised("Not enough data for this test: \(message)", "Refusal message. Placeholder says what is missing.")
+        case .badShape(let message): localised("The data is the wrong shape: \(message)", "Refusal message. Placeholder says what is wrong.")
         case .notImplemented(let test, let planned):
-            "ระบบยังคำนวณ \(test.rawValue) เองไม่ได้ (แผน \(planned)) — "
-                + "จึงไม่มีผลให้รายงาน · ถ้าจำเป็นต้องใช้ตอนนี้ ต้องคำนวณจากเครื่องมือภายนอก "
-                + "แล้วบันทึกที่มาไว้ อย่าอ้างว่าเป็นผลของระบบนี้"
+            localised("This system cannot compute \(test.rawValue) itself yet (planned for \(planned)) — ", "Refusal for an unimplemented test. Placeholders: the test name and the phase it is planned for.")
+                + localised("so there is no result to report · if it is needed now, compute it with an external tool ", "Continues the refusal for an unimplemented test.")
+                + localised("and record where it came from; do not claim it as a result of this system", "Ends the refusal for an unimplemented test.")
         }
     }
 }
@@ -201,7 +201,7 @@ public enum StatGate {
     public static func twoSample(_ a: [Double], _ b: [Double],
                                  assumingEqualVariance: Bool = false) throws -> StatResult {
         guard a.count >= 2, b.count >= 2 else {
-            throw StatError.notEnoughData("ต้องมีอย่างน้อยกลุ่มละ 2 ค่า")
+            throw StatError.notEnoughData(localised("at least 2 values per group are needed", "Why a test cannot run."))
         }
         let meanA = Statistics.mean(a), meanB = Statistics.mean(b)
         let varianceA = Statistics.variance(a), varianceB = Statistics.variance(b)
@@ -223,13 +223,13 @@ public enum StatGate {
         }
         let p = Statistics.tTestPValue(t: t, degreesOfFreedom: df)
 
-        var assumptions = [normality(of: a, named: "กลุ่ม 1"), normality(of: b, named: "กลุ่ม 2")]
+        var assumptions = [normality(of: a, named: localised("group 1", "Name of the first group in a two-sample test.")), normality(of: b, named: localised("group 2", "Name of the second group in a two-sample test."))]
         if assumingEqualVariance { assumptions.append(equalVariance([a, b])) }
 
         return StatResult(
             test: assumingEqualVariance ? .studentT : .welchT,
             statistic: t, pValue: p, degreesOfFreedom: df,
-            summary: String(format: "ค่าเฉลี่ย %.4g เทียบ %.4g (ต่างกัน %.4g) · t = %.4f · p = %.4g",
+            summary: String(format: localised("mean %.4g vs %.4g (difference %.4g) · t = %.4f · p = %.4g", "Result of a two-sample t-test."),
                             meanA, meanB, meanA - meanB, t, p),
             assumptions: assumptions,
             alternatives: assumptions.contains(where: \.isWarning) ? [.mannWhitney] : [])
@@ -238,9 +238,9 @@ public enum StatGate {
     /// Paired measurements — the same subjects before and after.
     public static func paired(_ before: [Double], _ after: [Double]) throws -> StatResult {
         guard before.count == after.count else {
-            throw StatError.badShape("ข้อมูลจับคู่ต้องมีจำนวนเท่ากัน")
+            throw StatError.badShape(localised("paired data must have the same number of values on both sides", "Why a test cannot run."))
         }
-        guard before.count >= 2 else { throw StatError.notEnoughData("ต้องมีอย่างน้อย 2 คู่") }
+        guard before.count >= 2 else { throw StatError.notEnoughData(localised("at least 2 pairs are needed", "Why a test cannot run.")) }
         let differences = zip(after, before).map { $0 - $1 }
         let n = Double(differences.count)
         let meanDifference = Statistics.mean(differences)
@@ -250,10 +250,10 @@ public enum StatGate {
         let p = Statistics.tTestPValue(t: t, degreesOfFreedom: df)
         // The assumption is about the *differences*, not about either column —
         // a detail that is wrong in a lot of published analyses.
-        let assumption = normality(of: differences, named: "ผลต่างรายคู่")
+        let assumption = normality(of: differences, named: localised("the per-pair differences", "What a normality check was run on."))
         return StatResult(
             test: .pairedT, statistic: t, pValue: p, degreesOfFreedom: df,
-            summary: String(format: "ผลต่างเฉลี่ย %.4g · t = %.4f · p = %.4g",
+            summary: String(format: localised("mean difference %.4g · t = %.4f · p = %.4g", "Result of a paired t-test."),
                             meanDifference, t, p),
             assumptions: [assumption],
             alternatives: assumption.isWarning ? [.wilcoxonSignedRank] : [])
@@ -263,7 +263,7 @@ public enum StatGate {
 
     public static func oneWayANOVA(_ groups: [[Double]]) throws -> StatResult {
         guard groups.count >= 2, groups.allSatisfy({ $0.count >= 2 }) else {
-            throw StatError.notEnoughData("ต้องมีอย่างน้อย 2 กลุ่ม กลุ่มละ 2 ค่า")
+            throw StatError.notEnoughData(localised("at least 2 groups with 2 values each are needed", "Why a test cannot run."))
         }
         let all = groups.flatMap { $0 }
         let grandMean = Statistics.mean(all)
@@ -281,7 +281,7 @@ public enum StatGate {
         let p = Statistics.fTestPValue(f: f, d1: d1, d2: d2)
 
         var assumptions = groups.enumerated().map {
-            normality(of: $0.element, named: "กลุ่ม \($0.offset + 1)")
+            normality(of: $0.element, named: localised("group \($0.offset + 1)", "Name of one group in a multi-group test. Placeholder is its number."))
         }
         assumptions.append(equalVariance(groups))
 
@@ -298,12 +298,12 @@ public enum StatGate {
     public static func chiSquare(_ table: [[Int]]) throws -> StatResult {
         guard table.count >= 2, let width = table.first?.count, width >= 2,
               table.allSatisfy({ $0.count == width }) else {
-            throw StatError.badShape("ตารางต้องมีอย่างน้อย 2×2 และทุกแถวยาวเท่ากัน")
+            throw StatError.badShape(localised("the table must be at least 2×2 with rows of equal length", "Why a test cannot run."))
         }
         let rowTotals = table.map { $0.reduce(0, +) }
         let columnTotals = (0..<width).map { column in table.reduce(0) { $0 + $1[column] } }
         let total = rowTotals.reduce(0, +)
-        guard total > 0 else { throw StatError.notEnoughData("ตารางว่าง") }
+        guard total > 0 else { throw StatError.notEnoughData(localised("the table is empty", "Why a test cannot run.")) }
 
         var chiSquare = 0.0
         var expected: [Double] = []
@@ -324,15 +324,15 @@ public enum StatGate {
         let smallest = expected.min() ?? 0
         let below5 = expected.filter { $0 < 5 }.count
         let assumption = AssumptionCheck(
-            name: "จำนวนที่คาดหวังในแต่ละช่อง ≥ 5",
+            name: localised("expected count in every cell ≥ 5", "Name of a statistical assumption."),
             wasChecked: true,
             passed: below5 == 0,
             statistic: smallest,
             pValue: nil,
             detail: below5 == 0
-                ? String(format: "ช่องที่น้อยที่สุดคาดหวัง %.2f", smallest)
-                : String(format: "%d ช่องมีค่าคาดหวังต่ำกว่า 5 (น้อยสุด %.2f) — "
-                         + "การประมาณด้วยไคสแควร์เชื่อถือไม่ได้ที่จำนวนเท่านี้", below5, smallest))
+                ? String(format: localised("the smallest expected count is %.2f", "Detail of a satisfied assumption."), smallest)
+                : String(format: localised("%d cells expect fewer than 5 (smallest %.2f) — ", "Detail of a failed assumption.")
+                         + localised("the chi-square approximation is not trustworthy at these counts", "Ends the failed expected-count detail."), below5, smallest))
 
         let isTwoByTwo = table.count == 2 && width == 2
         return StatResult(
@@ -349,7 +349,7 @@ public enum StatGate {
     /// carries the same shape every other test's does.
     public static func mcNemar(_ table: [[Int]]) throws -> StatResult {
         guard table.count == 2, table[0].count == 2, table[1].count == 2 else {
-            throw StatError.badShape("McNemar ใช้ตาราง 2×2 ของ*คู่* (ก่อน × หลัง)")
+            throw StatError.badShape(localised("McNemar takes a 2×2 table of *pairs* (before × after)", "Why a test cannot run."))
         }
         let result = try PairedCategorical.mcNemar(bothPositive: table[0][0],
                                                    changedOneWay: table[0][1],
@@ -372,15 +372,15 @@ public enum StatGate {
                           // mean something. Nothing in the numbers can check
                           // it, so it is said rather than tested.
                           assumptions: [AssumptionCheck(
-                            name: "ลำดับของกลุ่มมีความหมาย",
+                            name: localised("the order of the groups is meaningful", "Name of a statistical assumption."),
                             // Nothing in the numbers can check this: it is a
                             // fact about the design. Reported as unchecked
                             // rather than as passed, which is what
                             // `wasChecked` is for.
                             wasChecked: false, passed: true,
                             statistic: nil, pValue: nil,
-                            detail: "การทดสอบนี้ถือว่ากลุ่มเรียงตามปริมาณจริง — "
-                                + "ถ้าสลับลำดับได้โดยไม่เสียความหมาย ให้ใช้ไคสแควร์ธรรมดา")],
+                            detail: localised("This test assumes the groups are ordered by a real quantity — ", "Detail of an ordinal-group assumption.")
+                                + localised("if they could be shuffled without losing meaning, use an ordinary chi-square", "Ends the ordinal-group detail."))],
                           alternatives: [.chiSquare])
     }
 
@@ -396,13 +396,13 @@ public enum StatGate {
             let spearman = try Reliability.correlation(x, y, kind: .spearman)
             let gap = abs(spearman.coefficient) - abs(result.coefficient)
             assumptions.append(AssumptionCheck(
-                name: "ความสัมพันธ์เป็นเส้นตรง",
+                name: localised("the relationship is linear", "Name of a statistical assumption."),
                 wasChecked: true, passed: gap < 0.1,
                 statistic: spearman.coefficient, pValue: nil,
                 detail: gap < 0.1
-                    ? "Pearson กับ Spearman ใกล้เคียงกัน — ไม่มีสัญญาณว่าความสัมพันธ์โค้ง"
-                    : String(format: "Spearman (%.3f) สูงกว่า Pearson (%.3f) อยู่มาก — "
-                             + "ความสัมพันธ์น่าจะโค้ง ใช้ Spearman หรืออธิบายรูปร่างก่อน",
+                    ? localised("Pearson and Spearman agree closely — no sign of curvature", "Detail of a satisfied linearity assumption.")
+                    : String(format: localised("Spearman (%.3f) is well above Pearson (%.3f) — ", "Detail of a failed linearity assumption.")
+                             + localised("the relationship is probably curved; use Spearman or describe the shape first", "Ends the failed linearity detail."),
                              spearman.coefficient, result.coefficient)))
         }
         return StatResult(test: .correlation, statistic: result.coefficient,
@@ -426,11 +426,11 @@ public enum StatGate {
 
     public static func fisherExact(_ table: [[Int]]) throws -> StatResult {
         guard table.count == 2, table[0].count == 2, table[1].count == 2 else {
-            throw StatError.badShape("Fisher's exact ที่นี่รองรับเฉพาะตาราง 2×2")
+            throw StatError.badShape(localised("Fisher's exact here supports 2×2 tables only", "Why a test cannot run."))
         }
         let a = table[0][0], b = table[0][1], c = table[1][0], d = table[1][1]
         let rowOne = a + b, rowTwo = c + d, columnOne = a + c, total = a + b + c + d
-        guard total > 0 else { throw StatError.notEnoughData("ตารางว่าง") }
+        guard total > 0 else { throw StatError.notEnoughData(localised("the table is empty", "Why a test cannot run.")) }
 
         func logFactorial(_ n: Int) -> Double { lgamma(Double(n) + 1) }
         func probability(_ x: Int) -> Double {
@@ -450,13 +450,13 @@ public enum StatGate {
         let oddsRatio = Double(a * d) / Double(max(b * c, 1))
         return StatResult(
             test: .fisherExact, statistic: oddsRatio, pValue: min(1, p), degreesOfFreedom: nil,
-            summary: String(format: "odds ratio ≈ %.4g · p = %.4g (สองทาง)", oddsRatio, min(1, p)),
+            summary: String(format: localised("odds ratio ≈ %.4g · p = %.4g (two-sided)", "Result of Fisher's exact test."), oddsRatio, min(1, p)),
             // Exact by construction: there is no large-sample approximation
             // here to be wrong about.
-            assumptions: [AssumptionCheck(name: "ไม่มีข้อสมมติเรื่องขนาดตัวอย่าง",
+            assumptions: [AssumptionCheck(name: localised("no assumption about sample size", "Name of a statistical assumption."),
                                           wasChecked: true, passed: true,
                                           statistic: nil, pValue: nil,
-                                          detail: "คำนวณความน่าจะเป็นตรงจากตาราง ไม่ใช่การประมาณ")],
+                                          detail: localised("The probability is computed exactly from the table, not approximated", "Detail of Fisher's exact assumption."))],
             alternatives: [])
     }
 
@@ -466,7 +466,7 @@ public enum StatGate {
     /// answer to a t-test on data that is not normal.
     public static func mannWhitney(_ a: [Double], _ b: [Double]) throws -> StatResult {
         guard a.count >= 2, b.count >= 2 else {
-            throw StatError.notEnoughData("ต้องมีอย่างน้อยกลุ่มละ 2 ค่า")
+            throw StatError.notEnoughData(localised("at least 2 values per group are needed", "Why a test cannot run."))
         }
         let combined = a + b
         let ranks = Statistics.ranks(combined)
@@ -481,24 +481,24 @@ public enum StatGate {
         let p = 2 * (1 - Statistics.normalCDF(abs(z)))
         return StatResult(
             test: .mannWhitney, statistic: u, pValue: min(1, p), degreesOfFreedom: nil,
-            summary: String(format: "U = %.1f · z = %.4f · p = %.4g (ประมาณด้วยปกติ แก้ค่าซ้ำแล้ว)",
+            summary: String(format: localised("U = %.1f · z = %.4f · p = %.4g (normal approximation, corrected for ties)", "Result of a Mann–Whitney test."),
                             u, z, min(1, p)),
             assumptions: [AssumptionCheck(
-                name: "ไม่ต้องการการแจกแจงปกติ",
+                name: localised("no normal distribution required", "Name of a statistical assumption."),
                 wasChecked: true, passed: true, statistic: nil, pValue: nil,
-                detail: "ทดสอบจากอันดับ จึงไม่ขึ้นกับรูปร่างการแจกแจง")],
+                detail: localised("The test works on ranks, so it does not depend on the shape of the distribution", "Detail of a rank-based assumption."))],
             alternatives: [])
     }
 
     public static func wilcoxonSignedRank(_ before: [Double], _ after: [Double]) throws -> StatResult {
         guard before.count == after.count else {
-            throw StatError.badShape("ข้อมูลจับคู่ต้องมีจำนวนเท่ากัน")
+            throw StatError.badShape(localised("paired data must have the same number of values on both sides", "Why a test cannot run."))
         }
         // Zero differences carry no information about direction and are
         // dropped, which is the standard treatment and changes n.
         let differences = zip(after, before).map { $0 - $1 }.filter { $0 != 0 }
         guard differences.count >= 2 else {
-            throw StatError.notEnoughData("ต้องมีคู่ที่ค่าต่างกันอย่างน้อย 2 คู่")
+            throw StatError.notEnoughData(localised("at least 2 pairs with a non-zero difference are needed", "Why a test cannot run."))
         }
         let ranks = Statistics.ranks(differences.map { abs($0) })
         let positive = zip(differences, ranks).reduce(0.0) { $0 + ($1.0 > 0 ? $1.1 : 0) }
@@ -510,18 +510,18 @@ public enum StatGate {
         return StatResult(
             test: .wilcoxonSignedRank, statistic: positive, pValue: min(1, p),
             degreesOfFreedom: nil,
-            summary: String(format: "W⁺ = %.1f · z = %.4f · p = %.4g (ใช้ %d คู่ที่ต่างกัน)",
+            summary: String(format: localised("W⁺ = %.1f · z = %.4f · p = %.4g (using %d differing pairs)", "Result of a Wilcoxon signed-rank test."),
                             positive, z, min(1, p), differences.count),
             assumptions: [AssumptionCheck(
-                name: "ไม่ต้องการการแจกแจงปกติ",
+                name: localised("no normal distribution required", "Name of a statistical assumption."),
                 wasChecked: true, passed: true, statistic: nil, pValue: nil,
-                detail: "ทดสอบจากอันดับของผลต่าง")],
+                detail: localised("The test works on the ranks of the differences", "Detail of a signed-rank assumption."))],
             alternatives: [])
     }
 
     public static func kruskalWallis(_ groups: [[Double]]) throws -> StatResult {
         guard groups.count >= 2, groups.allSatisfy({ !$0.isEmpty }) else {
-            throw StatError.notEnoughData("ต้องมีอย่างน้อย 2 กลุ่มที่ไม่ว่าง")
+            throw StatError.notEnoughData(localised("at least 2 non-empty groups are needed", "Why a test cannot run."))
         }
         let combined = groups.flatMap { $0 }
         let ranks = Statistics.ranks(combined)
@@ -543,9 +543,9 @@ public enum StatGate {
             test: .kruskalWallis, statistic: h, pValue: p, degreesOfFreedom: df,
             summary: String(format: "H(%.0f) = %.4f · p = %.4g", df, h, p),
             assumptions: [AssumptionCheck(
-                name: "ไม่ต้องการการแจกแจงปกติ",
+                name: localised("no normal distribution required", "Name of a statistical assumption."),
                 wasChecked: true, passed: true, statistic: nil, pValue: nil,
-                detail: "ทดสอบจากอันดับรวมทุกกลุ่ม")],
+                detail: localised("The test works on ranks pooled across the groups", "Detail of a Kruskal–Wallis assumption."))],
             alternatives: [])
     }
 
@@ -556,7 +556,7 @@ public enum StatGate {
     public static func linearRegression(y: [Double], predictors: [[Double]],
                                         names: [String] = []) throws -> StatResult {
         guard let fit = Statistics.leastSquares(y: y, predictors: predictors) else {
-            throw StatError.notEnoughData("จำนวนแถวต้องมากกว่าจำนวนตัวแปร และตัวแปรต้องไม่ซ้ำกันพอดี")
+            throw StatError.notEnoughData(localised("there must be more rows than variables, and the variables must not be exact duplicates", "Why a regression cannot run."))
         }
         let labels = names.count == predictors.count
             ? names : (1...max(predictors.count, 1)).map { "x\($0)" }
@@ -564,7 +564,7 @@ public enum StatGate {
         var assumptions: [AssumptionCheck] = []
         assumptions.append(multicollinearity(predictors, names: labels))
         assumptions.append(linearity(fit))
-        assumptions.append(normality(of: fit.residuals, named: "ส่วนเหลือ (residual)"))
+        assumptions.append(normality(of: fit.residuals, named: localised("the residuals", "What a normality check was run on.")))
 
         let terms = zip(labels, fit.coefficients.dropFirst()).map { name, value in
             String(format: "%@ = %.4g", name, value)
@@ -576,7 +576,7 @@ public enum StatGate {
             // (F-test), not for any one coefficient.
             pValue: modelPValue(fit, predictorCount: predictors.count),
             degreesOfFreedom: Double(fit.degreesOfFreedom),
-            summary: String(format: "R² = %.4f · ค่าคงที่ %.4g · %@",
+            summary: String(format: localised("R² = %.4f · intercept %.4g · %@", "Result of a linear regression."),
                             fit.rSquared, fit.coefficients[0], terms),
             assumptions: assumptions,
             // A curved relationship is not fixed by a different test — it is
@@ -590,25 +590,25 @@ public enum StatGate {
     public static func logisticRegression(y: [Double], predictors: [[Double]],
                                           names: [String] = []) throws -> StatResult {
         guard let fit = Statistics.logistic(y: y, predictors: predictors) else {
-            throw StatError.badShape("ผลลัพธ์ต้องเป็น 0/1 และแถวต้องมากกว่าจำนวนตัวแปร")
+            throw StatError.badShape(localised("the outcome must be 0/1 and there must be more rows than variables", "Why a regression cannot run."))
         }
         let labels = names.count == predictors.count
             ? names : (1...max(predictors.count, 1)).map { "x\($0)" }
 
         var assumptions = [multicollinearity(predictors, names: labels)]
         assumptions.append(AssumptionCheck(
-            name: "ไม่มีการแยกกลุ่มสมบูรณ์ (separation)",
+            name: localised("no complete separation", "Name of a statistical assumption."),
             wasChecked: true,
             passed: !fit.separated,
             statistic: nil, pValue: nil,
             detail: fit.separated
-                ? "ตัวแปรบางตัวทำนายผลลัพธ์ได้สมบูรณ์ ค่าสัมประสิทธิ์จึงวิ่งไปไม่สิ้นสุด "
-                  + "— ตัวเลขที่ได้ไม่ใช่ขนาดของผล"
-                : "ค่าประมาณลู่เข้าใน \(fit.iterations) รอบ"))
+                ? localised("Some variable predicts the outcome perfectly, so its coefficient runs off to infinity ", "Detail of a failed separation check.")
+                  + localised("— the number you get is not an effect size", "Ends the failed separation detail.")
+                : localised("The estimate converged in \(fit.iterations) iterations", "Detail of a satisfied separation check.")))
         assumptions.append(AssumptionCheck(
-            name: "ความเป็นเส้นตรงของ logit",
+            name: localised("linearity of the logit", "Name of a statistical assumption."),
             wasChecked: false, passed: false, statistic: nil, pValue: nil,
-            detail: "โมดูลนี้ยังตรวจไม่ได้ — ต้องดูด้วยวิธี Box–Tidwell หรือกราฟก่อนเชื่อผล"))
+            detail: localised("This module cannot check it yet — look at it with Box–Tidwell or a plot before trusting the result", "Detail of an unchecked assumption.")))
 
         // Wald test per coefficient: z = β/SE, from the same inverse the fit
         // already produced. Reported per predictor rather than as one number —
@@ -619,7 +619,7 @@ public enum StatGate {
             .map { name, estimate in
                 let (coefficient, error) = estimate
                 guard error.isFinite, error > 0 else {
-                    return String(format: "%@: OR = %.4g (คำนวณ p ไม่ได้)", name, exp(coefficient))
+                    return String(format: localised("%@: OR = %.4g (p could not be computed)", "A logistic coefficient."), name, exp(coefficient))
                 }
                 let z = coefficient / error
                 let p = 2 * (1 - Statistics.normalCDF(abs(z)))
@@ -662,8 +662,8 @@ public enum StatGate {
             // a question nobody asked.
             pValue: .nan,
             degreesOfFreedom: Double(fit.clusters - 1),
-            summary: String(format: "ค่าเฉลี่ย %.4f (95%% CI %.4f–%.4f · แก้ตามการจับกลุ่มแล้ว) "
-                            + "· ถ้าคิดแบบข้อมูลอิสระจะได้ %.4f–%.4f ซึ่งแคบเกินจริง",
+            summary: String(format: localised("mean %.4f (95%% CI %.4f–%.4f · corrected for clustering) ", "Result of a multilevel model.")
+                            + localised("· treated as independent it would be %.4f–%.4f, which is too narrow", "Ends the multilevel result."),
                             mean, mean - z * corrected, mean + z * corrected,
                             mean - z * naiveError, mean + z * naiveError),
             assumptions: [Multilevel.independenceCheck(fit)],
@@ -688,7 +688,7 @@ public enum StatGate {
             .enumerated()
             .map { index, pair in
                 let name = index < names.count ? names[index] : "x\(index + 1)"
-                return String(format: "%@: rate ratio %.4f (SE ของ log = %.4f)",
+                return String(format: localised("%@: rate ratio %.4f (SE of the log = %.4f)", "A count-model coefficient."),
                               name, exp(pair.0), pair.1)
             }
             .joined(separator: " · ")
@@ -739,7 +739,7 @@ public enum StatGate {
                 assumptions: [AssumptionCheck(
                     name: "proportional hazards", wasChecked: false, passed: false,
                     statistic: nil, pValue: nil,
-                    detail: "โมเดล Cox ไม่ลู่เข้า จึงยังตรวจสมมติฐานไม่ได้ — ไม่ใช่ว่าผ่าน")],
+                    detail: localised("The Cox model did not converge, so the assumption could not be checked — which is not the same as passing", "Detail of an unchecked proportional-hazards assumption."))],
                 alternatives: [])
         }
         let hazard = fit.hazardRatios[0]
@@ -764,20 +764,20 @@ public enum StatGate {
     static func normality(of values: [Double], named name: String) -> AssumptionCheck {
         guard let test = Statistics.shapiroWilk(values) else {
             return AssumptionCheck(
-                name: "การแจกแจงปกติของ\(name)",
+                name: localised("normal distribution of \(name)", "Name of a normality assumption. Placeholder is what was tested."),
                 wasChecked: false, passed: false, statistic: nil, pValue: nil,
                 detail: values.count < 3
-                    ? "มีเพียง \(values.count) ค่า — น้อยเกินกว่าจะทดสอบได้"
-                    : "ทดสอบไม่ได้ (ค่าทั้งหมดเท่ากัน หรือ n เกิน 5000)")
+                    ? localised("only \(values.count) values — too few to test", "Why normality could not be tested.")
+                    : localised("cannot be tested (all values identical, or n above 5000)", "Why normality could not be tested."))
         }
         let passed = test.pValue >= alpha
         return AssumptionCheck(
-            name: "การแจกแจงปกติของ\(name)",
+            name: localised("normal distribution of \(name)", "Name of a normality assumption. Placeholder is what was tested."),
             wasChecked: true, passed: passed,
             statistic: test.w, pValue: test.pValue,
             detail: String(format: passed
-                           ? "Shapiro–Wilk W = %.4f, p = %.4g — ไม่พบหลักฐานว่าไม่ปกติ"
-                           : "Shapiro–Wilk W = %.4f, p = %.4g — ข้อมูลไม่เข้ากับการแจกแจงปกติ",
+                           ? localised("Shapiro–Wilk W = %.4f, p = %.4g — no evidence against normality", "Detail of a satisfied normality check.")
+                           : localised("Shapiro–Wilk W = %.4f, p = %.4g — the data does not fit a normal distribution", "Detail of a failed normality check."),
                            test.w, test.pValue))
     }
 
@@ -787,10 +787,10 @@ public enum StatGate {
     static func equalVariance(_ groups: [[Double]]) -> AssumptionCheck {
         let sizes = groups.map(\.count)
         guard groups.count >= 2, sizes.allSatisfy({ $0 >= 2 }) else {
-            return AssumptionCheck(name: "ความแปรปรวนเท่ากันระหว่างกลุ่ม",
+            return AssumptionCheck(name: localised("equal variance across groups", "Name of a statistical assumption."),
                                    wasChecked: false, passed: false,
                                    statistic: nil, pValue: nil,
-                                   detail: "ต้องมีอย่างน้อยกลุ่มละ 2 ค่า")
+                                   detail: localised("at least 2 values per group are needed", "Why a test cannot run."))
         }
         let deviations = groups.map { group -> [Double] in
             let median = Statistics.median(group)
@@ -809,10 +809,10 @@ public enum StatGate {
         let d1 = Double(groups.count - 1)
         let d2 = Double(all.count - groups.count)
         guard within > 0, d2 > 0 else {
-            return AssumptionCheck(name: "ความแปรปรวนเท่ากันระหว่างกลุ่ม",
+            return AssumptionCheck(name: localised("equal variance across groups", "Name of a statistical assumption."),
                                    wasChecked: false, passed: false,
                                    statistic: nil, pValue: nil,
-                                   detail: "ค่าภายในกลุ่มไม่กระจายเลย ทดสอบไม่ได้")
+                                   detail: localised("there is no spread within the groups, so it cannot be tested", "Why equal variance could not be tested."))
         }
         let w = (between / d1) / (within / d2)
         let p = Statistics.fTestPValue(f: w, d1: d1, d2: d2)
@@ -820,18 +820,18 @@ public enum StatGate {
         let spread = groups.map { String(format: "%.4g", Statistics.variance($0)) }
             .joined(separator: ", ")
         return AssumptionCheck(
-            name: "ความแปรปรวนเท่ากันระหว่างกลุ่ม",
+            name: localised("equal variance across groups", "Name of a statistical assumption."),
             wasChecked: true, passed: passed, statistic: w, pValue: p,
-            detail: String(format: "Levene (Brown–Forsythe) W = %.4f, p = %.4g · ความแปรปรวนรายกลุ่ม: %@",
+            detail: String(format: localised("Levene (Brown–Forsythe) W = %.4f, p = %.4g · variance per group: %@", "Detail of an equal-variance check."),
                            w, p, spread)
-                + (passed ? "" : " — ใช้ Welch แทน Student หรือเปลี่ยนไปใช้วิธีอันดับ"))
+                + (passed ? "" : localised(" — use Welch instead of Student, or move to a rank-based method", "Appended when equal variance fails.")))
     }
 
     static func multicollinearity(_ predictors: [[Double]], names: [String]) -> AssumptionCheck {
         guard predictors.count > 1 else {
-            return AssumptionCheck(name: "ไม่มี multicollinearity",
+            return AssumptionCheck(name: localised("no multicollinearity", "Name of a statistical assumption."),
                                    wasChecked: true, passed: true, statistic: nil, pValue: nil,
-                                   detail: "มีตัวแปรต้นเดียว จึงไม่มีอะไรให้ซ้ำซ้อน")
+                                   detail: localised("there is only one predictor, so nothing can be collinear", "Why multicollinearity could not arise."))
         }
         let factors = Statistics.varianceInflationFactors(predictors)
         let worst = factors.max() ?? 1
@@ -841,10 +841,10 @@ public enum StatGate {
         let listed = zip(names, factors).map { String(format: "%@ VIF = %.2f", $0, $1) }
             .joined(separator: " · ")
         return AssumptionCheck(
-            name: "ไม่มี multicollinearity",
+            name: localised("no multicollinearity", "Name of a statistical assumption."),
             wasChecked: true, passed: passed, statistic: worst, pValue: nil,
-            detail: listed + (passed ? "" : " — VIF เกิน 10 แปลว่าตัวแปรอธิบายกันเอง "
-                              + "ค่าสัมประสิทธิ์แต่ละตัวจึงตีความแยกไม่ได้"))
+            detail: listed + (passed ? "" : localised(" — a VIF above 10 means the variables explain each other ", "Appended when multicollinearity fails.")
+                              + localised("so the individual coefficients cannot be read separately", "Ends the multicollinearity detail.")))
     }
 
     /// Curvature, by Tukey's idea: if the relationship is really a line, the
@@ -853,20 +853,20 @@ public enum StatGate {
         let squares = fit.fitted.map { $0 * $0 }
         guard let extra = Statistics.leastSquares(y: fit.residuals, predictors: [squares]),
               extra.standardErrors.count > 1, extra.standardErrors[1] > 0 else {
-            return AssumptionCheck(name: "ความสัมพันธ์เป็นเส้นตรง",
+            return AssumptionCheck(name: localised("the relationship is linear", "Name of a statistical assumption."),
                                    wasChecked: false, passed: false,
                                    statistic: nil, pValue: nil,
-                                   detail: "ตรวจไม่ได้กับข้อมูลชุดนี้")
+                                   detail: localised("cannot be checked with this data", "Why an assumption could not be tested."))
         }
         let t = extra.coefficients[1] / extra.standardErrors[1]
         let p = Statistics.tTestPValue(t: t, degreesOfFreedom: Double(extra.degreesOfFreedom))
         let passed = p >= alpha
         return AssumptionCheck(
-            name: "ความสัมพันธ์เป็นเส้นตรง",
+            name: localised("the relationship is linear", "Name of a statistical assumption."),
             wasChecked: true, passed: passed, statistic: t, pValue: p,
             detail: String(format: "Tukey non-additivity t = %.4f, p = %.4g", t, p)
-                + (passed ? " — ไม่พบความโค้งที่เหลืออยู่"
-                          : " — ยังมีความโค้งเหลืออยู่ในส่วนเหลือ โมเดลเส้นตรงยังไม่พอ"))
+                + (passed ? localised(" — no curvature left over", "Appended when linearity holds.")
+                          : localised(" — curvature remains in the residuals; a linear model is not enough", "Appended when linearity fails.")))
     }
 
     /// The F-test for "does this model explain anything at all".

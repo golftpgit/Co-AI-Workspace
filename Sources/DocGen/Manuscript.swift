@@ -91,18 +91,22 @@ public enum ResultBindingFailure: Error, Sendable, Equatable, Identifiable {
     public var text: String {
         switch self {
         case .cellNeverRan(let reference):
-            "“\(reference.label)” อ้างถึงเซลล์ที่ยังไม่เคยรัน — ตัวเลขในเล่มต้องมาจากการรันจริง"
+            localised("“\(reference.label)” points at a cell that has never been run — a number in the manuscript has to come from a real run", "Why a manuscript cannot be built. Placeholder: the reference's name.")
         case .sourceChanged(let reference, let ranAt):
-            "“\(reference.label)” มาจากการรันเมื่อ "
+            localised("“\(reference.label)” comes from a run on ", "A stale manuscript reference. Placeholder: the reference's name.")
                 + "\(ranAt.formatted(date: .abbreviated, time: .shortened)) "
-                + "แต่คำสั่งในเซลล์นั้นถูกแก้หลังจากนั้น — ตัวเลขนี้ตอบคำถามคนละข้อกับที่เซลล์ถามอยู่ตอนนี้"
+                + localised("but the cell has been edited since — this number answers a different question than the cell asks now", "Ends the stale-reference warning.")
         case .noSuchColumn(let reference, let available):
-            "“\(reference.label)” อ้างคอลัมน์ \(reference.column) ซึ่งไม่มีในผลลัพธ์ "
-                + "(มี: \(available.joined(separator: ", ")))"
+            localised("“\(reference.label)” cites column \(reference.column), which is not in the result ", "A manuscript reference to a missing column. Placeholders: the reference's name and the column.")
+                + {
+                    let columns = available.joined(separator: ", ")
+                    return localised("(available: \(columns))",
+                                     "Lists the columns a result does have. Placeholder: the column names.")
+                }()
         case .noSuchRow(let reference, let rows):
-            "“\(reference.label)” อ้างแถวที่ \(reference.row) แต่ผลลัพธ์มี \(rows) แถว"
+            localised("“\(reference.label)” cites row \(reference.row), but the result has \(rows)", "A manuscript reference to a missing row. Placeholders: the reference's name, the row and the row count.")
         case .valueIsNull(let reference):
-            "“\(reference.label)” ได้ค่าว่าง (NULL) จากการรัน — ไม่ใช่ตัวเลขที่เขียนลงเล่มได้"
+            localised("“\(reference.label)” came back empty (NULL) from the run — that is not a number to put in a manuscript", "A manuscript reference that resolved to null. Placeholder: the reference's name.")
         }
     }
 }
@@ -227,11 +231,11 @@ public enum ManuscriptChapter: Int, Sendable, Codable, CaseIterable, Identifiabl
 
     public var title: String {
         switch self {
-        case .introduction: "บทที่ 1 บทนำ"
-        case .literature: "บทที่ 2 เอกสารและงานวิจัยที่เกี่ยวข้อง"
-        case .method: "บทที่ 3 วิธีดำเนินการวิจัย"
-        case .results: "บทที่ 4 ผลการวิเคราะห์ข้อมูล"
-        case .discussion: "บทที่ 5 สรุป อภิปรายผล และข้อเสนอแนะ"
+        case .introduction: localised("Chapter 1 Introduction", "Default manuscript chapter heading.")
+        case .literature: localised("Chapter 2 Literature review", "Default manuscript chapter heading.")
+        case .method: localised("Chapter 3 Method", "Default manuscript chapter heading.")
+        case .results: localised("Chapter 4 Results", "Default manuscript chapter heading.")
+        case .discussion: localised("Chapter 5 Conclusion, discussion and recommendations", "Default manuscript chapter heading.")
         }
     }
 }
@@ -304,10 +308,10 @@ public enum ManuscriptError: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .unboundResults(let failures):
-            "สร้างต้นฉบับไม่ได้ — มีตัวเลขที่ยังไม่ผูกกับผลการรันจริง:\n"
+            localised("the manuscript cannot be built — some numbers are not tied to a real run:\n", "Why a manuscript cannot be built.")
                 + failures.map { "• \($0.text)" }.joined(separator: "\n")
         case .unfilledPlaceholders(let names):
-            "สร้างต้นฉบับไม่ได้ — มีช่องว่างในประโยคที่ไม่มีผลรองรับ: "
+            localised("the manuscript cannot be built — some slots in the text have nothing behind them: ", "Why a manuscript cannot be built.")
                 + names.map { "{\($0)}" }.joined(separator: ", ")
         }
     }
@@ -374,7 +378,7 @@ public enum ManuscriptBuilder {
                                                               currentSources: currentSources)
             else { return nil }
             return "\(reference.label) = \(bound.value) · "
-                + "รันเมื่อ \(bound.ranAt.formatted(date: .abbreviated, time: .shortened)) · "
+                + localised("run on \(bound.ranAt.formatted(date: .abbreviated, time: .shortened)) · ", "When a bound number was produced. Placeholder: the run time.")
                 + bound.source.replacingOccurrences(of: "\n", with: " ")
         }
     }

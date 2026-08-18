@@ -31,7 +31,7 @@ struct InstrumentsView: View {
     @State private var newItemKind = ItemKindChoice.likert5
     /// The rows/options and columns for the kinds that need a list typed in
     /// (P11.6). Kept beside the picker rather than in a sheet: somebody adding
-    /// a grid knows its rows at the moment they choose "ตาราง".
+    /// a grid knows its rows at the moment they choose "matrix".
     @State private var newItemFirstList = ""
     @State private var newItemSecondList = ""
     @State private var newItemConstruct: String?
@@ -63,15 +63,15 @@ struct InstrumentsView: View {
 
         var label: String {
             switch self {
-            case .likert5: "Likert 5 ระดับ"
-            case .likert7: "Likert 7 ระดับ"
-            case .single: "เลือกตอบเดียว"
-            case .multiple: "เลือกได้หลายข้อ"
-            case .openText: "ข้อความเปิด"
-            case .number: "ตัวเลข"
-            case .date: "วันที่"
-            case .matrix: "ตาราง (แถว × คอลัมน์)"
-            case .ranking: "จัดอันดับ"
+            case .likert5: t("Likert, 5 points", "Question kind in a survey instrument.")
+            case .likert7: t("Likert, 7 points", "Question kind in a survey instrument.")
+            case .single: t("Single choice", "Question kind: one answer only.")
+            case .multiple: t("Multiple choice", "Question kind: several answers allowed.")
+            case .openText: t("Open text", "Question kind: free writing.")
+            case .number: t("Number", "Question kind: a numeric answer.")
+            case .date: t("Date", "Question kind: a date answer.")
+            case .matrix: t("Matrix (rows × columns)", "Question kind: a grid of sub-questions.")
+            case .ranking: t("Ranking", "Question kind: put options in order.")
             }
         }
 
@@ -79,8 +79,9 @@ struct InstrumentsView: View {
         /// the two boxes. Nil for the kinds that carry their own labels.
         var listLabels: (first: String, second: String?)? {
             switch self {
-            case .matrix: ("แถว (บรรทัดละแถว)", "คอลัมน์ (บรรทัดละคอลัมน์)")
-            case .ranking: ("ตัวเลือกที่จะให้จัดอันดับ (บรรทัดละข้อ)", nil)
+            case .matrix: (t("Rows (one per line)", "Editor label for a matrix question's rows."),
+                           t("Columns (one per line)", "Editor label for a matrix question's columns."))
+            case .ranking: (t("Options to rank (one per line)", "Editor label for a ranking question."), nil)
             default: nil
             }
         }
@@ -99,7 +100,7 @@ struct InstrumentsView: View {
             case .matrix:
                 // Empty lists are allowed through to the gate rather than
                 // filled in with placeholders: a grid with no rows is a
-                // mistake somebody should be told about, and "แถว 1" would
+                // mistake somebody should be told about, and "row 1" would
                 // publish as though it were a question.
                 return .matrix(rows: lines(first), columns: lines(second))
             case .ranking:
@@ -109,6 +110,19 @@ struct InstrumentsView: View {
             }
         }
 
+        /// **Not left in Thai by oversight — left in Thai pending a decision.**
+        ///
+        /// These are the words a *respondent* reads on a questionnaire, and
+        /// they are `Bilingual`, a type whose `thai` is required and whose
+        /// `english` is optional. That shape is a claim about who fills these
+        /// forms in, and it is stored in every instrument already saved and
+        /// served to respondents by `FieldServer`.
+        ///
+        /// Translating the seeds without changing `Bilingual` would give an
+        /// English-speaking researcher a Thai default they cannot read and
+        /// cannot see is a default; changing `Bilingual` is a data-model change
+        /// with migration behind it. Neither is a call to make while renaming
+        /// buttons, so it is written down instead (2026-08-18).
         private var legacyKind: ItemKind {
             switch self {
             case .likert5:
@@ -180,7 +194,8 @@ struct InstrumentsView: View {
                     if let instrument = model.selected {
                         detail(instrument)
                     } else {
-                        Text("ยังไม่มีเครื่องมือในโปรเจกต์นี้ — ตั้งชื่อทางซ้ายเพื่อเริ่มร่าง")
+                        Text(localised: "No instrument in this project yet — name one on the left to start a draft",
+                             "Empty state on the instruments screen.")
                             .font(.callout).foregroundStyle(.secondary)
                     }
                 }
@@ -196,7 +211,8 @@ struct InstrumentsView: View {
     private var list: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("เครื่องมือเก็บข้อมูล").font(.subheadline).bold()
+                Text(localised: "Data-collection instruments", "Heading over the list of survey instruments.")
+                    .font(.subheadline).bold()
                 Spacer()
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
@@ -209,7 +225,8 @@ struct InstrumentsView: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(instrument.title.thai).font(.callout)
-                            Text("เวอร์ชัน \(instrument.version) · \(instrument.items.count) ข้อ")
+                            Text(localised: "version \(instrument.version) · \(instrument.items.count) questions",
+                                 "An instrument row. Placeholders: its version and how many questions it holds.")
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -217,18 +234,21 @@ struct InstrumentsView: View {
                     }
                     .buttonStyle(.plain)
                     .fontWeight(model.selectedID == instrument.id ? .semibold : .regular)
-                    .accessibilityLabel("เปิดเครื่องมือ \(instrument.title.thai) เวอร์ชัน \(instrument.version)")
+                    .accessibilityLabel(t("Open instrument \(instrument.title.thai), version \(instrument.version)",
+                                          "Screen-reader label. Placeholders: the instrument's title and version."))
                 }
                 if model.instruments.isEmpty {
-                    Text("ยังไม่มีเครื่องมือ").font(.caption).foregroundStyle(.secondary)
+                    Text(localised: "No instrument yet", "Shown when the instrument list is empty.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
 
             Divider()
             HStack {
-                TextField("ชื่อเครื่องมือใหม่", text: $newTitle)
+                TextField(t("New instrument name", "Text field for creating a survey instrument."),
+                          text: $newTitle)
                     .textFieldStyle(.roundedBorder)
-                Button("สร้าง") {
+                Button(t("Create", "Button that creates the project.")) {
                     let title = newTitle
                     newTitle = ""
                     Task { await model.create(title: title) }
@@ -246,7 +266,9 @@ struct InstrumentsView: View {
     private func detail(_ instrument: Instrument) -> some View {
         HStack(spacing: 8) {
             Text(instrument.title.thai).font(.title3).bold()
-            Text("เวอร์ชัน \(instrument.version)").font(.caption).foregroundStyle(.secondary)
+            Text(localised: "version \(instrument.version)",
+                 "An instrument's version. Placeholder is the number.")
+                .font(.caption).foregroundStyle(.secondary)
             discardControl(instrument)
             Spacer()
             if let status = model.status {
@@ -258,7 +280,7 @@ struct InstrumentsView: View {
                         .frame(maxWidth: 420, alignment: .trailing)
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("ปิดข้อความนี้")
+                .accessibilityHint(t("dismiss this message", "Screen-reader hint on a dismiss button."))
             }
         }
 
@@ -266,7 +288,8 @@ struct InstrumentsView: View {
             // Said once at the top rather than only next to each disabled control:
             // the first question somebody has on opening an approved version is
             // why nothing can be typed into it.
-            Label("\(approval.summary) — เวอร์ชันนี้แก้ไม่ได้แล้ว กด “สร้างเวอร์ชันใหม่” เพื่อแก้",
+            Label(t("\(approval.summary) — this version can no longer be edited; press “New version” to change it",
+                    "Banner on an approved instrument. Placeholder summarises the approval."),
                   systemImage: "lock.fill")
                 .font(.callout)
                 .foregroundStyle(.green)
@@ -307,7 +330,7 @@ struct InstrumentsView: View {
     /// instruments cannot be.
     ///
     /// The button stays visible and disabled with the reasons beside it, which is
-    /// the opposite of the "เปิดฟอร์ม" controls below: those are *absent* until
+    /// the opposite of the "open the form" controls below: those are *absent* until
     /// the gate has passed because there is nothing to serve. Here there is
     /// something to delete and a rule that says not to, and a rule nobody can see
     /// reads as a screen that is broken.
@@ -317,22 +340,28 @@ struct InstrumentsView: View {
         Button(role: .destructive) {
             confirmingDiscard = true
         } label: {
-            Label("ลบร่างนี้", systemImage: "trash")
+            Label(t("Delete this draft", "Button that removes an unapproved instrument."), systemImage: "trash")
         }
         .controlSize(.small)
         .disabled(!refusals.isEmpty)
-        .accessibilityLabel("ลบร่างเครื่องมือ \(instrument.title.thai)")
-        .accessibilityHint(refusals.first.map(\.description) ?? "ลบได้ เพราะยังไม่มีอะไรผูกกับร่างนี้")
-        .help(refusals.first.map(\.description) ?? "ลบร่างที่ยังไม่มีอะไรผูกอยู่")
-        .confirmationDialog("ลบร่าง “\(instrument.title.thai)”?",
+        .accessibilityLabel(t("Delete the draft instrument \(instrument.title.thai)",
+                              "Screen-reader label. Placeholder is the instrument's title."))
+        .accessibilityHint(refusals.first.map(\.description)
+                           ?? t("can be deleted, because nothing is tied to this draft",
+                                "Screen-reader hint when deletion is allowed."))
+        .help(refusals.first.map(\.description)
+              ?? t("Deletes a draft nothing is tied to", "Tooltip when deletion is allowed."))
+        .confirmationDialog(t("Delete the draft “\(instrument.title.thai)”?",
+                              "Confirmation title. Placeholder is the instrument's title."),
                             isPresented: $confirmingDiscard, titleVisibility: .visible) {
-            Button("ลบร่างนี้", role: .destructive) {
+            Button(t("Delete this draft", "Confirming button that removes the draft."),
+                   role: .destructive) {
                 Task { await model.discardSelected() }
             }
-            Button("ไม่ลบ", role: .cancel) {}
+            Button(t("Keep it", "Button that dismisses the delete confirmation."), role: .cancel) {}
         } message: {
-            Text("ร่างนี้ยังไม่ผ่านประตู ยังไม่เคยเปิดรอบเก็บข้อมูล และยังไม่มีคำตอบผูกอยู่ "
-                 + "· คะแนนจากผู้เชี่ยวชาญที่ให้ไว้กับร่างนี้จะถูกลบไปด้วย เพราะเป็นคะแนนของข้อที่กำลังจะไม่มีอยู่")
+            Text(localised: "This draft has passed no gate, has never opened a collection wave, and has no responses tied to it · expert ratings given to it go too, because they rate questions that are about to stop existing",
+                 "Explains exactly what deleting an instrument draft takes with it.")
         }
 
         if let first = refusals.first {
@@ -349,14 +378,18 @@ struct InstrumentsView: View {
     /// reason the server has no admin endpoints.
     @ViewBuilder
     private func fieldBox() -> some View {
-        GroupBox("เปิดฟอร์มให้คนอื่นกรอก (เฉพาะในวงแลนนี้)") {
+        GroupBox(t("Open the form for others to fill in (this local network only)",
+                   "Box heading over the LAN-only response server.")) {
             VStack(alignment: .leading, spacing: 8) {
                 if let serving = model.serving {
                     HStack {
-                        Label(model.waveIsOpen ? "กำลังเปิดรับคำตอบ" : "ปิดรับคำตอบแล้ว",
+                        Label(model.waveIsOpen
+                              ? t("accepting responses", "Wave status: the form is open.")
+                              : t("closed to responses", "Wave status: the form is shut."),
                               systemImage: model.waveIsOpen ? "dot.radiowaves.left.and.right" : "hand.raised.fill")
                             .foregroundStyle(model.waveIsOpen ? Color.green : Color.orange)
-                        Text("ได้รับแล้ว \(model.responses) ชุด")
+                        Text(localised: "\(model.responses) received",
+                             "How many responses have arrived. Placeholder is a count.")
                             .font(.callout).foregroundStyle(.secondary)
                             // Counted again every few seconds while the round is
                             // open. Driving this with a refresh button found the
@@ -372,19 +405,24 @@ struct InstrumentsView: View {
                             }
                         Spacer()
                         if model.waveIsOpen {
-                            Button("ปิดรอบเก็บข้อมูล") { Task { await model.closeWave() } }
+                            Button(t("Close the collection wave", "Button that stops accepting responses.")) {
+                                Task { await model.closeWave() }
+                            }
                         }
-                        Button("หยุดเซิร์ฟเวอร์") { Task { await model.stopServing() } }
+                        Button(t("Stop the server", "Button that takes the form offline.")) {
+                            Task { await model.stopServing() }
+                        }
                     }
                     .controlSize(.small)
 
                     if serving.urls.isEmpty {
-                        Text("เครื่องนี้ยังไม่ได้ต่อเครือข่ายที่คนอื่นเข้าถึงได้ — "
-                             + "ต่อ wifi วงเดียวกับผู้ตอบก่อน")
+                        Text(localised: "This machine is not on a network anybody else can reach — join the same wifi as the respondents first",
+                             "Shown when the form cannot be served because there is no reachable network.")
                             .font(.callout).foregroundStyle(.orange)
                     } else {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("ให้ผู้ตอบเปิดลิงก์นี้ในเบราว์เซอร์:")
+                            Text(localised: "Have respondents open this link in a browser:",
+                                 "Instruction above the form's LAN address.")
                                 .font(.caption).foregroundStyle(.secondary)
                             // Several, because a laptop on wifi and ethernet has
                             // more than one address and only the person in the
@@ -398,14 +436,18 @@ struct InstrumentsView: View {
                                         .font(.system(.callout, design: .monospaced))
                                 }
                                 .buttonStyle(.plain)
-                                .accessibilityLabel("คัดลอกลิงก์ \(url)")
-                                .accessibilityHint("คัดลอกไปยังคลิปบอร์ด")
+                                .accessibilityLabel(t("Copy the link \(url)",
+                                                      "Screen-reader label. Placeholder is the address."))
+                                .accessibilityHint(t("copies it to the clipboard", "Screen-reader hint."))
                             }
                         }
                     }
                 } else {
                     HStack {
-                        Button("เปิดฟอร์มในวงแลน") { Task { await model.startServing() } }
+                        Button(t("Open the form on the local network",
+                                 "Button that starts serving the form.")) {
+                            Task { await model.startServing() }
+                        }
                         Spacer()
                     }
                     .controlSize(.small)
@@ -415,19 +457,16 @@ struct InstrumentsView: View {
                     // above it, so "the round is still open, starting again
                     // continues it" was announced where nobody could read it.
                     if let open = model.rounds.first(where: \.isOpen) {
-                        Label("รอบเก็บข้อมูลยังเปิดค้างอยู่ (เริ่ม "
-                              + open.openedAt.formatted(date: .abbreviated, time: .shortened)
-                              + " · \(open.submissions) ชุด) — เปิดเซิร์ฟเวอร์อีกครั้งแล้วเก็บต่อรอบเดิม "
-                              + "ไม่ใช่รอบใหม่",
+                        Label(t("A collection wave is still open (started \(open.openedAt.formatted(date: .abbreviated, time: .shortened)) · \(open.submissions) responses) — starting the server again continues that wave rather than beginning a new one",
+                                "Shown when a wave was left open. Placeholders: when it started and how many responses it has."),
                               systemImage: "pause.circle")
                             .font(.caption).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
-                Text("ค่าเริ่มต้นคือ LAN-only และไม่มี tunnel ในตัว — เปิดออกอินเทอร์เน็ตต้องเป็นการตั้งค่า "
-                     + "router ของคุณเอง · เซิร์ฟเวอร์นี้ไม่มีหน้าจัดการใด ๆ ให้เข้าถึงจากเว็บ และอ่านคำตอบ "
-                     + "กลับออกไปทางเว็บไม่ได้ · งานที่เดิมพันสูงยังควรใช้บริการที่ผ่านการตรวจความปลอดภัยแล้ว (R11)")
+                Text(localised: "LAN-only by default, with no built-in tunnel — putting it on the internet has to be your own router configuration · this server exposes no admin page to the web and responses cannot be read back out through it · high-stakes work should still use a service that has been security-reviewed (R11)",
+                     "States the security posture of the response server plainly.")
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -440,26 +479,30 @@ struct InstrumentsView: View {
     /// to.
     @ViewBuilder
     private func chainBox(_ instrument: Instrument) -> some View {
-        GroupBox("คำถามวิจัยและสิ่งที่จะวัด") {
+        GroupBox(t("Research questions and what will be measured",
+                   "Box heading over research questions and constructs.")) {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(instrument.researchQuestions) { question in
                     VStack(alignment: .leading, spacing: 2) {
                         Text("RQ: \(question.text.thai)").font(.callout)
                         ForEach(instrument.constructs.filter { $0.researchQuestionID == question.id }) { construct in
-                            Text("   ↳ \(construct.name.thai) — วัดด้วย \(instrument.items(measuring: construct.id).count) ข้อ")
+                            Text(localised: "   ↳ \(construct.name.thai) — measured by \(instrument.items(measuring: construct.id).count) questions",
+                                 "A construct under a research question. Placeholders: its name and how many questions measure it.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }
                 if instrument.researchQuestions.isEmpty {
-                    Text("ยังไม่มีคำถามวิจัย — construct ต้องผูกกับคำถามวิจัยข้อใดข้อหนึ่ง")
+                    Text(localised: "No research question yet — a construct must be tied to one",
+                         "Shown when there are no research questions to attach constructs to.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
 
                 HStack {
-                    TextField("คำถามวิจัยใหม่", text: $newQuestion)
+                    TextField(t("New research question", "Text field for adding a research question."),
+                              text: $newQuestion)
                         .textFieldStyle(.roundedBorder)
-                    Button("เพิ่ม RQ") {
+                    Button(t("Add RQ", "Button that adds a research question. RQ is the standard abbreviation.")) {
                         let text = newQuestion
                         newQuestion = ""
                         Task { await model.addResearchQuestion(text) }
@@ -470,19 +513,24 @@ struct InstrumentsView: View {
 
                 if !instrument.researchQuestions.isEmpty {
                     HStack {
-                        TextField("construct ที่จะวัด", text: $newConstruct)
+                        TextField(t("Construct to measure",
+                                    "Text field naming a construct. 'Construct' is the research term."),
+                                  text: $newConstruct)
                             .textFieldStyle(.roundedBorder)
-                        TextField("นิยาม", text: $newConstructDefinition)
+                        TextField(t("Definition", "Text field: what the construct means."),
+                                  text: $newConstructDefinition)
                             .textFieldStyle(.roundedBorder)
-                        Picker("ตอบ RQ ข้อ", selection: $constructQuestionID) {
-                            Text("— เลือก RQ —").tag(String?.none)
+                        Picker(t("Answers RQ", "Picker: which research question this construct answers."),
+                               selection: $constructQuestionID) {
+                            Text(localised: "— choose an RQ —", "Picker option before a research question is chosen.")
+                                .tag(String?.none)
                             ForEach(instrument.researchQuestions) { question in
                                 Text(question.text.thai).tag(String?.some(question.id))
                             }
                         }
                         .labelsHidden().frame(maxWidth: 200)
-                        .accessibilityLabel("คำถามวิจัยที่ construct นี้ตอบ")
-                        Button("เพิ่ม construct") {
+                        .accessibilityLabel(t("Research question this construct answers", "Screen-reader label."))
+                        Button(t("Add construct", "Button that adds a construct.")) {
                             guard let questionID = constructQuestionID else { return }
                             let name = newConstruct
                             let definition = newConstructDefinition
@@ -505,7 +553,7 @@ struct InstrumentsView: View {
 
     @ViewBuilder
     private func itemsBox(_ instrument: Instrument) -> some View {
-        GroupBox("ข้อคำถาม") {
+        GroupBox(t("Questions", "Box heading over the instrument's items.")) {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(instrument.ordered) { item in
                     HStack(spacing: 6) {
@@ -523,33 +571,39 @@ struct InstrumentsView: View {
                             Image(systemName: "trash")
                         }
                         .buttonStyle(.borderless)
-                        .accessibilityLabel("ลบข้อ \(item.prompt.thai)")
+                        .accessibilityLabel(t("Delete question \(item.prompt.thai)",
+                                              "Screen-reader label. Placeholder is the question text."))
                     }
                 }
                 if instrument.items.isEmpty {
-                    Text("ยังไม่มีข้อคำถาม").font(.callout).foregroundStyle(.secondary)
+                    Text(localised: "No questions yet", "Shown when the instrument has no items.")
+                        .font(.callout).foregroundStyle(.secondary)
                 }
 
                 Divider()
                 HStack {
-                    TextField("ข้อคำถามใหม่", text: $newItem)
+                    TextField(t("New question", "Text field for adding an item to the instrument."),
+                              text: $newItem)
                         .textFieldStyle(.roundedBorder)
-                    Picker("ชนิด", selection: $newItemKind) {
+                    Picker(t("Kind", "Picker: what kind of question this is."), selection: $newItemKind) {
                         ForEach(ItemKindChoice.allCases) { Text($0.label).tag($0) }
                     }
                     .labelsHidden().frame(maxWidth: 150)
-                    .accessibilityLabel("ชนิดของข้อคำถาม")
-                    Picker("วัด construct", selection: $newItemConstruct) {
-                        Text("— ไม่ผูก —").tag(String?.none)
+                    .accessibilityLabel(t("Kind of question", "Screen-reader label for the question kind picker."))
+                    Picker(t("Measures construct", "Picker: which construct this question measures."),
+                           selection: $newItemConstruct) {
+                        Text(localised: "— not tied —", "Picker option: this question measures no construct.")
+                            .tag(String?.none)
                         ForEach(instrument.constructs) { construct in
                             Text(construct.name.thai).tag(String?.some(construct.id))
                         }
                     }
                     .labelsHidden().frame(maxWidth: 170)
-                    .accessibilityLabel("construct ที่ข้อนี้วัด")
-                    Toggle("ข้อมูลพื้นฐาน", isOn: $newItemDemographic)
+                    .accessibilityLabel(t("Construct this question measures", "Screen-reader label."))
+                    Toggle(t("Demographic", "Checkbox marking a question as background information rather than a measure."),
+                           isOn: $newItemDemographic)
                         .toggleStyle(.checkbox)
-                    Button("เพิ่มข้อ") {
+                    Button(t("Add question", "Button that adds the item to the instrument.")) {
                         let prompt = newItem
                         let kind = newItemKind.kind(first: newItemFirstList,
                                                      second: newItemSecondList)
@@ -591,7 +645,8 @@ struct InstrumentsView: View {
                     .controlSize(.small)
                 }
 
-                Text("ข้อที่ไม่ผูก construct ต้องติดป้าย “ข้อมูลพื้นฐาน” — ข้อที่ไม่วัดอะไรเลยคือคอลัมน์ที่วิเคราะห์ไม่ได้ (§20.3) · บันทึกได้ แต่เผยแพร่ไม่ผ่าน")
+                Text(localised: "A question tied to no construct must be marked “Demographic” — one that measures nothing is a column no analysis can use (§20.3) · it can be saved, but it will not pass publication",
+                     "Explains why every question needs either a construct or the demographic flag.")
                     .font(.caption2).foregroundStyle(.secondary)
 
                 if !model.problems.isEmpty {
@@ -610,18 +665,19 @@ struct InstrumentsView: View {
 
     @ViewBuilder
     private func ethicsBox(_ instrument: Instrument) -> some View {
-        GroupBox("ความยินยอมและจริยธรรม") {
+        GroupBox(t("Consent and ethics", "Box heading over consent text and ethics approval.")) {
             VStack(alignment: .leading, spacing: 8) {
                 if let consent = instrument.consent, consent.isComplete, !editingConsent {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("มีหน้าความยินยอมครบแล้ว · ติดต่อ \(consent.contact)")
+                            Text(localised: "The consent page is complete · contact \(consent.contact)",
+                                 "Shown when consent text exists. Placeholder is the researcher's contact.")
                                 .font(.callout)
                             Text(consent.purpose.thai).font(.caption).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer()
-                        Button("แก้ข้อความ") {
+                        Button(t("Edit the text", "Button that opens the consent editor.")) {
                             consentDraft = ConsentDraft(purpose: consent.purpose.thai,
                                                         collected: consent.whatIsCollected.thai,
                                                         voluntary: consent.voluntary.thai,
@@ -632,16 +688,21 @@ struct InstrumentsView: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 4) {
-                        TextField("วัตถุประสงค์ของการเก็บข้อมูล", text: $consentDraft.purpose)
+                        TextField(t("Purpose of the collection", "Consent field: why data is being collected."),
+                                  text: $consentDraft.purpose)
                             .textFieldStyle(.roundedBorder)
-                        TextField("เก็บข้อมูลอะไรบ้าง", text: $consentDraft.collected)
+                        TextField(t("What is collected", "Consent field: which data is gathered."),
+                                  text: $consentDraft.collected)
                             .textFieldStyle(.roundedBorder)
-                        TextField("ข้อความเรื่องความสมัครใจและการถอนตัว", text: $consentDraft.voluntary)
+                        TextField(t("Statement on voluntariness and withdrawal",
+                                    "Consent field: that taking part is voluntary and can be withdrawn."),
+                                  text: $consentDraft.voluntary)
                             .textFieldStyle(.roundedBorder)
                         HStack {
-                            TextField("ช่องทางติดต่อผู้วิจัย", text: $consentDraft.contact)
+                            TextField(t("How to contact the researcher", "Consent field: contact details."),
+                                      text: $consentDraft.contact)
                                 .textFieldStyle(.roundedBorder)
-                            Button("บันทึกความยินยอม") {
+                            Button(t("Save the consent text", "Button that stores the consent page.")) {
                                 let draft = consentDraft
                                 editingConsent = false
                                 Task {
@@ -663,7 +724,7 @@ struct InstrumentsView: View {
                     HStack {
                         Text(ethics.summary).font(.callout)
                         Spacer()
-                        Button("แก้บันทึก") {
+                        Button(t("Edit the record", "Button that opens the ethics record editor.")) {
                             ethicsDraft = EthicsDraft(ethics)
                             editingEthics = true
                         }
@@ -671,27 +732,36 @@ struct InstrumentsView: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 4) {
-                        Picker("แบบไหน", selection: $ethicsDraft.isApproved) {
-                            Text("มีเลขรับรองจริยธรรม").tag(true)
-                            Text("ประกาศว่าไม่เข้าข่ายวิจัยในมนุษย์").tag(false)
+                        Picker(t("Which kind", "Picker: whether there is an approval number or an exemption."),
+                               selection: $ethicsDraft.isApproved) {
+                            Text(localised: "There is an ethics approval number",
+                                 "Ethics option: the study was approved by a committee.")
+                                .tag(true)
+                            Text(localised: "Declared not to be human-subjects research",
+                                 "Ethics option: the study is exempt.")
+                                .tag(false)
                         }
                         .pickerStyle(.radioGroup)
-                        .accessibilityLabel("ชนิดของบันทึกจริยธรรม")
+                        .accessibilityLabel(t("Kind of ethics record", "Screen-reader label."))
                         if ethicsDraft.isApproved {
                             HStack {
-                                TextField("คณะกรรมการ", text: $ethicsDraft.committee)
+                                TextField(t("Committee", "Ethics field: which body approved it."),
+                                          text: $ethicsDraft.committee)
                                     .textFieldStyle(.roundedBorder)
-                                TextField("เลขรับรอง", text: $ethicsDraft.number)
+                                TextField(t("Approval number", "Ethics field: the approval's reference."),
+                                          text: $ethicsDraft.number)
                                     .textFieldStyle(.roundedBorder)
                             }
                         } else {
-                            TextField("เหตุผลที่ไม่เข้าข่าย", text: $ethicsDraft.reason)
+                            TextField(t("Why it is exempt", "Ethics field: the reason for exemption."),
+                                      text: $ethicsDraft.reason)
                                 .textFieldStyle(.roundedBorder)
                         }
                         HStack {
-                            TextField("ชื่อผู้แจ้ง", text: $ethicsDraft.declaredBy)
+                            TextField(t("Name of who declared it", "Ethics field: who made the declaration."),
+                                      text: $ethicsDraft.declaredBy)
                                 .textFieldStyle(.roundedBorder)
-                            Button("บันทึกจริยธรรม") {
+                            Button(t("Save the ethics record", "Button that stores the ethics record.")) {
                                 let draft = ethicsDraft
                                 editingEthics = false
                                 Task {
@@ -709,7 +779,8 @@ struct InstrumentsView: View {
                     }
                     .controlSize(.small)
                 }
-                Text("ทั้งสองอย่างตรวจที่ประตู ไม่ใช่ที่หน้าจอ — หน้าจอที่ตรวจเองคือหน้าจอที่ทางเข้าอื่นข้ามได้ (§20.5)")
+                Text(localised: "Both are checked at the gate, not on this screen — a screen that checks for itself is a screen another way in can bypass (§20.5)",
+                     "Explains where consent and ethics are really enforced.")
                     .font(.caption2).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -720,12 +791,15 @@ struct InstrumentsView: View {
     /// fills in: +1 congruent, 0 unsure, −1 not congruent.
     @ViewBuilder
     private func validityBox(_ instrument: Instrument) -> some View {
-        GroupBox("ความตรงเชิงเนื้อหา (ผู้เชี่ยวชาญให้คะแนน)") {
+        GroupBox(t("Content validity (rated by experts)",
+                   "Box heading over expert ratings of each question.")) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    TextField("ชื่อผู้เชี่ยวชาญที่กำลังให้คะแนน", text: $expert)
+                    TextField(t("Name of the expert rating now", "Text field naming who is giving the ratings."),
+                              text: $expert)
                         .textFieldStyle(.roundedBorder).frame(maxWidth: 260)
-                    Text(model.validity?.summary ?? "ยังไม่มีผลประเมิน")
+                    Text(model.validity?.summary
+                         ?? t("no assessment yet", "Shown before any expert has rated the instrument."))
                         .font(.caption).foregroundStyle(.secondary)
                     Spacer()
                 }
@@ -750,24 +824,28 @@ struct InstrumentsView: View {
                             }
                             .controlSize(.mini)
                             .disabled(expert.trimmingCharacters(in: .whitespaces).isEmpty)
-                            .accessibilityLabel("ให้คะแนน \(score) กับข้อ \(item.prompt.thai)")
+                            .accessibilityLabel(t("Give \(score) to the question \(item.prompt.thai)",
+                                                  "Screen-reader label. Placeholders: the score and the question text."))
                         }
                         if let verdict = model.validity?.items.first(where: { $0.itemID == item.id }) {
-                            Text(verdict.ioc.map { String(format: "IOC %.2f", $0) } ?? "ยังไม่มีคะแนน")
+                            Text(verdict.ioc.map { String(format: "IOC %.2f", $0) }
+                                 ?? t("no rating yet", "Shown for a question nobody has rated."))
                                 .font(.caption2)
                                 .foregroundStyle(verdict.passes ? Color.green : Color.orange)
-                            Text("\(verdict.raters) คน").font(.caption2).foregroundStyle(.secondary)
+                            Text(localised: "\(verdict.raters) raters",
+                                 "How many experts rated a question. Placeholder is a count.")
+                                .font(.caption2).foregroundStyle(.secondary)
                         }
                         Spacer()
                     }
                 }
                 if instrument.itemsUnderContentReview.isEmpty && !instrument.items.isEmpty {
-                    Text("ทุกข้อในแบบสอบถามนี้เป็นข้อมูลพื้นฐาน จึงไม่มีข้อให้ผู้เชี่ยวชาญประเมินความตรง")
+                    Text(localised: "Every question here is demographic, so there is nothing for an expert to rate for validity",
+                         "Shown when no question makes a measurement claim.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
-                Text("IOC ≥ 0.50 ต่อข้อ · I-CVI ≥ 0.78 · S-CVI/Ave ≥ 0.90 · ผู้เชี่ยวชาญอย่างน้อย "
-                     + "\(ContentValidity.minimumPanel) คน — เกณฑ์ตามตำรา ปรับในหน้าจอไม่ได้โดยตั้งใจ "
-                     + "· ข้อที่ติดป้าย “ข้อมูลพื้นฐาน” ไม่ต้องประเมิน เพราะไม่ได้อ้างว่าวัดอะไร")
+                Text(localised: "IOC ≥ 0.50 per question · I-CVI ≥ 0.78 · S-CVI/Ave ≥ 0.90 · at least \(ContentValidity.minimumPanel) experts — thresholds from the literature, deliberately not adjustable from this screen · questions marked “Demographic” need no rating, because they claim to measure nothing",
+                     "The content-validity thresholds. The statistic names are standard and stay as they are. Placeholder is the minimum panel size.")
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -777,7 +855,8 @@ struct InstrumentsView: View {
 
     @ViewBuilder
     private func gateBox() -> some View {
-        GroupBox("ประตูก่อนเก็บข้อมูล") {
+        GroupBox(t("The gate before collection starts",
+                   "Box heading over what must be true before an instrument may be used.")) {
             VStack(alignment: .leading, spacing: 6) {
                 if let gate = model.gate {
                     ForEach(Array(gate.conditions.enumerated()), id: \.offset) { _, condition in
@@ -797,15 +876,18 @@ struct InstrumentsView: View {
                     }
                 }
                 HStack {
-                    TextField("ชื่อผู้อนุมัติ", text: $approver)
+                    TextField(t("Name of the approver", "Text field naming who signs off the instrument."),
+                              text: $approver)
                         .textFieldStyle(.roundedBorder).frame(maxWidth: 180)
-                    Button("เผยแพร่เครื่องมือ") {
+                    Button(t("Publish the instrument", "Button that approves the instrument for use.")) {
                         let person = approver
                         Task { await model.publish(by: person) }
                     }
                     .disabled(approver.trimmingCharacters(in: .whitespaces).isEmpty
                               || model.isApproved)
-                    Button("สร้างเวอร์ชันใหม่") { Task { await model.newVersion() } }
+                    Button(t("New version", "Button that opens an editable copy of an approved instrument.")) {
+                        Task { await model.newVersion() }
+                    }
                     Spacer()
                 }
                 .controlSize(.small)
@@ -823,7 +905,8 @@ struct InstrumentsView: View {
                         .font(.callout).foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Text("เครื่องมือที่ยังไม่ผ่านประตูนี้ **ไม่มีรูปแบบที่เซิร์ฟเวอร์รับได้เลย** — ไม่ใช่กฎที่ต้องจำ แต่เป็นสิ่งที่คอมไพล์ไม่ผ่าน (§20.6)")
+                Text(localised: "An instrument that has not passed this gate **has no form the server will accept** — not a rule to remember, but something that does not compile (§20.6)",
+                     "Says that the gate is enforced by the type system, not by discipline.")
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -835,11 +918,14 @@ struct InstrumentsView: View {
         var parts = [item.kind.label]
         if let constructID = item.constructID,
            let construct = instrument.constructs.first(where: { $0.id == constructID }) {
-            parts.append("วัด \(construct.name.thai)")
+            parts.append(t("measures \(construct.name.thai)",
+                           "Screen-reader detail on a question. Placeholder is the construct's name."))
         } else if item.isDemographic {
-            parts.append("ข้อมูลพื้นฐาน")
+            parts.append(t("Demographic",
+                           "Checkbox marking a question as background information rather than a measure."))
         } else {
-            parts.append("ยังไม่ผูกกับอะไร — เผยแพร่ไม่ผ่าน")
+            parts.append(t("tied to nothing — will not pass publication",
+                           "Screen-reader detail on a question that measures nothing and is not marked demographic."))
         }
         return parts.joined(separator: " · ")
     }

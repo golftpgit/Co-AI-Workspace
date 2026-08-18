@@ -175,3 +175,80 @@ struct BudgetRoutingTests {
         #expect(completion.producedBy == "local")
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// The metered tier, end to end over HTTP (decision C2b, AUDIT F-9).
+//
+// Everything above proves the governor's arithmetic against in-process stubs.
+// What none of it touches is the seam that actually bills anybody: a *paid*
+// `VLLMExecutor` talking to a server, the usage that server reports, and the
+// ledger entry that follows from it. There is no paid API key on this machine
+// and there may never be, so the choice was a mock server or a hole with a
+// comment over it — and a hole with a comment over it is how Tier 1 went
+// unchecked for weeks (F-2).
+//
+// The stub answers OpenAI-compatible and now reports token counts, which is the
+// only thing it was missing to stand in for a metered endpoint.
+// ─────────────────────────────────────────────────────────────
+
+@Suite("A metered endpoint, over HTTP", .serialized)
+struct MeteredEndpointTests {
+    private func paidExecutor(_ stub: StubEndpoint) -> VLLMExecutor {
+        VLLMExecutor(identifier: "paid-stub",
+                     baseURL: stub.baseURL,
+                     model: "gpt-priced",
+                     tier: .paid,
+                     price: price)
+    }
+
+    @Test("what the server says it cost is what gets billed", .timeLimit(.minutes(1)))
+    func usageFromTheWireIsWhatIsRecorded() async throws {
+        let stub = try StubEndpoint(serving: ["gpt-priced"])
+        // 1M in and 1M out at this price is $3 + $15. A thousandth of that is a
+        // number the arithmetic cannot produce by accident.
+        stub.reports(promptTokens: 1_000, completionTokens: 1_000)
+
+        let ledger = StubLedger()
+        let governor = BudgetGovernor(limits: .init(perSessionUSD: 10), ledger: ledger)
+        let router = ModelRouter(executors: [paidExecutor(stub)], governor: governor)
+
+        // Spending is opted into, never assumed — the rule that keeps a model
+        // choice on screen from becoming a way to spend money (E.37).
+        _ = try await router.complete(LLMRequest(messages: [.init(.user, "ถามหน่อย")]),
+                                      policy: .init(allowMetered: true))
+
+        let recorded = await ledger.recorded
+        #expect(recorded.count == 1, "การเรียก endpoint ที่คิดเงิน ไม่ได้ถูกบันทึกเลย")
+        #expect(recorded.first?.endpoint == "paid-stub")
+        // 1,000/1M × $3 + 1,000/1M × $15 = $0.018
+        #expect(abs((recorded.first?.cost ?? 0) - 0.018) < 0.0005,
+                "ค่าที่บันทึกไม่ตรงกับ usage ที่เซิร์ฟเวอร์รายงาน: \(recorded.first?.cost ?? -1)")
+    }
+
+    @Test("past the ceiling it stops costing money, and says so", .timeLimit(.minutes(1)))
+    func overTheCeilingTheMeteredTierIsNotUsed() async throws {
+        let stub = try StubEndpoint(serving: ["gpt-priced"])
+        stub.reports(promptTokens: 1_000, completionTokens: 1_000)
+
+        // The whole ceiling, already spent.
+        //
+        // 9.99 was the first number tried and the call went through: the gate
+        // runs on the *estimate* made before the request, and the estimate for a
+        // short prompt is fractions of a cent — so the ceiling was still clear
+        // when it was checked, and the actual usage took the total past it
+        // afterwards. That is worth knowing rather than testing around: **a
+        // single call can cross a ceiling; what a ceiling stops is the next
+        // one.** Anybody reading a budget as a hard stop per request is reading
+        // it wrong.
+        let ledger = StubLedger(SpendWindow(session: 10, today: 10, month: 10))
+        let governor = BudgetGovernor(limits: .init(perSessionUSD: 10), ledger: ledger)
+        let router = ModelRouter(executors: [paidExecutor(stub)], governor: governor)
+
+        await #expect(throws: (any Error).self) {
+            _ = try await router.complete(LLMRequest(messages: [.init(.user, "ถามหน่อย")]),
+                                          policy: .init(allowMetered: true))
+        }
+        let recorded = await ledger.recorded
+        #expect(recorded.isEmpty, "เกินเพดานแล้วยังมีการเรียกที่คิดเงินถูกบันทึก")
+    }
+}

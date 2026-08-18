@@ -118,7 +118,7 @@ struct RoleMemoryTests {
         let chunks = (1...8).map { lesson("บทเรียนที่ \($0)", appliesTo: "ทุกคน") }
         let brief = RoleMemory.brief(for: .engineer, in: chunks, limit: 3)
         #expect(brief.count == 4)
-        #expect(brief.last?.contains("อีก 5 ข้อ") == true)
+        #expect(brief.last?.contains("5 more relevant lessons") == true)
     }
 
     @Test("no lessons means no lines, not a line saying there are none")

@@ -68,14 +68,16 @@ final class PluginsViewModel {
             do {
                 let tools = try await mcp.connect(Engine.server(for: plugin))
                 await gateway.register(tools)
-                status = "ติดตั้ง '\(plugin.name)' แล้ว — ใช้ได้ทันที \(tools.count) เครื่องมือ"
+                status = t("Installed ‘\(plugin.name)’ — \(tools.count) tools available straight away",
+                           "Status message after installing a plug-in. Placeholders: its name and how many tools it brought.")
                 isError = false
             } catch {
                 // Installed but not running is a real state, and it is not the
                 // same as "failed to install": the package is on disk and will
                 // be tried again at the next launch. Saying which one happened
                 // is the difference between "try again" and "fix the server".
-                status = "ติดตั้ง '\(plugin.name)' แล้ว แต่เซิร์ฟเวอร์ยังเริ่มไม่ได้: "
+                status = t("Installed ‘\(plugin.name)’ but its server would not start: ",
+                           "Status message when a plug-in installs but does not run. Placeholder is its name.")
                     + ((error as? MCPServerError)?.description ?? "\(error)")
                 isError = true
             }
@@ -95,7 +97,8 @@ final class PluginsViewModel {
         }
         do {
             try registry.uninstall(plugin.name)
-            status = "ถอน '\(plugin.name)' แล้ว"
+            status = t("Removed ‘\(plugin.name)’",
+                       "Status message after removing a plug-in. Placeholder is its name.")
             isError = false
         } catch {
             status = (error as? PluginError)?.description ?? "\(error)"
@@ -112,17 +115,18 @@ struct PluginsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("ปลั๊กอิน (§7.1)").font(.headline)
+                Text(localised: "Plug-ins (§7.1)", "Heading of the plug-ins section.").font(.headline)
                 Spacer()
                 Button { choosing = true } label: {
-                    Label("ติดตั้งจากโฟลเดอร์…", systemImage: "shippingbox")
+                    Label(t("Install from a folder…", "Button that installs a plug-in from disk."),
+                          systemImage: "shippingbox")
                 }
                 .controlSize(.small)
             }
 
             if model.installed.isEmpty {
-                Text("ยังไม่มีปลั๊กอิน — ปลั๊กอินคือโฟลเดอร์ที่มี plugin.json "
-                     + "และเซิร์ฟเวอร์ MCP ของตัวเอง")
+                Text(localised: "No plug-in yet — a plug-in is a folder holding a plugin.json and its own MCP server",
+                     "Empty state in the plug-ins section.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -136,13 +140,14 @@ struct PluginsSection: View {
                         // as whether it is installed.
                         let tools = model.toolNames[plugin.name] ?? []
                         Text(tools.isEmpty
-                             ? "ยังไม่ได้เชื่อมต่อ — ไม่มีเครื่องมือจากปลั๊กอินนี้บนรายการ"
+                             ? t("not connected — none of this plug-in's tools are on the list",
+                                 "Shown for a plug-in whose server is not running.")
                              : tools.joined(separator: ", "))
                             .font(.caption2)
                             .foregroundStyle(tools.isEmpty ? .orange : .secondary)
                     }
                     Spacer()
-                    Button("ถอน", role: .destructive) {
+                    Button(t("Remove", "Button that uninstalls a plug-in."), role: .destructive) {
                         Task { await model.uninstall(plugin) }
                     }
                     .controlSize(.small)

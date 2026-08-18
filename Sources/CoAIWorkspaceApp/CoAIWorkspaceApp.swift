@@ -31,7 +31,25 @@ struct CoAIWorkspaceApp: App {
 
 /// Chat once the engine is up, boot status until then. Startup failures stay
 /// visible instead of leaving an empty window with no explanation (v1 bug B4).
-private struct RootView: View {
+///
+/// **Not `private`, and that is not a style choice.** macOS state restoration
+/// asks SwiftUI to restore a window by an identifier built from this type's
+/// mangled name. A file-private type has no stable mangled context: the name
+/// comes out as `…(unknown context at $10a276fe8).RootView`, with a runtime
+/// address in it, so the identifier is different on every launch.
+///
+/// What that produced, measured on 2026-08-18 (F-17): the packaged app opened
+/// with **no window at all**. AppKit logged `hasPersistentStateToRestore=1`,
+/// handed SwiftUI the saved identifier, got `window=0x0 error=(null)` back —
+/// no match, no error — and then did not open a fresh window either, because
+/// as far as it knew restoration had been handled. The app sat in its run loop
+/// with a menu bar and nothing else, looking exactly like a boot failure.
+/// ⌘N opened a window every time, which is what proved the scene was fine and
+/// only the *first* window was missing.
+///
+/// It also wrote a new `NSWindow Frame …` preference per launch: 172 of them
+/// had accumulated by the time this was found.
+struct RootView: View {
     let environment: AppEnvironment
     /// Which of the four areas is open (§19.2). The old flat `Screen` list is
     /// still what draws each surface — see `screenView` — but nobody navigates by
@@ -55,7 +73,7 @@ private struct RootView: View {
     /// question, and a monitor beside a question is noise.
     @State private var showingRail = false
     @State private var screen = Screen.chat
-    /// Which half of "สคริปต์ + คอนโซล" is showing. The notebook runs the
+    /// Which half of "Script + console" is showing. The notebook runs the
     /// commands and the file list is where their output lands (§14.2, P8.6),
     /// so they belong in one tab with a switch rather than two tabs apart.
     @State private var consolePane = ConsolePane.notebook
@@ -88,11 +106,11 @@ private struct RootView: View {
 
         var label: String {
             switch self {
-            case .chat: "สนทนา"
-            case .plan: "แผนงาน"
-            case .workbench: "โต๊ะทำงาน"
-            case .knowledge: "คลังความรู้"
-            case .system: "ระบบ"
+            case .chat: t("Chat", "Area 1 of 5: asking the team to do something.")
+            case .plan: t("Plan", "Area 2 of 5: what was agreed, and who is accountable.")
+            case .workbench: t("Workbench", "Area 3 of 5: where the data is and what to do with it.")
+            case .knowledge: t("Knowledge", "Area 4 of 5: what is true, and how we know.")
+            case .system: t("System", "Area 5 of 5: settings — models, budget, channels.")
             }
         }
 
@@ -126,22 +144,22 @@ private struct RootView: View {
 
         var label: String {
             switch self {
-            case .collect: "เก็บข้อมูล"
-            case .coding: "ลงรหัส"
-            case .internalDB: "ฐานข้อมูลภายใน"
-            case .externalDB: "ฐานข้อมูลภายนอก"
-            case .console: "สคริปต์ + คอนโซล"
-            case .results: "ผลลัพธ์ + เอกสาร"
-            case .documents: "เอกสาร"
-            case .graph: "กราฟ"
-            case .conflicts: "ข้อขัดแย้ง"
-            case .sources: "แหล่งและ tier"
-            case .models: "โมเดล"
-            case .budget: "งบ + endpoint"
-            case .channels: "ช่องทาง"
-            case .status: "สถานะระบบ"
-            case .command: "สายบังคับบัญชา"
-            case .inventory: "ผังหน้าจอ"
+            case .collect: t("Collect", "Sub-tab: gathering data into the project.")
+            case .coding: t("Code", "Sub-tab: qualitative coding of collected material.")
+            case .internalDB: t("Internal database", "Sub-tab: the project's own store.")
+            case .externalDB: t("External database", "Sub-tab: databases outside the project.")
+            case .console: t("Script + console", "Sub-tab: the notebook and its output.")
+            case .results: t("Results + documents", "Sub-tab: findings and what is written from them.")
+            case .documents: t("Documents", "Sub-tab: source documents in the knowledge base.")
+            case .graph: t("Graph", "Sub-tab: the entity graph.")
+            case .conflicts: t("Conflicts", "Sub-tab: claims that contradict each other.")
+            case .sources: t("Sources and tiers", "Sub-tab: where knowledge came from and how far it is trusted. 'tier' is a term of art here.")
+            case .models: t("Models", "Sub-tab: which models are available.")
+            case .budget: t("Budget + endpoints", "Sub-tab: spending limits and the servers that answer.")
+            case .channels: t("Channels", "Sub-tab: ways the app reaches out, such as mail or chat.")
+            case .status: t("System status", "Sub-tab: what came up at boot and what did not.")
+            case .command: t("Chain of command", "Sub-tab: who reports to whom in the agent roster.")
+            case .inventory: t("Screen map", "Sub-tab: the inventory of every screen the app draws.")
             }
         }
     }
@@ -155,14 +173,14 @@ private struct RootView: View {
 
         var label: String {
             switch self {
-            case .chat: "สนทนา"
-            case .projects: "โปรเจกต์"
-            case .knowledge: "คลังความรู้"
-            case .conflicts: "ข้อขัดแย้ง"
-            case .team: "ทีม"
-            case .analysis: "วิเคราะห์"
-            case .models: "โมเดล"
-            case .endpoints: "ระยะไกล"
+            case .chat: t("Chat", "Area 1 of 5: asking the team to do something.")
+            case .projects: t("Projects", "Screen: the list of projects and their plans.")
+            case .knowledge: t("Knowledge", "Area 4 of 5: what is true, and how we know.")
+            case .conflicts: t("Conflicts", "Sub-tab: claims that contradict each other.")
+            case .team: t("Team", "Screen: the agents on the roster and what they are doing.")
+            case .analysis: t("Analysis", "Screen: statistics and the notebook.")
+            case .models: t("Models", "Sub-tab: which models are available.")
+            case .endpoints: t("Remote", "Screen: servers reached over the network.")
             }
         }
 
@@ -207,7 +225,8 @@ private struct RootView: View {
                                  // the next thing on screen is its brief and
                                  // the G1 conditions still to fill in.
                                  area = .plan
-                             })
+                             },
+                             modelChainGeneration: environment.endpointGeneration)
                         // Identity by scope, still — but for what it is actually
                         // for. The view's own `State` (a half-typed message, an
                         // open sheet) is this tab's, and rebuilding is how it
@@ -320,7 +339,7 @@ private struct RootView: View {
                                          alignments: engine.alignments)
         workspace.knowledge.attach(conflicts: engine.conflicts,
                                    detector: engine.conflictDetector)
-        // Without this the scope picker's "โปรเจกต์" option has no project to
+        // Without this the scope picker's "project" option has no project to
         // mean.
         workspace.knowledge.currentProject = workspace.projectID
     }
@@ -353,7 +372,17 @@ private struct RootView: View {
     var body: some View {
         Group {
             if let engine = environment.engine {
-                areaContent(engine)
+                VStack(spacing: 0) {
+                    // A component that gave up is a fact about the whole app.
+                    // The engine coming up is not proof that everything under it
+                    // did: it can reach a database served by a sidecar this run
+                    // does not manage — measured, an orphan from four hours
+                    // earlier held the port and every launch after it started
+                    // with its own `surreal` dead and nothing on screen saying so
+                    // (AUDIT F-12, E.41).
+                    SidecarFailureBanner(environment: environment)
+                    areaContent(engine)
+                }
                     // Remembering where each tab was, and restoring it on the
                     // way back. Switching to the project you were planning and
                     // landing on Chat is the small daily cost of treating a
@@ -407,13 +436,14 @@ private struct RootView: View {
                 // that the four areas are four different *questions* — an icon
                 // does not say which one. The icon stays on the ⌘-shortcut
                 // legend and in the inventory, where there is room for both.
-                Picker("พื้นที่", selection: $area) {
+                Picker(t("Area", "Toolbar picker: which of the five areas of the app is showing."),
+                       selection: $area) {
                     ForEach(Area.allCases) { area in
                         Text(area.label).tag(area)
                     }
                 }
                 .pickerStyle(.segmented)
-                .accessibilityLabel("สลับพื้นที่ทำงาน")
+                .accessibilityLabel(t("Switch area", "Screen-reader label for the area picker."))
               }
             }
 
@@ -424,7 +454,8 @@ private struct RootView: View {
                 // whatever you were doing to change which project you were doing
                 // it in.
                 Menu {
-                    Button("General — คุยทั่วไป") {
+                    Button(t("General — everyday conversation",
+                             "Menu item: work outside any project. 'General' is the name of that workspace.")) {
                         Task { await projects.focus(.general) }
                     }
                     Divider()
@@ -441,14 +472,16 @@ private struct RootView: View {
                     // switch to the header was for.
                     Text(projects.selected?.name ?? "General")
                 }
-                .accessibilityLabel("สลับพื้นที่ทำงานระหว่าง General กับโปรเจกต์ — ตอนนี้อยู่ "
-                                    + (projects.selected?.name ?? "General"))
+                .accessibilityLabel(t("Switch workspace between General and a project — currently \(projects.selected?.name ?? "General")",
+                                      "Screen-reader label for the workspace menu. Placeholder is the workspace showing now."))
 
                 if area == .chat {
                     Toggle(isOn: $showingRail) {
-                        Label("เฝ้าดูทีม", systemImage: "sidebar.trailing")
+                        Label(t("Watch the team", "Toggle: show the right-hand rail of evidence about what the agents are doing."),
+                              systemImage: "sidebar.trailing")
                     }
-                    .accessibilityLabel("เปิดหรือปิดแถบเฝ้าดูทีมด้านขวา")
+                    .accessibilityLabel(t("Show or hide the team rail on the right",
+                                          "Screen-reader label for the rail toggle."))
                 }
               }
             }
@@ -509,7 +542,8 @@ private struct RootView: View {
                 // not move them: the list is in the same order for every kind
                 // of project, because position is how a person finds things
                 // long before reading is.
-                Picker("ส่วนของพื้นที่", selection: subTabSelection) {
+                Picker(t("Section of the area", "Picker over the sub-tabs inside one area."),
+                       selection: subTabSelection) {
                     ForEach(tabs) { tab in
                         Text(emphasised(tab) ? "• \(tab.label)" : tab.label).tag(tab)
                     }
@@ -517,7 +551,8 @@ private struct RootView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .padding(.horizontal, 12).padding(.top, 8)
-                .accessibilityLabel("เลือกส่วนของ\(area.label)")
+                .accessibilityLabel(t("Choose a section of \(area.label)",
+                                      "Screen-reader label for the sub-tab picker. Placeholder is the area name."))
                 .accessibilityHint(emphasisReason ?? "")
                 .help(emphasisReason ?? "")
             }
@@ -538,7 +573,7 @@ private struct RootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // A row rather than a `safeAreaInset`: as an inset it drew *over* the
-            // bottom of the split views under it — the "สร้างโปรเจกต์" form and
+            // bottom of the split views under it — the "create project" form and
             // the notebook list were both half-hidden behind it. A strip that
             // covers the control under it is worse than no strip.
             if projects.selected != nil {
@@ -576,9 +611,9 @@ private struct RootView: View {
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .notebook: "สมุดงาน"
-            case .files: "ไฟล์"
-            case .workflows: "ลำดับงาน"
+            case .notebook: t("Notebook", "Console pane: the script and its output.")
+            case .files: t("Files", "Console pane: files in the working folder.")
+            case .workflows: t("Workflows", "Console pane: scheduled and triggered jobs.")
             }
         }
     }
@@ -632,7 +667,7 @@ private struct RootView: View {
                 }
         case .coding:
             // The qualitative half of M15 (§20.3, P11.8). Its own tab rather
-            // than a box inside "เก็บข้อมูล" because it is the other order of
+            // than a box inside "Collect" because it is the other order of
             // work: there the instrument is designed before anybody answers,
             // here the text exists and the categories are built out of it.
             CodingView(model: workspace.coding, ingest: { transcript in
@@ -665,7 +700,8 @@ private struct RootView: View {
                        analysisPane: .explorer, explorerFocus: .external)
         case .console:
             VStack(spacing: 0) {
-                Picker("มุมมอง", selection: $consolePane) {
+                Picker(t("View", "Picker over the panes of the console sub-tab."),
+                       selection: $consolePane) {
                     ForEach(ConsolePane.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -824,7 +860,7 @@ private struct RootView: View {
         }
     }
 
-    /// General has no "เก็บข้อมูล" and no project database (§19.2).
+    /// General has no "Collect" and no project database (§19.2).
     private var workbenchTabs: [SubTab] {
         projects.selected == nil
             ? [.externalDB, .console, .results]
@@ -833,7 +869,7 @@ private struct RootView: View {
 
     /// The Workbench tab actually shown.
     ///
-    /// Leaving a project for General while standing on "เก็บข้อมูล" used to keep
+    /// Leaving a project for General while standing on "Collect" used to keep
     /// the project's questionnaire on screen — consent text, ethics number and
     /// expert ratings and all — under a header that said General, with no tab in
     /// the bar selected to say where you were. A selection that outlives the thing
@@ -895,8 +931,10 @@ private struct ProjectMenuButton: View {
     /// signal is that everything turns out to be disabled once you are in it.
     private var label: String {
         project.isOpen
-            ? "\(project.name) · ขั้น\(project.stage.label)"
-            : "\(project.name) · ปิดแล้ว (อ่านอย่างเดียว)"
+            ? t("\(project.name) · stage \(project.stage.label)",
+                "Tab title for an open project. Placeholders: the project name and its stage.")
+            : t("\(project.name) · closed (read-only)",
+                "Tab title for an archived project. Placeholder is the project name.")
     }
 }
 
@@ -968,7 +1006,8 @@ struct WorkspaceTabBar: View {
                     // `FilesView` documents and `accessibility-audit.py`
                     // checks for.
                     Image(systemName: "xmark").font(.system(size: 8))
-                        .accessibilityLabel("ปิดแท็บ \(entry.title) — ปิดแค่หน้าต่าง ไม่ใช่ปิดโครงการ")
+                        .accessibilityLabel(t("Close the \(entry.title) tab — this closes the window, not the project",
+                                              "Screen-reader label on a tab's close button. Placeholder is the tab title. The distinction matters: closing a project is a different act."))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
@@ -982,9 +1021,13 @@ struct WorkspaceTabBar: View {
     }
 
     private func spoken(_ entry: OpenWorkspaces.Entry, isActive: Bool) -> String {
-        var parts = ["แท็บ \(entry.title)"]
-        if entry.isArchived { parts.append("ปิดแล้ว อ่านอย่างเดียว") }
-        parts.append(isActive ? "กำลังดูอยู่" : "กดเพื่อสลับมา")
+        var parts = [t("\(entry.title) tab", "Screen-reader label for a workspace tab. Placeholder is the tab title.")]
+        if entry.isArchived {
+            parts.append(t("closed, read-only", "Screen-reader detail: this tab is an archived project."))
+        }
+        parts.append(isActive
+                     ? t("currently showing", "Screen-reader detail: this is the tab you are looking at.")
+                     : t("press to switch to it", "Screen-reader detail: this tab is not the one showing."))
         return parts.joined(separator: " · ")
     }
 }

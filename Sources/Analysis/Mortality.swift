@@ -33,14 +33,14 @@ public struct StandardisedMortalityRatio: Sendable, Equatable {
     public var indexed: Double { ratio * 100 }
 
     public var summary: String {
-        let direction = lower > 1 ? "สูงกว่าประชากรอ้างอิงอย่างมีนัยสำคัญ"
-            : upper < 1 ? "ต่ำกว่าประชากรอ้างอิงอย่างมีนัยสำคัญ"
-            : "ยังแยกจากประชากรอ้างอิงไม่ได้"
-        return String(format: "SMR = %.2f (95%% CI %.2f–%.2f) · ตายจริง %d ราย "
-                      + "เทียบกับ %.1f รายที่อัตราของประชากรอ้างอิงทำนายไว้ — %@",
+        let direction = lower > 1 ? localised("significantly above the reference population", "Verdict on a standardised mortality ratio.")
+            : upper < 1 ? localised("significantly below the reference population", "Verdict on a standardised mortality ratio.")
+            : localised("not yet distinguishable from the reference population", "Verdict on a standardised mortality ratio.")
+        return String(format: localised("SMR = %.2f (95%% CI %.2f–%.2f) · %d deaths observed ", "A standardised mortality ratio. Placeholders: the ratio, its two interval bounds and the observed number of deaths.")
+                      + localised("against the %.1f the reference rates predict — %@", "Ends the standardised mortality ratio. Placeholders: the expected number of deaths and the verdict."),
                       ratio, lower, upper, observed, expected, direction)
-            + " · **ช่วงคำนวณแบบ exact (Poisson)** เพราะการประมาณแบบปกติที่จำนวนตายน้อย "
-            + "ให้ขอบล่างต่ำกว่าศูนย์ ซึ่งไม่ใช่จำนวนคนตาย"
+            + localised(" · **the interval is exact (Poisson)** because at these few deaths the normal approximation ", "Says why an exact interval was used.")
+            + localised("puts the lower bound below zero, which is not a number of deaths", "Ends the reason an exact interval was used.")
     }
 }
 
@@ -78,16 +78,16 @@ public enum Mortality {
     public static func smr(_ strata: [(observed: Int, personTime: Double,
                                        referenceRate: Double)]) throws
         -> StandardisedMortalityRatio {
-        guard !strata.isEmpty else { throw StatError.notEnoughData("ไม่มีชั้นอายุ") }
+        guard !strata.isEmpty else { throw StatError.notEnoughData(localised("there are no age bands", "Why a life table cannot be built.")) }
         guard strata.allSatisfy({ $0.personTime >= 0 && $0.referenceRate >= 0 && $0.observed >= 0 })
         else {
-            throw StatError.badShape("person-time, อัตราอ้างอิง และจำนวนตาย ติดลบไม่ได้")
+            throw StatError.badShape(localised("person-time, reference rates and death counts cannot be negative", "Why a standardised mortality ratio cannot be computed."))
         }
         let observed = strata.reduce(0) { $0 + $1.observed }
         let expected = strata.reduce(0.0) { $0 + $1.personTime * $1.referenceRate }
         guard expected > 0 else {
             throw StatError.notEnoughData(
-                "อัตราของประชากรอ้างอิงทำนายว่าจะไม่มีใครตายเลย — หารด้วยศูนย์ไม่ได้")
+                localised("the reference rates predict no deaths at all — there is nothing to divide by", "Why a standardised mortality ratio cannot be computed."))
         }
 
         // Exact Poisson limits for the observed count, then scaled by the
@@ -108,13 +108,13 @@ public enum Mortality {
     public static func lifeTable(_ bands: [(age: Double, width: Double, rate: Double)],
                                  radix: Double = 100_000) throws -> LifeTable {
         guard bands.count >= 2 else {
-            throw StatError.notEnoughData("ตารางชีพต้องมีอย่างน้อยสองช่วงอายุ")
+            throw StatError.notEnoughData(localised("a life table needs at least two age bands", "Why a life table cannot be built."))
         }
         guard bands.allSatisfy({ $0.width > 0 && $0.rate >= 0 }) else {
-            throw StatError.badShape("ช่วงอายุต้องกว้างกว่าศูนย์ และอัตราตายติดลบไม่ได้")
+            throw StatError.badShape(localised("age bands must be wider than zero and mortality rates cannot be negative", "Why a life table cannot be built."))
         }
         guard zip(bands, bands.dropFirst()).allSatisfy({ $0.age < $1.age }) else {
-            throw StatError.badShape("ช่วงอายุต้องเรียงจากน้อยไปมาก")
+            throw StatError.badShape(localised("the age bands must be in ascending order", "Why a life table cannot be built."))
         }
 
         // Deaths are assumed to fall in the middle of a band, which is the

@@ -40,9 +40,10 @@ struct EntityGraphView: View {
             header
             if model.relations.isEmpty {
                 ContentUnavailableView(
-                    "ยังไม่มีความสัมพันธ์ในขอบเขตนี้",
+                    t("No relations in this scope yet", "Empty state on the graph screen."),
                     systemImage: "point.3.connected.trianglepath.dotted",
-                    description: Text("ความสัมพันธ์ถูกสกัดตอนเพิ่มเอกสารเข้าคลัง และต้องใช้โมเดล — เครื่องที่ยังโหลดโมเดลไม่ได้จะได้เอกสารครบแต่ไม่มีกราฟ"))
+                    description: Text(localised: "Relations are extracted when a document is added, and that needs a model — a machine that cannot load one gets all the documents and no graph",
+                                      "Empty-state explanation on the graph screen."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let graph {
                 canvas(graph)
@@ -50,7 +51,8 @@ struct EntityGraphView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 edgeList(graph)
             } else {
-                Text("เลือกสิ่งที่อยากดูความเชื่อมโยงจากรายการด้านบน")
+                Text(localised: "Choose something above to see what it connects to",
+                     "Instruction before a graph centre is chosen.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -71,12 +73,13 @@ struct EntityGraphView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("กราฟความรู้").font(.headline)
+                Text(localised: "Knowledge graph", "Heading of the graph screen.").font(.headline)
                 // Which library this is a picture of. Driving found the graph
                 // still showing central's relations after switching project,
                 // with nothing on screen saying so — a graph that does not name
                 // whose knowledge it is drawing is a chart with no axis label.
-                Picker("ขอบเขต", selection: Binding(
+                Picker(t("Scope", "Picker: which slice of the knowledge base is showing."),
+                       selection: Binding(
                     get: { ScopeChoice(model.scope) },
                     set: { choice in
                         guard let scope = choice.scope(of: model.currentProject) else { return }
@@ -89,25 +92,31 @@ struct EntityGraphView: View {
                     }
                 }
                 .pickerStyle(.segmented).labelsHidden().frame(width: 240)
-                .accessibilityLabel("เลือกขอบเขตของกราฟ")
+                .accessibilityLabel(t("Choose the graph scope", "Screen-reader label."))
                 Spacer()
                 // A neighbourhood, always — the whole graph at once is a
                 // hairball that looks like a lot and answers nothing.
-                Picker("ระยะ", selection: $hops) {
-                    ForEach(1...4, id: \.self) { Text("\($0) ชั้น").tag($0) }
+                Picker(t("Distance", "Picker: how many hops out from the centre to draw."),
+                       selection: $hops) {
+                    ForEach(1...4, id: \.self) {
+                        Text(localised: "\($0) hops",
+                             "How far out the graph is drawn. Placeholder is a number of hops.")
+                            .tag($0)
+                    }
                 }
                 .pickerStyle(.segmented).frame(width: 240)
-                .accessibilityLabel("ระยะที่เดินจากจุดกึ่งกลาง")
+                .accessibilityLabel(t("How far to walk from the centre", "Screen-reader label."))
             }
             // §11.8 / P18.3 — names in two scripts that may be one concept.
             // Every row is a suggestion and stays one: E.26 measured the
             // highest-scoring pair in the fixture as a *wrong* merge, above
             // every correct one, so nothing here joins two nodes on its own.
             if !model.mergeSuggestions.isEmpty {
-                GroupBox("ชื่อที่อาจเป็นสิ่งเดียวกัน") {
+                GroupBox(t("Names that might be the same thing",
+                           "Box heading over suggested entity merges.")) {
                     VStack(alignment: .leading, spacing: Space.row) {
-                        Text("ระบบเสนอเท่านั้น — คู่ที่คะแนนสูงที่สุดที่วัดได้เป็นคู่ที่ผิด (E.26) "
-                             + "การรวมจึงต้องมีคนกด")
+                        Text(localised: "Suggestions only — the highest-scoring pair ever measured here was a wrong one (E.26), so merging takes a person's press",
+                             "Explains why entity merges are never automatic.")
                             .font(.caption2).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                         ForEach(model.mergeSuggestions) { suggestion in
@@ -118,17 +127,17 @@ struct EntityGraphView: View {
                                     .font(.system(.caption2, design: .monospaced))
                                     .foregroundStyle(.secondary)
                                 Spacer()
-                                Button("ใช่ คำเดียวกัน") {
+                                Button(t("Yes, the same thing", "Button that accepts an entity merge.")) {
                                     Task { await model.decideMerge(suggestion, confirmed: true) }
                                 }
-                                Button("ไม่ใช่") {
+                                Button(t("No", "Button that dismisses the cancel confirmation.")) {
                                     Task { await model.decideMerge(suggestion, confirmed: false) }
                                 }
                             }
                             .controlSize(.small)
                             .accessibilityElement(children: .contain)
-                            .accessibilityLabel("ข้อเสนอรวมชื่อ "
-                                + suggestion.labels.map(\.text).joined(separator: " กับ "))
+                            .accessibilityLabel(t("Suggested merge of \(suggestion.labels.map(\.text).joined(separator: " and "))",
+                                                  "Screen-reader label for a merge suggestion. Placeholder is the pair of names."))
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -143,7 +152,8 @@ struct EntityGraphView: View {
                                 .buttonStyle(.bordered)
                                 .tint(entity == focus ? .accentColor : .secondary)
                                 .font(.caption)
-                                .accessibilityLabel("ดูความเชื่อมโยงของ \(entity)")
+                                .accessibilityLabel(t("See what \(entity) connects to",
+                                                      "Screen-reader label. Placeholder is the entity name."))
                         }
                     }
                 }
@@ -206,9 +216,9 @@ struct EntityGraphView: View {
                     }
                     .buttonStyle(.plain)
                     .position(place(node))
-                    .accessibilityLabel("\(node.entity) · ห่างจากจุดกึ่งกลาง \(node.hop) ชั้น · "
-                                        + "เชื่อมกับ \(node.degree) อย่าง")
-                    .accessibilityHint("กดเพื่อย้ายจุดกึ่งกลางมาที่นี่")
+                    .accessibilityLabel(t("\(node.entity) · \(node.hop) hops from the centre · connected to \(node.degree) things",
+                                          "Screen-reader label for a graph node. Placeholders: its name, its distance and its degree."))
+                    .accessibilityHint(t("press to move the centre here", "Screen-reader hint on a graph node."))
                 }
             }
         }
@@ -236,8 +246,11 @@ struct EntityGraphView: View {
                     // nothing to somebody listening.
                     .accessibilityLabel("\(edge.subject) \(edge.predicate) \(edge.object)"
                                         + (model.crossesClasses(edge, using: model.classesByEntity)
-                                           ? " · ข้ามหมวด" : ""))
-                    .accessibilityHint("กดเพื่อดูข้อความที่เป็นที่มาของความสัมพันธ์นี้")
+                                           ? t(" · crosses categories",
+                                               "Appended to an edge that joins two different subject areas.")
+                                           : ""))
+                    .accessibilityHint(t("press to read the passage this relation came from",
+                                         "Screen-reader hint on a graph edge."))
                 }
             }
         }
@@ -260,7 +273,8 @@ private struct EdgeSourceSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("ที่มาของความสัมพันธ์นี้").font(.headline)
+            Text(localised: "Where this relation came from", "Title of the edge provenance sheet.")
+                .font(.headline)
             Text("\(edge.subject) — \(edge.predicate) → \(edge.object)")
                 .font(.callout).textSelection(.enabled)
             Divider()
@@ -270,14 +284,15 @@ private struct EdgeSourceSheet: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 220)
-                Text("จาก “\(chunk.provenance.title)”")
+                Text(localised: "from “\(chunk.provenance.title)”",
+                     "Names the document a passage came from. Placeholder is its title.")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 // Honest rather than blank: the chunk may have been deleted
                 // with its document, and an edge whose source is gone should
                 // say so rather than show nothing.
-                Text("หาข้อความต้นทางไม่เจอ — อาจถูกลบไปพร้อมเอกสารแล้ว "
-                     + "(ความสัมพันธ์จะถูกลบตามในการล้างครั้งถัดไป)")
+                Text(localised: "The source passage cannot be found — it may have gone with its document (the relation is removed at the next clean-up)",
+                     "Shown when an edge outlives the passage that created it.")
                     .font(.callout).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -287,17 +302,19 @@ private struct EdgeSourceSheet: View {
                 // because it removes something a person will not see again —
                 // but what it removes is a claim, not the passage above it.
                 if let stored = model.relation(matching: edge) {
-                    Button("ไม่ใช่ความสัมพันธ์นี้ — ลบออก", role: .destructive) {
+                    Button(t("Not this relation — remove it",
+                             "Button that rejects a graph edge."),
+                           role: .destructive) {
                         Task {
                             await model.rejectRelation(stored)
                             dismiss()
                         }
                     }
-                    .accessibilityHint("ลบเฉพาะเส้นความสัมพันธ์ ข้อความต้นทางยังอยู่ "
-                                       + "และการอ่านเอกสารซ้ำจะไม่สร้างเส้นนี้ขึ้นมาอีก")
+                    .accessibilityHint(t("removes only the edge; the source text stays, and reading the document again will not recreate it",
+                                         "Screen-reader hint on the reject button."))
                 }
                 Spacer()
-                Button("ปิด") { dismiss() }
+                Button(t("Close", "Button that dismisses the endpoint sheet without saving.")) { dismiss() }
             }
         }
         .padding(Space.section)

@@ -48,9 +48,15 @@ public struct LimitationsSection: Sendable, Equatable {
 
     /// The section as prose, in the order §14.1 implies: what was assumed,
     /// what was disputed, what is thinly supported.
-    public func rendered(heading: String = "ข้อจำกัดของการศึกษานี้") -> String {
+    ///
+    /// - Parameter heading: defaulted to nil rather than to the looked-up
+    ///   title, because a default argument cannot call an internal function
+    ///   and the catalogue helper is internal.
+    public func rendered(heading: String? = nil) -> String {
+        let heading = heading ?? localised("Limitations of this study",
+                                           "Heading of the limitations section.")
         guard !items.isEmpty else {
-            return "\(heading)\n\nไม่พบข้อจำกัดที่ระบบบันทึกไว้จากขั้นตอนที่ผ่านมา"
+            return localised("\(heading)\n\nno limitation was recorded by the steps that ran", "Shown when nothing was recorded. Placeholder: the section heading.")
         }
         var lines = [heading, ""]
         for item in items { lines.append("• \(item.text)") }
@@ -74,15 +80,15 @@ public enum LimitationsBuilder {
         // §12.4 → §14.1: the assumptions, in the words the plan recorded, with
         // the reason they had to be made at all.
         for decision in plan?.decisions ?? [] where decision.wasAgentSuggested {
-            var sentence = "\(decision.question) กำหนดเป็น “\(decision.value)” "
-                + "เนื่องจากโครงร่างไม่ได้ระบุไว้"
+            var sentence = localised("\(decision.question) was set to “\(decision.value)” ", "A recorded decision. Placeholders: the question and the value chosen.")
+                + localised("because the protocol did not say", "Why a decision had to be made.")
             // The note is only worth adding when it says something the sentence
             // does not. `GapDetector` writes "โครงร่างไม่ได้ระบุไว้" for exactly
             // this case, and printing it twice reads like a stutter.
             if let note = decision.note, !sentence.contains(note) {
                 sentence += " (\(note))"
             }
-            if decision.origin == .humanConfirmed { sentence += " — ผู้วิจัยยืนยันแล้ว" }
+            if decision.origin == .humanConfirmed { sentence += localised(" — confirmed by the researcher", "Says a decision was confirmed by a person.") }
             items.append(Limitation(kind: .assumption, subject: decision.question, text: sentence))
         }
 
@@ -94,10 +100,16 @@ public enum LimitationsBuilder {
             items.append(Limitation(
                 kind: .resolvedConflict,
                 subject: conflict.question,
-                text: "มีแหล่งที่ขัดกันในประเด็น “\(conflict.question)” — "
-                    + "เลือกใช้: \(describe(decision.resolution)) "
-                    + "(ตัดสินโดย\(decision.decidedByHuman ? "ผู้วิจัย" : "ระบบ") "
-                    + "เมื่อ \(dateText(decision.decidedAt)))"))
+                text: localised("sources conflicted on “\(conflict.question)” — ", "A recorded conflict. Placeholder: the question.")
+                    + localised("resolved as: \(describe(decision.resolution)) ", "How a conflict was resolved. Placeholder: the resolution.")
+                    + {
+                        let who = decision.decidedByHuman
+                            ? localised("the researcher", "Who resolved a conflict.")
+                            : localised("the system", "Who resolved a conflict.")
+                        let when = dateText(decision.decidedAt)
+                        return localised("(decided by \(who) on \(when))",
+                                         "Who resolved a conflict and when. Placeholders: who decided and the date.")
+                    }()))
         }
 
         // §14.1's tier rule, stated as a limitation rather than left implicit.
@@ -106,8 +118,8 @@ public enum LimitationsBuilder {
             if let note = corroboration.note {
                 items.append(Limitation(
                     kind: .thinEvidence,
-                    subject: "ความหนาแน่นของหลักฐาน",
-                    text: "หลักฐานที่อ้างอิง: \(note)"))
+                    subject: localised("Density of evidence", "A kind of limitation."),
+                    text: localised("evidence cited: \(note)", "Describes the evidence behind a claim. Placeholder: the note.")))
             }
         }
 
@@ -115,7 +127,7 @@ public enum LimitationsBuilder {
         // checked, is a limitation of the analysis and not a detail of it.
         for warning in statistical {
             items.append(Limitation(kind: .statistical,
-                                    subject: warning, text: "ข้อสมมติทางสถิติ: \(warning)"))
+                                    subject: warning, text: localised("statistical assumption: \(warning)", "A statistical caveat. Placeholder: the warning.")))
         }
 
         return LimitationsSection(items: items)
@@ -123,13 +135,13 @@ public enum LimitationsBuilder {
 
     private static func describe(_ resolution: ConflictResolution) -> String {
         switch resolution {
-        case .preferA(let reason): "ฝั่ง A — \(reason)"
-        case .preferB(let reason): "ฝั่ง B — \(reason)"
-        case .bothInContext(let condition): "ถูกทั้งคู่ในบริบทต่างกัน — \(condition)"
+        case .preferA(let reason): localised("side A — \(reason)", "One side of a resolved conflict. Placeholder: the reason.")
+        case .preferB(let reason): localised("side B — \(reason)", "One side of a resolved conflict. Placeholder: the reason.")
+        case .bothInContext(let condition): localised("both hold, in different contexts — \(condition)", "A conflict resolved as context-dependent. Placeholder: the condition.")
         // §11.6 is explicit that an unresolved question must be written as
         // open rather than quietly picking a side, so it stays in Limitations
         // as exactly that.
-        case .unresolved: "ยังไม่ตัดสิน — เอกสารต้องระบุว่าประเด็นนี้ยังเปิดอยู่"
+        case .unresolved: localised("undecided — the document has to say this is still open", "A conflict that was not resolved.")
         }
     }
 

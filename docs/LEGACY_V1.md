@@ -49,10 +49,10 @@
 | # | ปัญหาที่เจอใน v1 | บทเรียนสำหรับ v2 |
 |---|---|---|
 | D1 | Embedding เป็น placeholder (hash) ทั้งระบบก่อนถูกจับได้ | **ห้ามปล่อย placeholder ที่ดูเหมือนทำงาน** — v2 ต้องมี eval ของ retrieval quality ตั้งแต่วัน 1 (v1 เลือก `all-MiniLM-L6-v2` เพราะ 384 มิติตรงกับ schema, 6 layer/22M param เบาพอ) |
-| D2 | research-agent ไม่มี web search เลยแม้ diagram จะวาดไว้ | v1 แก้ด้วย DDG HTML scraping (DDG ไม่มี public API จริงสำหรับ organic result) → **v2 ใช้ SearXNG sidecar** ([§1.2](../ARCHITECTURE.md#12-web-search--มีของฟรีถาวรไหม-apple-ให้ด้วยไหม)) |
-| D3 | ไม่มี code-agent เฉพาะ | **จงใจไม่แยก** — งานโค้ดต้อง context เต็ม + hook chain ครบ ตรงกับคำเตือนของ Cognition → v2 [§2.4](../ARCHITECTURE.md#24-ข้อยกเว้น-งานที่ห้ามแตกทีม) |
+| D2 | research-agent ไม่มี web search เลยแม้ diagram จะวาดไว้ | v1 แก้ด้วย DDG HTML scraping (DDG ไม่มี public API จริงสำหรับ organic result) → **v2 ใช้ SearXNG sidecar** ([§1.2](architecture/01-foundations.md#12-web-search--มีของฟรีถาวรไหม-apple-ให้ด้วยไหม)) |
+| D3 | ไม่มี code-agent เฉพาะ | **จงใจไม่แยก** — งานโค้ดต้อง context เต็ม + hook chain ครบ ตรงกับคำเตือนของ Cognition → v2 [§2.4](architecture/01-foundations.md#24-ข้อยกเว้น-งานที่ห้ามแตกทีม) |
 | D4 | Chunking ไม่รองรับไทย | v1 wrap `nlpo3` (newmm) → **v2 ใช้ NLTokenizer แต่ต้องเทียบคุณภาพก่อน** |
-| D5 | Config ไม่มี schema versioning/migration | v2 มีตั้งแต่ต้น ([§15](../ARCHITECTURE.md#15-m11-config--secrets)) |
+| D5 | Config ไม่มี schema versioning/migration | v2 มีตั้งแต่ต้น ([§15](architecture/03-surfaces-and-ops.md#15-m11-config--secrets)) |
 | D6 | MCP tool มีโค้ดครบแต่ไม่เคยถูกต่อเข้า tool list จริง | **บทเรียน**: มี implementation ≠ มี feature — v2 ต้องมี integration test ที่พิสูจน์ว่า tool ปรากฏใน session จริง |
 | D7 | ไม่มี BM25/full-text index — "hybrid search" ไม่เคยเกิดขึ้นจริง | v2 ต้อง index ทั้ง vector + full-text ตั้งแต่ ingestion แรก |
 
@@ -60,11 +60,11 @@
 
 | # | Bug | ป้องกันใน v2 ยังไง |
 |---|---|---|
-| B2 🔴 | **Telegram bridge ข้าม Critic/Risk/HITL ทั้งหมด** — สร้าง `AgentLoop` เองพร้อม `ShellTool` = remote shell ไม่มี approval | [§3](../ARCHITECTURE.md#3-system-hierarchy) invariant: channel execute tool เองไม่ได้เลยเชิงโครงสร้าง |
+| B2 🔴 | **Telegram bridge ข้าม Critic/Risk/HITL ทั้งหมด** — สร้าง `AgentLoop` เองพร้อม `ShellTool` = remote shell ไม่มี approval | [§3](architecture/01-foundations.md#3-system-hierarchy) invariant: channel execute tool เองไม่ได้เลยเชิงโครงสร้าง |
 | B3 | Workflow node-ID collision หลัง load | id เป็น UUID ไม่ใช่ counter |
 | B4 | Settings panel กลืน error เงียบ (แสดงหน้าว่าง) | pattern เดียวกันทุก panel + `Result` type ที่ compiler บังคับ handle |
 | B5 | Live Monitor เสีย state ทุกครั้งที่สลับหน้า, event หายเงียบ | M12 span store เป็น DB-backed ไม่ใช่ in-memory ของ view |
-| B7 | ไม่มี accessibility เลยทั้ง frontend | [§14.2](../ARCHITECTURE.md#142-workspaceui--หน้าจอทั้งหมด) — requirement ตั้งแต่ต้น |
+| B7 | ไม่มี accessibility เลยทั้ง frontend | [§14.2](architecture/03-surfaces-and-ops.md#142-workspaceui--หน้าจอทั้งหมด) — requirement ตั้งแต่ต้น |
 | B9 | หน้าต่างไม่มี minWidth/resizable, error ยาวล้นกรอบ | SwiftUI window sizing + text wrapping ตั้งแต่ต้น |
 
 ## A.4 Phase A–J ของ v1 (งานที่ทำเสร็จแล้ว — เป็น scope reference ของ v2)
@@ -82,7 +82,7 @@
 | I | Generic Bridge trait + Telegram/Discord/LINE multi-account | M4 |
 | J | Notebook (SQL+Python), plugin system, `install_package` | M8/M3/M6 |
 
-**งานที่ v1 ยังค้าง (Phase K)**: K1 Telegram remote-approval → **v2 ได้ฟรีจาก [§5.4](../ARCHITECTURE.md#54-approval-broker-sub-module)** · K2 OCR → **v2 ได้ฟรีจาก Vision framework** · K3 compaction handoff extraction → **ยังค้างอยู่ ต้อง design ใหม่**
+**งานที่ v1 ยังค้าง (Phase K)**: K1 Telegram remote-approval → **v2 ได้ฟรีจาก [§5.4](architecture/02-core-modules.md#54-approval-broker-sub-module)** · K2 OCR → **v2 ได้ฟรีจาก Vision framework** · K3 compaction handoff extraction → **ยังค้างอยู่ ต้อง design ใหม่**
 
 ---
 

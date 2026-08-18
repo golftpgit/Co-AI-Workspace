@@ -1,0 +1,137 @@
+/* The base language. Keys are the English sentences. */
+
+/* ── Agreement ───────────────────────────────────────────────── */
+
+"worse than guessing" = "worse than guessing";
+"slight" = "slight";
+"fair" = "fair";
+"moderate" = "moderate";
+"substantial" = "substantial";
+"almost perfect" = "almost perfect";
+"κ %.2f · observed agreement %.0f%% · %d units · %d coders · %@" = "κ %.2f · observed agreement %.0f%% · %d units · %d coders · %@";
+"the two coders did not code the same amount (%lld units against %lld) — " = "the two coders did not code the same amount (%lld units against %lld) — ";
+"κ only compares units both of them looked at" = "κ only compares units both of them looked at";
+"there is too little data to compute agreement" = "there is too little data to compute agreement";
+"the units were not coded by the same number of coders — Fleiss' κ assumes they were" = "the units were not coded by the same number of coders — Fleiss' κ assumes they were";
+"poor" = "poor";
+"good" = "good";
+"excellent" = "excellent";
+"ICC(2,1) %.2f · ICC(2,k) %.2f · %d units × %d raters · %@" = "ICC(2,1) %.2f · ICC(2,k) %.2f · %d units × %d raters · %@";
+
+/* ── Codebook ────────────────────────────────────────────────── */
+
+"code “%@” has no definition — an undefined code is a word two coders each read their own way " = "code “%@” has no definition — an undefined code is a word two coders each read their own way ";
+"and it surfaces later as a low κ nobody can account for" = "and it surfaces later as a low κ nobody can account for";
+"code “%@” points at a parent code that is not in the codebook" = "code “%@” points at a parent code that is not in the codebook";
+
+/* ── CodingReport ────────────────────────────────────────────── */
+
+"%lld units are left out because not everyone has coded them yet" = "%lld units are left out because not everyone has coded them yet";
+"least agreed-on code: “%@” κ %.2f" = "least agreed-on code: “%@” κ %.2f";
+"nothing has been coded yet" = "nothing has been coded yet";
+"%lld documents coded · %lld codes used" = "%lld documents coded · %lld codes used";
+"no new code has appeared since document %lld — an observation, not a finding of saturation " = "no new code has appeared since document %lld — an observation, not a finding of saturation ";
+"a study that stopped at document %lld has no evidence about the next one" = "a study that stopped at document %lld has no evidence about the next one";
+"new codes are still appearing in the most recent documents" = "new codes are still appearing in the most recent documents";
+
+/* ── ContentValidity ─────────────────────────────────────────── */
+
+"no expert has rated this item yet" = "no expert has rated this item yet";
+"IOC %.2f is below 0.50" = "IOC %.2f is below 0.50";
+"I-CVI %.2f is below 0.78" = "I-CVI %.2f is below 0.78";
+"no assessment yet" = "no assessment yet";
+"%lld experts" = "%lld experts";
+"%lld/%lld items passed" = "%lld/%lld items passed";
+"at least %lld experts are needed — " = "at least %lld experts are needed — ";
+"the IOC and CVI thresholds are set for a panel of 3 to 5" = "the IOC and CVI thresholds are set for a panel of 3 to 5";
+"items not yet passing: %@" = "items not yet passing: %@";
+
+/* ── FactorStructure ─────────────────────────────────────────── */
+
+"factor analysis needs at least %lld items (there are %lld) — " = "factor analysis needs at least %lld items (there are %lld) — ";
+"the structure of two items is a correlation, not a factor" = "the structure of two items is a correlation, not a factor";
+"%lld respondents against %lld items — there must be more respondents than items " = "%lld respondents against %lld items — there must be more respondents than items ";
+"otherwise the correlation matrix is singular by construction, and every number out of it is an artefact of the sample size" = "otherwise the correlation matrix is singular by construction, and every number out of it is an artefact of the sample size";
+"the rows do not all have the same number of items" = "the rows do not all have the same number of items";
+"everyone answered these items identically, so there is no variance to analyse: " = "everyone answered these items identically, so there is no variance to analyse: ";
+"the correlation matrix cannot be inverted — %@" = "the correlation matrix cannot be inverted — %@";
+"factor extraction failed — %@" = "factor extraction failed — %@";
+"unacceptable" = "unacceptable";
+"miserable" = "miserable";
+"mediocre" = "mediocre";
+"middling" = "middling";
+"meritorious" = "meritorious";
+"marvellous" = "marvellous";
+"this data is not yet suitable for factor analysis" = "this data is not yet suitable for factor analysis";
+"Bartlett's test is not significant — the items are not related enough to share a factor" = "Bartlett's test is not significant — the items are not related enough to share a factor";
+"items with an MSA below .50: %@" = "items with an MSA below .50: %@";
+"Kaiser's criterion (eigenvalue > 1)" = "Kaiser's criterion (eigenvalue > 1)";
+"parallel analysis (95th percentile of random data)" = "parallel analysis (95th percentile of random data)";
+"fixed at %lld factors" = "fixed at %lld factors";
+"%lld respondents — under the 100 most textbooks give as a floor " = "%lld respondents — under the 100 most textbooks give as a floor ";
+"the result is not stable enough to conclude a structure from" = "the result is not stable enough to conclude a structure from";
+"a respondent-to-item ratio of %.1f:1 — below 5:1" = "a respondent-to-item ratio of %.1f:1 — below 5:1";
+"extraction did not converge in %d iterations — the communalities were still moving by %.4f " = "extraction did not converge in %d iterations — the communalities were still moving by %.4f ";
+"per iteration when it stopped, so the figures below are where it was cut off" = "per iteration when it stopped, so the figures below are where it was cut off";
+"a Heywood case at %@" = "a Heywood case at %@";
+" — a communality above 1 is mathematically impossible, so either the number of factors or the sample size does not fit the data" = " — a communality above 1 is mathematically impossible, so either the number of factors or the sample size does not fit the data";
+"the two criteria disagree on how many factors there are (Kaiser %lld · " = "the two criteria disagree on how many factors there are (Kaiser %lld · ";
+"parallel analysis %lld) — one has to be chosen, and the choice explained" = "parallel analysis %lld) — one has to be chosen, and the choice explained";
+"items that load on no factor at all: %@" = "items that load on no factor at all: %@";
+"items that load on more than one factor: %@" = "items that load on more than one factor: %@";
+"%d factors (%@) · %.1f%% of the variance explained · %d items · %d respondents" = "%d factors (%@) · %.1f%% of the variance explained · %d items · %d respondents";
+"the chosen criterion gives 0 factors — nothing shared rises above the level of random data" = "the chosen criterion gives 0 factors — nothing shared rises above the level of random data";
+"%lld factors were asked for from %lld items — there must be fewer factors than items" = "%lld factors were asked for from %lld items — there must be fewer factors than items";
+"%lld/%lld constructs have every item on one factor" = "%lld/%lld constructs have every item on one factor";
+"items loading on a different factor than declared: %@" = "items loading on a different factor than declared: %@";
+"constructs the data cannot tell apart: %@" = "constructs the data cannot tell apart: %@";
+"ω %.3f · a single factor explains %.1f%% of the variance · %d respondents" = "ω %.3f · a single factor explains %.1f%% of the variance · %d respondents";
+
+/* ── Instrument ──────────────────────────────────────────────── */
+
+"%lld-point Likert" = "%lld-point Likert";
+"single choice" = "single choice";
+"multiple choice" = "multiple choice";
+"open text" = "open text";
+"number" = "number";
+"date" = "date";
+"ranking" = "ranking";
+"file upload" = "file upload";
+"approved by %@, reference %@ · recorded by %@" = "approved by %@, reference %@ · recorded by %@";
+"declared not to be human-subjects research: %@ · by %@" = "declared not to be human-subjects research: %@ · by %@";
+
+/* ── InstrumentDisposal ──────────────────────────────────────── */
+
+"this version has been through the gate and cannot be deleted — a gated instrument is the evidence of what respondents were shown " = "this version has been through the gate and cannot be deleted — a gated instrument is the evidence of what respondents were shown ";
+"to retire it, make a new version and stop opening this one (§20.6)" = "to retire it, make a new version and stop opening this one (§20.6)";
+"%lld sets of answers are tied to this instrument — delete it and what is left is a table of numbers nobody can match to a question" = "%lld sets of answers are tied to this instrument — delete it and what is left is a table of numbers nobody can match to a question";
+"%lld collection rounds have been opened with this instrument — an opened round is the record of when fieldwork happened " = "%lld collection rounds have been opened with this instrument — an opened round is the record of when fieldwork happened ";
+"even if nobody answered" = "even if nobody answered";
+
+/* ── InstrumentGate ──────────────────────────────────────────── */
+
+"“%@” is tied to no construct and is not marked as background data — " = "“%@” is tied to no construct and is not marked as background data — ";
+"an item that measures nothing is a column nothing can be done with (§20.3)" = "an item that measures nothing is a column nothing can be done with (§20.3)";
+"“%@” is marked as background data and tied to a construct — it must be one or the other" = "“%@” is marked as background data and tied to a construct — it must be one or the other";
+"no item measures the construct “%@”" = "no item measures the construct “%@”";
+"the construct “%@” is tied to no research question" = "the construct “%@” is tied to no research question";
+"no construct answers the research question “%@”" = "no construct answers the research question “%@”";
+"the skip condition on “%@” points at an item that does not exist, or at one before itself" = "the skip condition on “%@” points at an item that does not exist, or at one before itself";
+"every item measuring the construct “%@” is unscorable — its reliability cannot be computed at all" = "every item measuring the construct “%@” is unscorable — its reliability cannot be computed at all";
+"the questionnaire has no items yet" = "the questionnaire has no items yet";
+"this instrument cannot be published yet — outstanding: " = "this instrument cannot be published yet — outstanding: ";
+"through the gate, approved by %@ · " = "through the gate, approved by %@ · ";
+"the item map is complete (every item is tied to a construct or marked as background data)" = "the item map is complete (every item is tied to a construct or marked as background data)";
+"the consent page is complete" = "the consent page is complete";
+"an ethics record exists (an approval number or a declaration of exemption) naming who recorded it" = "an ethics record exists (an approval number or a declaration of exemption) naming who recorded it";
+"content validity meets the thresholds (IOC ≥ 0.5 on every item · I-CVI ≥ 0.78 · S-CVI/Ave ≥ 0.90)" = "content validity meets the thresholds (IOC ≥ 0.5 on every item · I-CVI ≥ 0.78 · S-CVI/Ave ≥ 0.90)";
+"the assessment submitted does not match this instrument's items " = "the assessment submitted does not match this instrument's items ";
+"(%lld items assessed of the %lld that need it)" = "(%lld items assessed of the %lld that need it)";
+"no expert content-validity assessment has been made yet" = "no expert content-validity assessment has been made yet";
+"an approver has to be named" = "an approver has to be named";
+
+/* ── ScaleReport ─────────────────────────────────────────────── */
+
+"the options have no order of their own — numbering them 1, 2, 3 " = "the options have no order of their own — numbering them 1, 2, 3 ";
+"invents an order nobody defined" = "invents an order nobody defined";
+"a “%@” item is not a score reliability can be computed from" = "a “%@” item is not a score reliability can be computed from";

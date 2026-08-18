@@ -16,7 +16,7 @@
 
 ## C.0 SurrealDB v3.2.0 quirks — ยืนยันซ้ำ/ค้นพบใหม่จาก spike ฝั่ง Swift (2026-08-10)
 
-ทดสอบจริงกับ SurrealDB **v3.2.0** ผ่าน `SurrealClient` ที่เขียนเอง ([E.8](VERIFICATION_LOG.md#e8-surrealclient-spike--เขียน-client-เอง-กับ-surrealdb-v320)):
+ทดสอบจริงกับ SurrealDB **v3.2.0** ผ่าน `SurrealClient` ที่เขียนเอง ([E.8](verification/01-e01-e15.md#e8-surrealclient-spike--เขียน-client-เอง-กับ-surrealdb-v320)):
 
 | quirk | สถานะ | รายละเอียด |
 |---|---|---|

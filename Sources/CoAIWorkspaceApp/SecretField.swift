@@ -27,7 +27,7 @@ struct SecretField: View {
     @State private var typed = ""
     @State private var saveError: String?
     /// Bumped after a write so the status line re-reads the vault. Without it
-    /// the sentence would keep saying "ยังไม่ได้ตั้ง" right after a successful
+    /// the sentence would keep saying "not set yet" right after a successful
     /// save, which reads as the save having failed.
     @State private var revision = 0
 
@@ -40,17 +40,22 @@ struct SecretField: View {
         VStack(alignment: .leading, spacing: 6) {
             LabeledContent(title) {
                 TextField(placeholder, text: $name)
-                    .accessibilityLabel("\(title) — ชื่อที่ใช้เก็บ")
+                    .accessibilityLabel(t("\(title) — the name it is stored under",
+                                          "Screen-reader label for a secret's name field. Placeholder is the field title."))
             }
 
             HStack(spacing: 8) {
-                SecureField("ค่าที่จะเก็บ", text: $typed)
-                    .accessibilityLabel("\(title) — ค่า")
+                SecureField(t("The value to store", "Secure field for a secret's value."), text: $typed)
+                    .accessibilityLabel(t("\(title) — the value",
+                                          "Screen-reader label for a secret's value field. Placeholder is the field title."))
                     .disabled(name.isEmpty)
-                Button("บันทึกลง Keychain") { save(typed.isEmpty ? nil : typed) }
+                Button(t("Save to the Keychain", "Button that stores a secret.")) {
+                    save(typed.isEmpty ? nil : typed)
+                }
                     .disabled(name.isEmpty || typed.isEmpty)
                 if display.canRemove {
-                    Button("ลบ", role: .destructive) { save(nil) }
+                    Button(t("Delete", "Context-menu item that removes a file."),
+                           role: .destructive) { save(nil) }
                 }
             }
 
@@ -60,7 +65,8 @@ struct SecretField: View {
                 .accessibilityLabel(display.text)
 
             if let saveError {
-                Text("บันทึกไม่สำเร็จ: \(saveError)")
+                Text(localised: "Could not save: \(saveError)",
+                     "Shown when storing a secret failed. Placeholder is the reason.")
                     .font(.caption).foregroundStyle(.red)
             }
         }
@@ -74,7 +80,9 @@ struct SecretField: View {
             typed = ""
             revision += 1
         } catch {
-            saveError = ReadableFailure.message(for: error, doing: "เก็บความลับลง Keychain")
+            saveError = ReadableFailure.message(for: error,
+                                               doing: t("storing the secret in the Keychain",
+                                                        "Names the action that failed."))
         }
     }
 

@@ -97,15 +97,25 @@ public struct ScheduleTimeline: Sendable, Equatable {
         /// reason this chart took four plan items to draw.
         public var gapNote: String? {
             guard segments.count > 1, calendarSeconds > workedSeconds * 2 else { return nil }
-            return "ทำจริง \(Self.readable(workedSeconds)) "
-                + "แต่กระจายอยู่ในช่วง \(Self.readable(calendarSeconds)) — ช่องว่างคือช่องว่าง"
+            return t("\(Self.readable(workedSeconds)) of real work spread across \(Self.readable(calendarSeconds)) — a gap is a gap",
+                     "Note on a timeline row. Placeholders: the worked time and the calendar span.")
         }
 
         static func readable(_ seconds: TimeInterval) -> String {
-            if seconds >= 86_400 { return String(format: "%.1f วัน", seconds / 86_400) }
-            if seconds >= 3_600 { return String(format: "%.1f ชม.", seconds / 3_600) }
-            if seconds >= 60 { return "\(Int((seconds / 60).rounded())) นาที" }
-            return "\(Int(seconds.rounded())) วิ"
+            if seconds >= 86_400 {
+                return String(format: t("%.1f days", "A duration in days. Placeholder is a number."),
+                              seconds / 86_400)
+            }
+            if seconds >= 3_600 {
+                return String(format: t("%.1f h", "A duration of an hour or more. Placeholder is a number of hours."),
+                              seconds / 3_600)
+            }
+            if seconds >= 60 {
+                return t("\(Int((seconds / 60).rounded())) min",
+                         "A duration in minutes. Placeholder is a whole number.")
+            }
+            return t("\(Int(seconds.rounded())) s",
+                     "A short duration in seconds. Placeholder is a whole number.")
         }
     }
 
@@ -175,11 +185,16 @@ public struct ScheduleTimeline: Sendable, Equatable {
         let known = Set(leaves.map(\.id))
         for (packageID, intervals) in byPackage.sorted(by: { $0.key < $1.key })
         where !known.contains(packageID) {
-            rows.append(row(packageID, "ใบงานที่ถูกลบไปแล้ว (\(packageID))", intervals))
+            rows.append(row(packageID,
+                            t("a work package that has been deleted (\(packageID))",
+                              "Timeline row for work against a package that no longer exists. Placeholder is its id."),
+                            intervals))
         }
 
         if !unplanned.isEmpty {
-            rows.append(row(nil, "งานที่ไม่ได้ผูกกับใบงาน", unplanned))
+            rows.append(row(nil,
+                            t("work not tied to any package", "Timeline row for unplanned work."),
+                            unplanned))
         }
         return ScheduleTimeline(rows: rows, start: first, end: last)
     }

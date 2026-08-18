@@ -1,19 +1,110 @@
 #!/bin/bash
 # One command for build + test + the project's own structural rules.
-# Run this before considering any Task in IMPLEMENTATION_PLAN.md done.
+# Run this before considering any Task in docs/plan/ done.
+#
+#   ./scripts/check.sh          fast round, every commit
+#   ./scripts/check.sh --full   before closing a task — red if Tier 1 is missing
+#
+# The difference between the two is what happens when the GX10 is unreachable,
+# not what gets checked: both rounds talk to Tier 1 when it answers (C1). A
+# laptop away from the LAN still goes green; a task still cannot be closed
+# without the model the app actually runs on having been exercised.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 
+FULL=0
+[ "${1:-}" = "--full" ] && FULL=1
+
 FAILED=0
+# What failed, not just how many. A round that ends with "something above went
+# wrong" in a 400-line log is a signal nobody can act on — and it happened here:
+# one round went red, the next went green with no edit in between, and the
+# summary could not say what had been different (M5).
+FAILURES=""
+CURRENT_STEP="(ก่อนเริ่ม)"
 step() {
+  CURRENT_STEP="$1"
   echo ""
   echo "── $1 ──"
 }
-fail() { echo "   ✗ $1"; FAILED=1; }
+fail() {
+  echo "   ✗ $1"
+  FAILED=1
+  FAILURES="$FAILURES
+   • [$CURRENT_STEP] $1"
+}
 ok()   { echo "   ✓ $1"; }
+
+# ── pre-flight ───────────────────────────────────────────────
+#
+# A run that was killed mid-way leaves sidecars behind, ~200 MB each — eleven of
+# them once. On a 16 GB machine that is the whole of "the model would not load"
+# in the next run, and it reads as a code failure rather than as rubbish from
+# the last one (U17, AUDIT F-3). Free memory is printed for the same reason:
+# the answer to "why did this pass yesterday" is usually here.
+step "pre-flight"
+# `helpers/surreal`, case-insensitive, and **not** `vendor/helpers/surreal`.
+# The narrower pattern is what this project used for months, and it misses the
+# one that matters most: a sidecar started by the packaged app runs from
+# `Co-AI Workspace.app/Contents/Resources/Helpers/surreal`. One survived every
+# cleanup for four hours, held the database LOCK, and every launch after it
+# started with no database at all — while the window opened normally.
+ORPHANS=$(pgrep -if 'helpers/surreal' 2>/dev/null | wc -l | tr -d ' ')
+if [ "$ORPHANS" -gt 0 ]; then
+  echo "   ⚠ เก็บ sidecar ค้างจากรอบก่อน $ORPHANS ตัว"
+  pkill -if 'helpers/surreal' 2>/dev/null
+  sleep 1
+fi
+free_gb() {
+  vm_stat | awk '/Pages free/ {f=$3} /Pages inactive/ {i=$3}
+                 END {gsub(/\./,"",f); gsub(/\./,"",i);
+                      printf "%.1f", (f+i)*4096/1073741824}'
+}
+RAM_BEFORE="$(free_gb)"
+ok "sidecar ค้าง $ORPHANS ตัว · RAM ว่าง ${RAM_BEFORE} GB"
+
+# ── Tier 1: find it, do not wait to be told where it is ──────
+#
+# The default used to be LM Studio on the loopback, which was true while this
+# machine was only a laptop. Since 2026-08-15 the GX10 is the main brain, and on
+# the day this was audited the default pointed at a dead port while the GX10 was
+# up — so the Tier 1 suite had been skipped in every round, silently, and
+# `ALL CHECKS PASSED` was printed on top of it (AUDIT F-2). LM Studio is off the
+# list entirely now (C7). The order still respects a value somebody set by hand.
+TIER1=""
+TIER1_MODEL=""
+TIER1_WINDOW=""
+# The GX10's address is this machine's, not the repo's. `COAI_TIER1_CANDIDATES`
+# lets another machine name its own (space separated), and is also how the
+# "no Tier 1 anywhere" branch below gets exercised on a machine that has one.
+TIER1_CANDIDATES="${COAI_TIER1_CANDIDATES:-http://192.168.1.205:8000/v1}"
+# shellcheck disable=SC2086
+for candidate in "${COAI_TEST_ENDPOINT:-}" $TIER1_CANDIDATES; do
+  [ -n "$candidate" ] || continue
+  if curl -s --max-time 4 "$candidate/models" >/dev/null 2>&1; then
+    TIER1="$candidate"
+    break
+  fi
+done
+if [ -n "$TIER1" ]; then
+  export COAI_TEST_ENDPOINT="$TIER1"
+  read -r TIER1_MODEL TIER1_WINDOW <<<"$(curl -s --max-time 4 "$TIER1/models" \
+    | /usr/bin/python3 -c 'import sys,json
+try:
+    d = json.load(sys.stdin)["data"][0]
+    print(d.get("id","?"), d.get("max_model_len","?"))
+except Exception:
+    print("? ?")' 2>/dev/null)"
+  ok "Tier 1: $TIER1 · $TIER1_MODEL · window $TIER1_WINDOW"
+else
+  echo "   ⊘ Tier 1: ไม่พบ endpoint ที่ตอบ"
+  if [ "$FULL" = "1" ]; then
+    fail "โหมด --full ต้องมี Tier 1 — GX10 ต่อไม่ได้ (ตั้ง COAI_TEST_ENDPOINT ถ้าอยู่ที่อื่น)"
+  fi
+fi
 
 # MLX's Metal kernels are a per-machine artifact like vendor/helpers/surreal,
 # because SwiftPM cannot build them (ARCHITECTURE E.13). Keep the working copy
@@ -53,15 +144,35 @@ echo "$TEST_OUT" | grep -E "Test run with|error:" | tail -5
 # act on — and the timing-dependent pair in U12 only fails while the machine is
 # busy, which is exactly when this script is running.
 echo "$TEST_OUT" | grep '✘ Test "' | sed 's/^/   ✗ /' | head -10
+# And *what* the issue was. Swift Testing prints the test name on one line and
+# the recorded message on another; printing only the first gives "recorded an
+# issue" and nothing to act on — which is the same silence M5 is about, one
+# level further in. Contract failures against a live endpoint say which case
+# and what it saw, and that is the whole value of running them.
+echo "$TEST_OUT" | grep -E '^✘|recorded an issue|Expectation failed|Caught error' \
+  | grep -v '✘ Test "' | sed 's/^/     ↳ /' | head -8
+# The contract prints its own detail, because the test framework does not.
+echo "$TEST_OUT" | grep '^CONTRACT-FAILED:' | sed 's/^/     ↳ /' | head -6
 # What the suite could not check. Not failures — a machine with no
 # OpenAI-compatible endpoint is the state P5.4 is working towards — but they
 # stay in front of a person, because a silent skip reads exactly like a pass.
-echo "$TEST_OUT" | grep "^SKIPPED:" | sort -u | sed 's/^/   ⊘ /' 
+echo "$TEST_OUT" | grep "^SKIPPED:" | sort -u | sed 's/^/   ⊘ /'
+# And the half that must not read like a pass. A skip that touches what the plan
+# calls the main brain is a hole in the round, not a note about the machine —
+# so it is counted, named, and in --full it is red (TEST_PROTOCOL §3.2).
+SKIPPED_OK=$(echo "$TEST_OUT" | grep -c "^SKIPPED:" || true)
+CRITICAL_SKIPS=$(echo "$TEST_OUT" | grep -c "^SKIPPED-CRITICAL:" || true)
+echo "$TEST_OUT" | grep "^SKIPPED-CRITICAL:" | sort -u | sed 's/^/   🔴 ข้ามไม่ได้: /'
+if [ "$CRITICAL_SKIPS" -gt 0 ] && [ "$FULL" = "1" ]; then
+  fail "ข้ามการตรวจที่แตะแกนหลัก $CRITICAL_SKIPS จุด"
+fi
+TESTS_PASSED=$(echo "$TEST_OUT" | grep -oE "Test run with [0-9]+ tests" | grep -oE "[0-9]+" | tail -1)
 echo "$TEST_OUT" | grep -q "Test run with .* passed" && ok "tests" || fail "tests"
 
 # Structural rules from ARCHITECTURE §0.2 — the duplication that made v1 hard
 # to maintain is cheap to catch mechanically.
 step "embedding model"
+echo "   RAM ว่างตอนเริ่มด่านนี้: $(free_gb) GB"
 if [ -f "vendor/metal/$BUNDLE/Contents/Resources/default.metallib" ]; then
   # The kernels have to sit beside the executable that uses them: MLX resolves
   # them through the main bundle, which for a plain executable is its directory.
@@ -80,13 +191,59 @@ if [ -f "vendor/metal/$BUNDLE/Contents/Resources/default.metallib" ]; then
   # and it is the only place the guaranteed floor is checked against real
   # weights. Skips (exit 0) on a machine with no chat model installed.
   step "local chat model (Tier 0.5)"
-  if swift run MLXCheck 2>&1 | tail -16; then
+  echo "   RAM ว่างตอนเริ่มด่านนี้: $(free_gb) GB"
+  # The exit code, not a grep for ✗.
+  #
+  # This used to read `if swift run MLXCheck | tail -16; then`, which tests
+  # `tail` and therefore never failed. Grepping the output instead looked like
+  # the fix and was worse: MLXCheck prints a ✗ beside any model in the
+  # catalogue too big for the free RAM, which is inventory, not a verdict — so
+  # the step went red or green depending on how much memory happened to be
+  # free, with every case inside it passing. That is the shape of the flaky
+  # round in E.39.
+  MLX_OUT="$(swift run MLXCheck 2>&1)"
+  MLX_EXIT=$?
+  echo "$MLX_OUT" | tail -16
+  # Kept in front of a person even when the step passes: a model that no longer
+  # fits is how Tier 0.5 quietly stops being the floor it is supposed to be.
+  echo "$MLX_OUT" | grep "^ *✗" | sed 's/^ */   ⚠ /'
+  if [ "$MLX_EXIT" -eq 0 ]; then
     ok "local chat model"
   else
-    fail "local chat model"
+    fail "local chat model (MLXCheck exit $MLX_EXIT)"
   fi
+  TIER05_NOTE="$(echo "$MLX_OUT" | grep '⊘' | head -1 | sed 's/^ *//')"
+  [ -z "$TIER05_NOTE" ] && TIER05_NOTE="$(echo "$MLX_OUT" | grep 'ใช้:' | head -1 | sed 's/^ *//')"
 else
   fail "no metal kernels — run ./scripts/build-metallib.sh"
+fi
+
+# ── Tier 1, against the endpoint rather than against a mock ──
+#
+# `gx10-check.sh` has existed since P15.0 and asserts on the *parsed* reply
+# rather than on the status code, because "the server is up" has twice not meant
+# "the app will work" — tool calling disabled returned 400s, and the wrong parser
+# returned 200 with `tool_calls: null` while the whole agent system quietly
+# degraded to a chatbot. Nothing had ever run it (AUDIT F-2: D6, ninth time).
+if [ "$FULL" = "1" ] && [ -n "$TIER1" ]; then
+  step "Tier 1 endpoint (P15.0/P15.2)"
+  HOSTPORT="$(echo "$TIER1" | sed 's|^https\{0,1\}://||; s|/v1/*$||')"
+  if ./scripts/gx10-check.sh "$HOSTPORT" 2>&1 | tail -22; then
+    ok "Tier 1 ทำได้ครบสามอย่างที่แอปพึ่ง"
+  else
+    fail "Tier 1 ตอบ แต่ทำสิ่งที่แอปพึ่งไม่ได้ (tool call / reasoning split / structured output)"
+  fi
+
+  # P9.1's other half: how good the judgements are, not just whether the
+  # endpoint answers. `gx10-check.sh` proves the plumbing; this proves the
+  # answers. The floor is a recorded number rather than a target — it exists so
+  # a change that makes the judgements worse cannot land quietly.
+  step "คุณภาพคำตัดสิน (P9.1)"
+  if swift run QualityCheck 2>&1 | tail -20; then
+    ok "คุณภาพไม่ต่ำกว่าพื้นที่บันทึกไว้"
+  else
+    fail "คุณภาพคำตัดสินตกจากที่เคยวัดได้ (P9.1)"
+  fi
 fi
 
 step "structure"
@@ -102,6 +259,9 @@ DUP_SCOPE=$(grep -rlE "enum Scope[[:space:]]*[:{]" Sources --include=*.swift | w
 # measured. The list is spelled out rather than derived from Package.swift: an
 # executable added here is a deliberate act, and having to name it is the point
 # at which somebody asks whether the printing belongs in a library.
+# `QualityCheck` joined the list in P9.1: what it prints *is* the product — a
+# score with the wrong cases named beside it, which is the only form of that
+# number anybody can act on.
 #
 # Anchored on a word boundary since P11.1's gate work: `InstrumentFootprint(`
 # ends in the same six letters, and so would any `Blueprint(` or `Sprint(`. A
@@ -116,7 +276,7 @@ if grep -rnE "(^|[^A-Za-z0-9_.])print\(" Sources --include=*.swift \
    | grep -v "^Sources/CoAIWorkspaceApp" | grep -v "^Sources/EmbeddingCheck" \
    | grep -v "^Sources/MLXCheck" | grep -v "^Sources/TierOneCheck" \
    | grep -v "^Sources/UIResponsivenessCheck" | grep -v "^Sources/ScreenCheck" \
-   | grep -v "^Sources/ConnectorCheck" | grep -q .; then
+   | grep -v "^Sources/ConnectorCheck" | grep -v "^Sources/QualityCheck" | grep -q .; then
   fail "print() outside the app target — use AppLog/os.Logger"
 else
   ok "no stray print() in library targets"
@@ -248,7 +408,7 @@ grep -A 6 "static let notBuiltYet" Sources/CoreEngine/RiskScorer.swift \
 # And every implemented tool is on the tool list the app builds. A tool nobody
 # registers is the same gap one step later.
 UNREGISTERED=""
-for tool in IngestURLTool AnalysisQueryTool AnalysisExecuteTool SaveDocumentTool PullDBTableTool; do
+for tool in IngestURLTool AnalysisQueryTool AnalysisExecuteTool SaveDocumentTool PullDBTableTool ReadFileTool WriteFileTool; do
   grep -rq "$tool(" Sources/CoAIWorkspaceApp --include=*.swift || UNREGISTERED="$UNREGISTERED $tool"
 done
 if [ -n "$UNREGISTERED" ]; then
@@ -456,10 +616,16 @@ bad = []
 for path in glob.glob('Sources/CoAIWorkspaceApp/*.swift'):
     text = open(path, encoding='utf-8').read()
     # A `Text("…` whose argument runs on with `+` before the closing paren.
-    for found in re.finditer(r'Text\((?!markdown:|verbatim:)"(?:[^"\\]|\\.)*"\s*\n?\s*\+', text):
+    for found in re.finditer(r'Text\((?!markdown:|verbatim:|localised:)"(?:[^"\\]|\\.)*"\s*\n?\s*\+', text):
         chunk = text[found.start():found.start() + 600]
         argument = chunk[:chunk.find(')\n')] if ')\n' in chunk else chunk
         if '**' in argument:
+            bad.append('%s:%d' % (path.split('/')[-1], text[:found.start()].count('\n') + 1))
+    # The same failure through the localisation door: `Text(t("… **x** …"))`
+    # hands `Text` a looked-up `String`, which is not a literal either. Use
+    # `Text(localised:)`, which parses it. Found while migrating (2026-08-18).
+    for found in re.finditer(r'Text\(\s*t\(\s*"((?:[^"\\]|\\.)*)"', text):
+        if '**' in found.group(1):
             bad.append('%s:%d' % (path.split('/')[-1], text[:found.start()].count('\n') + 1))
 print(' '.join(sorted(set(bad))))
 MD
@@ -524,7 +690,7 @@ fi
 # deciding to drop it, never by being forgotten.
 MISSING_SCREENS=$(/usr/bin/python3 - <<'INVENTORY'
 import re
-arch = open('ARCHITECTURE.md').read()
+arch = open('docs/architecture/03-surfaces-and-ops.md').read()
 table = arch[arch.index('### 14.2 WorkspaceUI'):arch.index('### 14.3 App Intents')]
 # Rows look like: | **Chat** | ... |  — with an optional *(ใหม่)* after the name.
 names = re.findall(r'^\| \*\*([^*]+)\*\*', table, re.M)
@@ -686,13 +852,15 @@ fi
 STALE_STATUS=$(/usr/bin/python3 - <<'PLAN'
 import re
 bad = []
-for i, line in enumerate(open('IMPLEMENTATION_PLAN.md'), 1):
-    m = re.match(r'\| \*\*(P\d+\.\d+[a-z]?)\*\*[^|]*\|[^|]*\|[^|]*\|(.*)\|$', line)
-    if not m:
-        continue
-    task, status = m.group(1), m.group(2).strip()
-    if status.startswith('—') and ('✅' in status or '🔶' in status):
-        bad.append(f'{task}@{i}')
+import glob
+for path in sorted(glob.glob('docs/plan/p*.md')):
+    for i, line in enumerate(open(path), 1):
+        m = re.match(r'\| \*\*(P\d+\.\d+[a-z]?)\*\*[^|]*\|[^|]*\|[^|]*\|(.*)\|$', line)
+        if not m:
+            continue
+        task, status = m.group(1), m.group(2).strip()
+        if status.startswith('—') and ('✅' in status or '🔶' in status):
+            bad.append(f'{task}@{path}:{i}')
 print(' '.join(bad))
 PLAN
 )
@@ -1429,17 +1597,455 @@ fi
 #    fallback constant is allowed and expected — a server that reports nothing
 #    has to leave the app with something — but `maxModelLength` has to be what
 #    is asked first.
-if awk '/executors.append\(VLLMExecutor\(/,/^        }$/' Sources/CoAIWorkspaceApp/Engine.swift \
+#
+#    The construction moved out of `Engine.build` into `EndpointExecutors` so
+#    that saving on the settings screen can build the same chain (AUDIT F-1).
+#    The rule followed it: a rule left pointing at the old file would have gone
+#    on passing while guarding an empty range, which is the quiet failure this
+#    whole script exists to prevent.
+if awk '/executors.append\(VLLMExecutor\(/,/^        }$/' \
+     Sources/CoAIWorkspaceApp/EndpointExecutors.swift \
    | grep -q "maxModelLength"; then
   ok "each endpoint's context window comes from its own /v1/models reply"
 else
   fail "an executor is built with a hardcoded context window (P15.3)"
 fi
 
+# 3. And the construction stays in one place. A second `VLLMExecutor(` outside
+#    the factory is the drift this refactor was for: the copy that gets a new
+#    field first is the copy somebody is reading, and the other one keeps
+#    building executors that are quietly a version behind.
+EXTRA_BUILDERS=$(grep -rln "VLLMExecutor(" Sources/CoAIWorkspaceApp --include=*.swift \
+  | grep -v "EndpointExecutors.swift" || true)
+if [ -n "$EXTRA_BUILDERS" ]; then
+  echo "$EXTRA_BUILDERS" | sed 's/^/   /'
+  fail "an executor is built outside EndpointExecutors — two chains would drift (F-1)"
+else
+  ok "every Tier 1 executor is built in one place"
+fi
+
 if grep -rn ": \[String: Any\]" Sources --include=*.swift | grep -q "Sendable"; then
   fail "[String: Any] on a Sendable type (see ARCHITECTURE App. C)"
 else
   ok "no [String: Any] on Sendable types"
+fi
+
+# AUDIT F-12 — a component that gave up says so where the person is.
+#
+# The status has existed since P0.4 and was drawn on one screen: `ระบบ →
+# สถานะระบบ`, which is a screen somebody opens *after* they already suspect
+# something. Measured, the app can even come up healthy on top of a dead
+# sidecar — an orphan from an earlier run held the port, so `surreal` in this
+# run gave up and the window opened normally (E.41).
+# Comment lines skipped. Writing this rule without that is a mistake this file
+# has now made twice — the F-1 rules passed happily against code that had been
+# commented out, because the name is still there in the comment.
+BANNER_DRAWN=$(grep -rn "SidecarFailureBanner(" Sources/CoAIWorkspaceApp --include=*.swift \
+  | grep -v "BootStatusView.swift" | grep -vE ':[0-9]+: *(//|\*)' || true)
+if [ -n "$BANNER_DRAWN" ]; then
+  ok "a sidecar that gave up is visible from wherever the person is"
+else
+  fail "the failed-sidecar banner is drawn nowhere — a dead component would be silent again (F-12)"
+fi
+
+# U17 / AUDIT F-3 — a sidecar dies with the process that started it.
+#
+# `applicationShouldTerminate` covers ⌘Q and nothing else, so a run killed with
+# SIGTERM left `surreal` alive at ~200 MB a time. The pid-file reaping only
+# helps at the *next* launch, which never comes for a `swift test` somebody
+# stopped. Two halves, and both are one edit from being lost.
+if grep -q "SidecarReaper.install()" Sources/Sidecar/SidecarManager.swift \
+   && grep -q "SidecarReaper.register(" Sources/Sidecar/SidecarManager.swift; then
+  ok "a sidecar is registered to die with the process that started it"
+else
+  fail "SidecarManager no longer arms the reaper — a killed run would strand sidecars again (U17)"
+fi
+if grep -vE '^\s*(//|\*)' Sources/Sidecar/SidecarReaper.swift | grep -q "raise(number)"; then
+  ok "the reaper kills its children and then dies the way it was asked to"
+else
+  fail "the reaper swallows the signal — the process would hang instead of stopping (U17)"
+fi
+
+# AUDIT F-1 — the chain can be changed while the app is running.
+#
+# Three ways the complaint comes back, and each is one edit away:
+#
+# 1. `executors` goes back to being a `let`. It was one for months, and the
+#    symptom was an endpoint saved on the settings screen that the chat's model
+#    switch never offered, with nothing on screen saying to restart.
+if grep -vE '^\s*(//|\*)' Sources/LLMProviders/ModelRouter.swift | grep -q "private var executors" \
+   && grep -vE '^\s*(//|\*)' Sources/LLMProviders/ModelRouter.swift | grep -q "public func replaceExecutors"; then
+  ok "the model chain can be replaced while the app runs"
+else
+  fail "ModelRouter went back to a chain that cannot change — a saved endpoint would go silent again (F-1)"
+fi
+
+# 2. Saving on the screen stops rebuilding it. Writing the file is the half that
+#    always worked; calling the router is the half that did not exist.
+if awk '/public func rememberEndpoints/,/^    }$/' Sources/CoAIWorkspaceApp/AppEnvironment.swift \
+   | grep -vE '^\s*(//|\*)' | grep -q "rebuildModelChain"; then
+  ok "saving an endpoint rebuilds the chain, not just the file"
+else
+  fail "rememberEndpoints only writes bootstrap.plist again — the router would not hear about it (F-1)"
+fi
+
+# 3. The swap forgets to clear the availability cache. It is keyed by
+#    identifier, and an identifier can point at a different server than it did
+#    thirty seconds ago — so a stale entry keeps skipping the endpoint somebody
+#    has just corrected, with no reason visible anywhere.
+if awk '/public func replaceExecutors/,/^    }$/' Sources/LLMProviders/ModelRouter.swift \
+   | grep -vE '^\s*(//|\*)' | grep -q "availability.removeAll"; then
+  ok "replacing the chain forgets what it knew about the old one"
+else
+  fail "replaceExecutors keeps the availability cache — a corrected endpoint stays skipped (F-1)"
+fi
+
+step "การแปลภาษา"
+
+# The app was written in Thai and is being opened up with English as the base
+# language (2026-08-17). The mechanism fails *silently* in four ways, and all
+# four are invisible on this machine, whose locale is `en-TH`:
+#
+#  • a key used in code but absent from `th.lproj` shows English to a Thai
+#    reader, with nothing anywhere saying a translation is missing;
+#  • a key left in a catalogue after its call site is gone is dead weight a
+#    translator keeps paying for;
+#  • a translation whose format specifiers do not match the key's turns
+#    `String(format:)` into garbage — `%.0f` dropped from a Thai line prints the
+#    wrong number, not an error;
+#  • a module that ships a catalogue but is not asked to emit its keys is a
+#    module where all three of the above go unchecked.
+#
+# **The keys come from the compiler, not from reading the source.** Every target
+# with a catalogue passes `-emit-localized-strings` (see `Package.swift`), which
+# writes one `.stringsdata` per file holding the key each call site actually
+# looks up. Deriving those keys by scanning text cannot be done correctly:
+# `\(count)` becomes `%lld` while `\(name)` becomes `%@`, and telling them apart
+# needs the type checker. `Tests/ConfigTests/LocalisationTests` pins that fact.
+# A derivation that guesses wrong passes its own check while every lookup misses
+# at runtime — which is the same shape as the `.xcstrings` trap that cost a full
+# round: SwiftPM shipped the catalogue uncompiled, every lookup fell through to
+# the key, and because the keys are English sentences the screen looked correct.
+LOC_PROBLEMS=$(/usr/bin/python3 - <<'LOC'
+import glob, json, os, re, sys
+
+ENTRY = re.compile(r'^\s*"((?:[^"\\]|\\.)*)"\s*=\s*"((?:[^"\\]|\\.)*)"\s*;')
+
+def unescaped(text):
+    """A .strings literal as the loader sees it.
+
+    The file must escape a quote and a backslash; the compiler's key list does
+    not. Comparing the two forms directly reported a correctly-escaped entry as
+    both missing and dead at once — which is how this was found (2026-08-18).
+    """
+    return re.sub(r'\\(.)', lambda m: {'n': '\n', 't': '\t'}.get(m.group(1), m.group(1)), text)
+# No space in the flag set. `% o` is a legal printf specifier and nothing in
+# this project writes one, while "reaches 75% of the budget" contains those two
+# characters and is not a format string at all. Reading the second as the first
+# is a rule firing on prose (RULES §10).
+SPEC = re.compile(r'%(?:\d+\$)?[-+#0]*[\d*]*(?:\.\d+)?(?:hh|h|ll|l|q|L|z|t|j)?([@dioufeEgGxXcsp%])')
+# The test target proves the mechanism with keys no view uses. Those keys are in
+# use — by the only thing that can tell whether the mechanism still works.
+PROBE = re.compile(r'localizedString\(forKey:\s*"((?:[^"\\]|\\.)*)"')
+# A call site that has been moved onto the module's own catalogue. `\bt\(` does
+# not match `.font(`, `format(` or `Text(` — no word boundary before the `t` in
+# the first two, wrong case in the third.
+#
+# `localised(` is the same helper under a longer name, which `Analysis` uses
+# because it computes t-statistics and every t-test in it writes `let t = …`.
+# A one-letter helper a local shadows is a compile error per test, so that
+# module spells it out and this pattern knows both spellings.
+MIGRATED = re.compile(r'\bt\(\s*"|\blocalised\(\s*"|Text\(localised:\s*"')
+EMITTED = '.build/localized-strings'
+
+
+def specifiers(text):
+    return [m.group(1) for m in SPEC.finditer(text) if m.group(1) != '%']
+
+
+problems = []
+for base in sorted(glob.glob('Sources/*/Resources/en.lproj/Localizable.strings')):
+    module_dir = base.split('/Resources/')[0]
+    module = os.path.basename(module_dir)
+
+    emitted = f'{EMITTED}/{module}'
+    if not os.path.isdir(emitted):
+        problems.append(f'{module}: มีแคตตาล็อกแต่ไม่ได้ emit key — เพิ่ม -emit-localized-strings ใน Package.swift')
+        continue
+
+    # Every SwiftUI `Text("…")` is a localisation lookup, so the compiler emits
+    # the whole module — including the ~1,700 call sites still waiting to be
+    # migrated. Only the ones that have been moved onto `t()` / `Text(localised:)`
+    # are claims about the catalogue; the rest are the backlog, and failing on
+    # them would just keep this step red until the last one lands.
+    #
+    # So: the compiler supplies the key, the source supplies which call sites
+    # have been migrated. Neither half is guessed.
+    used = {}
+    for path in sorted(glob.glob(f'{emitted}/*.stringsdata')):
+        data = json.load(open(path, encoding='utf-8'))
+        source = data.get('source')
+        if not source or not os.path.exists(source):
+            problems.append(f'{module}: emit key ของไฟล์ที่ไม่มีอยู่จริง — {source}')
+            continue
+        migrated = set()
+        for n, line in enumerate(open(source, encoding='utf-8'), start=1):
+            if MIGRATED.search(line):
+                migrated.add(n)
+        emitted_lines = set()
+        for entries in data.get('tables', {}).values():
+            for entry in entries:
+                line = entry.get('location', {}).get('startingLine')
+                emitted_lines.add(line)
+                if line in migrated:
+                    used.setdefault(entry['key'], os.path.basename(source))
+        # **A migrated call site the compiler emitted nothing for.** That happens
+        # when the key is not statically knowable — interpolating `any Error`
+        # rather than a `String`, say. The string still compiles and still shows
+        # correct English, because the key *is* the English sentence; it is
+        # simply never translatable, and nothing else here would notice, since
+        # this check only ever asks about keys the compiler reported.
+        #
+        # Measured on 2026-08-18: 17 status messages in two view models were in
+        # exactly that state. `\(String(describing: error))` fixes them.
+        for line in sorted(migrated - emitted_lines):
+            problems.append(f'{module}: {os.path.basename(source)}:{line} เรียก t() แต่คอมไพเลอร์ไม่ได้ emit key — '
+                            'แปลว่า key ไม่คงที่ (เช่นแทรก any Error) ⇒ แปลไม่ได้ตลอดไป')
+    # Probes only excuse a catalogue entry from looking dead. They never demand
+    # one: the fallback test looks up a key that must *not* be translated, and
+    # requiring a translation for it would break the thing it proves.
+    probed = set()
+    for path in sorted(glob.glob(f'Tests/{module}Tests/**/*.swift', recursive=True)):
+        for m in PROBE.finditer(open(path, encoding='utf-8').read()):
+            probed.add(m.group(1))
+
+    for lang_dir in sorted(glob.glob(f'{module_dir}/Resources/*.lproj')):
+        lang = os.path.basename(lang_dir).removesuffix('.lproj')
+        # **A key twice in one file.** `.strings` takes the last one silently,
+        # so two translations of one key look like one working catalogue while
+        # half the call sites get a translation nobody chose. It happens the
+        # moment two screens use the same English word for the same thing and
+        # each translator reaches for a different Thai one — measured: five
+        # such pairs had accumulated by 2026-08-18, including `medium risk`
+        # translated two ways.
+        entries = {}
+        for line in open(f'{lang_dir}/Localizable.strings', encoding='utf-8'):
+            m = ENTRY.match(line)
+            if m:
+                if unescaped(m.group(1)) in entries:
+                    problems.append(f'{module}/{lang}: key ซ้ำในไฟล์เดียวกัน "{m.group(1)[:48]}" '
+                                    '⇒ ตัวหลังทับตัวแรกเงียบ ๆ')
+                entries[unescaped(m.group(1))] = unescaped(m.group(2))
+
+        for key in sorted(used):
+            if key not in entries:
+                problems.append(f'{module}/{lang}: ไม่มีคำแปลของ "{key[:48]}" ({used[key]})')
+        for key in sorted(entries):
+            if key not in used and key not in probed:
+                problems.append(f'{module}/{lang}: มีคำแปลค้างอยู่ ไม่มีใครเรียก "{key[:48]}"')
+        if lang != 'en':
+            for key, value in sorted(entries.items()):
+                if specifiers(key) != specifiers(value):
+                    problems.append(f'{module}/{lang}: ตัวแปรในคำแปลไม่ตรงกับต้นฉบับ "{key[:48]}"')
+
+# **A language that ships but is never offered.** Without `CFBundleLocalizations`
+# in the app's own Info.plist the main bundle declares no localisations, macOS
+# resolves the app's language to the development region, and every module bundle
+# is intersected against that single language. `th.lproj` then ships inside the
+# app, is found, loads — and is never chosen, at any system setting, on any
+# machine. Measured on 2026-08-17: with `AppleLanguages` forced to `(th)` the
+# module's `preferredLocalizations` came back `["en"]` before the keys were
+# added and `["th"]` after, and the same lookup went from "Stop" to "หยุด".
+# Nothing in a build, a test or a screen said a word about it.
+# **A table of words the program *matches on* must not be translated.**
+#
+# Not "is not translated yet" — translating it removes the feature. The words in
+# `Classifier.vocabulary` are looked for inside the document, so they have to
+# stay in the language the document is written in. Several of them are also
+# class labels, and a literal-level replacer duly rewrote eight into `t(…)`
+# calls: a Thai paper would then have stopped classifying the moment somebody
+# switched the interface to English (2026-08-18).
+#
+# Marked at the declaration rather than listed here, so a table added later is
+# covered by whoever writes it instead of by whoever remembers this file.
+MARKER = 'LOCALISATION: matching data'
+for path in sorted(glob.glob('Sources/**/*.swift', recursive=True)):
+    lines = open(path, encoding='utf-8').read().split('\n')
+    for n, line in enumerate(lines):
+        if MARKER not in line: continue
+        # From the declaration to wherever its brackets close.
+        depth, started = 0, False
+        for offset in range(n + 1, min(n + 400, len(lines))):
+            body = lines[offset]
+            if MIGRATED.search(body):
+                problems.append(f'{path}:{offset + 1} อยู่ในตารางที่ทำเครื่องหมายว่าเป็น '
+                                'ข้อมูลสำหรับจับคู่ แต่มีการเรียกคำแปล ⇒ ตารางจะเปลี่ยนตามภาษาของหน้าจอ '
+                                'และเอกสารภาษาเดิมจะหยุดถูกจับคู่')
+            depth += body.count('[') + body.count('{') - body.count(']') - body.count('}')
+            started = started or depth > 0
+            if started and depth <= 0: break
+
+INFO = 'Resources/Info.plist'
+declared = set()
+if os.path.exists(INFO):
+    import plistlib
+    with open(INFO, 'rb') as handle:
+        declared = set(plistlib.load(handle).get('CFBundleLocalizations', []))
+shipped = {os.path.basename(d).removesuffix('.lproj')
+           for d in glob.glob('Sources/*/Resources/*.lproj')}
+for lang in sorted(shipped - declared):
+    problems.append(f'Info.plist: มี {lang}.lproj อยู่ในบันเดิล แต่ไม่ได้ประกาศใน CFBundleLocalizations '
+                    f'⇒ ไม่มีทางถูกเลือกเลย')
+
+# **`Bundle.module` is not reachable from a packaged app.** SwiftPM's generated
+# accessor appends the bundle name to `Bundle.main.bundleURL`, which for an app
+# is the `.app` itself — and `codesign` refuses loose contents at a bundle root,
+# so the bundle can only live in `Contents/Resources`, the one place that
+# accessor does not look. Its only fallback is an absolute path on the machine
+# that compiled it, and then it calls `fatalError`.
+#
+# Measured on 2026-08-18: the packaged app died on its first localised `Text`,
+# before drawing anything, while the same binary run from the terminal was fine.
+# `Localisation.bundle(named:)` looks in both places and degrades to the main
+# bundle instead of trapping.
+for path in sorted(glob.glob('Sources/*/*.swift')) + sorted(glob.glob('Sources/*/**/*.swift', recursive=True)):
+    module = path.split('/')[1]
+    if module == 'Localisation':
+        continue
+    body = ''.join(line for line in open(path, encoding='utf-8')
+                   if not re.match(r'\s*(//|\*|/\*)', line))
+    if 'Bundle.module' in body or 'bundle: .module' in body:
+        problems.append(f'{module}: ใช้ Bundle.module ({os.path.basename(path)}) — '
+                        'ในแอปที่แพ็กแล้วมันหาไม่เจอแล้ว fatalError · ใช้ Localisation.bundle(named:)')
+
+# A module that localises without a catalogue of its own gets the key back and
+# says nothing about it.
+for path in sorted(glob.glob('Sources/**/*.swift', recursive=True)):
+    module_dir = '/'.join(path.split('/')[:2])
+    if re.search(r'(?:\bt\(\s*"|\blocalised\(\s*"|Text\(localised:)', open(path, encoding='utf-8').read()) \
+            and not os.path.isdir(f'{module_dir}/Resources/en.lproj'):
+        problems.append(f'{os.path.basename(module_dir)}: เรียก t() แต่โมดูลไม่มี Resources/en.lproj')
+
+# Ten at a time so one bad merge does not fill the screen — but *say* when
+# there are more. The silent version hid a genuine failure behind ten lines of
+# a different one, and read exactly like a clean run of the rule that was cut
+# off (2026-08-18).
+found = sorted(set(problems))
+for line in found[:10]:
+    print(line)
+if len(found) > 10:
+    print(f'… อีก {len(found) - 10} ข้อ (แสดง 10 ข้อแรก)')
+sys.exit(0)
+LOC
+)
+if [ -n "$LOC_PROBLEMS" ]; then
+  echo "$LOC_PROBLEMS" | sed 's/^/   /'
+  fail "แคตตาล็อกคำแปลไม่ตรงกับที่โค้ดเรียกจริง"
+else
+  ok "ทุก key ที่คอมไพเลอร์บอกว่าถูกเรียก มีคำแปลครบทุกภาษา และตัวแปรตรงกัน"
+fi
+
+step "documentation"
+
+# Docs are read by people and by agents, and both fail the same way on a wall of
+# text. Two rules, both mechanical, both from a real symptom:
+#
+#  • IMPLEMENTATION_PLAN.md reached 555 KB with a single status cell 5,254
+#    characters long, in a table whose whole job is to be scanned. ARCHITECTURE.md
+#    reached 331 KB. Both were split on 2026-08-17 and neither may grow back.
+#  • The split moved ~300 links. A broken link in a doc set this size is not an
+#    inconvenience — it is how somebody ends up reading the wrong file and acting
+#    on it.
+OVERSIZED=$(/usr/bin/python3 - <<'SIZE'
+import glob, os
+limit = 200 * 1024
+bad = []
+for path in sorted(set(glob.glob('*.md') + glob.glob('docs/**/*.md', recursive=True))):
+    size = os.path.getsize(path)
+    if size > limit:
+        bad.append(f'{path}({size//1024}KB)')
+print(' '.join(bad))
+SIZE
+)
+if [ -n "$OVERSIZED" ]; then
+  fail "a document grew past 200 KB — split it into a folder: $OVERSIZED"
+else
+  ok "no document is over 200 KB"
+fi
+
+BROKEN_LINKS=$(/usr/bin/python3 - <<'LINKS'
+import re, os, glob
+docs = sorted(set(glob.glob('*.md') + glob.glob('docs/**/*.md', recursive=True)))
+
+def anchors(path):
+    out = set()
+    for line in open(path, encoding='utf-8'):
+        m = re.match(r'^#{1,6}\s+(.*?)\s*$', line)
+        if m:
+            t = re.sub(r'[`*]', '', m.group(1))
+            t = re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', t).lower()
+            t = re.sub(r'[^\w\s฀-๿-]', '', t)
+            out.add(t.strip().replace(' ', '-'))
+    return out
+
+anch = {d: anchors(d) for d in docs}
+bad = []
+for d in docs:
+    for m in re.finditer(r'(?<!\!)\[[^\]]*\]\(([^)\s]+)\)', open(d, encoding='utf-8').read()):
+        link = m.group(1)
+        if link.startswith(('http', 'mailto:')):
+            continue
+        path, _, frag = link.partition('#')
+        target = os.path.normpath(os.path.join(os.path.dirname(d), path)) if path else d
+        if path and not os.path.exists(target):
+            bad.append(f'{d}->{link}')
+        elif frag and target in anch and frag not in anch[target]:
+            bad.append(f'{d}->{link}')
+print(' '.join(bad[:8]))
+LINKS
+)
+if [ -n "$BROKEN_LINKS" ]; then
+  echo "$BROKEN_LINKS" | tr ' ' '\n' | sed 's/^/   /'
+  fail "a link between documents points at nothing"
+else
+  ok "every link between documents resolves, anchors included"
+fi
+
+# The gateway is the one file an agent reads first, and the rules are what it
+# reads second. Both are referenced from everywhere; neither may quietly vanish.
+MISSING_ENTRY=""
+for doc in START_HERE.md RULES.md docs/TEST_PROTOCOL.md docs/UX_UI_DESIGN.md docs/plan/README.md; do
+  [ -f "$doc" ] || MISSING_ENTRY="$MISSING_ENTRY $doc"
+done
+if [ -n "$MISSING_ENTRY" ]; then
+  fail "a document the whole set points at is gone:$MISSING_ENTRY"
+else
+  ok "the gateway, the rules and the plan index are all present"
+fi
+
+step "สรุปความครอบคลุม"
+
+# What this round actually touched. Without it, "green" is a claim about the
+# checks that ran and reads as a claim about the system — which is exactly how
+# Tier 1 went unexercised for weeks while every round reported success (M3).
+if [ -n "$TIER1" ]; then
+  echo "   Tier 1:    $TIER1 · $TIER1_MODEL · window $TIER1_WINDOW"
+else
+  echo "   Tier 1:    ⊘ ไม่มี endpoint ที่ตอบ"
+fi
+echo "   Tier 0.5:  ${TIER05_NOTE:-ไม่ได้ตรวจ}"
+echo "   RAM:       ก่อน ${RAM_BEFORE} GB → หลัง $(free_gb) GB"
+FAIL_COUNT=$(printf '%s' "$FAILURES" | grep -c '•' || true)
+echo "   ผ่าน ${TESTS_PASSED:-?} · ตก ${FAIL_COUNT} · ข้ามได้ ${SKIPPED_OK:-0} · ข้ามไม่ได้ ${CRITICAL_SKIPS:-0}"
+if [ -n "$FAILURES" ]; then
+  echo ""
+  echo "   สิ่งที่ตก:"
+  printf '%s\n' "$FAILURES"
+fi
+if [ "${CRITICAL_SKIPS:-0}" -gt 0 ]; then
+  echo ""
+  echo "   ⚠ มีการข้ามที่แตะแกนหลัก — อ่านคำว่า 'เขียว' ว่า 'ยังไม่พบว่าพัง ในส่วนที่ตรวจ'"
+  echo "     รัน ./scripts/check.sh --full เพื่อให้มันเป็น error"
 fi
 
 echo ""

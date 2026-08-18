@@ -185,6 +185,25 @@ public actor AXNavigator {
     /// wait is either slower than it needs to be or shorter than the animation
     /// on the machine that matters. Bounded, because a screen that never
     /// settles has to be reported rather than waited on forever.
+    /// A snapshot taken once the screen has stopped moving.
+    ///
+    /// Reading straight after an action can catch a menu that is still being
+    /// built: it cost four rounds of chasing a bug that was not there, because
+    /// the last row of a popup had not been added yet and the tree read like the
+    /// whole list. Anything that reports what is on screen should wait for the
+    /// screen to mean it.
+    public func stableSnapshot(within limit: Duration = .seconds(2)) async throws -> ScreenSnapshot {
+        var last = try snapshot()
+        let deadline = ContinuousClock.now + limit
+        while ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(120))
+            let now = try snapshot()
+            if !now.differs(from: last) { return now }
+            last = now
+        }
+        return last
+    }
+
     private func settled(after before: ScreenSnapshot,
                          within limit: Duration = .seconds(3)) async throws -> ScreenSnapshot {
         var last = before

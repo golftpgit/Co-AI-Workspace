@@ -1,0 +1,107 @@
+/* The base language. Keys are the English sentences. */
+
+/* ── Classification ──────────────────────────────────────────── */
+
+"General works" = "General works";
+"Philosophy, psychology, religion" = "Philosophy, psychology, religion";
+"Auxiliary sciences of history" = "Auxiliary sciences of history";
+"World history" = "World history";
+"History of the Americas" = "History of the Americas";
+"History of the Americas (local)" = "History of the Americas (local)";
+"Geography, anthropology" = "Geography, anthropology";
+"Social sciences" = "Social sciences";
+"Political science" = "Political science";
+"Law" = "Law";
+"Education" = "Education";
+"Music" = "Music";
+"Fine arts" = "Fine arts";
+"Language and literature" = "Language and literature";
+"Science" = "Science";
+"Medicine" = "Medicine";
+"Agriculture" = "Agriculture";
+"Technology" = "Technology";
+"Military science" = "Military science";
+"Naval science" = "Naval science";
+"Library science" = "Library science";
+"Public health" = "Public health";
+"Internal medicine" = "Internal medicine";
+"Nursing" = "Nursing";
+"Paediatrics" = "Paediatrics";
+"Pharmacotherapy" = "Pharmacotherapy";
+"Mathematics and computing" = "Mathematics and computing";
+"Biology" = "Biology";
+"Physiology" = "Physiology";
+"Statistics" = "Statistics";
+"Sociology" = "Sociology";
+"Theory and practice of education" = "Theory and practice of education";
+"Electrical and computer engineering" = "Electrical and computer engineering";
+"no word in it said clearly enough what it is about" = "no word in it said clearly enough what it is about";
+"the words that placed it — " = "the words that placed it — ";
+
+/* ── ClosingHandover ─────────────────────────────────────────── */
+
+"participant data — the people in it consented to this study, and only this one" = "participant data — the people in it consented to this study, and only this one";
+"a table pulled from a database — the system cannot tell whether it holds personal data" = "a table pulled from a database — the system cannot tell whether it holds personal data";
+"the project's drafts and working notes — lessons go up by their own path" = "the project's drafts and working notes — lessons go up by their own path";
+"an outside document with no tier — sent up it would be re-ranked as if nobody had ever assessed it" = "an outside document with no tier — sent up it would be re-ranked as if nobody had ever assessed it";
+"an outside reference, with the tier it already had" = "an outside reference, with the tier it already had";
+
+/* ── ConflictLedger ──────────────────────────────────────────── */
+
+"a T1 source (official document)" = "a T1 source (official document)";
+"a T2 source (peer-reviewed)" = "a T2 source (peer-reviewed)";
+"a T3 source (preprint or semi-official)" = "a T3 source (preprint or semi-official)";
+"a T4 source (a community that reviews its own)" = "a T4 source (a community that reviews its own)";
+"a T5 source (the open web)" = "a T5 source (the open web)";
+"written by the system itself (no outside tier)" = "written by the system itself (no outside tier)";
+"%lld — recent" = "%lld — recent";
+"%lld — reasonably recent" = "%lld — reasonably recent";
+"%lld — old" = "%lld — old";
+"no year given" = "no year given";
+"%lld other sources agree" = "%lld other sources agree";
+
+/* ── EntityGraph ─────────────────────────────────────────────── */
+
+"nothing has been extracted around “%@” in this scope yet" = "nothing has been extracted around “%@” in this scope yet";
+"%lld things · %lld relationships around “%@”" = "%lld things · %lld relationships around “%@”";
+" · %lld more lie beyond what is shown — widen the range to see them" = " · %lld more lie beyond what is shown — widen the range to see them";
+
+/* ── KnowledgeView ───────────────────────────────────────────── */
+
+"scope " = "scope ";
+"%@ sources and above" = "%@ sources and above";
+"fully citable only" = "fully citable only";
+"system-generated evidence only" = "system-generated evidence only";
+"kind " = "kind ";
+"%lld hops through the graph" = "%lld hops through the graph";
+
+/* ── Provenance ──────────────────────────────────────────────── */
+
+"research protocol" = "research protocol";
+"research paper" = "research paper";
+"guideline" = "guideline";
+"dataset" = "dataset";
+"report" = "report";
+"other" = "other";
+
+/* ── RoleMemory ──────────────────────────────────────────────── */
+
+"a lesson for this role" = "a lesson for this role";
+"a general lesson" = "a general lesson";
+"(%lld more relevant lessons are in the central store — " = "(%lld more relevant lessons are in the central store — ";
+"search for them with kb_search)" = "search for them with kb_search)";
+
+/* ── SourceRegistry ──────────────────────────────────────────── */
+
+"Engineering" = "Engineering";
+"Computing" = "Computing";
+"Social science" = "Social science";
+"Policy" = "Policy";
+"General" = "General";
+"Ministry of Public Health (Thailand)" = "Ministry of Public Health (Thailand)";
+"National Statistical Office (Thailand)" = "National Statistical Office (Thailand)";
+"Royal Thai Government Gazette" = "Royal Thai Government Gazette";
+"Chulalongkorn University" = "Chulalongkorn University";
+"Mahidol University" = "Mahidol University";
+"ThaiLIS (Thai thesis repository)" = "ThaiLIS (Thai thesis repository)";
+"NRCT (National Research Council of Thailand)" = "NRCT (National Research Council of Thailand)";

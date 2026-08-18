@@ -52,13 +52,13 @@ public enum DisposalRefusal: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .approved:
-            "เวอร์ชันนี้ผ่านประตูแล้ว จึงลบไม่ได้ — เครื่องมือที่ผ่านประตูคือหลักฐานว่าผู้ตอบเห็นอะไร "
-                + "ถ้าเลิกใช้ ให้สร้างเวอร์ชันใหม่แล้วไม่เปิดเวอร์ชันนี้อีก (§20.6)"
+            localised("this version has been through the gate and cannot be deleted — a gated instrument is the evidence of what respondents were shown ", "Why an instrument cannot be deleted.")
+                + localised("to retire it, make a new version and stop opening this one (§20.6)", "Ends the reason an instrument cannot be deleted.")
         case .hasResponses(let count):
-            "มีคำตอบ \(count) ชุดผูกกับเครื่องมือนี้ — ลบเครื่องมือแล้วจะเหลือตารางตัวเลขที่ไม่มีใครบอกได้ว่าคำถามคืออะไร"
+            localised("\(count) sets of answers are tied to this instrument — delete it and what is left is a table of numbers nobody can match to a question", "Why an instrument cannot be deleted. Placeholder: how many response sets exist.")
         case .hasRounds(let count):
-            "เคยเปิดรอบเก็บข้อมูล \(count) รอบกับเครื่องมือนี้ — รอบที่เปิดแล้วเป็นบันทึกว่าลงพื้นที่เมื่อไร "
-                + "แม้จะยังไม่มีใครตอบก็ตาม"
+            localised("\(count) collection rounds have been opened with this instrument — an opened round is the record of when fieldwork happened ", "Why an instrument cannot be deleted. Placeholder: how many rounds were opened.")
+                + localised("even if nobody answered", "Ends the reason an instrument cannot be deleted.")
         }
     }
 }

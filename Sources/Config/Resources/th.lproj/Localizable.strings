@@ -1,0 +1,6 @@
+/* Shown when a configured endpoint answered and can be used. */
+"Ready" = "พร้อมใช้";
+
+/* fixtures — see the English file for why these exist */
+"%lld things" = "MARKER-TH-LLD %lld";
+"%@ things" = "MARKER-TH-AT %@";

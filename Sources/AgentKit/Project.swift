@@ -39,11 +39,11 @@ public enum ProjectStage: String, Sendable, Codable, CaseIterable, Comparable {
 
     public var label: String {
         switch self {
-        case .initiation: "เริ่มต้น"
-        case .planning: "วางแผน"
-        case .execution: "ดำเนินงาน"
-        case .closing: "ปิดโครงการ"
-        case .closed: "ปิดแล้ว"
+        case .initiation: localised("starting up", "A project stage.")
+        case .planning: localised("planning", "A project stage.")
+        case .execution: localised("delivery", "A project stage.")
+        case .closing: localised("closing", "A project stage.")
+        case .closed: localised("closed", "A project stage.")
         }
     }
 
@@ -70,10 +70,10 @@ public enum ProjectKind: String, Sendable, Codable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .blank: "ทั่วไป"
-        case .research: "งานวิจัย"
-        case .software: "ซอฟต์แวร์"
-        case .analysis: "วิเคราะห์ข้อมูล"
+        case .blank: localised("general", "A kind of project.")
+        case .research: localised("research", "A kind of project.")
+        case .software: localised("software", "A kind of project.")
+        case .analysis: localised("data analysis", "A kind of project.")
         }
     }
 }
@@ -116,8 +116,8 @@ public enum ProjectClosure: String, Sendable, Codable {
 
     public var label: String {
         switch self {
-        case .completed: "ส่งมอบครบ"
-        case .terminated: "ยุติก่อนกำหนด"
+        case .completed: localised("delivered in full", "How a project ended.")
+        case .terminated: localised("stopped early", "How a project ended.")
         }
     }
 }
@@ -138,10 +138,10 @@ public struct DataDisposition: Sendable, Codable, Equatable {
 
         public var label: String {
             switch self {
-            case .keep: "เก็บไว้ที่เดิม"
-            case .archive: "ย้ายเข้าคลังเก็บถาวร"
-            case .handOver: "ยกให้ผู้รับต่อ"
-            case .delete: "ลบตามนโยบายเก็บรักษา"
+            case .keep: localised("left where it is", "What happens to a closed project's data.")
+            case .archive: localised("moved to the archive", "What happens to a closed project's data.")
+            case .handOver: localised("handed to a successor", "What happens to a closed project's data.")
+            case .delete: localised("deleted under the retention policy", "What happens to a closed project's data.")
             }
         }
     }

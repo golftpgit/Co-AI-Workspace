@@ -20,7 +20,9 @@ struct ApprovalBanner: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "hand.raised.fill").foregroundStyle(.orange)
-                Text("ขออนุมัติ: \(request.toolName)").fontWeight(.semibold)
+                Text(localised: "Approval requested: \(request.toolName)",
+                     "Heading of the approval banner. Placeholder is the tool name.")
+                    .fontWeight(.semibold)
                 RiskBadge(risk: request.risk)
                 Spacer()
                 Text(request.requestedAt, style: .time)
@@ -38,7 +40,7 @@ struct ApprovalBanner: View {
                 TextEditor(text: $edit)
                     .font(.system(.callout, design: .monospaced))
                     .frame(height: 120)
-                    .accessibilityLabel("แก้อาร์กิวเมนต์ก่อนอนุมัติ")
+                    .accessibilityLabel(t("Edit the arguments before approving", "Screen-reader label."))
             } else {
                 ScrollView {
                     Text(request.detail)
@@ -56,28 +58,34 @@ struct ApprovalBanner: View {
             }
 
             HStack(spacing: 10) {
-                Button("อนุมัติ") {
+                Button(t("Approve", "Button that approves a register entry.")) {
                     respond(isEditing ? .approvedWithEdit(argumentsJSON: edit) : .approved)
                 }
                 .keyboardShortcut(.defaultAction)
 
-                Button("ไม่อนุมัติ", role: .destructive) {
-                    respond(.rejected(reason: "ผู้ใช้ปฏิเสธ"))
+                Button(t("Do not approve", "Button that refuses a tool call."),
+                       role: .destructive) {
+                    respond(.rejected(reason: t("the user refused",
+                                                "Recorded reason when a person declines a tool call.")))
                 }
 
-                Toggle("แก้ก่อนอนุมัติ", isOn: $isEditing)
+                Toggle(t("Edit before approving", "Checkbox that opens the arguments for editing."),
+                       isOn: $isEditing)
                     .toggleStyle(.button)
-                    .accessibilityHint("เปิดเพื่อแก้อาร์กิวเมนต์ก่อนกดอนุมัติ")
+                    .accessibilityHint(t("turn on to change the arguments before approving",
+                                         "Screen-reader hint on the edit switch."))
 
                 Spacer()
-                Text("ตอบจากช่องทางไหนก็ได้ — ใครตอบก่อนนับคนนั้น")
+                Text(localised: "It can be answered from any channel — whoever answers first is the one that counts",
+                     "Says that approval is not tied to this screen.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding(Space.section)
         .background(.orange.opacity(0.08))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("คำขออนุมัติสำหรับเครื่องมือ \(request.toolName)")
+        .accessibilityLabel(t("Approval request for the tool \(request.toolName)",
+                              "Screen-reader label. Placeholder is the tool name."))
     }
 }
 
@@ -90,14 +98,14 @@ struct RiskBadge: View {
             .padding(.horizontal, 7).padding(.vertical, 2)
             .background(color.opacity(0.2), in: Capsule())
             .foregroundStyle(color)
-            .accessibilityLabel("ความเสี่ยง \(label)")
+            .accessibilityLabel(t("Risk \(label)", "Screen-reader label. Placeholder is the risk level."))
     }
 
     private var label: String {
         switch risk {
-        case .low: "เสี่ยงต่ำ"
-        case .medium: "เสี่ยงปานกลาง"
-        case .high: "เสี่ยงสูง"
+        case .low: t("low risk", "Risk level of a work package.")
+        case .medium: t("medium risk", "Risk level of a work package.")
+        case .high: t("high risk", "Risk level of a work package.")
         }
     }
 

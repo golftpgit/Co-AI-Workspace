@@ -11,7 +11,7 @@ import AgentKit
 // widens a budget or closes an exception in one click, from any screen, is a
 // place where decisions get made and forgotten.
 //
-// So the Done-when includes "ทุกการกระทำใน popover เขียน decision record", and
+// So the Done-when includes "every action in a popover writes a decision record", and
 // the way to make that true is not to remember it at three call sites in a view.
 // It is this: every action is a case here, and `ProjectService.perform` is the
 // only thing that runs one. A new action that forgets to record is a new case
@@ -25,7 +25,7 @@ public enum StatusAction: Sendable, Equatable {
     case widenTolerance(ToleranceDimension, to: Double, reason: String)
     /// Deciding an exception without leaving the screen — the Done-when's first
     /// clause. The decision text is the answer to the report's
-    /// "ต้องการจากคุณ" field.
+    /// "what we need from you" field.
     case decideException(ExceptionReport, decision: String)
     /// Turning visible drift into a request somebody has to decide (§19.11).
     case requestChange(title: String, scopeImpact: String, timeImpact: String,
@@ -34,9 +34,11 @@ public enum StatusAction: Sendable, Equatable {
     public var title: String {
         switch self {
         case .widenTolerance(let dimension, let limit, _):
-            "ขยายกรอบ\(dimension.label) เป็น \(ChangeControl.number(limit))"
+            t("Widen the \(dimension.label) tolerance to \(ChangeControl.number(limit))",
+              "Title of a decision record. Placeholders: which tolerance and the new limit.")
         case .decideException(let report, _):
-            "ตัดสินข้อยกเว้น: ทะลุกรอบ\(report.dimension.label)"
+            t("Decide an exception: the \(report.dimension.label) tolerance was breached",
+              "Title of a decision record. Placeholder is which tolerance.")
         case .requestChange(let title, _, _, _):
             title
         }
@@ -48,11 +50,15 @@ public enum StatusAction: Sendable, Equatable {
     var options: [String] {
         switch self {
         case .widenTolerance(let dimension, _, _):
-            ["ขยายกรอบ\(dimension.label)", "ลดขอบเขตให้พอดีกรอบเดิม", "ยุติโครงการ"]
+            [t("Widen the \(dimension.label) tolerance",
+               "Option recorded on a decision. Placeholder is which tolerance."),
+             t("Cut scope back to fit the existing tolerance", "Option recorded on a decision."),
+             t("End the project", "Option recorded on a decision.")]
         case .decideException(let report, _):
             report.options
         case .requestChange:
-            ["เปิดคำขอเปลี่ยนแปลง", "ไม่แก้แผน"]
+            [t("Open a change request", "Option recorded on a decision."),
+             t("Leave the plan alone", "Option recorded on a decision.")]
         }
     }
 
@@ -61,7 +67,8 @@ public enum StatusAction: Sendable, Equatable {
         case .widenTolerance(_, _, let reason): reason
         case .decideException(_, let decision): decision
         case .requestChange(_, let scope, let time, let cost):
-            "กระทบ: ขอบเขต \(scope) · เวลา \(time) · เงิน \(cost)"
+            t("Impact: scope \(scope) · time \(time) · money \(cost)",
+              "The impact recorded on a decision. Placeholders: its three impacts.")
         }
     }
 
@@ -85,7 +92,8 @@ extension ProjectService {
     /// decision record for something that did not happen is worse than no
     /// record, because it is the version a later reader will believe.
     public func perform(_ action: StatusAction, in id: ProjectID,
-                        by person: String = "ผู้ใช้") async throws {
+                        by person: String? = nil) async throws {
+        let person = person ?? t("the user", "Recorded as the origin of a register entry a person made.")
         guard let project = await project(id) else { throw LifecycleError.alreadyClosed }
 
         switch action {
@@ -99,7 +107,9 @@ extension ProjectService {
             // breached; the exception it raised has to be closed with it, or the
             // project stays stopped for a limit that no longer exists.
             for report in try await openExceptions(id) where report.dimension == dimension {
-                try await resolve(report, decision: "ขยายกรอบ\(dimension.label) เป็น \(ChangeControl.number(limit))")
+                try await resolve(report,
+                                  decision: t("Widen the \(dimension.label) tolerance to \(ChangeControl.number(limit))",
+                                              "Title of a decision record. Placeholders: which tolerance and the new limit."))
             }
 
         case .decideException(let report, let decision):
@@ -133,7 +143,8 @@ public enum StatusActionError: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .emptyDecision:
-            "ต้องเขียนคำตัดสิน — ปิดข้อยกเว้นโดยไม่บอกว่าตัดสินอะไร คือการลบมันทิ้ง"
+            t("A decision has to be written — closing an exception without saying what was decided is deleting it",
+              "Refusal message when an exception is closed with no decision text.")
         }
     }
 }

@@ -77,7 +77,7 @@ struct ScoringTests {
         let scored = ScoredResponses.score(instrument: built, answers: rows)
         #expect(!scored.itemIDs.contains(choice.id))
         #expect(scored.skippedItems.map(\.itemID) == [choice.id])
-        #expect(scored.skippedItems[0].reason.contains("ลำดับ"))
+        #expect(scored.skippedItems[0].reason.contains("no order of their own"))
         // Left out, not counted as a missing answer: the respondent answered it.
         #expect(scored.droppedRespondents == 0)
     }
@@ -174,7 +174,7 @@ struct ScaleReportTests {
 
         #expect(report.solution == nil)
         #expect(report.fit == nil)
-        #expect(report.refusal?.contains("ผู้ตอบ") == true)
+        #expect(report.refusal?.contains("respondents") == true)
         #expect(report.subscales.count == 2)
         #expect(report.subscales.contains { $0.alpha != nil })
         #expect(report.hasAnything)

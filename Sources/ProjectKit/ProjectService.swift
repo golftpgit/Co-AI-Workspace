@@ -111,7 +111,9 @@ public actor ProjectService {
         let decided = try entry.decided(approve: approve, by: person)
         try await record(decided)
         guard approve, let project = await project(entry.projectID) else { return }
-        try await freezeBaseline(project, reason: "คำขอเปลี่ยนแปลง: \(entry.title)")
+        try await freezeBaseline(project,
+                                 reason: t("Change request: \(entry.title)",
+                                           "Reason recorded on a baseline frozen by a change request. Placeholder is its title."))
     }
 
     // MARK: - benefits (§19.12)
@@ -423,9 +425,12 @@ public actor ProjectService {
     /// request lands as `proposed`, so G3 will not open until a person decides.
     @discardableResult
     public func apply(_ edit: PlanEdit, in id: ProjectID,
-                      by person: String = "ผู้ใช้",
+                      by person: String? = nil,
                       basis: ChangeEstimateBasis = ChangeEstimateBasis())
     async throws -> PlanChangeProposal? {
+        // Defaulted here rather than in the signature: a default argument may
+        // not call an internal function, and `t` is internal.
+        let person = person ?? t("the user", "Recorded as the origin of a register entry a person made.")
         guard let project = await project(id) else { throw LifecycleError.alreadyClosed }
         let proposal = await proposal(for: edit, in: id, basis: basis)
 
@@ -451,7 +456,13 @@ public actor ProjectService {
                 // The words the person was shown, kept verbatim: a change
                 // request whose impact is re-derived later is a different
                 // request from the one that was agreed to.
-                note: proposal.headline + "\nส่วนต่างจาก baseline หลังแก้: " + proposal.driftAfter))
+                // The newline stays out of the key: a catalogue entry that
+                // begins with whitespace is one a translator cannot see the
+                // shape of, and one the checker has to unescape to compare.
+                note: proposal.headline + "\n"
+                    + t("Difference from the baseline after this edit: ",
+                        "Prefix before the drift a pending edit would create.")
+                    + proposal.driftAfter))
         }
         return proposal
     }
@@ -614,7 +625,9 @@ public actor ProjectService {
         // §19.11 — the plan becomes an agreement at G2, and the agreement is a
         // frozen copy rather than a promise to remember what it said.
         if project.stage == .execution {
-            try await freezeBaseline(project, reason: "ผ่าน G2")
+            try await freezeBaseline(project,
+                                     reason: t("passed G2",
+                                               "Reason recorded on the first baseline."))
         }
         // §19.12 condition 7 — a lesson that never leaves the project it came
         // from has taught nobody.
@@ -636,8 +649,11 @@ public actor ProjectService {
         project.closure = .terminated
         defer { Task { try? await self.publishLessons(of: project) } }
         project.brief = project.brief.isEmpty
-            ? "ยุติก่อนกำหนด: \(reason)"
-            : project.brief + "\n\nยุติก่อนกำหนด: \(reason)"
+            ? t("Ended early: \(reason)",
+                "Recorded on a terminated project. Placeholder is the reason.")
+            : project.brief + "\n\n"
+                + t("Ended early: \(reason)",
+                    "Recorded on a terminated project. Placeholder is the reason.")
         try await update(project)
         return byID[project.id] ?? project
     }

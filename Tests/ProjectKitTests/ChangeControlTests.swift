@@ -69,12 +69,12 @@ struct ChangeControlTests {
             project: project, wbs: wbs, baseline: baseline, existingChanges: 3))
 
         #expect(proposal.requestNumber == 4)
-        #expect(proposal.scopeImpact.contains("+1 ใบ"))
+        #expect(proposal.scopeImpact.contains("+1 packages"))
         // The one line §19.2.4 asks for, with all three impacts in it.
-        #expect(proposal.headline.contains("คำขอเปลี่ยนแปลง #4"))
-        #expect(proposal.headline.contains("ขอบเขต"))
-        #expect(proposal.headline.contains("เวลา"))
-        #expect(proposal.headline.contains("เงิน"))
+        #expect(proposal.headline.contains("change request #4"))
+        #expect(proposal.headline.contains("scope"))
+        #expect(proposal.headline.contains("time"))
+        #expect(proposal.headline.contains("money"))
         // And the register entry carries the same three, not a re-derivation.
         if case .change(let scope, let time, let cost) = proposal.detail {
             #expect(scope == proposal.scopeImpact)
@@ -95,10 +95,10 @@ struct ChangeControlTests {
             for: .savePackage(leaf(project, "ภาคผนวก ก")),
             project: project, wbs: wbs, baseline: baseline, existingChanges: 0))
         // "เวลา +0" would be quoted in a meeting as "no delay expected".
-        #expect(blind.timeImpact.contains("ยังประเมินไม่ได้"))
-        #expect(blind.costImpact.contains("ยังประเมินไม่ได้"))
+        #expect(blind.timeImpact.contains("cannot be estimated"))
+        #expect(blind.costImpact.contains("cannot be estimated"))
 
-        // With one finished leaf that took 30 minutes and ฿120 spent, the same
+        // With one finished leaf that took 30 minutes and $120 spent, the same
         // edit can be estimated — and the estimate names what it rests on.
         let finished = leaf(project, "ตารางที่ 2", status: .done)
         let measured = WorkBreakdown([finished])
@@ -109,9 +109,9 @@ struct ChangeControlTests {
             existingChanges: 0,
             basis: ChangeEstimateBasis(elapsedByPackage: [finished.id: 1_800],
                                        spent: 120, costMeasured: true)))
-        #expect(informed.timeImpact.contains("+30 นาที"))
-        #expect(informed.timeImpact.contains("เฉลี่ยจาก 1 ใบ"))
-        #expect(informed.costImpact.contains("฿120"))
+        #expect(informed.timeImpact.contains("+30 minutes"))
+        #expect(informed.timeImpact.contains("averaged over 1 finished packages"))
+        #expect(informed.costImpact.contains("$120"))
     }
 
     @Test("moving a tolerance after the baseline is a change to the agreement")
@@ -128,8 +128,8 @@ struct ChangeControlTests {
         // A baseline holds the frame as well as the plan, and `BaselineDiff`
         // deliberately does not look at it — so this is the case that would have
         // slipped through if the guard only asked the diff.
-        #expect(proposal.title.contains("ค่าใช้จ่าย"))
-        #expect(proposal.scopeImpact.contains("แผนงานไม่เปลี่ยน"))
+        #expect(proposal.title.contains("Cost"))
+        #expect(proposal.scopeImpact.contains("the plan did not"))
     }
 
     @Test("an edit that changes nothing agreed does not ask for a change request")
@@ -168,7 +168,7 @@ struct ChangeControlTests {
             project: project, wbs: wbs, baseline: baseline, existingChanges: 0))
         // Three rows go, not one. A preview that under-reports the edit people
         // most regret is worse than no preview.
-        #expect(proposal.scopeImpact.contains("−3 ใบ"))
+        #expect(proposal.scopeImpact.contains("−3 packages"))
     }
 
     @Test("the preview is what gets applied")
@@ -216,19 +216,19 @@ struct ChangeControlTests {
 
         let changes = await service.entries(of: project.id, kind: .change)
         #expect(changes.count == 1)
-        #expect(changes.first?.title == "เพิ่มใบงาน: ภาคผนวก ก")
+        #expect(changes.first?.title == "Add work package: ภาคผนวก ก")
         // Proposed, not approved: §19.11 reserves the decision for a person, and
         // the edit landing does not decide it.
         #expect(changes.first?.status == .proposed)
         #expect(changes.first?.origin == .human("ผู้ใช้"))
         // The words the person was shown are kept, so the register and the bar
         // cannot disagree later.
-        #expect(changes.first?.note.contains("คำขอเปลี่ยนแปลง #1") == true)
+        #expect(changes.first?.note.contains("change request #1") == true)
         // The edit really landed — this is not a "propose then maybe apply" flow.
         #expect(await service.breakdown(of: project.id).packages.count == 2)
         // And G3 is now shut on the undecided request (§19.11).
         let gate = try #require(await service.gate(for: project.id))
-        #expect(gate.unmet.contains("ไม่มีคำขอเปลี่ยนแปลงที่ยังไม่ตัดสิน"))
+        #expect(gate.unmet.contains("No undecided change request"))
     }
 
     @Test("an edit before the baseline lands with no change request at all")

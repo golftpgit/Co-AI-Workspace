@@ -33,11 +33,10 @@ struct TeamView: View {
                 PlanEditor(model: model)
             } else if model.rows.isEmpty {
                 ContentUnavailableView(
-                    "ยังไม่มีงานของทีม",
+                    t("No team work yet", "Empty state on the team rail."),
                     systemImage: "person.3",
-                    description: Text("พิมพ์เป้าหมายด้านบน แล้วให้หัวหน้าทีมวางแผนให้ "
-                                      + "หรือข้ามหัวหน้าทีมแล้วสั่งผู้เชี่ยวชาญเอง — "
-                                      + "ไม่ว่าทางไหน แผนจะมาให้แก้ก่อนเริ่มเสมอ"))
+                    description: Text(localised: "Type a goal above and let the team lead plan it, or skip the lead and instruct a specialist yourself — either way the plan comes back for you to edit before anything starts",
+                                      "Empty-state explanation on the team rail."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
@@ -55,9 +54,10 @@ struct TeamView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("ทีม").font(.headline)
+                Text(localised: "Team", "Heading of the team rail.").font(.headline)
                 if model.unfinishedCount > 0 {
-                    Text("\(model.unfinishedCount) ยังไม่จบ")
+                    Text(localised: "\(model.unfinishedCount) unfinished",
+                         "Count of team assignments still running. Placeholder is how many.")
                         .font(.caption)
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(.orange.opacity(0.18), in: Capsule())
@@ -67,42 +67,51 @@ struct TeamView: View {
             }
 
             HStack(spacing: 8) {
-                TextField("เป้าหมายของงานนี้ เช่น สรุปแนวทางการให้ยาปฏิชีวนะก่อนผ่าตัด",
+                TextField(t("The goal of this piece of work, for example: summarise the guidance on antibiotics before surgery",
+                            "Placeholder in the field where a person states what the team should achieve."),
                           text: $model.goal)
                     .textFieldStyle(.roundedBorder)
                     // Enter asks for a plan; it never starts work, because
                     // nothing starts before the user has seen the plan (§2.6).
                     .onSubmit { Task { await model.propose() } }
                     .disabled(model.isRunning)
-                    .accessibilityLabel("เป้าหมายที่จะให้ทีมทำ")
+                    .accessibilityLabel(t("Goal to give the team", "Screen-reader label for the goal field."))
 
                 // §5.5 / P4.8 — the third thing a person walking away wants to
                 // bound, beside "how many times" and "how much money": how many
                 // tokens this run may spend. Blank is no ceiling, which is what
                 // it has always been; the field does not invent one.
-                TextField("เพดานโทเคน", text: $model.tokenCeiling)
+                TextField(t("Token ceiling", "Field limiting how many tokens this run may spend."),
+                          text: $model.tokenCeiling)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 110)
                     .disabled(model.isRunning)
-                    .accessibilityLabel("เพดานโทเคนของการรันนี้")
-                    .accessibilityHint("เว้นว่างไว้ = ไม่จำกัด · ถึงเพดานแล้วงานที่เหลือจะค้างไว้ให้คนตัดสิน")
+                    .accessibilityLabel(t("Token ceiling for this run", "Screen-reader label for the token ceiling field."))
+                    .accessibilityHint(t("leave empty for no limit · at the ceiling, the remaining work waits for a person to decide",
+                                         "Screen-reader hint explaining what the ceiling does."))
 
                 if model.isRunning {
                     ProgressView().controlSize(.small)
                     // Stopping is not the same as finishing, and the screen
                     // says so afterwards rather than clearing the rows.
-                    Button("หยุด") { model.cancel() }
-                        .accessibilityLabel("หยุดการทำงานของทีม")
+                    Button(t("Stop", "Button that cancels the turn the assistant is running right now.")) {
+                        model.cancel()
+                    }
+                        .accessibilityLabel(t("Stop the team", "Screen-reader label for the button that halts the team run."))
                 } else if model.draft.isEmpty {
                     if model.isPlanning { ProgressView().controlSize(.small) }
-                    Button("ให้หัวหน้าทีมวางแผน") { Task { await model.propose() } }
+                    Button(t("Have the team lead plan it",
+                             "Button that asks the lead to propose a plan for the goal.")) {
+                        Task { await model.propose() }
+                    }
                         .buttonStyle(.borderedProminent)
                         .disabled(hasNoGoal || model.isPlanning)
-                        .accessibilityLabel("ให้หัวหน้าทีมเสนอแผนสำหรับเป้าหมายนี้")
+                        .accessibilityLabel(t("Have the team lead propose a plan for this goal",
+                                              "Screen-reader label for the plan button."))
 
                     // §2.6's first row: the dropdown that skips the lead is
                     // still here, and is not a fallback for when planning fails.
-                    Menu("ข้ามหัวหน้าทีม") {
+                    Menu(t("Skip the team lead", "Menu for instructing one specialist directly.")) {
                         ForEach(Role.assignable, id: \.self) { role in
                             Button(role.label) { model.draftDirect(role: role) }
                         }
@@ -110,7 +119,7 @@ struct TeamView: View {
                     .menuStyle(.borderlessButton)
                     .fixedSize()
                     .disabled(hasNoGoal || model.isPlanning)
-                    .accessibilityLabel("สั่งผู้เชี่ยวชาญคนเดียวโดยตรง")
+                    .accessibilityLabel(t("Instruct a single specialist directly", "Screen-reader label."))
                 }
             }
 
@@ -138,8 +147,11 @@ struct TeamView: View {
     private var workPackagePicker: some View {
         if !model.workPackages.isEmpty {
             HStack(spacing: 8) {
-                Picker("ใบงาน", selection: $model.workPackage) {
-                    Text("ไม่ผูกกับใบงาน").tag(String?.none)
+                Picker(t("Work package", "Picker: which planned unit of work this conversation counts against."),
+                       selection: $model.workPackage) {
+                    Text(localised: "Not tied to a work package",
+                         "Picker option: this conversation is a question, not work against a promise.")
+                        .tag(String?.none)
                     ForEach(model.workPackages) { package in
                         Text(package.title).tag(String?.some(package.id))
                     }
@@ -148,9 +160,11 @@ struct TeamView: View {
                 .frame(maxWidth: 260)
                 .labelsHidden()
                 .disabled(model.isRunning)
-                .accessibilityLabel("เลือกใบงานที่งานทีมชุดนี้ทำอยู่")
-                .help("เวลาที่ทีมใช้กับงานชุดนี้จะถูกนับเข้าใบงานที่เลือก")
-                Text("เวลาของทุกงานในแผนชุดนี้จะถูกนับเข้าใบงานที่เลือก")
+                .accessibilityLabel(t("Choose the work package this team run belongs to", "Screen-reader label."))
+                .help(t("Time the team spends on this run is counted against the package you pick",
+                        "Tooltip on the team run's work package picker."))
+                Text(localised: "Time for every assignment in this plan is counted against the package you pick",
+                     "Note under the work package picker on the team rail.")
                     .font(.caption2).foregroundStyle(.secondary)
                 Spacer()
             }
@@ -170,7 +184,8 @@ private struct PlanEditor: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Label("แผนนี้ยังไม่ได้เริ่ม — แก้ได้ทุกช่องก่อนกดอนุมัติ",
+                Label(t("Nothing has started — every field is editable until you approve it",
+                        "Heading of the plan editor, before any work runs."),
                       systemImage: "square.and.pencil")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -187,13 +202,17 @@ private struct PlanEditor: View {
                 }
 
                 HStack {
-                    Button("เพิ่มงาน", systemImage: "plus") { model.addDraftAssignment() }
+                    Button(t("Add assignment", "Button that adds a row to the draft plan."),
+                           systemImage: "plus") { model.addDraftAssignment() }
                     Spacer()
-                    Button("ทิ้งแผนนี้", role: .destructive) { model.discardDraft() }
-                    Button("อนุมัติและเริ่ม") { Task { await model.start() } }
+                    Button(t("Discard this plan", "Button that throws the draft away."),
+                           role: .destructive) { model.discardDraft() }
+                    Button(t("Approve and start", "Button that accepts the plan and sets the team running.")) {
+                        Task { await model.start() }
+                    }
                         .buttonStyle(.borderedProminent)
                         .disabled(!model.draftIsRunnable || refusal != nil)
-                        .accessibilityLabel("อนุมัติแผนนี้แล้วให้ทีมเริ่มทำงาน")
+                        .accessibilityLabel(t("Approve this plan and let the team begin", "Screen-reader label."))
                 }
             }
             .padding(Space.section)
@@ -209,28 +228,32 @@ private struct DraftCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Picker("ผู้รับผิดชอบ", selection: $item.role) {
+                Picker(t("Assigned to", "Picker: which specialist takes this assignment."), selection: $item.role) {
                     ForEach(Role.assignable, id: \.self) { Text($0.label).tag($0) }
                 }
                 .labelsHidden()
                 .fixedSize()
-                .accessibilityLabel("เลือกผู้เชี่ยวชาญที่รับงานนี้")
+                .accessibilityLabel(t("Choose the specialist for this assignment", "Screen-reader label."))
 
-                TextField("ให้ทำอะไร", text: $item.goal)
+                TextField(t("What to do", "Text field holding one assignment's instruction."), text: $item.goal)
                     .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel("รายละเอียดงาน")
+                    .accessibilityLabel(t("Assignment detail", "Screen-reader label for the assignment goal field."))
 
-                Button("ลบ", systemImage: "trash", action: remove)
+                Button(t("Delete", "Button that removes an assignment from the draft plan."),
+                       systemImage: "trash", action: remove)
                     .labelStyle(.iconOnly)
-                    .accessibilityLabel("ลบงานนี้ออกจากแผน")
+                    .accessibilityLabel(t("Remove this assignment from the plan", "Screen-reader label."))
             }
 
-            TextField("ผลงานที่ต้องส่ง เช่น เอกสารสรุป", text: $item.deliverableType)
+            TextField(t("What must be delivered, for example: a summary document",
+                        "Text field naming the kind of thing this assignment produces."),
+                      text: $item.deliverableType)
                 .textFieldStyle(.roundedBorder)
-                .accessibilityLabel("ชนิดของผลงานที่ต้องส่ง")
+                .accessibilityLabel(t("Kind of deliverable required", "Screen-reader label."))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("เกณฑ์ตรวจรับ — บรรทัดละข้อ เขียนว่า  เกณฑ์ | หลักฐานที่ต้องเห็น")
+                Text(localised: "Acceptance criteria — one per line, written as  criterion | evidence that must be seen",
+                     "Instruction above the criteria editor, giving the exact format expected.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 // Required, not optional: an assignment with no criteria cannot
@@ -239,9 +262,10 @@ private struct DraftCard: View {
                     .font(.callout)
                     .frame(minHeight: 54)
                     .overlay(RoundedRectangle(cornerRadius: Radius.control).stroke(.quaternary))
-                    .accessibilityLabel("เกณฑ์ตรวจรับของงานนี้ บรรทัดละหนึ่งข้อ")
+                    .accessibilityLabel(t("Acceptance criteria for this assignment, one per line", "Screen-reader label."))
                 if item.assignment == nil {
-                    Text("ยังเริ่มไม่ได้ — ต้องมีทั้งรายละเอียดงานและเกณฑ์ตรวจรับอย่างน้อยหนึ่งข้อ")
+                    Text(localised: "Cannot start yet — it needs both an instruction and at least one acceptance criterion",
+                         "Shown when a draft assignment is not yet startable.")
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
@@ -258,7 +282,8 @@ private struct PlanSummary: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label("แผนของหัวหน้าทีม — \(plan.assignments.count) งาน",
+            Label(t("The team lead's plan — \(plan.assignments.count) assignments",
+                    "Heading over a plan that has started. Placeholder is how many assignments it holds."),
                   systemImage: "list.bullet.rectangle")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
@@ -299,7 +324,9 @@ private struct AssignmentRow: View {
 
             if !row.findings.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(row.progress == .passed ? "หมายเหตุจากการตรวจ" : "เหตุผลที่ถูกตีกลับ")
+                    Text(row.progress == .passed
+                         ? t("notes from review", "Heading over QA notes on work that passed.")
+                         : t("why it was sent back", "Heading over QA reasons on work that failed."))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     ForEach(Array(row.findings.enumerated()), id: \.offset) { _, finding in
@@ -320,14 +347,17 @@ private struct AssignmentRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: Radius.sheet))
         .sheet(isPresented: $askingRework) { reworkSheet }
-        .confirmationDialog("ยกเลิกงานนี้?", isPresented: $confirmingCancel,
+        .confirmationDialog(t("Cancel this assignment?", "Title of the confirmation before cancelling work."),
+                            isPresented: $confirmingCancel,
                             titleVisibility: .visible) {
-            Button("ยกเลิกงาน", role: .destructive) {
+            Button(t("Cancel the assignment", "Confirming button that stops the assignment."),
+                   role: .destructive) {
                 Task { await model.cancel(row) }
             }
-            Button("ไม่", role: .cancel) {}
+            Button(t("No", "Button that dismisses the cancel confirmation."), role: .cancel) {}
         } message: {
-            Text("บันทึกไว้ว่าคนเป็นคนหยุด — Run-until-done จะไม่หยิบขึ้นมาทำเองอีก")
+            Text(localised: "It is recorded that a person stopped it — Run-until-done will not pick it up again",
+                 "Explains the consequence of cancelling. 'Run-until-done' is a mode name and stays as is.")
         }
     }
 
@@ -338,13 +368,18 @@ private struct AssignmentRow: View {
     private var actions: some View {
         if row.progress != .running {
             HStack(spacing: 12) {
-                Button("สั่งแก้…") { note = ""; askingRework = true }
+                Button(t("Send back…", "Button that returns finished work for another attempt.")) {
+                    note = ""; askingRework = true
+                }
                     .disabled(!model.isReworkable(row))
                     .help(model.isReworkable(row)
-                          ? "ส่งกลับไปทำใหม่พร้อมเหตุผล"
-                          : "บันทึกของงานนี้ไม่มีเกณฑ์ตรวจรับ จึงสร้างงานกลับมาไม่ได้")
+                          ? t("Send it back for another attempt, with a reason",
+                              "Tooltip on the rework button.")
+                          : t("This assignment's record has no acceptance criteria, so it cannot be recreated",
+                              "Tooltip on a disabled rework button."))
                 if row.progress != .cancelled {
-                    Button("ยกเลิก", role: .destructive) { confirmingCancel = true }
+                    Button(t("Cancel", "Button that stops a running assignment."),
+                           role: .destructive) { confirmingCancel = true }
                 }
                 Spacer()
             }
@@ -355,11 +390,14 @@ private struct AssignmentRow: View {
 
     private var reworkSheet: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("สั่งแก้: \(row.goal)").font(.headline)
-            // Required, not optional. "ทำใหม่อีกรอบ" with no reason is the
+            Text(localised: "Send back: \(row.goal)",
+                 "Title of the rework sheet. Placeholder is the assignment's goal.")
+                .font(.headline)
+            // Required, not optional. "try again" with no reason is the
             // instruction that made v1's loops repeat themselves, and this
             // note goes to the specialist in the same place QA's findings do.
-            Text("บอกด้วยว่าจะให้แก้อะไร — ข้อความนี้จะถูกส่งไปเป็นเหตุผลเดียวกับที่ QA ใช้")
+            Text(localised: "Say what needs changing — this text is sent as the same kind of reason QA gives",
+                 "Instruction in the rework sheet, explaining where the note goes.")
                 .font(.caption).foregroundStyle(.secondary)
             TextEditor(text: $note)
                 .font(.body)
@@ -367,8 +405,8 @@ private struct AssignmentRow: View {
                 .overlay(RoundedRectangle(cornerRadius: Radius.box).stroke(.quaternary))
             HStack {
                 Spacer()
-                Button("ปิด") { askingRework = false }
-                Button("ส่งกลับไปแก้") {
+                Button(t("Close", "Button that dismisses the rework sheet.")) { askingRework = false }
+                Button(t("Send it back", "Button that files the rework with its reason.")) {
                     askingRework = false
                     Task { await model.rework(row, note: note) }
                 }
@@ -389,7 +427,7 @@ private struct RoleChip: View {
             .font(.caption2.weight(.semibold))
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(.secondary.opacity(0.18), in: Capsule())
-            .accessibilityLabel("บทบาท \(role.label)")
+            .accessibilityLabel(t("Role \(role.label)", "Screen-reader label for a role badge. Placeholder is the role name."))
     }
 }
 
@@ -401,7 +439,7 @@ extension Role {
 
     var label: String {
         switch self {
-        case .teamLead: "หัวหน้าทีม"
+        case .teamLead: t("Team lead", "Picker option: the team lead is accountable.")
         case .researcher: "Researcher"
         case .analyst: "Analyst"
         case .engineer: "Engineer"
@@ -423,18 +461,25 @@ private struct ProgressChip: View {
         }
         .font(.caption)
         .foregroundStyle(tint)
-        .accessibilityLabel("\(text) ผ่านไป \(attempts) รอบ")
+        .accessibilityLabel(t("\(text), \(attempts) attempts so far",
+                              "Screen-reader label for an assignment's status. Placeholders: the status text and how many attempts."))
     }
 
     // Attempts are on the chip rather than hidden: a task that passed on the
     // third try and one that passed immediately are not the same result.
     private var text: String {
         switch progress {
-        case .running: "กำลังทำ (รอบ \(attempts))"
-        case .passed: attempts > 1 ? "ผ่าน (รอบที่ \(attempts))" : "ผ่าน"
-        case .failed: "ถูกตีกลับ (รอบ \(attempts))"
-        case .escalated: "ต้องให้คนตัดสิน (\(attempts) รอบ)"
-        case .cancelled: "ยกเลิกโดยผู้ใช้"
+        case .running: t("running (attempt \(attempts))",
+                         "Assignment status. Placeholder is which attempt this is.")
+        case .passed: attempts > 1
+            ? t("passed (on attempt \(attempts))",
+                "Assignment status after more than one try. Placeholder is which attempt passed.")
+            : t("passed", "Assignment status: accepted first time.")
+        case .failed: t("sent back (attempt \(attempts))",
+                        "Assignment status. Placeholder is which attempt was rejected.")
+        case .escalated: t("needs a person to decide (\(attempts) attempts)",
+                           "Assignment status. Placeholder is how many attempts were made.")
+        case .cancelled: t("cancelled by the user", "Assignment status: a person stopped it.")
         }
     }
 

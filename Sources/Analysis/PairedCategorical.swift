@@ -29,11 +29,11 @@ public struct McNemarResult: Sendable, Equatable {
     public let exact: Bool
 
     public var summary: String {
-        let base = "คู่ที่เปลี่ยนจาก + เป็น −: \(changedOneWay) · จาก − เป็น +: \(changedOtherWay)"
+        let base = localised("pairs that went + to −: \(changedOneWay) · − to +: \(changedOtherWay)", "Counts of the pairs that changed each way. Placeholders: the two counts.")
         let test = exact
-            ? String(format: "ทดสอบแบบ exact (binomial) เพราะคู่ที่เปลี่ยนมีน้อย — p = %.4f", pValue)
+            ? String(format: localised("tested exactly (binomial) because so few pairs changed — p = %.4f", "Says the exact test was used. Placeholder: the p-value."), pValue)
             : String(format: "McNemar χ² = %.3f, p = %.4f", statistic, pValue)
-        return "\(base) · \(test) · **คู่ที่ไม่เปลี่ยนไม่ได้ถูกนับ** เพราะมันไม่บอกอะไรเรื่องการเปลี่ยนแปลง"
+        return localised("\(base) · \(test) · **pairs that did not change are not counted** because they say nothing about change", "The McNemar summary. Placeholders: the pair counts and the test result.")
     }
 }
 
@@ -45,10 +45,10 @@ public struct TrendResult: Sendable, Equatable {
 
     public var summary: String {
         String(format: "χ² for trend = %.3f (1 df), p = %.4f", statistic, pValue)
-            + " · สัดส่วนตามลำดับ: "
+            + localised(" · proportions in order: ", "Introduces the proportions of a trend test.")
             + proportions.map { String(format: "%.1f%%", $0 * 100) }.joined(separator: " → ")
-            + " · **ทดสอบนี้ถามว่าสัดส่วนไล่ไปตามลำดับหรือไม่** ไม่ใช่ว่ากลุ่มไหนต่างจากกลุ่มไหน "
-            + "ถ้าลำดับของกลุ่มสลับได้โดยไม่เสียความหมาย แปลว่าใช้ผิดการทดสอบ"
+            + localised(" · **this test asks whether the proportions run in order**, not which group differs from which ", "Warns what a trend test does and does not answer.")
+            + localised("if the groups could be reordered without losing meaning, this is the wrong test", "Ends the warning about what a trend test answers.")
     }
 }
 
@@ -64,12 +64,12 @@ public enum PairedCategorical {
     public static func mcNemar(bothPositive: Int, changedOneWay: Int,
                                changedOtherWay: Int, bothNegative: Int) throws -> McNemarResult {
         guard bothPositive >= 0, changedOneWay >= 0, changedOtherWay >= 0, bothNegative >= 0 else {
-            throw StatError.badShape("จำนวนคู่ติดลบไม่ได้")
+            throw StatError.badShape(localised("pair counts cannot be negative", "Why McNemar's test cannot run."))
         }
         let discordant = changedOneWay + changedOtherWay
         guard discordant > 0 else {
             throw StatError.notEnoughData(
-                "ไม่มีคู่ไหนเปลี่ยนเลย — ไม่มีอะไรให้ทดสอบเรื่องการเปลี่ยนแปลง")
+                localised("no pair changed — there is no change to test", "Why McNemar's test cannot run."))
         }
 
         // Under 25 discordant pairs the χ² approximation is poor and Bland
@@ -102,14 +102,14 @@ public enum PairedCategorical {
     public static func trend(_ groups: [(cases: Int, total: Int)],
                              scores: [Double]? = nil) throws -> TrendResult {
         guard groups.count >= 3 else {
-            throw StatError.notEnoughData("แนวโน้มต้องมีอย่างน้อยสามกลุ่มที่เรียงลำดับได้")
+            throw StatError.notEnoughData(localised("a trend needs at least three groups that can be put in order", "Why a trend test cannot run."))
         }
         guard groups.allSatisfy({ $0.total > 0 && $0.cases >= 0 && $0.cases <= $0.total }) else {
-            throw StatError.badShape("จำนวนเคสต้องอยู่ระหว่าง 0 กับจำนวนทั้งหมดของกลุ่ม")
+            throw StatError.badShape(localised("the number of cases must be between 0 and the size of the group", "Why a trend test cannot run."))
         }
         let x = scores ?? (0..<groups.count).map(Double.init)
         guard x.count == groups.count else {
-            throw StatError.badShape("จำนวนคะแนนลำดับต้องเท่ากับจำนวนกลุ่ม")
+            throw StatError.badShape(localised("there must be as many ordinal scores as groups", "Why a trend test cannot run."))
         }
 
         let totals = groups.map { Double($0.total) }
@@ -118,7 +118,7 @@ public enum PairedCategorical {
         let r = cases.reduce(0, +)
         let overall = r / n
         guard overall > 0, overall < 1 else {
-            throw StatError.notEnoughData("ทุกคนเป็นเคส หรือไม่มีใครเป็นเลย — ไม่มีแนวโน้มให้ทดสอบ")
+            throw StatError.notEnoughData(localised("everyone is a case, or nobody is — there is no trend to test", "Why a trend test cannot run."))
         }
 
         let meanScore = zip(totals, x).reduce(0) { $0 + $1.0 * $1.1 } / n
@@ -128,7 +128,7 @@ public enum PairedCategorical {
             denominator += totals[index] * (x[index] - meanScore) * (x[index] - meanScore)
         }
         guard denominator > 0 else {
-            throw StatError.badShape("คะแนนลำดับทุกกลุ่มเท่ากัน — ไม่มีลำดับให้ไล่")
+            throw StatError.badShape(localised("every group has the same ordinal score — there is no order to follow", "Why a trend test cannot run."))
         }
         let statistic = numerator * numerator / (overall * (1 - overall) * denominator)
 

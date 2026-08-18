@@ -30,6 +30,7 @@ public enum ConflictHeadline {
     /// sources. Crude and deliberately so: the cost of rejecting a usable title
     /// is a plainer card, and the cost of keeping a bad one is every card in
     /// the list reading like the search box.
+    /// LOCALISATION: matching data — see RULES.md U24.
     static let instructionMarkers = [
         "จง", "ช่วย", "กรุณา", "ขอให้", "ให้ตอบ", "ตอบเป็น", "สรุปให้", "เขียนให้",
         "หน่อย", "ทีครับ", "ทีค่ะ",

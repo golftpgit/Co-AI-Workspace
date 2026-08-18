@@ -52,7 +52,7 @@ struct BootStatusView: View {
             .padding(Space.section)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .accessibilityLabel("สถานะการเริ่มระบบ")
+        .accessibilityLabel(t("System start-up status", "Screen-reader label for the whole boot screen."))
         .task {
             // Built once the paths exist rather than at construction: the
             // bridge script goes beside the analysis store, and where that is
@@ -75,14 +75,14 @@ struct BootStatusView: View {
             switch environment.phase {
             case .launching:
                 ProgressView().controlSize(.small)
-                Text("กำลังเริ่มระบบ…")
+                Text(localised: "Starting up…", "Boot phase: the app is still bringing services up.")
             case .ready:
                 statusDot(.green)
-                Text("พร้อมใช้งาน").fontWeight(.medium)
+                Text(localised: "Ready", "Boot phase: everything came up.").fontWeight(.medium)
             case .degraded(let reason):
                 statusDot(.red)
                 VStack(alignment: .leading) {
-                    Text("เริ่มระบบไม่สำเร็จ").fontWeight(.medium)
+                    Text(localised: "Start-up did not finish", "Boot phase: something failed and the reason follows.").fontWeight(.medium)
                     Text(reason).font(.callout).foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
@@ -93,11 +93,12 @@ struct BootStatusView: View {
 
     @ViewBuilder private var pathsSection: some View {
         if let paths = environment.paths {
-            section("ที่เก็บข้อมูล") {
+            section(t("Where data is kept", "Section heading on the boot screen.")) {
                 labeled("Data directory", paths.root.path(percentEncoded: false))
                 labeled("Bootstrap", paths.bootstrapFile.lastPathComponent)
                 if !environment.createdDirectories.isEmpty {
-                    labeled("สร้างใหม่รอบนี้", environment.createdDirectories.joined(separator: ", "))
+                    labeled(t("Created this run", "Row label: directories that did not exist before this launch."),
+                            environment.createdDirectories.joined(separator: ", "))
                 }
             }
         }
@@ -110,7 +111,7 @@ struct BootStatusView: View {
             labeled("SearXNG port", "\(environment.config.searxngPort)")
             labeled("Log level", environment.config.logLevel.rawValue)
             if let outcome = environment.bootstrapOutcome {
-                labeled("โหลดแบบ", describe(outcome))
+                labeled(t("Loaded by", "Row label: how the bootstrap file was obtained."), describe(outcome))
             }
         }
     }
@@ -118,7 +119,7 @@ struct BootStatusView: View {
     private var sidecarSection: some View {
         section("Sidecars") {
             if environment.sidecarStatuses.isEmpty {
-                Text("ยังไม่มี sidecar ที่ลงทะเบียน").foregroundStyle(.secondary)
+                Text(localised: "No sidecar is registered", "Shown when the sidecar list is empty.").foregroundStyle(.secondary)
             } else {
                 ForEach(environment.sidecarStatuses.sorted(by: { $0.key < $1.key }), id: \.key) { id, status in
                     HStack(spacing: 8) {
@@ -138,18 +139,20 @@ struct BootStatusView: View {
     /// can't it run commands" is invisible — tool calling needs a tier above
     /// on-device (ARCHITECTURE §9.1).
     private var engineSection: some View {
-        section("เอนจิน") {
+        section(t("Engine", "Section heading on the boot screen.")) {
             if let engine = environment.engine {
-                labeled("ฐานข้อมูล", "เชื่อมต่อแล้ว")
+                labeled(t("Database", "Row label on the boot screen."),
+                        t("connected", "Row value: the database answered."))
                 ForEach(Array(engine.executorSummary.enumerated()), id: \.offset) { _, line in
-                    labeled("โมเดล", line)
+                    labeled(t("Model", "Row label: one line per model tier that answered a probe."), line)
                 }
                 // §7: a manifest that did not load is worth saying out loud —
                 // a silent one looks like an agent that stopped behaving.
-                labeled("ทะเบียน (§7)",
-                        "\(engine.roster.count) รายการ"
+                labeled(t("Roster (§7)", "Row label: the agent manifest."),
+                        t("\(engine.roster.count) entries", "Row value. Placeholder is a count of roster entries.")
                             + (engine.rosterProblems.isEmpty ? ""
-                               : " · โหลดไม่ได้ \(engine.rosterProblems.count) ไฟล์"))
+                               : t(" · \(engine.rosterProblems.count) files failed to load",
+                                   "Appended when some roster files could not be read. Placeholder is a count of files.")))
                 ForEach(Array(engine.rosterProblems.enumerated()), id: \.offset) { _, problem in
                     Text("• \(problem)")
                         .font(.caption).foregroundStyle(.orange)
@@ -173,7 +176,9 @@ struct BootStatusView: View {
                 // bot list being empty one morning with no reason given.
                 let unreadable = FileStoreIncidents.shared.all
                 if !unreadable.isEmpty {
-                    labeled("ไฟล์ที่อ่านไม่ออก", "\(unreadable.count) ไฟล์ · ของเดิมถูกสำรองไว้แล้ว")
+                    labeled(t("Files that could not be read", "Row label for files whose contents would not decode."),
+                            t("\(unreadable.count) files · the originals have been backed up",
+                              "Row value. Placeholder is a count of files. Says the data was kept, not lost."))
                     ForEach(Array(unreadable.enumerated()), id: \.offset) { _, failure in
                         Text("• \(failure.summary)")
                             .font(.caption).foregroundStyle(.orange)
@@ -184,7 +189,9 @@ struct BootStatusView: View {
             } else {
                 HStack(spacing: 8) {
                     statusDot(.orange)
-                    Text(environment.engineError.map { "ยังเริ่มไม่สำเร็จ — \($0)" } ?? "กำลังเริ่ม…")
+                    Text(environment.engineError.map {
+                        t("Not started yet — \($0)", "Engine failed to start. Placeholder is the reason.")
+                    } ?? t("Starting…", "The engine is still coming up."))
                         .foregroundStyle(.secondary).textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -194,7 +201,7 @@ struct BootStatusView: View {
     }
 
     private var notesSection: some View {
-        section("หมายเหตุ") {
+        section(t("Notes", "Section heading on the boot screen.")) {
             ForEach(Array(environment.notes.enumerated()), id: \.offset) { _, note in
                 Text("• \(note)").font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -209,12 +216,14 @@ struct BootStatusView: View {
     /// whether the thing an agent needs is on the list.
     private func mcpSummary(_ engine: Engine) -> String {
         guard !engine.mcpConnected.isEmpty || !engine.mcpProblems.isEmpty else {
-            return "ยังไม่ได้ตั้งค่าเซิร์ฟเวอร์"
+            return t("no server is configured", "MCP summary when nothing has been set up.")
         }
         let tools = engine.mcpConnected.reduce(0) { $0 + $1.toolNames.count }
-        let servers = "\(engine.mcpConnected.count) เซิร์ฟเวอร์ · \(tools) เครื่องมือ"
+        let servers = t("\(engine.mcpConnected.count) servers · \(tools) tools",
+                        "MCP summary. Placeholders: a count of servers and a count of tools. Counted in tools because that is what an agent needs.")
         return engine.mcpProblems.isEmpty ? servers
-            : servers + " · ต่อไม่ได้ \(engine.mcpProblems.count)"
+            : servers + t(" · \(engine.mcpProblems.count) could not connect",
+                          "Appended to the MCP summary. Placeholder is a count of servers that failed.")
     }
 
     private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
@@ -255,7 +264,7 @@ struct BootStatusView: View {
     }
 
     /// P9.4: what the status means for the person, not the exit code on its
-    /// own. "ล้มเหลว — exited 1" left the user to work out for themselves that
+    /// own. "failed — exited 1" left the user to work out for themselves that
     /// nothing durable in the app was going to work.
     private func describe(_ status: SidecarStatus, id: String) -> String {
         status.explanation(id: id)
@@ -263,21 +272,60 @@ struct BootStatusView: View {
 
     private func describe(_ outcome: BootstrapStore.LoadOutcome) -> String {
         switch outcome {
-        case .loaded: "อ่านจากไฟล์เดิม"
-        case .createdDefault: "สร้างไฟล์ใหม่จากค่าเริ่มต้น"
+        case .loaded: t("read from the existing file", "How the bootstrap config was loaded.")
+        case .createdDefault: t("a new file was written from the defaults",
+                                "How the bootstrap config was loaded.")
         // P9.2 — both of these replaced or refused somebody's file, so both say
         // that a copy of the old one is still there. "Your settings moved" is
         // only reassuring if you can check.
         case .migrated(let from, let steps):
-            "ย้ายจากรุ่น \(from) เป็นรุ่น \(BootstrapConfig.currentSchemaVersion) "
-                + "(ขั้นที่ \(steps.map(String.init).joined(separator: ", "))) — "
-                + "ไฟล์เดิมเก็บไว้เป็น bootstrap.v\(from).backup.plist"
+            t("migrated from version \(from) to version \(BootstrapConfig.currentSchemaVersion) (steps \(steps.map(String.init).joined(separator: ", "))) — the old file is kept as bootstrap.v\(from).backup.plist",
+              "The settings file was upgraded. Placeholders: the old version, the new version, the migration steps that ran, and the old version again in the backup filename.")
         case .newerThanExpected(let version):
-            "ไฟล์ตั้งค่าเป็นรุ่น \(version) ซึ่งใหม่กว่าที่แอปรุ่นนี้รู้จัก "
-                + "(\(BootstrapConfig.currentSchemaVersion)) — รอบนี้ใช้ค่าเริ่มต้นและ**ไม่แก้ไฟล์เดิม**"
+            t("the settings file is version \(version), newer than this build understands (\(BootstrapConfig.currentSchemaVersion)) — the defaults are being used this run and **the file was left alone**",
+              "The settings file came from a newer build. Placeholders: the file's version and this build's version.")
         case .repairedInvalid:
-            "ไฟล์เดิมใช้ไม่ได้ จึงเขียนทับด้วยค่าเริ่มต้น — "
-                + "ไฟล์เดิมเก็บไว้เป็น bootstrap.unreadable.backup.plist"
+            t("the existing file was unusable and was replaced with the defaults — the old one is kept as bootstrap.unreadable.backup.plist",
+              "The settings file would not parse.")
+        }
+    }
+}
+
+/// What a stopped component looks like from wherever the person happens to be.
+///
+/// The status has existed since P0.4 and was shown on one screen. That is enough
+/// for somebody already looking for it and no use at all to somebody in the
+/// middle of a conversation, which is the state the app is usually in when a
+/// sidecar dies (AUDIT F-12).
+///
+/// Deliberately not dismissible: it disappears when the thing it describes is
+/// fixed, and a banner a person can wave away is a banner they will wave away.
+struct SidecarFailureBanner: View {
+    let environment: AppEnvironment
+
+    var body: some View {
+        let failures = environment.failedSidecars
+        if !failures.isEmpty {
+            VStack(alignment: .leading, spacing: Space.tight) {
+                ForEach(failures, id: \.id) { failure in
+                    HStack(alignment: .firstTextBaseline, spacing: Space.row) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(failure.explanation)
+                            .font(.callout)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(t("Service \(failure.id) has stopped — \(failure.explanation)",
+                                          "Screen-reader label on the sidecar failure banner. Placeholders: the service name and why it stopped."))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Space.box)
+            // Solid, not glass: it carries the reason somebody has to read
+            // (§24.2).
+            .background(.orange.opacity(0.12))
+            Divider()
         }
     }
 }

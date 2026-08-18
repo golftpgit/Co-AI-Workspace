@@ -74,7 +74,7 @@ struct AccountabilityTests {
                               statement: ScopeStatement(inScope: ["ความชุก"],
                                                         outOfScope: ["ข้ามวิชาชีพ"]))
         let gate = try #require(ProjectLifecycle.evaluate(project))
-        #expect(gate.unmet == ["มีชื่อผู้รับผิดชอบทางธุรกิจ (Executive) ที่เป็นคน"])
+        #expect(gate.unmet == ["A named human business owner (Executive)"])
 
         project.board = [BoardRole(seat: .executive, person: "ผู้ใช้")]
         #expect(ProjectLifecycle.evaluate(project)?.passed == true)

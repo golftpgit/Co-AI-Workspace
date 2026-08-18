@@ -61,7 +61,7 @@ public final class ConflictViewModel {
             conflicts = try await store.load(scope: scope)
         } catch {
             log.error("loading conflicts: \(error)")
-            status = Status(message: "โหลดรายการข้อขัดแย้งไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not load the conflicts: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -76,7 +76,8 @@ public final class ConflictViewModel {
                        _ resolution: ConflictResolution,
                        asPrecedent: Bool) async {
         guard let store else {
-            status = Status(message: "ยังต่อฐานข้อมูลไม่ได้ — คำตัดสินจะไม่ถูกบันทึก",
+            status = Status(message: t("The database is unreachable — the decision would not be recorded",
+                                       "Status message refusing to decide while the database is down."),
                             isError: true)
             return
         }
@@ -94,12 +95,14 @@ public final class ConflictViewModel {
             try await store.recordDecision(decision, for: conflict.id)
             await reload()
             status = Status(message: asPrecedent
-                            ? "บันทึกเป็นคำตัดสินกลาง — ใช้กับทุกโปรเจกต์"
-                            : "บันทึกคำตัดสินสำหรับขอบเขตนี้แล้ว",
+                            ? t("Recorded as a central decision — binding on every project",
+                                "Status message after deciding with precedent.")
+                            : t("The decision is recorded for this scope",
+                                "Status message after deciding within one scope."),
                             isError: false)
         } catch {
             log.error("saving decision: \(error)")
-            status = Status(message: "บันทึกคำตัดสินไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not record the decision: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -126,7 +129,8 @@ public final class ConflictViewModel {
     /// mind from a mis-click.
     public func reopen(_ conflict: StoredConflict, reason: String) async {
         guard let store else {
-            status = Status(message: "ยังต่อฐานข้อมูลไม่ได้ — การกลับคำตัดสินจะไม่ถูกบันทึก",
+            status = Status(message: t("The database is unreachable — the reversal would not be recorded",
+                                       "Status message refusing to reverse while the database is down."),
                             isError: true)
             return
         }
@@ -136,13 +140,14 @@ public final class ConflictViewModel {
             try await store.reopen(conflict.id, reason: reason)
             await reload()
             if historyFor == conflict.id { await loadHistory(of: conflict) }
-            status = Status(message: "กลับมาเป็นคำถามที่ยังไม่ตัดสิน — คำตัดสินเดิมยังอยู่ในประวัติ",
+            status = Status(message: t("Back to an open question — the original decision stays in the history",
+                                       "Status message after reversing a conflict decision."),
                             isError: false)
         } catch let error as ConflictHistoryError {
             status = Status(message: error.description, isError: true)
         } catch {
             log.error("reopening conflict: \(error)")
-            status = Status(message: "กลับคำตัดสินไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not reverse the decision: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 }

@@ -4,6 +4,8 @@ import Config
 import AgentKit
 import Observability
 import Sidecar
+import LLMProviders
+import CoreEngine
 
 /// Boot state the UI observes. Everything that can fail at startup fails
 /// *visibly* here — v1's habit of swallowing startup errors left blank panels
@@ -23,6 +25,19 @@ public final class AppEnvironment {
     public private(set) var bootstrapOutcome: BootstrapStore.LoadOutcome?
     public private(set) var createdDirectories: [String] = []
     public private(set) var sidecarStatuses: [String: SidecarStatus] = [:]
+    /// Sidecars that gave up, newest state each poll.
+    ///
+    /// Kept as its own property rather than filtered at each call site, because
+    /// this is the one thing about the strip that has to be true everywhere: a
+    /// component that stopped is a fact about the whole app, and it was only
+    /// visible on the system screen — which is a screen somebody opens *after*
+    /// they already suspect something (AUDIT F-12).
+    public var failedSidecars: [(id: String, explanation: String)] {
+        sidecarStatuses
+            .filter { if case .failed = $0.value { return true }; return false }
+            .sorted { $0.key < $1.key }
+            .map { ($0.key, $0.value.explanation(id: $0.key)) }
+    }
     public private(set) var notes: [String] = []
     /// Nil until the database answers. Chat is unavailable without it, and the
     /// UI says which of the two happened rather than showing an empty panel.
@@ -47,7 +62,8 @@ public final class AppEnvironment {
             self.config = config
             self.bootstrapOutcome = outcome
             if case .repairedInvalid(let reason) = outcome {
-                notes.append("bootstrap.plist ใช้ไม่ได้ จึงสร้างใหม่จากค่าเริ่มต้น (\(reason))")
+                notes.append(t("bootstrap.plist was unusable, so it was rewritten from the defaults (\(reason))",
+                           "Boot note. Placeholder is why the file was rejected."))
             }
 
             let manager = SidecarManager(paths: paths)
@@ -72,13 +88,15 @@ public final class AppEnvironment {
         guard let helpers = Bundle.main.url(forResource: nil, withExtension: nil, subdirectory: "Helpers")
                 ?? Bundle.main.resourceURL?.appending(path: "Helpers"),
               FileManager.default.fileExists(atPath: helpers.path(percentEncoded: false)) else {
-            notes.append("ยังไม่มีโฟลเดอร์ Helpers ใน bundle — sidecar จะเริ่มทำงานเมื่อถึง P1.2/P3.1")
+            notes.append(t("No Helpers folder in the bundle yet — sidecars start once P1.2/P3.1 land",
+                           "Boot note when the helper binaries are not packaged."))
             return
         }
 
         let surreal = helpers.appending(path: "surreal")
         guard FileManager.default.isExecutableFile(atPath: surreal.path(percentEncoded: false)) else {
-            notes.append("ไม่พบ binary 'surreal' ใน Helpers — ข้ามการเริ่ม sidecar")
+            notes.append(t("No ‘surreal’ binary in Helpers — starting the sidecar was skipped",
+                           "Boot note when the database binary is missing."))
             return
         }
 
@@ -93,7 +111,8 @@ public final class AppEnvironment {
         do {
             try await manager.start(spec)
         } catch {
-            notes.append("เริ่ม sidecar 'surreal' ไม่สำเร็จ: \(error)")
+            notes.append(t("The ‘surreal’ sidecar would not start: \(String(describing: error))",
+                           "Boot note. Placeholder is the underlying error."))
         }
 
         await startSearXNG(manager: manager, config: config)
@@ -109,12 +128,13 @@ public final class AppEnvironment {
     /// (P9.6), not a copy step.
     private func startSearXNG(manager: SidecarManager, config: BootstrapConfig) async {
         guard let interpreter = config.searxngPython, !interpreter.isEmpty else {
-            notes.append("ยังไม่ได้ตั้ง searxngPython — ค้นเว็บทั่วไป (T5) จะใช้ไม่ได้ "
-                         + "(ติดตั้งด้วย scripts/fetch-searxng.sh แล้วตั้งค่าใน bootstrap.plist)")
+            notes.append(t("searxngPython is not set — open-web search (T5) will not work (install it with scripts/fetch-searxng.sh, then set it in bootstrap.plist)",
+                           "Boot note when the web-search interpreter is unconfigured."))
             return
         }
         guard FileManager.default.isExecutableFile(atPath: interpreter) else {
-            notes.append("searxngPython ชี้ไปที่ไฟล์ที่รันไม่ได้: \(interpreter)")
+            notes.append(t("searxngPython points at something that cannot be run: \(interpreter)",
+                           "Boot note. Placeholder is the configured path."))
             return
         }
 
@@ -136,14 +156,15 @@ public final class AppEnvironment {
         do {
             try await manager.start(spec)
         } catch {
-            notes.append("เริ่ม sidecar 'searxng' ไม่สำเร็จ: \(error)")
+            notes.append(t("The ‘searxng’ sidecar would not start: \(String(describing: error))",
+                           "Boot note. Placeholder is the underlying error."))
         }
     }
 
     /// The database is a sidecar that has just been asked to start, so the
     /// first connection attempt can legitimately lose the race. Retrying for a
     /// few seconds is the difference between a working first launch and a
-    /// window that says "ต่อฐานข้อมูลไม่ได้" until the user restarts.
+    /// window that says "the database is unreachable" until the user restarts.
     private func buildEngine(config: BootstrapConfig, paths: AppPaths) async {
         let deadline = ContinuousClock.now.advanced(by: .seconds(20))
         while ContinuousClock.now < deadline {
@@ -163,7 +184,8 @@ public final class AppEnvironment {
                 try? await Task.sleep(for: .milliseconds(500))
             }
         }
-        notes.append("เชื่อมต่อฐานข้อมูลไม่สำเร็จ จึงยังใช้หน้าแชทไม่ได้ — \(engineError ?? "ไม่ทราบสาเหตุ")")
+        notes.append(t("The database would not connect, so Chat is unavailable — \(engineError ?? t("no reason given", "Stand-in when a failure carries no reason."))",
+                       "Boot note. Placeholder is why the connection failed."))
         log.error("engine unavailable: \(self.engineError ?? "unknown", privacy: .public)")
     }
 
@@ -180,18 +202,15 @@ public final class AppEnvironment {
         let hasEndpoint = !(config.selfHostedEndpoint?.isEmpty ?? true)
         switch (engine.localTier.selected, hasEndpoint) {
         case (nil, false):
-            notes.append("ไม่มีโมเดล MLX บนเครื่อง และยังไม่ได้ตั้ง selfHostedEndpoint — "
-                         + "เหลือแต่โมเดล on-device ซึ่งงานที่ต้องความแม่นสูงใช้ไม่ได้: "
-                         + "จะไม่พบข้อขัดแย้งและไม่สกัดความสัมพันธ์ให้กราฟเลย "
-                         + "(โหลดโมเดลได้ที่แท็บ \"โมเดล\")")
+            notes.append(t("No MLX model on the machine and no selfHostedEndpoint set — only the on-device model is left, which accuracy-critical work cannot use: no conflict will be found and no relation extracted for the graph (download one on the “Models” tab)",
+                           "Boot note when neither a local model nor an endpoint is available."))
         case (nil, true):
             // §9.2 rule 4: the endpoint is not allowed to be the only path.
-            notes.append("ไม่มีโมเดล MLX บนเครื่อง — Tier 0.5 ซึ่งเป็นพื้นรับประกันจึงหายไป "
-                         + "ถ้า endpoint ล่มหรือออฟไลน์ งานที่ต้องความแม่นสูงจะไม่มีที่รัน "
-                         + "(โหลดโมเดลได้ที่แท็บ \"โมเดล\")")
+            notes.append(t("No MLX model on the machine — Tier 0.5, the guarantee floor, is missing. If the endpoint goes down or you are offline, accuracy-critical work has nowhere to run (download one on the “Models” tab)",
+                           "Boot note when the guarantee floor is missing."))
         case (let model?, false):
-            notes.append("ยังไม่ได้ตั้ง selfHostedEndpoint — งานที่ต้องความแม่นสูงจะรันบน "
-                         + "\(model.name) บนเครื่องนี้ ซึ่งช้ากว่าแต่ทำงานได้")
+            notes.append(t("No selfHostedEndpoint set — accuracy-critical work runs on \(model.name) on this machine, which is slower but works",
+                           "Boot note when only the local model is available. Placeholder is its name."))
         case (_?, true):
             break
         }
@@ -212,9 +231,23 @@ public final class AppEnvironment {
         }
     }
 
-    /// Records endpoints and ceilings from the settings screen. Same file and
-    /// same reason as the local model: the router is assembled during boot,
-    /// before the database is up.
+    /// Bumped every time the model chain changes. Screens that show the chain
+    /// watch it, because `.task` runs when a view appears and switching areas
+    /// with ⌘1–⌘5 does not promise a fresh view.
+    public private(set) var endpointGeneration = 0
+
+    /// Records endpoints and ceilings from the settings screen — **and rebuilds
+    /// the chain the router is using.**
+    ///
+    /// Writing the file used to be all this did. The router was assembled once
+    /// during boot, so an endpoint saved here did not exist as far as the app
+    /// was concerned until it was restarted, and nothing on screen said so: the
+    /// composer's model switch offers `ModelRouter.offered`, and the GX10
+    /// somebody had just added was not in that list (AUDIT F-1).
+    ///
+    /// The file is still written first. It is what survives a restart, and a
+    /// chain rebuilt from a registry that failed to save would disagree with
+    /// the one the next launch builds.
     public func rememberEndpoints(_ registry: EndpointRegistry, limits: BudgetLimits) {
         guard let paths else { return }
         var updated = config
@@ -225,6 +258,35 @@ public final class AppEnvironment {
             config = updated
         } catch {
             log.error("saving endpoints: \(String(describing: error), privacy: .public)")
+            return
+        }
+        rebuildModelChain(from: registry)
+    }
+
+    /// Rebuilds the router's chain from a registry, off the main actor.
+    ///
+    /// Probing every endpoint is network work, and §24/P9.5 measured what that
+    /// costs on the main actor: a stall long enough to read as the app hanging.
+    private func rebuildModelChain(from registry: EndpointRegistry) {
+        guard let engine else { return }
+        Task { [engine, log] in
+            let built = await EndpointExecutors.build(from: registry)
+            // The two local tiers are not configurable here and keep their
+            // place at the front of the chain (§9.2 rule 4): Tier 0.5 is the
+            // floor everything else falls back to, and a rebuild that dropped
+            // it would take the app offline the moment the LAN went away.
+            var chain: [any LLMExecutor] = [OnDeviceExecutor(), engine.localTier]
+            chain.append(contentsOf: built.executors)
+            await engine.router.replaceExecutors(chain)
+            // The window is the server's to declare (P15.3, C2). A different
+            // endpoint means a different window, and the meter beside the
+            // composer would otherwise go on reporting the old one.
+            if let window = built.defaultWindow {
+                await engine.runner.setPromptBudget(
+                    ContextManager.promptBudget(forWindow: window))
+            }
+            await MainActor.run { self.endpointGeneration += 1 }
+            log.info("model chain rebuilt: \(chain.count, privacy: .public) executors")
         }
     }
 

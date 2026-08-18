@@ -42,9 +42,9 @@ public enum SQLEffect: Int, Sendable, Comparable, Codable {
 
     public var label: String {
         switch self {
-        case .read: "อ่านอย่างเดียว"
-        case .write: "เปลี่ยนข้อมูล"
-        case .destructive: "ลบหรือเขียนทับข้อมูล"
+        case .read: localised("read only", "Label for a SQL statement that only reads.")
+        case .write: localised("changes data", "Label for a SQL statement that writes.")
+        case .destructive: localised("deletes or overwrites data", "Label for a destructive SQL statement.")
         }
     }
 }
@@ -96,13 +96,13 @@ public struct SQLAssessment: Sendable, Equatable {
 
     /// One line for the top of the confirmation sheet.
     public var summary: String {
-        guard !statements.isEmpty else { return "ไม่มีคำสั่งให้รัน" }
+        guard !statements.isEmpty else { return localised("there is nothing to run", "Shown when the statement list is empty.") }
         let writes = statements.filter { $0.effect == .write }.count
         let destroys = statements.filter { $0.effect == .destructive }.count
-        var parts = ["\(statements.count) คำสั่ง"]
-        if writes > 0 { parts.append("เปลี่ยนข้อมูล \(writes)") }
-        if destroys > 0 { parts.append("ลบหรือเขียนทับ \(destroys)") }
-        if writes == 0 && destroys == 0 { parts.append("อ่านอย่างเดียว") }
+        var parts = [localised("\(statements.count) statements", "How many statements are about to run. Placeholder: the count.")]
+        if writes > 0 { parts.append(localised("\(writes) change data", "How many statements write. Placeholder: the count.")) }
+        if destroys > 0 { parts.append(localised("\(destroys) delete or overwrite", "How many statements are destructive. Placeholder: the count.")) }
+        if writes == 0 && destroys == 0 { parts.append(localised("read only", "Label for a SQL statement that only reads.")) }
         return parts.joined(separator: " · ")
     }
 }
@@ -158,7 +158,7 @@ public enum SQLGuard {
         let verbIndex = tokens.firstIndex { $0.word == verb && !verb.isEmpty }
         let verbDepth = verbIndex.map { tokens[$0].depth } ?? 0
         let target = self.target(from: verbIndex, in: tokens)
-        let named = target ?? "ตารางที่ระบุไว้"
+        let named = target ?? localised("the named table", "Stands in for a table name the parser could not read.")
         let hasWhere = tokens.contains { $0.word == "WHERE" && $0.depth == verbDepth }
 
         func made(_ effect: SQLEffect, _ note: String?) -> SQLStatement {
@@ -171,46 +171,46 @@ public enum SQLGuard {
             // The classic: a WHERE that was meant to be there and is not takes
             // the whole table with it.
             return hasWhere
-                ? made(.write, "ลบแถวใน \(named) ที่ตรงเงื่อนไข")
-                : made(.destructive, "ไม่มี WHERE — ลบทุกแถวใน \(named)")
+                ? made(.write, localised("deletes matching rows in \(named)", "What a DELETE with a WHERE does. Placeholder: the table."))
+                : made(.destructive, localised("no WHERE — deletes every row in \(named)", "What a DELETE without a WHERE does. Placeholder: the table."))
         case "UPDATE":
             return hasWhere
-                ? made(.write, "แก้แถวใน \(named) ที่ตรงเงื่อนไข")
-                : made(.destructive, "ไม่มี WHERE — แก้ทุกแถวใน \(named)")
+                ? made(.write, localised("changes matching rows in \(named)", "What an UPDATE with a WHERE does. Placeholder: the table."))
+                : made(.destructive, localised("no WHERE — changes every row in \(named)", "What an UPDATE without a WHERE does. Placeholder: the table."))
         case "CREATE":
             // `OR REPLACE` is the difference between making something and
             // silently throwing away what was there under that name.
             let replaces = tokens.contains { $0.word == "REPLACE" && $0.depth == 0 }
             return replaces
-                ? made(.destructive, "เขียนทับ \(named) ที่มีอยู่เดิม")
-                : made(.write, "สร้าง \(named)")
+                ? made(.destructive, localised("overwrites the existing \(named)", "What a CREATE OR REPLACE does. Placeholder: the table."))
+                : made(.write, localised("creates \(named)", "What a CREATE does. Placeholder: the table."))
         case "INSERT":
             let replaces = tokens.contains { $0.word == "REPLACE" && $0.depth == 0 }
             return made(replaces ? .destructive : .write,
-                        replaces ? "เขียนทับแถวที่ชนกันใน \(named)" : "เพิ่มแถวลง \(named)")
+                        replaces ? localised("overwrites clashing rows in \(named)", "What an INSERT OR REPLACE does. Placeholder: the table.") : localised("adds rows to \(named)", "What an INSERT does. Placeholder: the table."))
         case "DROP":
-            return made(.destructive, "ลบ \(named) ทิ้งทั้งหมด — กู้คืนจากในแอปไม่ได้")
+            return made(.destructive, localised("drops \(named) entirely — the app cannot bring it back", "What a DROP does. Placeholder: the table."))
         case "TRUNCATE":
-            return made(.destructive, "ล้างทุกแถวใน \(named)")
+            return made(.destructive, localised("empties every row in \(named)", "What a TRUNCATE does. Placeholder: the table."))
         case "ALTER":
-            return made(.destructive, "เปลี่ยนโครงสร้างของ \(named)")
+            return made(.destructive, localised("changes the structure of \(named)", "What an ALTER does. Placeholder: the table."))
         case "ATTACH":
             // §12.2 attaches read-only by default precisely because the data on
             // the other end is usually somebody else's.
             let readOnly = tokens.contains { $0.word == "READ_ONLY" }
-            return made(.write, readOnly ? "ต่อฐานข้อมูลภายนอกแบบอ่านอย่างเดียว"
-                                         : "ต่อฐานข้อมูลภายนอกแบบเขียนได้ด้วย")
+            return made(.write, readOnly ? localised("attaches an outside database read-only", "What a read-only ATTACH does.")
+                                         : localised("attaches an outside database with writing allowed", "What a writable ATTACH does."))
         case "COPY":
-            return made(.write, "คัดลอกข้อมูลเข้า/ออกไฟล์")
+            return made(.write, localised("copies data to or from a file", "What a COPY does."))
         case "":
-            return made(.write, "คำสั่งขึ้นต้นด้วยชื่อในเครื่องหมายคำพูด — ถือว่าเปลี่ยนข้อมูลไว้ก่อน")
+            return made(.write, localised("the statement starts with a quoted name — assumed to change data until proven otherwise", "Said when the statement's verb could not be read."))
         default:
             if reading.contains(verb) { return made(.read, nil) }
             if removing.contains(verb) { return made(.destructive, "\(verb) \(named)") }
             if verb == "WITH" { return made(.read, nil) }
             // Not a verb this file knows. Treated as mutating on purpose: the
             // list above is what we have checked, not what SQL contains.
-            return made(.write, "คำสั่ง \(verb) ที่ตัวคุมยังไม่รู้จัก — ถือว่าเปลี่ยนข้อมูลไว้ก่อน")
+            return made(.write, localised("\(verb) is a statement this guard does not know — assumed to change data until proven otherwise", "Said for an unrecognised SQL verb. Placeholder: the verb."))
         }
     }
 

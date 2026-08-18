@@ -72,7 +72,7 @@ struct ContentValidityTests {
         #expect(b?.ioc == nil)
         #expect(b?.raters == 0)
         #expect(b?.passes == false)
-        #expect(b?.reason?.contains("ยังไม่มีผู้เชี่ยวชาญ") == true)
+        #expect(b?.reason?.contains("no expert has rated this item yet") == true)
         #expect(!validity.passes)
     }
 

@@ -58,7 +58,7 @@ struct MultilevelTests {
         let check = Multilevel.independenceCheck(fit)
         #expect(check.wasChecked)
         #expect(check.passed == false)
-        #expect(check.detail.contains("แคบเกินจริง"))
+        #expect(check.detail.contains("too narrow"))
         #expect(check.detail.contains("6.1") || check.detail.contains("6.09"),
                 "the warning does not say what the sample is really worth")
     }
@@ -94,8 +94,8 @@ struct MultilevelTests {
         // the uncorrected estimate would be the same mistake with a note.
         let result = try StatGate.clustered(clinics)
         #expect(result.test == .mixedModel)
-        #expect(result.summary.contains("แก้ตามการจับกลุ่มแล้ว"))
-        #expect(result.summary.contains("แคบเกินจริง"))
+        #expect(result.summary.contains("corrected for clustering"))
+        #expect(result.summary.contains("too narrow"))
         #expect(result.assumptions.first?.passed == false)
         // 60.5 ± 1.96 × 4.30 rather than ± 1.96 × 1.94.
         #expect(result.summary.contains("60.5"))

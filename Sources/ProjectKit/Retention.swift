@@ -7,7 +7,7 @@ import Knowledge
 // somebody's answers after the study ends.
 //
 // **What was wrong before this.** Condition 8 asked for a `DataDisposition`
-// whose `policy` was any non-empty string. Typing "จะจัดการให้เรียบร้อย" passed
+// whose `policy` was any non-empty string. Typing "we will sort it out" passed
 // it. So the gate that exists to make the promise made to participants
 // survive the end of the project could be satisfied without there being a
 // promise at all — box-ticking, which is the exact thing `isDecided` was
@@ -79,6 +79,13 @@ public enum RetentionPolicyReader {
         }
     }
 
+    /// **Not translated, on purpose.** These match text a *person* wrote into a
+    /// retention policy, in whatever language they wrote it. Replacing the Thai
+    /// terms with English ones would stop every Thai-language policy from being
+    /// recognised — the words are the data being searched, not chrome the app
+    /// is showing. Adding a language here means adding its words, never
+    /// swapping the existing ones out (2026-08-18).
+    /// LOCALISATION: matching data — see RULES.md U24.
     private static let retentionTerms = [
         "เก็บรักษา", "เก็บข้อมูล", "ทำลาย", "ลบข้อมูล", "ระยะเวลาเก็บ",
         "retention", "retain", "destroy", "dispose", "anonymis", "anonymiz",
@@ -132,13 +139,16 @@ public struct RetentionObligation: Sendable, Equatable, Codable {
     }
 
     /// The sentence to show. Says when, or says that the rule never said when —
-    /// "ตามนโยบาย" with no date is the version nobody can act on.
+    /// "under the policy" with no date is the version nobody can act on.
     public var summary: String {
-        let base = "\(action.label) ตามนโยบาย “\(policy)” · ตัดสินโดย \(decidedBy)"
+        let base = t("\(action.label) under policy “\(policy)” · decided by \(decidedBy)",
+                     "A retention obligation. Placeholders: the action, the policy and who decided.")
         guard let dueOn else {
-            return base + " · **นโยบายไม่ได้ระบุระยะเวลา** จึงไม่มีวันครบกำหนดให้เตือน"
+            return base + t(" · **the policy states no period**, so there is no due date to warn about",
+                            "Appended when a retention policy carries no duration.")
         }
-        return base + " · ครบกำหนด \(dueOn.formatted(date: .abbreviated, time: .omitted))"
+        return base + t(" · due \(dueOn.formatted(date: .abbreviated, time: .omitted))",
+                        "Appended with a retention due date. Placeholder is the date.")
     }
 }
 
@@ -185,25 +195,26 @@ public enum RetentionCheck {
                                 rules: [RetentionRule],
                                 now: Date = Date()) -> Result {
         guard let heldHumanData else {
-            return .unchecked("นโยบายเก็บรักษาข้อมูล — ยังไม่ได้ตรวจว่าโปรเจกต์นี้เก็บข้อมูลจากคนไว้หรือไม่")
+            return .unchecked(t("Data retention policy — whether this project holds data from people has not been checked",
+                                "Retention result when the store was not consulted."))
         }
         guard heldHumanData else { return .notApplicable }
 
         guard let disposition, disposition.isDecided else {
-            return .blocked("โปรเจกต์นี้เก็บคำตอบจากคนไว้ — ต้องระบุว่าข้อมูลจะไปทางไหน "
-                            + "และใครเป็นคนตัดสิน ก่อนปิดโครงการ (§20.5)")
+            return .blocked(t("This project holds answers from people — where the data goes and who decided must be stated before it closes (§20.5)",
+                              "Retention result blocking a close."))
         }
         guard !rules.isEmpty else {
             return .blocked("""
-                โปรเจกต์นี้เก็บคำตอบจากคนไว้ แต่ **ไม่มีนโยบายเก็บรักษาข้อมูลใน `policy` scope เลย**
-                — สิ่งที่สัญญากับผู้เข้าร่วมไว้ ต้องเขียนไว้ที่ไหนสักแห่งก่อนโครงการจะปิด (§20.5)
+                This project holds answers from people, but **there is no retention policy in the `policy` scope at all** \
+                — what was promised to the participants has to be written down somewhere before it closes (§20.5)
                 """)
         }
         guard let matched = rules.first(where: { $0.matches(disposition.policy) }) else {
             return .blocked("""
-                ไม่พบนโยบาย “\(disposition.policy)” ในนโยบายเก็บรักษาที่มีอยู่ — \
-                ข้อความที่พิมพ์เองผ่านประตูนี้ได้ก่อนหน้านี้ ซึ่งทำให้เงื่อนไขนี้ไม่มีความหมาย
-                นโยบายที่มีจริง: \(rules.map { "“\($0.text)”" }.joined(separator: " · "))
+                The policy “\(disposition.policy)” is not among the retention policies that exist — \
+                free text used to pass this gate, which made the condition meaningless.
+                The policies that do exist: \(rules.map { "“\($0.text)”" }.joined(separator: " · "))
                 """)
         }
 

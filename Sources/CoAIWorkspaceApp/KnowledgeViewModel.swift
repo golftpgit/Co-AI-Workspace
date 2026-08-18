@@ -35,7 +35,7 @@ public final class KnowledgeViewModel {
     public private(set) var isWorking = false
     public var query = ""
     public var scope: Scope = .central
-    /// Which project the app is in, so the scope picker's "โปรเจกต์" option
+    /// Which project the app is in, so the scope picker's "project" option
     /// means a real one (§19.1). `nil` in General, where that option is
     /// disabled rather than filled in with a made-up id.
     public var currentProject: ProjectID?
@@ -136,13 +136,13 @@ public final class KnowledgeViewModel {
             index = rebuilt
             refresh()
             if foreign > 0 {
-                status = Status(message: "\(foreign) ส่วนถูกสร้าง vector ด้วยโมเดลอื่น "
-                                + "— ค้นได้เฉพาะแบบข้อความจนกว่าจะ re-embed",
+                status = Status(message: t("\(foreign) passages were vectorised with a different model — only text search reaches them until they are re-embedded",
+                                           "Status message. Placeholder is how many passages."),
                                 isError: true)
             }
         } catch {
             log.error("loading knowledge: \(error)")
-            status = Status(message: "โหลดคลังจากฐานข้อมูลไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not load the knowledge base from the database: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -204,9 +204,11 @@ public final class KnowledgeViewModel {
             // A contradiction the user is not told about is one they find out
             // from the answer instead of the library (§11.6).
             let raised = conflicts > 0
-                ? " · พบความรู้ที่ขัดกัน \(conflicts) จุด ดูได้ที่แท็บข้อขัดแย้ง"
+                ? t(" · \(conflicts) contradictions were found, on the Conflicts tab",
+                    "Appended to an ingest status message. Placeholder is how many conflicts.")
                 : ""
-            status = Status(message: "เพิ่ม \(added) ส่วน · ข้ามที่ซ้ำ \(skipped) ส่วน" + raised,
+            status = Status(message: t("Added \(added) passages · skipped \(skipped) duplicates",
+                                       "Status message after ingest. Placeholders: how many were added and how many skipped.") + raised,
                             isError: false)
         } else {
             status = Status(message: failed.joined(separator: "\n"), isError: true)
@@ -229,9 +231,8 @@ public final class KnowledgeViewModel {
     /// leaving available, and neither is undoable by the person who notices.
     public func ingest(transcript: Transcript) async {
         guard case .project = scope else {
-            status = Status(message: "บทถอดเทปเข้าคลังของโครงการเท่านั้น — "
-                            + "คลังกลางถูกค้นจากทุกโครงการ คำพูดของผู้เข้าร่วมจึงไม่ควรไปอยู่ตรงนั้น "
-                            + "(§20.7) · เปลี่ยนไปที่โครงการที่เก็บบทสัมภาษณ์นี้ก่อน",
+            status = Status(message: t("A transcript may only enter a project's own base — the shared base is searched from every project, so a participant's words do not belong there (§20.7) · switch to the project this interview belongs to first",
+                                       "Status message refusing to index a transcript into the shared base."),
                             isError: true)
             return
         }
@@ -241,7 +242,7 @@ public final class KnowledgeViewModel {
         let chunks = TranscriptIngest.chunks(of: transcript)
             .map { (chunk: $0.0, provenance: $0.1) }
         guard !chunks.isEmpty else {
-            status = Status(message: "บทถอดเทปนี้ยังไม่มีเนื้อความให้เข้าคลัง", isError: true)
+            status = Status(message: t("This transcript has no text to index yet", "Status message when a transcript is empty."), isError: true)
             return
         }
 
@@ -267,25 +268,28 @@ public final class KnowledgeViewModel {
             let conflicts = await reviewForConflicts(newChunks)
 
             refresh()
-            var message = "เข้าคลังแล้ว \(report.chunksAdded) ส่วน จาก “\(transcript.title)” — "
-                + "แต่ละส่วนอ้างกลับไปที่ช่วงข้อความในบทถอดเทปได้"
+            var message = t("Indexed \(report.chunksAdded) passages from “\(transcript.title)” — each one cites back to its span in the transcript",
+                            "Status message after indexing a transcript. Placeholders: how many passages and the transcript title.")
             if report.chunksReplaced > 0 {
-                // Said out loud: "เพิ่ม 12 ส่วน" on its own hides that eleven
+                // Said out loud: "added 12 passages" on its own hides that eleven
                 // older passages just stopped being citable.
-                message += " · แทนที่ของเดิม \(report.chunksReplaced) ส่วน "
-                    + "เพราะบทถอดเทปนี้เคยเข้าคลังไปแล้ว"
+                message += t(" · replaced \(report.chunksReplaced) existing passages, because this transcript had been indexed before",
+                             "Appended when re-indexing replaced passages. Placeholder is how many.")
             }
             if report.duplicatesSkipped > 0 {
-                message += " · ข้ามที่ซ้ำ \(report.duplicatesSkipped) ส่วน"
+                message += t(" · skipped \(report.duplicatesSkipped) duplicates",
+                             "Appended when duplicates were skipped. Placeholder is how many.")
             }
             if conflicts > 0 {
-                message += " · พบความรู้ที่ขัดกัน \(conflicts) จุด ดูได้ที่แท็บข้อขัดแย้ง"
+                message += t(" · \(conflicts) contradictions were found, on the Conflicts tab",
+                             "Appended to an ingest status message. Placeholder is how many conflicts.")
             }
             status = Status(message: message, isError: false)
         } catch {
             log.error("ingest transcript: \(error)")
             status = Status(message: ReadableFailure.message(
-                for: error, doing: "นำบทถอดเทปเข้าคลังความรู้"), isError: true)
+                for: error, doing: t("indexing the transcript into the knowledge base",
+                                     "Names the action that failed.")), isError: true)
         }
     }
 
@@ -306,7 +310,8 @@ public final class KnowledgeViewModel {
             // and the user is told which one answered.
             log.error("hybrid search: \(error)")
             results = index.search(query, scope: scope, limit: 20)
-            status = Status(message: "ค้นแบบข้อความอย่างเดียว (โมเดลใช้ไม่ได้): \(error)",
+            status = Status(message: t("Text search only (the model is unavailable): \(String(describing: error))",
+                                       "Status message when semantic search is impossible. Placeholder is the underlying error."),
                             isError: true)
         }
     }
@@ -321,19 +326,19 @@ public final class KnowledgeViewModel {
             .filter { !$0.isEmpty }
 
         guard index.updateEntities(of: chunkID, to: cleaned) else {
-            status = Status(message: "ส่วนนี้ไม่อยู่ในคลังแล้ว", isError: true)
+            status = Status(message: t("This passage is no longer in the base", "Status message when a passage has gone."), isError: true)
             return
         }
         do {
             try await store?.updateEntities(chunkID: chunkID, to: cleaned)
         } catch {
             log.error("persisting entities: \(error)")
-            status = Status(message: "แก้ในหน้าจอแล้วแต่บันทึกไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Changed on screen but not saved: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
             return
         }
         refresh()
         await search()
-        status = Status(message: "แก้ entity แล้ว — ผลค้นหาอัปเดตตาม", isError: false)
+        status = Status(message: t("Entities updated — search results follow", "Status message after editing a passage's entities."), isError: false)
     }
 
     public func delete(documentID: String) async {
@@ -345,13 +350,16 @@ public final class KnowledgeViewModel {
             try await relationStore?.deleteDocument(documentID)
         } catch {
             log.error("deleting document: \(error)")
-            status = Status(message: "ลบจากหน้าจอแล้วแต่ลบในฐานข้อมูลไม่สำเร็จ: \(error)",
+            status = Status(message: t("Removed from the screen but not from the database: \(String(describing: error))",
+                                       "Status message. Placeholder is the underlying error."),
                             isError: true)
             return
         }
         refresh()
         await search()
-        status = Status(message: "ลบเอกสารแล้ว (\(removed) ส่วน)", isError: false)
+        status = Status(message: t("Document deleted (\(removed) passages)",
+                                   "Status message after deleting a document. Placeholder is how many passages went."),
+                        isError: false)
     }
 
     /// Reads the graph edges out of freshly ingested text. Failures here are
@@ -390,12 +398,12 @@ public final class KnowledgeViewModel {
         do {
             try await relationStore.reject(relation)
             await reloadRelations()
-            status = Status(message: "ลบความสัมพันธ์นี้แล้ว — ข้อความต้นทางยังอยู่ "
-                            + "และการอ่านเอกสารนี้อีกครั้งจะไม่สร้างมันขึ้นมาใหม่",
+            status = Status(message: t("The relation is deleted — the source text stays, and reading this document again will not recreate it",
+                                       "Status message after rejecting a graph edge."),
                             isError: false)
         } catch {
             log.error("rejecting relation: \(error)")
-            status = Status(message: "ลบความสัมพันธ์ไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not delete the relation: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -416,7 +424,8 @@ public final class KnowledgeViewModel {
     /// Proposes merges between entity names written in different scripts.
     ///
     /// Every suggestion is a suggestion: E.26 measured the highest-scoring pair
-    /// in the fixture as a *wrong* merge (`ความดัน` ↔ `pressure`, 0.919), higher
+    /// in the fixture as a *wrong* merge (`ความดัน` ↔ `pressure`, 0.919 — a real
+    /// case kept in Thai because it is the data being judged), higher
     /// than every correct one — so nothing here changes a graph, and the list
     /// exists to be answered rather than applied.
     public func proposeMerges() async {
@@ -445,12 +454,14 @@ public final class KnowledgeViewModel {
             mergeSuggestions.removeAll { AlignmentStore.key($0) == AlignmentStore.key(alignment) }
             confirmedMerges = ((try? await alignmentStore.decided()) ?? []).filter(\.confirmedByHuman)
             status = Status(message: confirmed
-                            ? "รวมเป็นชื่อเดียวกันแล้ว — กราฟจะใช้ชื่อเดียวสำหรับทั้งสองคำ"
-                            : "บันทึกว่าไม่ใช่คำเดียวกัน — จะไม่เสนออีก",
+                            ? t("Merged — the graph will use one name for both",
+                                "Status message after accepting an entity merge.")
+                            : t("Recorded as not the same thing — it will not be suggested again",
+                                "Status message after rejecting an entity merge."),
                             isError: false)
         } catch {
             log.error("recording alignment: \(error)")
-            status = Status(message: "บันทึกคำตัดสินเรื่องชื่อไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not record the naming decision: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -556,9 +567,11 @@ public final class KnowledgeViewModel {
                 encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
                 try encoder.encode(archive).write(to: url)
             }.value
-            status = Status(message: "ส่งออกแล้ว: \(url.lastPathComponent)", isError: false)
+            status = Status(message: t("Exported: \(url.lastPathComponent)",
+                                   "Status message after export. Placeholder is the file name."),
+                        isError: false)
         } catch {
-            status = Status(message: "ส่งออกไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not export: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -578,11 +591,11 @@ public final class KnowledgeViewModel {
             index = working
             try await store?.save(working.allChunks)
             refresh()
-            status = Status(message: "นำเข้า \(added) ส่วน "
-                            + "(ที่ซ้ำถูกข้าม, vector สร้างใหม่ด้วยโมเดลปัจจุบัน)",
+            status = Status(message: t("Imported \(added) passages (duplicates skipped, vectors rebuilt with the current model)",
+                                       "Status message after importing an archive. Placeholder is how many passages."),
                             isError: false)
         } catch {
-            status = Status(message: "นำเข้าไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not import: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -689,7 +702,7 @@ public final class KnowledgeViewModel {
         await reload()
         // The relations too. They were loaded once at attach and never again,
         // which nobody could see while nothing rendered them — the graph tab
-        // (P2.7) showed central's relations with "โปรเจกต์" selected, and the
+        // (P2.7) showed central's relations with "project" selected, and the
         // picker was telling the truth about a screen that was not.
         await reloadRelations()
         await search()

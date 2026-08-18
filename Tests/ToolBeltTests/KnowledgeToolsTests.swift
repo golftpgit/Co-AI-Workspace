@@ -477,7 +477,7 @@ struct WideningRecordTests {
         // a widening that cannot be reviewed.
         #expect(span.detail?.contains("peer review") == true)
         // And what it became, in the words a reviewer reads.
-        #expect(span.detail?.contains("ขอบเขต") == true)
+        #expect(span.detail?.contains("scope") == true)
         #expect(span.endedAt != nil)
     }
 

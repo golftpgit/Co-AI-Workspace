@@ -72,7 +72,7 @@ public enum CountModels {
             return AssumptionCheck(
                 name: "equidispersion (variance = mean)",
                 wasChecked: false, passed: false, statistic: nil, pValue: nil,
-                detail: "ข้อมูลน้อยเกินกว่าจำนวนพารามิเตอร์ — ตรวจการกระจายเกินไม่ได้")
+                detail: localised("fewer observations than parameters — overdispersion cannot be checked", "Why the overdispersion check could not run."))
         }
         var pearson = 0.0
         for (index, count) in counts.enumerated() where expected[index] > 0 {
@@ -88,11 +88,11 @@ public enum CountModels {
             statistic: ratio,
             pValue: pValue,
             detail: passed
-                ? String(format: "Pearson χ²/df = %.2f — ความแปรปรวนใกล้เคียงค่าเฉลี่ยตามที่ Poisson สมมติ",
+                ? String(format: localised("Pearson χ²/df = %.2f — the variance is close to the mean, as Poisson assumes", "Result of the overdispersion check when the data are not overdispersed."),
                          ratio)
-                : String(format: "Pearson χ²/df = %.2f (p = %.4f) — **ข้อมูลกระจายเกินกว่าที่ Poisson รับได้** "
-                         + "ช่วงความเชื่อมั่นจาก Poisson จะแคบเกินจริง และผลที่ไม่จริงจะดูมีนัยสำคัญ "
-                         + "· ใช้ negative binomial แทน",
+                : String(format: localised("Pearson χ²/df = %.2f (p = %.4f) — **the data are more spread out than Poisson allows** ", "Result of the overdispersion check when the data are overdispersed.")
+                         + localised("Poisson intervals will be too narrow, and findings that are not real will look significant ", "Continues the overdispersion warning.")
+                         + localised("· use a negative binomial instead", "Ends the overdispersion warning."),
                          ratio, pValue))
     }
 
@@ -112,7 +112,7 @@ public enum CountModels {
             // with a wasted parameter. Said rather than silently returning a
             // huge theta that means the same thing obscurely.
             throw StatError.notEnoughData(
-                "ข้อมูลไม่ได้กระจายเกิน — negative binomial ไม่มีอะไรจะอธิบายเพิ่มจาก Poisson")
+                localised("the data are not overdispersed — a negative binomial has nothing to add over Poisson", "Said when a negative binomial was asked for but is not needed."))
         }
         return denominator / numerator
     }
@@ -126,22 +126,22 @@ public enum CountModels {
                             predictors: [[Double]],
                             theta: Double?,
                             maximumIterations: Int = 50) throws -> CountFit {
-        guard !counts.isEmpty else { throw StatError.notEnoughData("ไม่มีข้อมูล") }
+        guard !counts.isEmpty else { throw StatError.notEnoughData(localised("there is no data", "Why a count model cannot be fitted.")) }
         guard counts.allSatisfy({ $0 >= 0 && $0 == $0.rounded() }) else {
-            throw StatError.badShape("โมเดลนับต้องการจำนวนนับที่ไม่ติดลบและเป็นจำนวนเต็ม")
+            throw StatError.badShape(localised("a count model needs non-negative whole numbers", "Why a count model cannot be fitted."))
         }
         guard predictors.allSatisfy({ $0.count == counts.count }) else {
-            throw StatError.badShape("จำนวนค่าตัวแปรต้นไม่เท่ากับจำนวนการสังเกต")
+            throw StatError.badShape(localised("there are not as many predictor values as observations", "Why a count model cannot be fitted."))
         }
         guard counts.contains(where: { $0 > 0 }) else {
-            throw StatError.notEnoughData("ไม่มีเหตุการณ์เกิดขึ้นเลย")
+            throw StatError.notEnoughData(localised("no events happened at all", "Why a count model cannot be fitted."))
         }
 
         // Design matrix with the intercept in column zero.
         let rows = counts.count
         let columns = predictors.count + 1
         guard rows > columns else {
-            throw StatError.notEnoughData("จำนวนการสังเกตต้องมากกว่าจำนวนพารามิเตอร์")
+            throw StatError.notEnoughData(localised("there must be more observations than parameters", "Why a count model cannot be fitted."))
         }
         let design: [[Double]] = (0..<rows).map { row in
             [1.0] + predictors.map { $0[row] }
@@ -172,14 +172,14 @@ public enum CountModels {
                 }
             }
             guard let delta = solve(information, score) else {
-                throw StatError.notEnoughData("ประมาณค่าไม่ลู่เข้า — ตัวแปรต้นอาจซ้อนกันสมบูรณ์")
+                throw StatError.notEnoughData(localised("the fit did not converge — the predictors may be perfectly collinear", "Why a count model could not be fitted."))
             }
             for j in 0..<columns { beta[j] += delta[j] }
             if delta.allSatisfy({ abs($0) < 1e-10 }) { break }
         }
 
         guard let covariance = invert(information) else {
-            throw StatError.notEnoughData("เมทริกซ์ข้อมูลกลับด้านไม่ได้")
+            throw StatError.notEnoughData(localised("the data matrix cannot be inverted", "Why a count model could not be fitted."))
         }
         return CountFit(coefficients: beta,
                         standardErrors: (0..<columns).map { covariance[$0][$0].squareRoot() },

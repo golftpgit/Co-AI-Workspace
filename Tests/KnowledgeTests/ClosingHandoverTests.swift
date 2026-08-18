@@ -55,7 +55,7 @@ struct ClosingHandoverTests {
         let verdict = ClosingHandoverPolicy.verdict(for: transcript)
         #expect(verdict.isMovingUp == false)
         if case .stays(let reason) = verdict {
-            #expect(reason.contains("ผู้เข้าร่วม"))
+            #expect(reason.contains("participant data"))
         }
         // …and it is not in the promoted set either, which is the version of
         // this fact that a caller can get wrong.

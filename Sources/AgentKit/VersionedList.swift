@@ -90,7 +90,7 @@ public enum FileStoreError: Error, CustomStringConvertible, Equatable {
     case fileFromNewerBuild
 
     public var description: String {
-        "ไฟล์นี้ถูกเขียนโดยแอปรุ่นใหม่กว่า — ไม่บันทึกทับให้ "
-            + "เพราะการเขียนทับคือการทำให้การตั้งค่าหายไปจากรุ่นที่คุณจะกลับไปใช้"
+        localised("this file was written by a newer version of the app, and has not been written over ", "Why a save was refused.")
+            + localised("because overwriting it would lose those settings for the version you would go back to", "Ends the reason a save was refused.")
     }
 }

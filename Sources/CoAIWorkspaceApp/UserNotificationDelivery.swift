@@ -92,9 +92,11 @@ actor UserNotificationDelivery: NotificationDelivering {
         UNNotificationCategory(
             identifier: approvalCategory,
             actions: [
-                UNNotificationAction(identifier: approveAction, title: "อนุมัติ",
+                UNNotificationAction(identifier: approveAction,
+                                     title: t("Approve", "Button that approves a register entry."),
                                      options: [.authenticationRequired]),
-                UNNotificationAction(identifier: rejectAction, title: "ไม่อนุมัติ",
+                UNNotificationAction(identifier: rejectAction,
+                                     title: t("Do not approve", "Button that refuses a tool call."),
                                      options: [.destructive]),
             ],
             intentIdentifiers: [],
@@ -136,7 +138,8 @@ final class ApprovalNotificationResponder: NSObject, UNUserNotificationCenterDel
         case UserNotificationDelivery.approveAction:
             decision = .approved
         case UserNotificationDelivery.rejectAction:
-            decision = .rejected(reason: "ปฏิเสธจากการแจ้งเตือน")
+            decision = .rejected(reason: t("refused from a notification",
+                                           "Recorded reason when a person declines from the notification."))
         default:
             // Tapping the banner itself opens the app, which is what somebody
             // wanting to read the arguments before deciding is doing.

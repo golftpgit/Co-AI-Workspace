@@ -256,3 +256,46 @@ struct SidecarStatusExplanationTests {
         #expect(SidecarStatus.running(pid: 4242).explanation(id: "surreal").contains("4242"))
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// U17 — a sidecar dies with the process that started it.
+// ─────────────────────────────────────────────────────────────
+
+@Suite("Sidecars do not outlive the process that started them")
+struct SidecarReaperTests {
+    @Test("a launched child is registered, and a stopped one is forgotten")
+    func registrationTracksLifetime() {
+        SidecarReaper.forget(id: "u17-test")
+        #expect(SidecarReaper.registered["u17-test"] == nil)
+        SidecarReaper.register(id: "u17-test", pid: 999_999)
+        #expect(SidecarReaper.registered["u17-test"] == 999_999)
+        SidecarReaper.forget(id: "u17-test")
+        #expect(SidecarReaper.registered["u17-test"] == nil,
+                "a sidecar stopped on purpose stays on the kill list")
+    }
+
+    @Test("the reaper actually kills what it holds")
+    func killsRegisteredChildren() async throws {
+        // A real child, because the thing under test is a signal reaching a
+        // process — a stub would prove the bookkeeping and nothing else.
+        let sleeper = Process()
+        sleeper.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        sleeper.arguments = ["300"]
+        try sleeper.run()
+        let pid = sleeper.processIdentifier
+        SidecarReaper.register(id: "u17-sleeper", pid: pid)
+        #expect(kill(pid, 0) == 0, "the child did not start")
+
+        SidecarReaper.terminateChildren()
+
+        // `kill(pid, 0)` keeps answering 0 for a zombie, so wait for the
+        // Process itself to report the exit rather than polling the signal.
+        var waited = 0
+        while sleeper.isRunning, waited < 50 {
+            try? await Task.sleep(for: .milliseconds(100))
+            waited += 1
+        }
+        #expect(sleeper.isRunning == false, "the registered child survived the reaper")
+        #expect(SidecarReaper.registered["u17-sleeper"] == nil)
+    }
+}

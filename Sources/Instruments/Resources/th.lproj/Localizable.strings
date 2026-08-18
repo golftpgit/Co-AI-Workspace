@@ -1,0 +1,137 @@
+/* ภาษาไทย — คำแปลของข้อความที่โมดูลนี้เป็นเจ้าของ */
+
+/* ── Agreement ───────────────────────────────────────────────── */
+
+"worse than guessing" = "แย่กว่าการเดา";
+"slight" = "ต่ำมาก (slight)";
+"fair" = "พอมี (fair)";
+"moderate" = "พอใช้ (moderate)";
+"substantial" = "ดี (substantial)";
+"almost perfect" = "ดีมาก (almost perfect)";
+"κ %.2f · observed agreement %.0f%% · %d units · %d coders · %@" = "κ %.2f · ตรงกันจริง %.0f%% · %d หน่วย · %d ผู้ลงรหัส · %@";
+"the two coders did not code the same amount (%lld units against %lld) — " = "ผู้ลงรหัสสองคนลงไม่เท่ากัน (%lld กับ %lld หน่วย) — ";
+"κ only compares units both of them looked at" = "κ เทียบได้เฉพาะหน่วยที่ทั้งคู่ดูเหมือนกัน";
+"there is too little data to compute agreement" = "ข้อมูลน้อยเกินกว่าจะคำนวณความสอดคล้อง";
+"the units were not coded by the same number of coders — Fleiss' κ assumes they were" = "จำนวนผู้ลงรหัสต่อหน่วยไม่เท่ากัน — Fleiss' κ ตั้งอยู่บนสมมติฐานว่าทุกหน่วยถูกลงรหัสเท่ากัน";
+"poor" = "ต่ำ (poor)";
+"good" = "ดี (good)";
+"excellent" = "ดีมาก (excellent)";
+"ICC(2,1) %.2f · ICC(2,k) %.2f · %d units × %d raters · %@" = "ICC(2,1) %.2f · ICC(2,k) %.2f · %d หน่วย × %d ผู้ประเมิน · %@";
+
+/* ── Codebook ────────────────────────────────────────────────── */
+
+"code “%@” has no definition — an undefined code is a word two coders each read their own way " = "รหัส “%@” ยังไม่มีนิยาม — รหัสที่ไม่มีนิยามคือคำที่ผู้ลงรหัสสองคนอ่านคนละอย่าง ";
+"and it surfaces later as a low κ nobody can account for" = "แล้วโผล่มาเป็น κ ต่ำที่อธิบายไม่ได้";
+"code “%@” points at a parent code that is not in the codebook" = "รหัส “%@” ชี้ไปยังรหัสแม่ที่ไม่มีอยู่ในสมุดรหัส";
+
+/* ── CodingReport ────────────────────────────────────────────── */
+
+"%lld units are left out because not everyone has coded them yet" = "ไม่นำมาคำนวณ %lld หน่วยที่ยังลงรหัสไม่ครบทุกคน";
+"least agreed-on code: “%@” κ %.2f" = "รหัสที่ตกลงกันได้น้อยที่สุด: “%@” κ %.2f";
+"nothing has been coded yet" = "ยังไม่มีการลงรหัส";
+"%lld documents coded · %lld codes used" = "ลงรหัสแล้ว %lld ฉบับ · รหัสที่ใช้ %lld รหัส";
+"no new code has appeared since document %lld — an observation, not a finding of saturation " = "ไม่มีรหัสใหม่หลังฉบับที่ %lld — เป็นข้อสังเกต ไม่ใช่ข้อสรุปว่าอิ่มตัว ";
+"a study that stopped at document %lld has no evidence about the next one" = "การศึกษาที่หยุดที่ฉบับที่ %lld ไม่มีหลักฐานเรื่องฉบับถัดไป";
+"new codes are still appearing in the most recent documents" = "ยังมีรหัสใหม่โผล่อยู่ในฉบับท้าย ๆ";
+
+/* ── ContentValidity ─────────────────────────────────────────── */
+
+"no expert has rated this item yet" = "ยังไม่มีผู้เชี่ยวชาญให้คะแนนข้อนี้";
+"IOC %.2f is below 0.50" = "IOC %.2f ต่ำกว่า 0.50";
+"I-CVI %.2f is below 0.78" = "I-CVI %.2f ต่ำกว่า 0.78";
+"no assessment yet" = "ยังไม่มีผลประเมิน";
+"%lld experts" = "ผู้เชี่ยวชาญ %lld คน";
+"%lld/%lld items passed" = "ข้อที่ผ่าน %lld/%lld";
+"at least %lld experts are needed — " = "ต้องมีผู้เชี่ยวชาญอย่างน้อย %lld คน — ";
+"the IOC and CVI thresholds are set for a panel of 3 to 5" = "เกณฑ์ IOC/CVI ตั้งไว้สำหรับคณะผู้เชี่ยวชาญ 3–5 คน";
+"items not yet passing: %@" = "ข้อที่ยังไม่ผ่าน: %@";
+
+/* ── FactorStructure ─────────────────────────────────────────── */
+
+"factor analysis needs at least %lld items (there are %lld) — " = "วิเคราะห์องค์ประกอบต้องมีอย่างน้อย %lld ข้อ (มี %lld) — ";
+"the structure of two items is a correlation, not a factor" = "โครงสร้างของสองข้อคือสหสัมพันธ์ ไม่ใช่องค์ประกอบ";
+"%lld respondents against %lld items — there must be more respondents than items " = "ผู้ตอบ %lld คนกับ %lld ข้อ — ต้องมีผู้ตอบมากกว่าจำนวนข้อ ";
+"otherwise the correlation matrix is singular by construction, and every number out of it is an artefact of the sample size" = "ไม่เช่นนั้นเมทริกซ์สหสัมพันธ์เป็นเอกฐานโดยโครงสร้าง และตัวเลขที่ได้จะเป็นสิ่งประดิษฐ์ของขนาดตัวอย่าง";
+"the rows do not all have the same number of items" = "แต่ละแถวมีจำนวนข้อไม่เท่ากัน";
+"everyone answered these items identically, so there is no variance to analyse: " = "ทุกคนตอบข้อเหล่านี้เหมือนกันหมด จึงไม่มีความแปรปรวนให้วิเคราะห์: ";
+"the correlation matrix cannot be inverted — %@" = "เมทริกซ์สหสัมพันธ์กลับด้านไม่ได้ — %@";
+"factor extraction failed — %@" = "สกัดองค์ประกอบไม่สำเร็จ — %@";
+"unacceptable" = "รับไม่ได้ (unacceptable)";
+"miserable" = "แย่ (miserable)";
+"mediocre" = "พอไปได้ (mediocre)";
+"middling" = "ปานกลาง (middling)";
+"meritorious" = "ดี (meritorious)";
+"marvellous" = "ดีมาก (marvellous)";
+"this data is not yet suitable for factor analysis" = "ข้อมูลชุดนี้ยังไม่เหมาะกับการวิเคราะห์องค์ประกอบ";
+"Bartlett's test is not significant — the items are not related enough to share a factor" = "Bartlett ไม่มีนัยสำคัญ — ข้อต่าง ๆ ไม่สัมพันธ์กันพอจะมีองค์ประกอบร่วม";
+"items with an MSA below .50: %@" = "ข้อที่ MSA ต่ำกว่า .50: %@";
+"Kaiser's criterion (eigenvalue > 1)" = "เกณฑ์ Kaiser (eigenvalue > 1)";
+"parallel analysis (95th percentile of random data)" = "parallel analysis (เปอร์เซ็นไทล์ที่ 95 ของข้อมูลสุ่ม)";
+"fixed at %lld factors" = "กำหนดเอง %lld องค์ประกอบ";
+"%lld respondents — under the 100 most textbooks give as a floor " = "ผู้ตอบ %lld คน — ต่ำกว่า 100 ซึ่งเป็นขั้นต่ำที่ตำราส่วนใหญ่ระบุ ";
+"the result is not stable enough to conclude a structure from" = "ผลที่ได้ไม่คงที่พอจะสรุปโครงสร้าง";
+"a respondent-to-item ratio of %.1f:1 — below 5:1" = "อัตราส่วนผู้ตอบต่อข้อ %.1f:1 — ต่ำกว่า 5:1";
+"extraction did not converge in %d iterations — the communalities were still moving by %.4f " = "การสกัดไม่ลู่เข้าใน %d รอบ — ค่าความร่วมยังขยับอยู่ %.4f ";
+"per iteration when it stopped, so the figures below are where it was cut off" = "ต่อรอบตอนหยุด ตัวเลขข้างล่างจึงเป็นค่าที่หยุดกลางทาง";
+"a Heywood case at %@" = "Heywood case ที่ข้อ %@";
+" — a communality above 1 is mathematically impossible, so either the number of factors or the sample size does not fit the data" = " — ค่าความร่วมเกิน 1 ตามคณิตศาสตร์ แปลว่าจำนวนองค์ประกอบหรือขนาดตัวอย่างยังไม่เข้ากับข้อมูล";
+"the two criteria disagree on how many factors there are (Kaiser %lld · " = "สองเกณฑ์ให้จำนวนองค์ประกอบไม่ตรงกัน (Kaiser %lld · ";
+"parallel analysis %lld) — one has to be chosen, and the choice explained" = "parallel analysis %lld) — ต้องเลือกและอธิบายว่าเลือกเพราะอะไร";
+"items that load on no factor at all: %@" = "ข้อที่ไม่เกาะองค์ประกอบไหนเลย: %@";
+"items that load on more than one factor: %@" = "ข้อที่เกาะมากกว่าหนึ่งองค์ประกอบ: %@";
+"%d factors (%@) · %.1f%% of the variance explained · %d items · %d respondents" = "%d องค์ประกอบ (%@) · อธิบายความแปรปรวนได้ %.1f%% · %d ข้อ · ผู้ตอบ %d คน";
+"the chosen criterion gives 0 factors — nothing shared rises above the level of random data" = "เกณฑ์ที่เลือกให้ 0 องค์ประกอบ — ไม่มีองค์ประกอบร่วมเหนือระดับข้อมูลสุ่ม";
+"%lld factors were asked for from %lld items — there must be fewer factors than items" = "ขอ %lld องค์ประกอบจาก %lld ข้อ — ต้องน้อยกว่าจำนวนข้อ";
+"%lld/%lld constructs have every item on one factor" = "%lld/%lld construct ที่ข้อทุกข้อลงองค์ประกอบเดียวกัน";
+"items loading on a different factor than declared: %@" = "ข้อที่ลงคนละองค์ประกอบกับที่ประกาศไว้: %@";
+"constructs the data cannot tell apart: %@" = "construct ที่ข้อมูลแยกไม่ออกจากกัน: %@";
+"ω %.3f · a single factor explains %.1f%% of the variance · %d respondents" = "ω %.3f · องค์ประกอบเดียวอธิบายความแปรปรวนได้ %.1f%% · ผู้ตอบ %d คน";
+
+/* ── Instrument ──────────────────────────────────────────────── */
+
+"%lld-point Likert" = "Likert %lld ระดับ";
+"single choice" = "เลือกตอบเดียว";
+"multiple choice" = "เลือกได้หลายข้อ";
+"open text" = "ข้อความเปิด";
+"number" = "ตัวเลข";
+"date" = "วันที่";
+"ranking" = "จัดอันดับ";
+"file upload" = "อัปโหลดไฟล์";
+"approved by %@, reference %@ · recorded by %@" = "รับรองโดย %@ เลขที่ %@ · แจ้งโดย %@";
+"declared not to be human-subjects research: %@ · by %@" = "ประกาศว่าไม่เข้าข่ายวิจัยในมนุษย์: %@ · โดย %@";
+
+/* ── InstrumentDisposal ──────────────────────────────────────── */
+
+"this version has been through the gate and cannot be deleted — a gated instrument is the evidence of what respondents were shown " = "เวอร์ชันนี้ผ่านประตูแล้ว จึงลบไม่ได้ — เครื่องมือที่ผ่านประตูคือหลักฐานว่าผู้ตอบเห็นอะไร ";
+"to retire it, make a new version and stop opening this one (§20.6)" = "ถ้าเลิกใช้ ให้สร้างเวอร์ชันใหม่แล้วไม่เปิดเวอร์ชันนี้อีก (§20.6)";
+"%lld sets of answers are tied to this instrument — delete it and what is left is a table of numbers nobody can match to a question" = "มีคำตอบ %lld ชุดผูกกับเครื่องมือนี้ — ลบเครื่องมือแล้วจะเหลือตารางตัวเลขที่ไม่มีใครบอกได้ว่าคำถามคืออะไร";
+"%lld collection rounds have been opened with this instrument — an opened round is the record of when fieldwork happened " = "เคยเปิดรอบเก็บข้อมูล %lld รอบกับเครื่องมือนี้ — รอบที่เปิดแล้วเป็นบันทึกว่าลงพื้นที่เมื่อไร ";
+"even if nobody answered" = "แม้จะยังไม่มีใครตอบก็ตาม";
+
+/* ── InstrumentGate ──────────────────────────────────────────── */
+
+"“%@” is tied to no construct and is not marked as background data — " = "“%@” ไม่ได้ผูกกับ construct และไม่ได้ติดป้ายว่าเป็นข้อมูลพื้นฐาน — ";
+"an item that measures nothing is a column nothing can be done with (§20.3)" = "ข้อที่ไม่วัดอะไรเลยคือคอลัมน์ที่วิเคราะห์ไม่ได้ (§20.3)";
+"“%@” is marked as background data and tied to a construct — it must be one or the other" = "“%@” ติดป้ายข้อมูลพื้นฐานแต่ผูกกับ construct ด้วย — เลือกอย่างใดอย่างหนึ่ง";
+"no item measures the construct “%@”" = "construct “%@” ยังไม่มีข้อคำถามวัดมันเลย";
+"the construct “%@” is tied to no research question" = "construct “%@” ไม่ได้ผูกกับคำถามวิจัยข้อใด";
+"no construct answers the research question “%@”" = "คำถามวิจัย “%@” ไม่มี construct ใดตอบมัน";
+"the skip condition on “%@” points at an item that does not exist, or at one before itself" = "เงื่อนไขข้ามของ “%@” ชี้ไปที่ข้อที่ไม่มีอยู่ หรืออยู่หลังตัวมันเอง";
+"every item measuring the construct “%@” is unscorable — its reliability cannot be computed at all" = "construct “%@” วัดด้วยข้อที่ให้คะแนนไม่ได้ทั้งหมด — คำนวณความเที่ยงไม่ได้เลย";
+"the questionnaire has no items yet" = "แบบสอบถามยังไม่มีข้อคำถาม";
+"this instrument cannot be published yet — outstanding: " = "ยังเผยแพร่เครื่องมือนี้ไม่ได้ — ค้าง: ";
+"through the gate, approved by %@ · " = "ผ่านประตูแล้วโดย %@ · ";
+"the item map is complete (every item is tied to a construct or marked as background data)" = "ผังข้อคำถามครบ (ทุกข้อผูก construct หรือติดป้ายข้อมูลพื้นฐาน)";
+"the consent page is complete" = "มีหน้าความยินยอมครบทุกช่อง";
+"an ethics record exists (an approval number or a declaration of exemption) naming who recorded it" = "มีบันทึกจริยธรรม (เลขรับรอง หรือคำประกาศว่าไม่เข้าข่าย) พร้อมชื่อผู้แจ้ง";
+"content validity meets the thresholds (IOC ≥ 0.5 on every item · I-CVI ≥ 0.78 · S-CVI/Ave ≥ 0.90)" = "ความตรงเชิงเนื้อหาผ่านเกณฑ์ (IOC ≥ 0.5 ทุกข้อ · I-CVI ≥ 0.78 · S-CVI/Ave ≥ 0.90)";
+"the assessment submitted does not match this instrument's items " = "ผลประเมินที่ส่งมาไม่ตรงกับชุดข้อคำถามของเครื่องมือนี้ ";
+"(%lld items assessed of the %lld that need it)" = "(ประเมิน %lld ข้อ จากที่ต้องประเมิน %lld ข้อ)";
+"no expert content-validity assessment has been made yet" = "ยังไม่มีผลประเมินความตรงเชิงเนื้อหาจากผู้เชี่ยวชาญ";
+"an approver has to be named" = "ต้องมีชื่อผู้อนุมัติ";
+
+/* ── ScaleReport ─────────────────────────────────────────────── */
+
+"the options have no order of their own — numbering them 1, 2, 3 " = "ตัวเลือกไม่มีลำดับในตัวเอง — การให้เลข 1, 2, 3 แทนตัวเลือก ";
+"invents an order nobody defined" = "คือการสร้างลำดับที่ไม่มีใครกำหนดไว้";
+"a “%@” item is not a score reliability can be computed from" = "ชนิด “%@” ไม่ใช่คะแนนที่นำมาหาความเที่ยงได้";

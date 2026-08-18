@@ -111,6 +111,10 @@ public actor SidecarManager {
                 probe: (@Sendable (URL) async -> Bool)? = nil) {
         self.paths = paths
         self.probe = probe ?? SidecarManager.httpProbe
+        // Every entry point that can start a sidecar installs this, not just the
+        // app: `swift test` and the check executables start them too, and those
+        // are the runs that actually get killed part-way (U17).
+        SidecarReaper.install()
     }
 
     // MARK: - lifecycle
@@ -136,6 +140,7 @@ public actor SidecarManager {
         managed[id] = entry
         terminate(entry.process)
         removePIDFile(id: id)
+        SidecarReaper.forget(id: id)
         log.info("sidecar '\(id, privacy: .public)' stopped")
     }
 
@@ -188,6 +193,9 @@ public actor SidecarManager {
         entry.status = .starting
         managed[id] = entry
         writePIDFile(id: id, pid: process.processIdentifier)
+        // So it dies with us even when nobody asks politely (U17). The pid file
+        // stays too: it is what covers SIGKILL and a crash, which no handler can.
+        SidecarReaper.register(id: id, pid: process.processIdentifier)
         log.info("sidecar '\(id, privacy: .public)' launched pid \(process.processIdentifier)")
     }
 

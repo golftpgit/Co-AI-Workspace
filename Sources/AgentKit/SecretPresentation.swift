@@ -45,26 +45,26 @@ public enum SecretPresentation {
 
     public static func display(name: String?, status: SecretStatus) -> Display {
         guard let name, !name.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return Display(text: "ยังไม่ได้ตั้งชื่อให้ความลับนี้ จึงยังเก็บค่าไม่ได้",
+            return Display(text: localised("this secret has no name yet, so there is nowhere to store it", "Why a secret cannot be saved."),
                            tone: .missing, canRemove: false)
         }
         switch status {
         case .present(.keychain):
-            return Display(text: "ตั้งไว้แล้ว · เก็บใน Keychain ของเครื่องนี้",
+            return Display(text: localised("set · held in this machine's Keychain", "The state of a stored secret."),
                            tone: .ok, canRemove: true)
         case .present(.environment):
-            return Display(text: "มาจาก environment ไม่ใช่ Keychain — "
-                           + "ค่าแบบนี้ทุกโปรเซสของผู้ใช้คนนี้อ่านได้ · "
-                           + "บันทึกทับที่นี่เพื่อย้ายเข้า Keychain",
+            return Display(text: localised("from the environment rather than the Keychain — ", "The state of a stored secret.")
+                           + localised("a value every process this user runs can read · ", "Warns what an environment secret exposes.")
+                           + localised("save over it here to move it into the Keychain", "How to move a secret into the Keychain."),
                            tone: .caution, canRemove: false)
         case .present(.override):
-            return Display(text: "กำลังใช้ค่าทดสอบที่ตั้งไว้ในโปรเซสนี้",
+            return Display(text: localised("using a test value set inside this process", "The state of a stored secret."),
                            tone: .caution, canRemove: false)
         case .absent:
-            return Display(text: "ยังไม่ได้ตั้ง", tone: .missing, canRemove: false)
+            return Display(text: localised("not set", "The state of a stored secret."), tone: .missing, canRemove: false)
         case .unreadable(let detail):
-            return Display(text: "อ่าน Keychain ไม่ได้ (\(detail)) — "
-                           + "**ยังไม่ได้แปลว่ายังไม่ได้ตั้ง** อย่าเพิ่งกรอกใหม่ทับ",
+            return Display(text: localised("the Keychain could not be read (\(detail)) — ", "The state of a stored secret. Placeholder: the underlying reason.")
+                           + localised("**which does not mean it was never set** — do not type a new one over it yet", "Warns not to overwrite a secret that merely could not be read."),
                            tone: .problem, canRemove: false)
         }
     }

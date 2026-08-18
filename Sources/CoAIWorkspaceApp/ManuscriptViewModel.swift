@@ -17,7 +17,7 @@ import Persistence
 //
 // 1. **The preview and the export are checked against the same evidence.**
 //    Both go through `AnalysisViewModel.manuscriptEvidence()`. A screen that
-//    says "พร้อมส่งออก" beside a button that then refuses is worse than a
+//    says "ready to export" beside a button that then refuses is worse than a
 //    screen with no preview, because it teaches the author to distrust the
 //    check that is the point of the feature.
 // 2. **Saving is not export.** A draft is saved constantly and half-finished;
@@ -60,7 +60,7 @@ final class ManuscriptViewModel {
             }
             await refreshPreview()
         } catch {
-            report(ReadableFailure.message(for: error, doing: "อ่านรายการต้นฉบับ"), isError: true)
+            report(ReadableFailure.message(for: error, doing: t("listing the manuscripts", "Names the action that failed.")), isError: true)
         }
     }
 
@@ -68,7 +68,9 @@ final class ManuscriptViewModel {
         // §20.8 is about a study's results. A manuscript that belongs to no
         // project is a thesis with no data behind it.
         guard case .project = scope else {
-            report("ต้นฉบับเป็นของโครงการ — เลือกโครงการก่อนจึงจะสร้างได้", isError: true)
+            report(t("A manuscript belongs to a project — choose one before creating it",
+                     "Status message refusing to create a manuscript outside a project."),
+                   isError: true)
             return
         }
         let trimmed = title.trimmingCharacters(in: .whitespaces)
@@ -77,10 +79,11 @@ final class ManuscriptViewModel {
         // Chapter 4 is where the bound numbers live, so it starts with a
         // section rather than making the first thing the author does be
         // administrative.
-        fresh.sections[.results] = [ManuscriptSection(heading: "4.1 ผลการวิเคราะห์")]
-        // Selected *before* saving, not after. Driven: pressing "สร้าง" put
+        fresh.sections[.results] = [ManuscriptSection(
+            heading: t("4.1 Analysis results", "Heading of the first section created in a new manuscript."))]
+        // Selected *before* saving, not after. Driven: pressing "Create" put
         // the new manuscript in the list and left the editor showing
-        // "ยังไม่ได้เลือกต้นฉบับ" until you clicked the row you had just made
+        // "No manuscript selected" until you clicked the row you had just made
         // — because `save` reloads, and the reload decided what was selected
         // while this was still nil (U33-5).
         selected = fresh
@@ -94,7 +97,7 @@ final class ManuscriptViewModel {
             if selected?.id == manuscript.id { selected = manuscript }
             await load()
         } catch {
-            report(ReadableFailure.message(for: error, doing: "บันทึกต้นฉบับ"), isError: true)
+            report(ReadableFailure.message(for: error, doing: t("saving the manuscript", "Names the action that failed.")), isError: true)
         }
     }
 
@@ -111,7 +114,8 @@ final class ManuscriptViewModel {
         guard var manuscript = selected else { return }
         var sections = manuscript.sections[chapter] ?? []
         sections.append(ManuscriptSection(
-            heading: "\(chapter.rawValue).\(sections.count + 1) หัวข้อใหม่"))
+            heading: t("\(chapter.rawValue).\(sections.count + 1) New section",
+                       "Heading of a newly added manuscript section. Placeholders: the chapter number and the section number.")))
         manuscript.sections[chapter] = sections
         await save(manuscript)
     }

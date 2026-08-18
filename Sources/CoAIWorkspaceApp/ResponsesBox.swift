@@ -36,32 +36,35 @@ struct ResponsesBox: View {
     private var columns: [Item] { instrument.ordered }
 
     var body: some View {
-        GroupBox("คำตอบที่เก็บได้ (เวอร์ชัน \(instrument.version))") {
+        GroupBox(t("Responses collected (version \(instrument.version))",
+                   "Box heading over the response table. Placeholder is the instrument version.")) {
             VStack(alignment: .leading, spacing: 8) {
                 rounds
                 if model.responseRows.isEmpty {
-                    Text("ยังไม่มีคำตอบสำหรับเวอร์ชันนี้ — เปิดฟอร์มในวงแลนแล้วส่งลิงก์ให้ผู้ตอบ")
+                    Text(localised: "No responses for this version yet — open the form on the local network and send the link to respondents",
+                         "Empty state in the response table.")
                         .font(.callout).foregroundStyle(.secondary)
                 } else {
                     table
                     HStack {
-                        Button("ส่งเข้าฐานข้อมูลวิเคราะห์") { Task { await model.materialize() } }
+                        Button(t("Write it to the analysis database",
+                                 "Button that materialises responses into DuckDB.")) {
+                            Task { await model.materialize() }
+                        }
                         if let done = model.materialized {
-                            Text("ตาราง \(done.table) · \(done.rows) แถว"
-                                 + (done.corrections > 0 ? " · \(done.corrections) ค่าที่ถูกแก้" : ""))
+                            Text(localised: "table \(done.table) · \(done.rows) rows\(done.corrections > 0 ? t(" · \(done.corrections) corrected values", "Appended when corrected values are present. Placeholder is how many.") : "")",
+                                 "Result of materialising. Placeholders: the table name and how many rows.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
                     }
                     .controlSize(.small)
-                    Text("คำตอบดิบอยู่ใน SQLite ของโปรเจกต์ · กดปุ่มนี้เพื่อคัดลอกเข้า DuckDB "
-                         + "แล้วเปิดในสมุดงานได้ — แอปเป็นฝ่ายดึง เซิร์ฟเวอร์แตะ DuckDB ไม่ได้เลย (§19.17) "
-                         + "· ค่าที่ถูกแก้จะไปในรูปค่าที่แก้แล้ว พร้อมคอลัมน์ `was_corrected` บอกว่าแก้")
+                    Text(localised: "Raw responses live in the project's SQLite · this button copies them into DuckDB so the notebook can open them — the app pulls, and the server never touches DuckDB at all (§19.17) · corrected values go across in their corrected form, with a `was_corrected` column saying so",
+                         "Explains what materialising does and which way the data moves.")
                         .font(.caption2).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("ตารางนี้ทำงานเหมือน Sheet แต่ไม่ใช่ Sheet — แก้ค่าหนึ่งช่องจะถูกเก็บเป็น "
-                         + "“บันทึกการแก้ไข” (ค่าเดิม · ค่าใหม่ · เหตุผล · ใครแก้ · เมื่อไร) "
-                         + "ไม่ใช่การเขียนทับ (§19.17)")
+                    Text(localised: "This table behaves like a spreadsheet but is not one — editing a cell is stored as a “correction record” (old value · new value · reason · who · when) rather than an overwrite (§19.17)",
+                         "Explains that edits are recorded, never destructive.")
                         .font(.caption2).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -86,14 +89,17 @@ struct ResponsesBox: View {
                         // are shown rather than summarised.
                         // The date format puts a comma before the time, so the
                         // count needs its own separator or the line reads
-                        // "…at 10:58, 0 ชุด" as though the count were part of
+                        // "…at 10:58, 0 responses" as though the count were part of
                         // the timestamp.
                         Text(round.isOpen
-                             ? "รอบที่เปิดอยู่ · เริ่ม \(round.openedAt.formatted(date: .abbreviated, time: .shortened))"
-                             : "ปิดแล้ว · \(round.openedAt.formatted(date: .abbreviated, time: .omitted))"
-                                + " – \(round.closedAt?.formatted(date: .abbreviated, time: .shortened) ?? "")")
+                             ? t("open wave · started \(round.openedAt.formatted(date: .abbreviated, time: .shortened))",
+                                 "A wave that is still accepting responses. Placeholder is when it opened.")
+                             : t("closed · \(round.openedAt.formatted(date: .abbreviated, time: .omitted)) – \(round.closedAt?.formatted(date: .abbreviated, time: .shortened) ?? "")",
+                                 "A finished wave. Placeholders: when it opened and when it closed."))
                             .font(.caption)
-                        Text("· \(round.submissions) ชุด").font(.caption).foregroundStyle(.secondary)
+                        Text(localised: "· \(round.submissions) responses",
+                             "How many responses a wave received. Placeholder is a count.")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .combine)
                 }
@@ -112,7 +118,7 @@ struct ResponsesBox: View {
         ScrollView([.horizontal, .vertical]) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 0) {
-                    header("เมื่อไร", width: 130)
+                    header(t("When", "Column heading over response timestamps."), width: 130)
                     ForEach(columns) { item in
                         header(item.prompt.thai, width: 150)
                     }
@@ -175,7 +181,7 @@ struct ResponsesBox: View {
         .buttonStyle(.plain)
         .disabled(answer == nil)
         .accessibilityLabel(label(for: answer, item: item))
-        .accessibilityHint("เปิดหน้าต่างแก้ค่าคำตอบนี้")
+        .accessibilityHint(t("opens the sheet for correcting this answer", "Screen-reader hint on a response cell."))
         .popover(isPresented: Binding(get: { editing == cell },
                                       set: { if !$0 { editing = nil } })) {
             correctionForm(row: row, item: item, answer: answer)
@@ -183,12 +189,15 @@ struct ResponsesBox: View {
     }
 
     private func label(for answer: ResolvedAnswer?, item: Item) -> String {
-        guard let answer else { return "\(item.prompt.thai): ไม่มีคำตอบ" }
+        guard let answer else {
+            return t("\(item.prompt.thai): no answer",
+                     "Screen-reader label for an unanswered item. Placeholder is the question text.")
+        }
         guard let correction = answer.corrected else {
             return "\(item.prompt.thai): \(answer.text)"
         }
-        return "\(item.prompt.thai): \(answer.text) — แก้จาก \(correction.previousText) "
-            + "โดย \(correction.correctedBy) เพราะ \(correction.reason)"
+        return t("\(item.prompt.thai): \(answer.text) — corrected from \(correction.previousText) by \(correction.correctedBy) because \(correction.reason)",
+                 "Screen-reader label for a corrected answer. Placeholders: the question, the current value, the old value, who corrected it and why.")
     }
 
     @ViewBuilder
@@ -199,30 +208,34 @@ struct ResponsesBox: View {
             if let correction = answer?.corrected {
                 // The original, still readable — which is the point of keeping it.
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("ค่าเดิมที่ผู้ตอบส่งมา: \(correction.previousText)")
-                    Text("แก้เป็น \(correction.newText) โดย \(correction.correctedBy) · "
-                         + correction.correctedAt.formatted(date: .abbreviated, time: .shortened))
-                    Text("เหตุผล: \(correction.reason)")
+                    Text(localised: "What the respondent sent: \(correction.previousText)",
+                         "The original answer, kept beside the correction. Placeholder is the old value.")
+                    Text(localised: "changed to \(correction.newText) by \(correction.correctedBy) · \(correction.correctedAt.formatted(date: .abbreviated, time: .shortened))",
+                         "The correction itself. Placeholders: the new value, who made it and when.")
+                    Text(localised: "Reason: \(correction.reason)",
+                         "The reason for a correction. Placeholder is the reason given.")
                 }
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
 
-            TextField("ค่าใหม่", text: $draft)
+            TextField(t("New value", "Text field for the corrected answer."), text: $draft)
                 .textFieldStyle(.roundedBorder)
-            TextField("เหตุผลที่แก้", text: $reason)
+            TextField(t("Reason for the correction", "Text field: why the answer is being changed."),
+                      text: $reason)
                 .textFieldStyle(.roundedBorder)
-            TextField("ชื่อผู้แก้", text: $person)
+            TextField(t("Name of who is correcting it", "Text field: who is making the correction."),
+                      text: $person)
                 .textFieldStyle(.roundedBorder)
-            Text("ทั้งเหตุผลและชื่อผู้แก้เป็นสิ่งที่ต้องมี — การแก้ที่ไม่มีทั้งสองอย่าง "
-                 + "แยกไม่ออกจากการแก้ที่หวังว่าไม่มีใครสังเกต")
+            Text(localised: "Both the reason and the name are required — a correction with neither is indistinguishable from one hoping nobody notices",
+                 "Explains why both fields are mandatory.")
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack {
                 Spacer()
-                Button("ยกเลิก") { editing = nil }
-                Button("บันทึกการแก้ไข") {
+                Button(t("Cancel", "Button that closes the correction sheet without saving.")) { editing = nil }
+                Button(t("Record the correction", "Button that saves the correction.")) {
                     let previous = answer?.text ?? ""
                     let newText = draft, why = reason, who = person
                     editing = nil

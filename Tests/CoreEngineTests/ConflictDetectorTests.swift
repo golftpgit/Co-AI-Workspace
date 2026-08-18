@@ -205,17 +205,24 @@ struct ConflictDetectorTests {
 
     @Test("a cross-language pair is held to a higher bar than a same-language one")
     func crossLanguageNeedsMoreConfidence() async {
-        // 0.8 clears the ordinary bar and not the cross-language one, because
-        // the model is reading a language it may not have.
+        // 0.75 clears the ordinary bar (0.7) and not the cross-language one
+        // (0.8), because the model is reading a language it may not have.
+        //
+        // The value used to be 0.8, which stopped discriminating when the
+        // cross-language bar came down from 0.9 — measured, that bar was
+        // discarding correct answers at 0.85, and translation is already
+        // refused by name through `isTranslation` (E.45). **The property this
+        // test guards is unchanged**: cross-language is still held higher than
+        // same-language. Only the number that demonstrates it moved.
         let json = #"""
         {"sameQuestion":true,"mutuallyExclusive":true,"sameContext":true,"isTranslation":false,
-         "question":"ผลของวัคซีน","confidence":0.8,"explanation":"ตรงข้ามกัน"}
+         "question":"ผลของวัคซีน","confidence":0.75,"explanation":"ตรงข้ามกัน"}
         """#
         let thai = "วัคซีนไข้หวัดใหญ่ลดอัตราการเข้ารักษาในโรงพยาบาลของผู้สูงอายุ"
         let english = "Influenza vaccination has no effect on hospital admissions in older adults"
 
         #expect(await detector(saying: json).examine(thai, english)
-                == .failure(.notConfidentEnough(0.8)))
+                == .failure(.notConfidentEnough(0.75)))
         // The same answer about two Thai passages is filed: nothing here says
         // the model is bad at Thai, only that it may not read both languages.
         let bothThai = await detector(saying: json)

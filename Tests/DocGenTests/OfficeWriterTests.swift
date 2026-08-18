@@ -139,9 +139,9 @@ struct OfficeWriterTests {
         #expect(converted.output.contains("เมตฟอร์มินลด HbA1c ได้ราว 1%"))
         // The citation markers were placed by the builder, from the provenance.
         #expect(converted.output.contains("(สมชาย ก., 2025)"))
-        #expect(converted.output.contains("เอกสารอ้างอิง"))
+        #expect(converted.output.contains("References"))
         // §14.1's Limitations section, in the file, without anyone asking.
-        #expect(converted.output.contains("ข้อจำกัดของการศึกษานี้"))
+        #expect(converted.output.contains("Limitations of this study"))
         #expect(converted.output.contains("นิยามของการติดตามครบ"))
         // The characters that would have broken the XML.
         #expect(converted.output.contains("<ทั้งหมด> & สรุปช่องว่าง"))
@@ -181,7 +181,7 @@ struct OfficeWriterTests {
         #expect(slides.count == 5)
         #expect(slides[0].title == "ผลของเมตฟอร์มินต่อระดับ HbA1c")
         #expect(slides[1].title == "บทนำ")
-        #expect(slides.last?.title == "เอกสารอ้างอิง")
+        #expect(slides.last?.title == "References")
     }
 
     /// The bug this guards against shipped once: a deck with no master chain

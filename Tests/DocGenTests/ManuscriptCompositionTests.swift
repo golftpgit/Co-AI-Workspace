@@ -88,7 +88,7 @@ struct SentenceComposerTests {
         composer.write("เขียนใหม่ทั้งประโยค โดยไม่มีช่องเติมเลขแล้ว")
 
         #expect(composer.problems.count == 1)
-        #expect(composer.problems[0].contains("ไม่มีช่องในประโยคแล้ว"))
+        #expect(composer.problems[0].contains("the text no longer has a slot for it"))
         // And it is not carried into the document, where it would appear in the
         // appendix as a figure the reader cannot find in the text.
         #expect(composer.sentence.references.isEmpty)
@@ -98,7 +98,7 @@ struct SentenceComposerTests {
     func unfilledIsReported() {
         let composer = SentenceComposer("ค่าเฉลี่ยเท่ากับ {ค่าที่ยังไม่ผูก}")
         #expect(composer.problems.count == 1)
-        #expect(composer.problems[0].contains("ยังไม่มีผลรองรับ"))
+        #expect(composer.problems[0].contains("has nothing behind it"))
     }
 }
 
@@ -131,7 +131,7 @@ struct ManuscriptPreviewTests {
         let preview = ManuscriptPreview.of(manuscript(composer.sentence), runs: [run()])
         #expect(preview.isExportable == false)
         #expect(preview.failures.count == 1)
-        #expect(preview.failures[0].text.contains("ยังไม่เคยรัน"))
+        #expect(preview.failures[0].text.contains("has never been run"))
     }
 
     // §20.8's central case: the number is stale because the query changed.
@@ -145,7 +145,7 @@ struct ManuscriptPreviewTests {
             currentSources: ["c1": "SELECT avg(age) FROM patients WHERE year > 2020"])
 
         #expect(preview.isExportable == false)
-        #expect(preview.failures[0].text.contains("ตอบคำถามคนละข้อ"))
+        #expect(preview.failures[0].text.contains("answers a different question"))
     }
 
     // The appendix must agree with the chapter about which numbers exist.

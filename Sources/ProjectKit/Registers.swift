@@ -21,11 +21,11 @@ public enum RegisterKind: String, Sendable, Codable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .risk: "ความเสี่ยง"
-        case .issue: "ปัญหา"
-        case .change: "คำขอเปลี่ยนแปลง"
-        case .decision: "การตัดสินใจ"
-        case .lesson: "บทเรียน"
+        case .risk: t("Risk", "Name of an ISO 21502 practice.")
+        case .issue: t("Issue", "Kind of register entry.")
+        case .change: t("Change request", "Kind of register entry.")
+        case .decision: t("Decision", "Kind of register entry.")
+        case .lesson: t("Lesson", "Kind of register entry.")
         }
     }
 }
@@ -41,11 +41,11 @@ public enum RegisterStatus: String, Sendable, Codable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .open: "เปิดอยู่"
-        case .proposed: "รอตัดสิน"
-        case .approved: "อนุมัติแล้ว"
-        case .rejected: "ปฏิเสธ"
-        case .closed: "ปิดแล้ว"
+        case .open: t("open", "Status of a register entry.")
+        case .proposed: t("awaiting a decision", "Status of a register entry.")
+        case .approved: t("approved", "Marker on an analysis plan somebody signed off.")
+        case .rejected: t("rejected", "Status of a register entry.")
+        case .closed: t("closed", "Status of a register entry.")
         }
     }
 }
@@ -65,7 +65,9 @@ public enum RegisterOrigin: Sendable, Codable, Equatable {
     public var label: String {
         switch self {
         case .agent(let role): role.rawValue
-        case .human(let name): name.isEmpty ? "คน" : name
+        case .human(let name): name.isEmpty
+            ? t("a person", "Stand-in when a human origin carries no name.")
+            : name
         }
     }
 }
@@ -97,10 +99,10 @@ public enum RiskResponse: String, Sendable, Codable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .avoid: "เลี่ยง"
-        case .reduce: "ลด"
-        case .transfer: "โอน"
-        case .accept: "ยอมรับ"
+        case .avoid: t("avoid", "Risk response.")
+        case .reduce: t("reduce", "Risk response.")
+        case .transfer: t("transfer", "Risk response.")
+        case .accept: t("accept", "Risk response.")
         }
     }
 }
@@ -110,9 +112,9 @@ public enum IssueKind: String, Sendable, Codable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .problem: "ปัญหา"
-        case .concern: "ข้อกังวล"
-        case .offSpecification: "ไม่ตรงสเปก"
+        case .problem: t("problem", "Kind of issue.")
+        case .concern: t("concern", "Kind of issue.")
+        case .offSpecification: t("off specification", "Kind of issue.")
         }
     }
 }
@@ -171,9 +173,10 @@ public enum RegisterError: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .changeDecidedByAgent:
-            "คำขอเปลี่ยนแปลงต้องให้คนตัดสิน — agent เสนอได้ แต่อนุมัติเองไม่ได้"
-        case .notAChange: "รายการนี้ไม่ใช่คำขอเปลี่ยนแปลง"
-        case .emptyDecider: "ต้องระบุชื่อผู้ตัดสิน"
+            t("A change request needs a person to decide it — an agent may propose one but never approve it",
+              "Refusal message when an agent tries to approve a change request.")
+        case .notAChange: t("This entry is not a change request", "Refusal message.")
+        case .emptyDecider: t("The name of the decider is required", "Refusal message.")
         }
     }
 }

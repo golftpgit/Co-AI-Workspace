@@ -8,7 +8,7 @@ import SwiftUI
 // grows past the margin and somebody splits it with `+`, the argument becomes a
 // `String` and the asterisks stop being emphasis and start being asterisks.
 //
-// Driving the participants screen found exactly that: "ไฟล์คนละไฟล์กับคำตอบ" was
+// Driving the participants screen found exactly that: "a different file from the answers" was
 // on screen wrapped in two stars. It is a small thing that reads as sloppiness
 // in the one place the app is explaining a privacy guarantee, and it is invisible
 // to every test — so `check.sh` now fails on a concatenated `Text` containing

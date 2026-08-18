@@ -97,7 +97,7 @@ public enum SecretVaultError: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .keychain(let status):
-            "เข้าถึง Keychain ไม่ได้ (OSStatus \(status))"
+            localised("the Keychain could not be reached (OSStatus \(status))", "A Keychain failure. Placeholder: the status code.")
         }
     }
 }
@@ -354,7 +354,7 @@ public enum SecretStoreError: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .noVault:
-            "ยังไม่ได้ติดตั้งที่เก็บความลับ (Keychain) ในโปรเซสนี้ จึงบันทึกไม่ได้"
+            localised("no secret store (Keychain) has been installed in this process, so nothing can be saved", "Why a secret cannot be saved.")
         }
     }
 }

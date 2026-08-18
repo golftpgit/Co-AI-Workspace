@@ -56,8 +56,8 @@ struct ToolProficiencyTests {
         let found = ToolProficiencyReader.aggregate(
             (0..<5).map { _ in attempt(succeeded: true) }
                 + [attempt(succeeded: false, detail: "policy hard stop: x")])
-        #expect(found[0].summary.contains("ถูกกฎห้ามไว้อีก 1 ครั้ง"))
-        #expect(found[0].summary.contains("ไม่นับเป็นความผิดของบทบาท"))
+        #expect(found[0].summary.contains("a rule blocked 1 more"))
+        #expect(found[0].summary.contains("not counted against the role"))
     }
 
     // These three *are* the role's to get right: wrong arguments, work the
@@ -81,7 +81,7 @@ struct ToolProficiencyTests {
         let found = ToolProficiencyReader.aggregate([attempt(succeeded: true)])
         #expect(found[0].successRate == nil)
         #expect(found[0].isTooFewToJudge)
-        #expect(found[0].summary.contains("ยังใช้ไม่พอ"))
+        #expect(found[0].summary.contains("used too little to say anything"))
         #expect(found[0].summary.contains("100") == false)
     }
 

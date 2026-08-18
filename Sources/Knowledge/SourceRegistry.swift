@@ -23,15 +23,15 @@ public enum Discipline: String, Sendable, Codable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .medicine: "การแพทย์"
-        case .science: "วิทยาศาสตร์"
-        case .engineering: "วิศวกรรม"
-        case .computing: "คอมพิวเตอร์"
-        case .socialScience: "สังคมศาสตร์"
-        case .statistics: "สถิติ"
-        case .law: "กฎหมาย"
-        case .policy: "นโยบาย"
-        case .general: "ทั่วไป"
+        case .medicine: localised("Medicine", "A discipline a source covers.")
+        case .science: localised("Science", "A discipline a source covers.")
+        case .engineering: localised("Engineering", "A discipline a source covers.")
+        case .computing: localised("Computing", "A discipline a source covers.")
+        case .socialScience: localised("Social science", "A discipline a source covers.")
+        case .statistics: localised("Statistics", "A discipline a source covers.")
+        case .law: localised("Law", "A discipline a source covers.")
+        case .policy: localised("Policy", "A discipline a source covers.")
+        case .general: localised("General", "A discipline a source covers.")
         }
     }
 }
@@ -156,7 +156,7 @@ extension SourceRegistry {
         .init(domain: "who.int", name: "World Health Organization", tier: .t1,
               disciplines: [.medicine, .policy]),
         .init(domain: "cdc.gov", name: "US CDC", tier: .t1, disciplines: [.medicine]),
-        .init(domain: "moph.go.th", name: "กระทรวงสาธารณสุข", tier: .t1,
+        .init(domain: "moph.go.th", name: localised("Ministry of Public Health (Thailand)", "Name of a source in the registry."), tier: .t1,
               disciplines: [.medicine, .policy]),
         .init(domain: "nist.gov", name: "NIST", tier: .t1,
               disciplines: [.science, .engineering, .computing]),
@@ -171,9 +171,9 @@ extension SourceRegistry {
         .init(domain: "oecd.org", name: "OECD", tier: .t1,
               disciplines: [.statistics, .policy]),
         .init(domain: "un.org", name: "United Nations", tier: .t1, disciplines: [.policy]),
-        .init(domain: "nso.go.th", name: "สำนักงานสถิติแห่งชาติ", tier: .t1,
+        .init(domain: "nso.go.th", name: localised("National Statistical Office (Thailand)", "Name of a source in the registry."), tier: .t1,
               disciplines: [.statistics, .policy]),
-        .init(domain: "ratchakitcha.soc.go.th", name: "ราชกิจจานุเบกษา", tier: .t1,
+        .init(domain: "ratchakitcha.soc.go.th", name: localised("Royal Thai Government Gazette", "Name of a source in the registry."), tier: .t1,
               disciplines: [.law]),
 
         // T2 — peer reviewed
@@ -211,13 +211,13 @@ extension SourceRegistry {
         // Thai institutional repositories: a thesis or a faculty report has an
         // identifiable author and institution, which is T3's definition, and
         // leaving them at T5 was the other half of the same hole.
-        .init(domain: "chula.ac.th", name: "จุฬาลงกรณ์มหาวิทยาลัย", tier: .t3,
+        .init(domain: "chula.ac.th", name: localised("Chulalongkorn University", "Name of a source in the registry."), tier: .t3,
               disciplines: [.general]),
-        .init(domain: "mahidol.ac.th", name: "มหาวิทยาลัยมหิดล", tier: .t3,
+        .init(domain: "mahidol.ac.th", name: localised("Mahidol University", "Name of a source in the registry."), tier: .t3,
               disciplines: [.general]),
-        .init(domain: "thailis.or.th", name: "ThaiLIS (คลังวิทยานิพนธ์)", tier: .t3,
+        .init(domain: "thailis.or.th", name: localised("ThaiLIS (Thai thesis repository)", "Name of a source in the registry."), tier: .t3,
               disciplines: [.general]),
-        .init(domain: "nrct.go.th", name: "วช. (สำนักงานการวิจัยแห่งชาติ)", tier: .t3,
+        .init(domain: "nrct.go.th", name: localised("NRCT (National Research Council of Thailand)", "Name of a source in the registry."), tier: .t3,
               disciplines: [.general, .policy]),
 
         // T4 — curated community

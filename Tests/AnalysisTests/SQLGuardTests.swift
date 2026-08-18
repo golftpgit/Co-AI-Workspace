@@ -29,11 +29,11 @@ struct SQLGuardTests {
         let bare = SQLGuard.assess("DELETE FROM patients").statements[0]
         #expect(bare.effect == .destructive)
         #expect(bare.target == "patients")
-        #expect(bare.note?.contains("ทุกแถว") == true)
+        #expect(bare.note?.contains("every row") == true)
 
         let filtered = SQLGuard.assess("DELETE FROM patients WHERE id = 3").statements[0]
         #expect(filtered.effect == .write)
-        #expect(filtered.note?.contains("เงื่อนไข") == true)
+        #expect(filtered.note?.contains("matching rows") == true)
     }
 
     @Test("UPDATE is judged the same way as DELETE")
@@ -139,7 +139,7 @@ struct SQLGuardTests {
     func unknownVerbIsMutating() {
         let statement = SQLGuard.assess("REINDEX something_new").statements[0]
         #expect(statement.effect == .write)
-        #expect(statement.note?.contains("ยังไม่รู้จัก") == true)
+        #expect(statement.note?.contains("this guard does not know") == true)
     }
 
     /// A buffer is confirmed as a whole: stopping to ask between statements two
@@ -154,7 +154,7 @@ struct SQLGuardTests {
         #expect(assessment.statements.count == 3)
         #expect(assessment.effect == .destructive)
         #expect(assessment.mutating.count == 1)
-        #expect(assessment.summary.contains("3 คำสั่ง"))
+        #expect(assessment.summary.contains("3 statements"))
     }
 
     @Test("an empty buffer has nothing to confirm")
@@ -168,9 +168,9 @@ struct SQLGuardTests {
     @Test("attaching a writable external database is called out")
     func writableAttach() {
         let readOnly = SQLGuard.assess("ATTACH 'lab.db' AS lab (TYPE sqlite, READ_ONLY)")
-        #expect(readOnly.statements[0].note?.contains("อ่านอย่างเดียว") == true)
+        #expect(readOnly.statements[0].note?.contains("read-only") == true)
         let writable = SQLGuard.assess("ATTACH 'lab.db' AS lab (TYPE sqlite)")
-        #expect(writable.statements[0].note?.contains("เขียนได้") == true)
+        #expect(writable.statements[0].note?.contains("writing allowed") == true)
     }
 
     /// The split has to hand back statements DuckDB accepts — no trailing

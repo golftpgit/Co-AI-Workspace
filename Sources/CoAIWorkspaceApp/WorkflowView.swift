@@ -54,7 +54,7 @@ final class WorkflowViewModel {
     }
 
     func newWorkflow() {
-        draft = Workflow(name: "ลำดับงานใหม่")
+        draft = Workflow(name: t("New workflow", "Default name for a workflow somebody just created."))
         run = nil
         problem = nil
     }
@@ -127,12 +127,13 @@ struct WorkflowView: View {
     private var saved: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("ลำดับงานที่บันทึกไว้").fontWeight(.semibold)
+                Text(localised: "Saved workflows", "Heading over the workflow list.").fontWeight(.semibold)
                 Spacer()
                 Button {
                     model.newWorkflow()
                 } label: {
-                    Image(systemName: "plus").accessibilityLabel("สร้างลำดับงานใหม่")
+                    Image(systemName: "plus")
+                        .accessibilityLabel(t("Create a new workflow", "Screen-reader label."))
                 }
                 .buttonStyle(.borderless)
             }
@@ -140,9 +141,10 @@ struct WorkflowView: View {
             Divider()
 
             if model.workflows.isEmpty {
-                ContentUnavailableView("ยังไม่มีลำดับงาน", systemImage: "list.number",
-                                       description: Text("ลำดับงานคือขั้นตอนที่ทำซ้ำทุกเดือน "
-                                                         + "บันทึกไว้แล้วกดรันใหม่ได้ โดยทุกขั้นยังผ่านการอนุมัติเหมือนเดิม"))
+                ContentUnavailableView(t("No workflow yet", "Empty state in the workflow list."),
+                                       systemImage: "list.number",
+                                       description: Text(localised: "A workflow is the sequence you repeat every month — save it once and run it again, with every step still going through the same approvals",
+                                                         "Empty-state explanation in the workflow list."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(model.workflows) { workflow in
@@ -150,21 +152,25 @@ struct WorkflowView: View {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(workflow.name)
                                 .fontWeight(model.draft?.id == workflow.id ? .semibold : .regular)
-                            Text("\(workflow.steps.count) ขั้น · "
-                                 + workflow.updatedAt.formatted(date: .abbreviated, time: .shortened))
+                            Text(localised: "\(workflow.steps.count) steps · \(workflow.updatedAt.formatted(date: .abbreviated, time: .shortened))",
+                                 "A workflow row. Placeholders: how many steps and when it was last changed.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("ลำดับงาน \(workflow.name)")
+                    .accessibilityLabel(t("Workflow \(workflow.name)",
+                                          "Screen-reader label. Placeholder is the workflow name."))
                     .contextMenu {
-                        Button("ลบ", role: .destructive) { model.delete(workflow.id) }
+                        Button(t("Delete", "Context-menu item that removes a file."),
+                               role: .destructive) { model.delete(workflow.id) }
                     }
                     // §14.4 rule 3: a context menu needs a second door, because
                     // right-click is a mouse and most Mac keyboards have no menu key.
-                    .accessibilityAction(named: "ลบลำดับงานนี้") { model.delete(workflow.id) }
+                    .accessibilityAction(named: t("Delete this workflow", "Screen-reader action name.")) {
+                        model.delete(workflow.id)
+                    }
                 }
                 .listStyle(.inset)
             }
@@ -178,14 +184,16 @@ struct WorkflowView: View {
         if let draft = model.draft {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 10) {
-                    TextField("ชื่อลำดับงาน", text: Binding(
+                    TextField(t("Workflow name", "Text field holding the workflow's name."), text: Binding(
                         get: { model.draft?.name ?? "" },
                         set: { model.draft?.name = $0 }))
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 320)
                     Spacer()
-                    Button("บันทึก") { model.save() }
-                    Button(model.running ? "กำลังรัน…" : "รัน") {
+                    Button(t("Save", "Button that stores the edited entities.")) { model.save() }
+                    Button(model.running
+                           ? t("running…", "Button label while a workflow is executing.")
+                           : t("Run", "Button that executes the SQL in the editor.")) {
                         Task { await model.runDraft() }
                     }
                     .disabled(model.running || model.refusal != nil)
@@ -211,8 +219,10 @@ struct WorkflowView: View {
                 Divider()
 
                 if draft.steps.isEmpty {
-                    ContentUnavailableView("ยังไม่มีขั้นตอน", systemImage: "hand.point.right",
-                                           description: Text("เลือกทูลจากรายการทางขวาเพื่อเพิ่มเป็นขั้นตอน"))
+                    ContentUnavailableView(t("No steps yet", "Empty state inside a workflow."),
+                                           systemImage: "hand.point.right",
+                                           description: Text(localised: "Pick a tool from the list on the right to add it as a step",
+                                                             "Empty-state instruction inside a workflow."))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ScrollView {
@@ -228,8 +238,10 @@ struct WorkflowView: View {
                 if let run = model.run { Divider(); report(run) }
             }
         } else {
-            ContentUnavailableView("เลือกหรือสร้างลำดับงาน", systemImage: "list.number",
-                                   description: Text("ลำดับงานที่บันทึกไว้ รันซ้ำได้โดยทุกขั้นยังเดินผ่านประตูอนุมัติเดิม"))
+            ContentUnavailableView(t("Choose or create a workflow", "Empty state before a workflow is selected."),
+                                   systemImage: "list.number",
+                                   description: Text(localised: "A saved workflow can be re-run with every step still passing through the same approval gate",
+                                                     "Empty-state explanation before a workflow is selected."))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -256,16 +268,20 @@ struct WorkflowView: View {
                 }
                 Spacer()
                 Button { model.move(step.id, by: -1) } label: {
-                    Image(systemName: "arrow.up").accessibilityLabel("เลื่อนขั้นนี้ขึ้น")
+                    Image(systemName: "arrow.up")
+                        .accessibilityLabel(t("Move this step up", "Screen-reader label."))
                 }
                 .buttonStyle(.borderless).disabled(index == 0)
                 Button { model.move(step.id, by: 1) } label: {
-                    Image(systemName: "arrow.down").accessibilityLabel("เลื่อนขั้นนี้ลง")
+                    Image(systemName: "arrow.down")
+                        .accessibilityLabel(t("Move this step down", "Screen-reader label."))
                 }
                 .buttonStyle(.borderless)
                 .disabled(index == (model.draft?.steps.count ?? 0) - 1)
                 Button { model.removeStep(step.id) } label: {
-                    Image(systemName: "trash").accessibilityLabel("ลบขั้น \(step.tool)")
+                    Image(systemName: "trash")
+                        .accessibilityLabel(t("Delete the \(step.tool) step",
+                                              "Screen-reader label. Placeholder is the tool name."))
                 }
                 .buttonStyle(.borderless)
             }
@@ -275,7 +291,9 @@ struct WorkflowView: View {
                           ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                         .foregroundStyle(outcome.succeeded ? .green : .orange)
                         .accessibilityHidden(true)
-                    Text(outcome.stop?.label ?? "ผ่าน").font(.caption).fontWeight(.medium)
+                    Text(outcome.stop?.label
+                         ?? t("passed", "Assignment status: accepted first time."))
+                        .font(.caption).fontWeight(.medium)
                     Text(outcome.detail).font(.caption).foregroundStyle(.secondary)
                         .lineLimit(2).textSelection(.enabled)
                 }
@@ -285,10 +303,11 @@ struct WorkflowView: View {
                 Text(advert.description).font(.caption).foregroundStyle(.secondary)
                     .lineLimit(2)
             } else {
-                Text("ไม่มีทูลชื่อนี้แล้ว — บันทึกไม่ได้จนกว่าจะแก้หรือลบขั้นนี้")
+                Text(localised: "There is no tool by that name any more — this cannot be saved until the step is fixed or removed",
+                     "Shown on a workflow step whose tool has gone.")
                     .font(.caption).foregroundStyle(.orange)
             }
-            TextField("อาร์กิวเมนต์ (JSON)", text: Binding(
+            TextField(t("Arguments (JSON)", "Text field holding a workflow step's arguments."), text: Binding(
                 get: { model.draft?.steps.first { $0.id == step.id }?.argumentsJSON ?? "{}" },
                 set: { value in
                     guard let i = model.draft?.steps.firstIndex(where: { $0.id == step.id })
@@ -297,7 +316,7 @@ struct WorkflowView: View {
                 }))
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.caption, design: .monospaced))
-            TextField("ขั้นนี้มีไว้ทำอะไร", text: Binding(
+            TextField(t("What this step is for", "Text field: why a workflow step exists."), text: Binding(
                 get: { model.draft?.steps.first { $0.id == step.id }?.note ?? "" },
                 set: { value in
                     guard let i = model.draft?.steps.firstIndex(where: { $0.id == step.id })
@@ -308,7 +327,8 @@ struct WorkflowView: View {
                 .font(.caption)
             if outcome == nil, model.run?.completed == false {
                 // Blank would read as "this one was fine". It never ran.
-                Text("ยังไม่ได้รัน — ลำดับหยุดก่อนถึงขั้นนี้")
+                Text(localised: "Not run — the workflow stopped before reaching this step",
+                     "Shown on a step the run never got to.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -322,7 +342,9 @@ struct WorkflowView: View {
     private func report(_ run: WorkflowRun) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(run.completed ? "รันครบทุกขั้น" : "หยุดที่ขั้นที่ไม่ผ่าน")
+                Text(run.completed
+                     ? t("every step ran", "Workflow run outcome: it finished.")
+                     : t("stopped at the step that did not pass", "Workflow run outcome: it halted."))
                     .fontWeight(.semibold)
                     .foregroundStyle(run.completed ? .green : .orange)
                 if let stop = run.stoppedAt?.stop {
@@ -350,12 +372,14 @@ struct WorkflowView: View {
 
     private var paletteColumn: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("ทูลที่ใช้ได้ตอนนี้").fontWeight(.semibold).padding(Space.box)
+            Text(localised: "Tools available now", "Heading over the palette of tools.")
+                .fontWeight(.semibold).padding(Space.box)
             Divider()
             if model.palette.isEmpty {
-                ContentUnavailableView("ยังไม่มีทูล", systemImage: "wrench.and.screwdriver",
-                                       description: Text("รายการนี้อ่านจาก ToolGateway จริง "
-                                                         + "ทูลจาก MCP หรือปลั๊กอินที่เพิ่งต่อจะขึ้นเอง"))
+                ContentUnavailableView(t("No tools yet", "Empty state in the tool palette."),
+                                       systemImage: "wrench.and.screwdriver",
+                                       description: Text(localised: "This list is read from the real ToolGateway — tools from a newly connected MCP server or plug-in appear on their own",
+                                                         "Empty-state explanation in the tool palette."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(model.palette, id: \.name) { advert in
@@ -375,7 +399,8 @@ struct WorkflowView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(model.draft == nil)
-                    .accessibilityLabel("เพิ่มขั้น \(advert.name)")
+                    .accessibilityLabel(t("Add a \(advert.name) step",
+                                          "Screen-reader label. Placeholder is the tool name."))
                 }
                 .listStyle(.inset)
             }
@@ -384,9 +409,9 @@ struct WorkflowView: View {
 
     private func riskLabel(_ risk: RiskLevel) -> String {
         switch risk {
-        case .low: "เสี่ยงต่ำ"
-        case .medium: "เสี่ยงปานกลาง"
-        case .high: "เสี่ยงสูง"
+        case .low: t("low risk", "Risk level of a work package.")
+        case .medium: t("medium risk", "Risk level of a work package.")
+        case .high: t("high risk", "Risk level of a work package.")
         }
     }
 

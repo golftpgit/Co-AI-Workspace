@@ -59,6 +59,24 @@ public struct ContractOutcome: Sendable {
     public var isFailure: Bool { status == .failed }
 }
 
+/// Room for an answer on an endpoint that is also serving somebody else.
+///
+/// 2,048 was the figure for months and it failed three full rounds in a row
+/// while passing every time the suite was run alone (F-11). Measured, with the
+/// identical request at temperature 0: **sequentially it costs 294 tokens; six
+/// at once it costs 172 to 2,048, and the one that reached the ceiling came
+/// back with `finish_reason: length` and an empty body.** Output length on this
+/// endpoint is a function of how busy it is, so a budget set from a quiet
+/// machine is a budget that fails under load — which is exactly when the whole
+/// suite runs (E.47).
+///
+/// A share of the executor's own window, not a constant. A flat 8,192 was
+/// tried first and overflowed Tier 0, whose window is 4,096 — the same mistake
+/// rule L1 exists to prevent, made inside the file that checks the rules.
+func contractAnswerBudget(for executor: any LLMExecutor) -> Int {
+    max(512, min(8_192, executor.capabilities.contextWindow / 4))
+}
+
 public enum ExecutorContract {
 
     /// Runs every applicable case against one executor.
@@ -213,7 +231,7 @@ public enum ExecutorContract {
             // Room for a reasoning model to think *and* answer: 80 produced
             // nothing at all on qwen3.5, which is a fact about reasoning
             // models rather than about any executor.
-            request.maxTokens = 2_048
+            request.maxTokens = contractAnswerBudget(for: executor)
 
             var textDeltas = 0
             var reasoningDeltas = 0
@@ -244,7 +262,7 @@ public enum ExecutorContract {
             var request = LLMRequest(messages: [
                 .init(.user, "What is 17 times 3? Reply with the number only."),
             ])
-            request.maxTokens = 2_048
+            request.maxTokens = contractAnswerBudget(for: executor)
 
             let completion = try await executor.complete(request)
             guard completion.text.contains("51") else {
@@ -275,7 +293,7 @@ public enum ExecutorContract {
                 .init(.user, "Fix a crash in main.swift on launch"),
             ])
             request.responseSchema = (name: "Routing", schemaJSON: routingSchema)
-            request.maxTokens = 2_048
+            request.maxTokens = contractAnswerBudget(for: executor)
 
             let completion = try await executor.complete(request)
             // `structuredText`, not `text`: a reasoning model can put the whole
@@ -309,7 +327,7 @@ public enum ExecutorContract {
                 .init(.system, "Use tools when asked about cohort sizes."),
                 .init(.user, "How many patients are in the diabetes cohort?"),
             ])
-            request.maxTokens = 2_048
+            request.maxTokens = contractAnswerBudget(for: executor)
             request.tools = [LLMToolSpec(
                 name: "lookup_patient_count",
                 description: "Look up how many patients are in a named cohort",

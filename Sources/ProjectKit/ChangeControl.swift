@@ -21,7 +21,7 @@ import AgentKit
 //  • **An estimate says what it rests on.** Time and cost are extrapolated from
 //    leaves this project has actually finished; with nothing finished, the
 //    fields say there is no basis instead of printing a zero. A change request
-//    reading "เวลา +0" would be quoted as "no delay expected" (§19.10's rule
+//    reading "time +0" would be quoted as "no delay expected" (§19.10's rule
 //    about unmeasured numbers, in the place where it does the most damage).
 // ─────────────────────────────────────────────────────────────
 
@@ -42,24 +42,29 @@ public enum PlanEdit: Sendable, Equatable {
     case tolerances(Tolerances)
 
     /// What the change request will be called. Written from the edit rather than
-    /// typed, because a change request titled "แก้แผน" is one nobody can review.
+    /// typed, because a change request titled "edit the plan" is one nobody can review.
     public func summary(in wbs: WorkBreakdown, of project: Project) -> String {
         switch self {
         case .savePackage(let package):
             return wbs.packages.contains(where: { $0.id == package.id })
-                ? "แก้ใบงาน: \(package.title)"
-                : "เพิ่มใบงาน: \(package.title)"
+                ? t("Change work package: \(package.title)",
+                    "Title of a change request. Placeholder is the package title.")
+                : t("Add work package: \(package.title)",
+                    "Title of a change request. Placeholder is the package title.")
         case .removePackage(_, let title):
-            return "ตัดใบงานออก: \(title)"
+            return t("Remove work package: \(title)",
+                     "Title of a change request. Placeholder is the package title.")
         case .scopeStatement:
-            return "แก้ขอบเขตของโครงการ"
+            return t("Change the project's scope", "Title of a change request.")
         case .tolerances(let next):
             let moved = ToleranceDimension.allCases.filter {
                 next.limit($0) != project.tolerances.limit($0)
             }
             return moved.isEmpty
-                ? "แก้กรอบที่ทีมเดินเองได้"
-                : "แก้กรอบ: " + moved.map {
+                ? t("Change how far the team may go on its own", "Title of a change request.")
+                : t("Change tolerances: ",
+                    "Title of a change request; the tolerances that moved follow.")
+                    + moved.map {
                     "\($0.label) \(ChangeControl.number(project.tolerances.limit($0)))"
                         + " → \(ChangeControl.number(next.limit($0)))"
                 }.joined(separator: " · ")
@@ -84,8 +89,8 @@ public struct PlanChangeProposal: Sendable, Equatable {
 
     /// The one line §19.2.4 asks for, in the words it asks for them.
     public var headline: String {
-        "การแก้นี้จะกลายเป็นคำขอเปลี่ยนแปลง #\(requestNumber) · "
-            + "กระทบ: ขอบเขต \(scopeImpact), เวลา \(timeImpact), เงิน \(costImpact)"
+        t("This edit becomes change request #\(requestNumber) · impact: scope \(scopeImpact), time \(timeImpact), money \(costImpact)",
+          "Headline of a pending change. Placeholders: the request number and its three impacts.")
     }
 
     /// The register entry it becomes on confirmation — the same three impacts,
@@ -170,7 +175,8 @@ public enum ChangeControl {
         let (after, changedProject) = applying(edit, to: wbs, of: project)
 
         // The edit's own effect: today's plan treated as the thing being changed.
-        let here = Baseline.freeze(project, wbs: wbs, version: 0, reason: "ตอนนี้")
+        let here = Baseline.freeze(project, wbs: wbs, version: 0,
+                                   reason: t("now", "Reason recorded on the throwaway baseline used to compute drift."))
         let delta = BaselineDiff.between(here, and: changedProject, wbs: after)
         // A baseline holds the frame as well as the plan (§19.11), so moving a
         // tolerance after G2 is a change to the agreement even though the WBS is
@@ -194,17 +200,29 @@ public enum ChangeControl {
     private static func scopeImpact(_ edit: PlanEdit, delta: BaselineDiff,
                                     project: Project) -> String {
         if case .tolerances = edit {
-            return "กรอบเปลี่ยน — แผนงานไม่เปลี่ยน"
+            return t("Tolerances changed — the plan did not",
+                     "Scope impact when only tolerances moved.")
         }
         var parts: [String] = []
-        if !delta.added.isEmpty { parts.append("+\(delta.added.count) ใบ") }
-        if !delta.removed.isEmpty { parts.append("−\(delta.removed.count) ใบ") }
-        if !delta.changed.isEmpty { parts.append("แก้ \(delta.changed.count) ใบ") }
-        if delta.scopeChanged {
-            parts.append("ขอบเขต ทำ \(project.statement.inScope.count) ข้อ · "
-                         + "ไม่ทำ \(project.statement.outOfScope.count) ข้อ")
+        if !delta.added.isEmpty {
+            parts.append(t("+\(delta.added.count) packages",
+                           "Scope impact. Placeholder is how many were added."))
         }
-        return parts.isEmpty ? "ไม่เปลี่ยน" : parts.joined(separator: " · ")
+        if !delta.removed.isEmpty {
+            parts.append(t("−\(delta.removed.count) packages",
+                           "Scope impact. Placeholder is how many were removed."))
+        }
+        if !delta.changed.isEmpty {
+            parts.append(t("\(delta.changed.count) packages changed",
+                           "Scope impact. Placeholder is how many were edited."))
+        }
+        if delta.scopeChanged {
+            parts.append(t("Scope: \(project.statement.inScope.count) in · \(project.statement.outOfScope.count) out",
+                           "Scope impact. Placeholders: how many scope lines in and out."))
+        }
+        return parts.isEmpty
+            ? t("no change", "Impact when nothing moved.")
+            : parts.joined(separator: " · ")
     }
 
     private static func timeImpact(delta: BaselineDiff, wbs: WorkBreakdown,
@@ -216,7 +234,8 @@ public enum ChangeControl {
         let now = Schedule.criticalPaths(after).map(\.count).max() ?? 0
         var parts: [String] = []
         if now != before {
-            parts.append("เส้นทางวิกฤต \(before) → \(now) ใบ")
+            parts.append(t("critical path \(before) → \(now) packages",
+                           "Time impact. Placeholders: the length before and after."))
         }
 
         // The part that is an estimate, with its basis attached.
@@ -226,29 +245,36 @@ public enum ChangeControl {
         let net = delta.added.count - delta.removed.count
         if net != 0 {
             if finished.isEmpty {
-                parts.append("ยังประเมินไม่ได้ — โครงการนี้ยังไม่มีใบงานที่วัดเวลาได้")
+                parts.append(t("cannot be estimated — no work package in this project has measured time yet",
+                               "Time impact when there is no history to estimate from."))
             } else {
                 let average = finished.reduce(0, +) / Double(finished.count)
                 let minutes = Int((average * Double(net) / 60).rounded())
-                parts.append("≈ \(minutes >= 0 ? "+" : "")\(minutes) นาที "
-                             + "(เฉลี่ยจาก \(finished.count) ใบที่เสร็จแล้ว)")
+                parts.append(t("≈ \(minutes >= 0 ? "+" : "")\(minutes) minutes (averaged over \(finished.count) finished packages)",
+                               "Time impact. Placeholders: the sign, the minutes, and the sample size."))
             }
         }
-        return parts.isEmpty ? "ไม่เปลี่ยนลำดับหรือปริมาณงาน" : parts.joined(separator: " · ")
+        return parts.isEmpty
+            ? t("no change to the order or the amount of work", "Time impact when nothing moved.")
+            : parts.joined(separator: " · ")
     }
 
     private static func costImpact(delta: BaselineDiff, wbs: WorkBreakdown,
                                    basis: ChangeEstimateBasis) -> String {
         let net = delta.added.count - delta.removed.count
-        guard net != 0 else { return "ไม่เปลี่ยนปริมาณงาน" }
+        guard net != 0 else {
+            return t("no change to the amount of work", "Cost impact when nothing moved.")
+        }
         let finished = wbs.leaves.count { $0.status == .done }
         guard basis.costMeasured, finished > 0, basis.spent > 0 else {
-            return "ยังประเมินไม่ได้ — ยังไม่มีค่าใช้จ่ายที่บันทึกไว้ให้เทียบ"
+            return t("cannot be estimated — no spending has been recorded to compare against",
+                     "Cost impact when there is no history to estimate from.")
         }
         let perLeaf = basis.spent / Double(finished)
         let amount = perLeaf * Double(net)
-        return "≈ \(amount >= 0 ? "+" : "−")฿\(number(abs(amount))) "
-            + "(เฉลี่ยจาก \(finished) ใบที่เสร็จแล้ว)"
+        return "≈ \(amount >= 0 ? "+" : "−")$\(number(abs(amount))) "
+            + t("(averaged over \(finished) finished packages)",
+                "Cost impact. Placeholder is the sample size.")
     }
 
     static func number(_ value: Double) -> String {

@@ -210,51 +210,18 @@ struct Engine: Sendable {
             quotaGigabytes: config.modelQuotaGigabytes ?? BootstrapConfig.defaultModelQuotaGigabytes)
         // §9.3: several endpoints rather than one, each declaring whether it
         // costs money. The old single pair migrates itself (`effectiveEndpoints`).
+        //
+        // Built through `EndpointExecutors` rather than inline, because the
+        // settings screen has to build the same chain when somebody saves an
+        // endpoint — and two copies of that loop would drift (AUDIT F-1).
         let endpoints = config.effectiveEndpoints
-        var endpointChecks: [String: EndpointCheck] = [:]
-        let probe = EndpointProbe()
+        let built = await EndpointExecutors.build(from: endpoints)
+        executors.append(contentsOf: built.executors)
+        let endpointChecks = built.checks
         /// The window of the endpoint the app will normally talk to, as the
         /// server reports it (§17.1, P15.3). Nil when nothing answered — and
         /// nil stays nil rather than becoming a guessed number.
-        var defaultWindow: Int?
-        for endpoint in endpoints.endpoints {
-            guard let url = endpoint.url else { continue }
-            // Probed at boot so the status dots are true when the screen opens,
-            // and so a typo in a model name is visible before it is used
-            // (E.9 case 8a). The same reply says how big the window is and
-            // which model is really being served, so neither is guessed
-            // (P15.1/P15.3).
-            let check = await probe.check(endpoint)
-            endpointChecks[endpoint.id] = check
-            if endpoint.id == endpoints.defaultEndpointID || defaultWindow == nil {
-                defaultWindow = check.served?.maxModelLength ?? defaultWindow
-            }
-            executors.append(VLLMExecutor(
-                identifier: endpoint.name,
-                baseURL: url,
-                // Whatever the config says, including nothing: an empty name
-                // means "the model this server serves", and `VLLMExecutor`
-                // asks. A pinned name that no longer exists takes the endpoint
-                // out of the chain with nothing on screen saying why.
-                model: endpoint.model,
-                apiKey: endpoint.apiKey,
-                tier: endpoint.kind == .paid ? .paid : .selfHosted,
-                price: endpoint.inputPricePerMillion.flatMap { input in
-                    endpoint.outputPricePerMillion.map {
-                        TokenPrice(inputPerMillion: input, outputPerMillion: $0)
-                    }
-                },
-                capabilities: .init(
-                    // Declared by the server, not by this file. It read 32_768
-                    // here for every endpoint, so raising `--max-model-len`
-                    // changed nothing and lowering it made the app overflow a
-                    // window it believed was bigger.
-                    contextWindow: check.served?.maxModelLength ?? 32_768,
-                    supportsTools: true,
-                    supportsStructuredOutput: true,
-                    supportsStreaming: true,
-                    supportsVision: false)))
-        }
+        let defaultWindow = built.defaultWindow
 
         // §9.5 — only the metered tier passes through it, and only ever to be
         // sent somewhere cheaper rather than to fail.
@@ -295,7 +262,7 @@ struct Engine: Sendable {
             benefits: BenefitStore(client: client),
             tailoring: TailoringStore(client: client),
             // §19.12 conditions 4–5. Wired here for the reason the whole gate
-            // exists: without this the two conditions read "ยังตรวจไม่ได้" and
+            // exists: without this the two conditions read "cannot be checked yet" and
             // refuse to close, which is correct but useless — the app is the
             // only place that has both the conflict ledger and the plans.
             closingLedger: ClosingLedger(conflicts: ConflictStore(client: client),
@@ -418,6 +385,16 @@ struct Engine: Sendable {
                 persist: { [knowledgeStore] chunks in try await knowledgeStore.save(chunks) },
                 embedder: embedder),
             SaveDocumentTool(directory: paths.documentsDirectory),
+            // C6 / AUDIT F-9 — two names that sat in the risk table for months
+            // with nothing behind them. Registered here rather than merely
+            // built, because "classified, implemented, unreachable" is the gap
+            // this project has now closed nine times (M1).
+            //
+            // Scoped to the folder the person chose, exactly as `run_shell` is:
+            // one root, so what an agent writes is what a person can open, and
+            // no directory the sandbox has not been granted.
+            ReadFileTool(),
+            WriteFileTool(),
         ])
         // §7.3 / P8.5 — the agent writing down what it worked out. Registered
         // like any other tool, because that is the whole point: it goes through
@@ -651,7 +628,8 @@ struct Engine: Sendable {
         var summary: [String] = []
         for executor in executors {
             let reachable = await executor.isAvailable()
-            summary.append("\(executor.identifier) — \(reachable ? "พร้อมใช้" : "ยังต่อไม่ได้")")
+            summary.append(t("\(executor.identifier) — \(reachable ? t("ready", "Channel status: it can run.") : t("not reachable", "Endpoint probe result: the server did not answer."))",
+                             "One line of the boot screen's model summary. Placeholder is the executor identifier."))
         }
 
         return Engine(client: client, paths: paths,

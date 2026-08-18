@@ -149,7 +149,7 @@ struct InstrumentGateTests {
         let validity = goodRatings(for: instrument)
         instrument.consent = nil
         #expect(InstrumentGate.evaluate(instrument, validity: validity).unmet
-            .contains { $0.contains("ความยินยอม") })
+            .contains { $0.contains("consent page") })
 
         // A consent page with an empty field is not consent to anything.
         instrument.consent = ConsentText(purpose: Bilingual("ศึกษา"),
@@ -182,7 +182,7 @@ struct InstrumentGateTests {
         let instrument = wellFormed()
         let gate = InstrumentGate.evaluate(instrument, validity: nil)
         #expect(!gate.passed)
-        #expect(gate.unmet.contains { $0.contains("ยังไม่มีผลประเมินความตรงเชิงเนื้อหา") })
+        #expect(gate.unmet.contains { $0.contains("no expert content-validity assessment") })
     }
 
     @Test("a complete instrument publishes, and only through the gate")
@@ -296,7 +296,7 @@ struct InstrumentGateTests {
         #expect(partial.passes)          // it passes on its own terms…
         let gate = InstrumentGate.evaluate(instrument, validity: partial)
         #expect(!gate.passed)            // …and is still not evidence about this form
-        #expect(gate.conditions.last?.detail?.contains("ไม่ตรงกับชุดข้อคำถาม") == true)
+        #expect(gate.conditions.last?.detail?.contains("does not match this instrument's items") == true)
     }
 
     @Test("passing the gate leaves a record with a name and a date on it")

@@ -51,14 +51,21 @@ final class CommandTreeViewModel {
     /// have to hold two numbers in their head to notice it.
     var reconciliation: String {
         guard let load else {
-            return "อ่านคิวของเซิร์ฟเวอร์ไม่ได้ — ตัวเลขข้างล่างมาจาก span ฝั่งเราอย่างเดียว"
+            return t("The server's queue could not be read — the numbers below come from our own spans alone",
+                     "Shown when the server's load is unavailable.")
         }
         if load.running == working {
-            return "ตรงกัน: กระดานลง \(working) · เซิร์ฟเวอร์กำลังรัน \(load.running)"
+            return t("Agreed: the board says \(working) · the server is running \(load.running)",
+                     "Shown when our count and the server's agree. Placeholders: both counts.")
         }
-        return "ไม่ตรงกัน: กระดานลง \(working) · เซิร์ฟเวอร์กำลังรัน \(load.running)"
-            + (load.waiting > 0 ? " (รออีก \(load.waiting))" : "")
-            + " — ตัวใดตัวหนึ่งเก่า ซึ่งเป็นข้อมูลที่ควรเห็น ไม่ใช่สิ่งที่ควรเกลี่ยให้เท่ากัน"
+        return t("Disagreed: the board says \(working) · the server is running \(load.running)",
+                 "Shown when our count and the server's disagree. Placeholders: both counts.")
+            + (load.waiting > 0
+               ? t(" (\(load.waiting) more waiting)",
+                   "Appended when the server has a queue. Placeholder is how many.")
+               : "")
+            + t(" — one of them is stale, which is a fact worth seeing rather than something to average away",
+                "Says why the disagreement is shown rather than smoothed over.")
     }
 }
 
@@ -71,9 +78,10 @@ struct CommandTreeScreen: View {
             Divider()
             if model.roots.isEmpty {
                 ContentUnavailableView(
-                    "ยังไม่มีงานที่บันทึกไว้",
+                    t("No recorded work yet", "Empty state on the chain-of-command screen."),
                     systemImage: "point.3.connected.trianglepath.dotted",
-                    description: Text("สายบังคับบัญชาวาดจาก span — เริ่มงานทีมแล้วจะเห็นที่นี่"))
+                    description: Text(localised: "The chain of command is drawn from spans — start some team work and it appears here",
+                                      "Empty-state explanation on the chain-of-command screen."))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
@@ -92,15 +100,18 @@ struct CommandTreeScreen: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: Space.tight) {
-                Text("สายบังคับบัญชา").font(.headline)
+                Text(localised: "Chain of command", "Sub-tab: who reports to whom in the agent roster.")
+                    .font(.headline)
                 // The reconciliation line is the one a person should read, so
                 // it is the one next to the title.
                 Text(model.reconciliation)
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Button("อ่านใหม่") { Task { await model.refresh() } }
-                .accessibilityLabel("อ่านสถานะสายบังคับบัญชาใหม่")
+            Button(t("Reload", "Button that re-reads the chain of command.")) {
+                Task { await model.refresh() }
+            }
+                .accessibilityLabel(t("Reload the chain of command", "Screen-reader label."))
         }
         .padding(Space.box)
     }
@@ -145,8 +156,10 @@ private struct CommandRows: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(isCollapsed
-                                    ? "กางงานย่อยของ \(node.name)"
-                                    : "พับงานย่อยของ \(node.name)")
+                                    ? t("Expand the work under \(node.name)",
+                                        "Screen-reader label. Placeholder is the node name.")
+                                    : t("Collapse the work under \(node.name)",
+                                        "Screen-reader label. Placeholder is the node name."))
             }
 
             statusDot
@@ -156,7 +169,8 @@ private struct CommandRows: View {
             }
             Spacer(minLength: 0)
             if let duration = node.duration {
-                Text("\(Int(duration.rounded())) วิ")
+                Text(localised: "\(Int(duration.rounded())) s",
+                     "How long a node took. Placeholder is a whole number of seconds.")
                     .font(.caption).monospacedDigit().foregroundStyle(.secondary)
             }
         }

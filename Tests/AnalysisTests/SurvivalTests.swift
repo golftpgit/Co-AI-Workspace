@@ -141,7 +141,7 @@ struct SurvivalTests {
         let check = Survival.proportionalHazards(tiny, covariates: [covariate], fit: fit)
         #expect(check.wasChecked == false)
         #expect(check.passed == false)
-        #expect(check.detail.contains("ยังไม่ได้ตรวจ ไม่ใช่ผ่าน"))
+        #expect(check.detail.contains("not checked, which is not the same as passed"))
     }
 
     @Test("a study where nothing happened is refused rather than fitted")

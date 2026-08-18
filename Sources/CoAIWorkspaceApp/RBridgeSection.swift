@@ -42,7 +42,8 @@ final class RBridgeViewModel {
         switch await RBridgeClient(scriptPath: startCommand).health() {
         case .success(let version):
             isHealthy = true
-            health = "สะพานตอบอยู่ — R \(version)"
+            health = t("The bridge is answering — R \(version)",
+                       "Status of the R bridge. Placeholder is the R version.")
         case .failure(let error):
             isHealthy = false
             health = error.description
@@ -56,7 +57,8 @@ final class RBridgeViewModel {
             scriptPath = try BridgeScript.write(into: directory).path(percentEncoded: false)
             problem = nil
         } catch {
-            problem = "เขียนไฟล์ไม่สำเร็จ: \(error)"
+            problem = t("Could not write the file: \(String(describing: error))",
+                        "Status message. Placeholder is the underlying error.")
         }
     }
 
@@ -72,10 +74,11 @@ struct RBridgeSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Space.box) {
             SectionHeading(
-                title: "สะพาน R",
-                help: "รันโค้ด R ด้วย R ตัวเดียวกับที่คุณใช้ใน RStudio — แอปไม่ได้เปิดให้เอง "
-                    + "คุณเป็นคนสั่งเปิด และปิดเมื่อไหร่ก็ได้ (§12.7)",
-                action: (title: "ตรวจอีกครั้ง", run: { Task { await model.refresh() } }))
+                title: t("R bridge", "Heading of the R bridge section."),
+                help: t("Runs R code with the same R you use in RStudio — the app does not start it for you: you start it, and you can stop it whenever you like (§12.7)",
+                        "Explains what the R bridge is and who is in control of it."),
+                action: (title: t("Check again", "Button that re-verifies every bound number."),
+                         run: { Task { await model.refresh() } }))
 
             if let status = model.status {
                 Text(status.nextStep)
@@ -90,18 +93,26 @@ struct RBridgeSection: View {
                 Image(systemName: model.isHealthy ? "checkmark.circle.fill" : "circle.dashed")
                     .foregroundStyle(model.isHealthy ? .green : .secondary)
                     .accessibilityHidden(true)
-                Text(model.health ?? "ยังไม่ได้ตรวจ")
+                Text(model.health ?? t("not checked yet", "R bridge status before it has been probed."))
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(model.isHealthy ? "สะพานทำงานอยู่" : "สะพานยังไม่ทำงาน")
+            .accessibilityLabel(model.isHealthy
+                                ? t("the bridge is running", "Screen-reader label for a healthy R bridge.")
+                                : t("the bridge is not running", "Screen-reader label for an unavailable R bridge."))
 
             HStack(spacing: Space.row) {
-                Button("สร้างไฟล์ r-bridge.R") { model.writeScript() }
-                    .accessibilityHint("เขียนสคริปต์สะพานไว้ในโฟลเดอร์วิเคราะห์ ไม่ทับไฟล์ที่คุณแก้เอง")
-                Button("คัดลอกคำสั่งเปิด") { model.copyCommand() }
-                    .accessibilityHint("คัดลอกคำสั่งไปวางในเทอร์มินัลเพื่อเปิดสะพาน")
+                Button(t("Create r-bridge.R", "Button that writes the bridge script.")) {
+                    model.writeScript()
+                }
+                    .accessibilityHint(t("writes the bridge script into the analysis folder without overwriting one you have edited",
+                                         "Screen-reader hint on the create-script button."))
+                Button(t("Copy the start command", "Button that copies the command that starts the bridge.")) {
+                    model.copyCommand()
+                }
+                    .accessibilityHint(t("copies a command to paste into a terminal to start the bridge",
+                                         "Screen-reader hint on the copy-command button."))
             }
 
             Text(model.startCommand)
@@ -112,9 +123,8 @@ struct RBridgeSection: View {
             // P14.4's half that belongs on a screen: the bridge runs as you,
             // in your home directory, with your library paths. Somebody
             // deciding whether to open it needs that said plainly.
-            Text("สะพานรันด้วยสิทธิ์ของคุณเอง เห็นไฟล์ทุกอย่างที่คุณเห็น และใช้ไลบรารี R ของคุณ — "
-                 + "โค้ดที่ส่งเข้าไปจึงถูกจัดเป็นความเสี่ยงสูงเสมอ และหยุดถามก่อนรันเหมือน `run_shell` · "
-                 + "ฟังเฉพาะ 127.0.0.1 เครื่องอื่นในวงเรียกไม่ได้")
+            Text(localised: "The bridge runs with your own permissions, sees every file you see, and uses your R libraries — so code sent to it is always classed high risk and stops to ask first, exactly like `run_shell` · it listens on 127.0.0.1 only, so no other machine on the network can call it",
+                 "States what the R bridge can reach and why it is high risk.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 

@@ -108,7 +108,7 @@ extension Scope: Codable {
         guard let key = container.allKeys.first else {
             throw DecodingError.dataCorrupted(.init(
                 codingPath: decoder.codingPath,
-                debugDescription: "ไม่รู้ว่าเป็น scope ไหน"))
+                debugDescription: localised("the scope is not known", "Said when a scope cannot be determined.")))
         }
         switch key {
         case .central: self = .central
@@ -185,7 +185,7 @@ public enum CredibilityTier: String, Sendable, Codable, Comparable, CaseIterable
         let number = try container.decode(Int.self)
         guard let tier = CredibilityTier.allCases.first(where: { $0.number == number }) else {
             throw DecodingError.dataCorruptedError(in: container,
-                                                   debugDescription: "ไม่รู้จัก tier \(number)")
+                                                   debugDescription: localised("tier \(number) is not one this system knows", "An unrecognised source tier. Placeholder: the number given."))
         }
         self = tier
     }
@@ -222,7 +222,7 @@ public enum Corroboration: Sendable, Equatable {
     public var note: String? {
         switch self {
         case .strong: nil
-        case .adequate: "มีแหล่งรองรับพอสมควร แต่ยังไม่ถึงเกณฑ์ 'แหล่งชั้นต้นสองแหล่งขึ้นไป'"
+        case .adequate: localised("reasonably supported, but short of the 'two or more primary sources' bar", "How well a claim is evidenced.")
         case .weak(let reason): reason
         }
     }
@@ -234,18 +234,18 @@ public enum Corroboration: Sendable, Equatable {
     /// times is one source, and a rule that counted otherwise would let a single
     /// blog post look like a consensus.
     public static func assess(tiers: [CredibilityTier?]) -> Corroboration {
-        guard !tiers.isEmpty else { return .weak(reason: "ไม่มีแหล่งอ้างอิงเลย") }
+        guard !tiers.isEmpty else { return .weak(reason: localised("there is no source at all", "How well a claim is evidenced.")) }
         let strong = tiers.filter { $0 == .t1 || $0 == .t2 }.count
         let mid = tiers.filter { $0 == .t3 }.count
         if strong >= 2 { return .strong }
         if tiers.count == 1 {
-            return .weak(reason: "มีแหล่งเดียว — ยังยืนยันข้ามแหล่งไม่ได้")
+            return .weak(reason: localised("a single source — nothing corroborates it", "How well a claim is evidenced."))
         }
         if strong + mid >= 1 { return .adequate }
         // Ten weak sources are not two strong ones; §14.1 is explicit that T5s
         // need at least one T1–T3 standing behind them.
-        return .weak(reason: "มีแต่แหล่งชั้นรอง (T4–T5) \(tiers.count) แหล่ง — "
-                     + "ต้องมีแหล่ง T1–T3 ยืนยันอย่างน้อยหนึ่งแหล่ง")
+        return .weak(reason: localised("only secondary sources (T4–T5), \(tiers.count) of them — ", "How well a claim is evidenced. Placeholder: how many sources.")
+                     + localised("at least one T1–T3 source has to back it", "Ends the note about secondary sources."))
     }
 }
 

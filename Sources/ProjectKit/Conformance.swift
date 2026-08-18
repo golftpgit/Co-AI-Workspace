@@ -45,23 +45,23 @@ public enum Practice: String, Sendable, Codable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .planning: "การวางแผน"
-        case .benefits: "ประโยชน์ที่จะได้"
-        case .scope: "ขอบเขต"
-        case .resource: "ทรัพยากรและคน"
-        case .schedule: "กำหนดเวลา"
-        case .cost: "ค่าใช้จ่าย"
-        case .risk: "ความเสี่ยง"
-        case .issue: "ปัญหา"
-        case .changeControl: "การควบคุมการเปลี่ยนแปลง"
-        case .quality: "คุณภาพ"
-        case .stakeholder: "ผู้มีส่วนได้เสีย"
-        case .communication: "การสื่อสาร"
-        case .orgChange: "การเปลี่ยนแปลงองค์กร"
-        case .reporting: "การรายงาน"
-        case .information: "ข้อมูลและเอกสาร"
-        case .procurement: "การจัดซื้อจัดหา"
-        case .lessons: "บทเรียน"
+        case .planning: t("Planning", "Name of an ISO 21502 practice.")
+        case .benefits: t("Benefits", "Name of an ISO 21502 practice.")
+        case .scope: t("Scope", "Name of an ISO 21502 practice.")
+        case .resource: t("Resources and people", "Name of an ISO 21502 practice.")
+        case .schedule: t("Schedule", "Name of an ISO 21502 practice.")
+        case .cost: t("Cost", "Name of an ISO 21502 practice.")
+        case .risk: t("Risk", "Name of an ISO 21502 practice.")
+        case .issue: t("Issues", "Name of an ISO 21502 practice.")
+        case .changeControl: t("Change control", "Name of an ISO 21502 practice.")
+        case .quality: t("Quality", "Name of an ISO 21502 practice.")
+        case .stakeholder: t("Stakeholders", "Name of an ISO 21502 practice.")
+        case .communication: t("Communication", "Name of an ISO 21502 practice.")
+        case .orgChange: t("Organisational change", "Name of an ISO 21502 practice.")
+        case .reporting: t("Reporting", "Name of an ISO 21502 practice.")
+        case .information: t("Information and documents", "Name of an ISO 21502 practice.")
+        case .procurement: t("Procurement", "Name of an ISO 21502 practice.")
+        case .lessons: t("Lessons", "Name of an ISO 21502 practice.")
         }
     }
 }
@@ -92,7 +92,7 @@ public struct TailoringRecord: Sendable, Codable, Equatable, Identifiable {
     }
 
     /// The only way one is made. Refuses an empty reason as well as an empty
-    /// name: "ไม่เกี่ยว" with nobody attached is the box-ticking the record was
+    /// name: "not relevant" with nobody attached is the box-ticking the record was
     /// supposed to replace.
     public static func decided(projectID: ProjectID,
                                practice: Practice,
@@ -115,8 +115,10 @@ public enum TailoringError: Error, CustomStringConvertible, Equatable {
 
     public var description: String {
         switch self {
-        case .emptyDecider: "ต้องระบุชื่อคนที่ตัดสินว่าจะไม่ทำ practice นี้"
-        case .emptyReason: "ต้องบอกเหตุผลที่ไม่ทำ — 'ไม่เกี่ยว' เฉย ๆ ไม่ใช่บันทึก"
+        case .emptyDecider: t("The name of whoever decided not to do this practice is required",
+                              "Refusal message when a tailoring record has no decider.")
+        case .emptyReason: t("A reason for not doing it is required — “not relevant” on its own is not a record",
+                             "Refusal message when a tailoring record has no reason.")
         }
     }
 }
@@ -221,7 +223,7 @@ public struct ObservedFacts: Sendable, Equatable {
     /// two different numbers for the same day.
     public var readings: ToleranceReadings
     /// Which of the six are real measurements. Everything outside this set
-    /// prints as "ยังไม่ได้วัด" in a report, which matters more there than on
+    /// prints as "not measured yet" in a report, which matters more there than on
     /// screen — a report gets quoted.
     public var measured: Set<ToleranceDimension>
     public var measuredSeconds: TimeInterval
@@ -267,51 +269,95 @@ public enum Conformance {
                                 in facts: ConformanceFacts) -> String? {
         switch practice {
         case .planning:
-            facts.leafCount > 0 ? "แผนงานมี \(facts.leafCount) ใบงาน" : nil
+            facts.leafCount > 0
+                ? t("The plan has \(facts.leafCount) work packages",
+                    "Conformance evidence. Placeholder is a count of packages.")
+                : nil
         case .benefits:
-            facts.benefitCount > 0 ? "ทะเบียนประโยชน์ \(facts.benefitCount) รายการ" : nil
+            facts.benefitCount > 0
+                ? t("\(facts.benefitCount) entries in the benefit register",
+                    "Conformance evidence. Placeholder is a count.")
+                : nil
         case .scope:
             facts.inScopeCount > 0 && facts.outOfScopeCount > 0
-                ? "ขอบเขต: ทำ \(facts.inScopeCount) ข้อ · ไม่ทำ \(facts.outOfScopeCount) ข้อ"
+                ? t("Scope: \(facts.inScopeCount) in · \(facts.outOfScopeCount) out",
+                    "Conformance evidence. Placeholders: how many scope lines in and out.")
                 : nil
         case .resource:
-            facts.staffedLeaves > 0 ? "ใบงานที่มีคนหรือ agent รับไป \(facts.staffedLeaves) ใบ" : nil
+            facts.staffedLeaves > 0
+                ? t("\(facts.staffedLeaves) packages taken by a person or an agent",
+                    "Conformance evidence. Placeholder is a count.")
+                : nil
         case .schedule:
             if facts.dependencyCount > 0 {
-                "เส้นพึ่งพา \(facts.dependencyCount) เส้น"
+                t("\(facts.dependencyCount) dependencies",
+                  "Conformance evidence. Placeholder is a count.")
             } else if facts.measuredSeconds > 0 {
-                "เวลาที่วัดได้ \(Int(facts.measuredSeconds / 60)) นาที"
+                t("\(Int(facts.measuredSeconds / 60)) minutes measured",
+                  "Conformance evidence. Placeholder is a number of minutes.")
             } else {
                 nil
             }
         case .cost:
-            facts.spent > 0 ? String(format: "ค่าใช้จ่ายที่บันทึกไว้ ฿%.2f", facts.spent) : nil
+            facts.spent > 0
+                ? String(format: t("$%.2f of spending recorded",
+                                   "Conformance evidence. Placeholder is an amount in the endpoint's currency."),
+                         facts.spent)
+                : nil
         case .risk:
-            facts.riskCount > 0 ? "ทะเบียนความเสี่ยง \(facts.riskCount) รายการ" : nil
+            facts.riskCount > 0
+                ? t("\(facts.riskCount) entries in the risk register",
+                    "Conformance evidence. Placeholder is a count.")
+                : nil
         case .issue:
-            facts.issueCount > 0 ? "ทะเบียนปัญหา \(facts.issueCount) รายการ" : nil
+            facts.issueCount > 0
+                ? t("\(facts.issueCount) entries in the issue register",
+                    "Conformance evidence. Placeholder is a count.")
+                : nil
         case .changeControl:
             // A baseline is what makes change control exist: without a frozen
             // agreement there is nothing for a change request to change.
             facts.baselineVersions > 0
-                ? "baseline \(facts.baselineVersions) เวอร์ชัน · คำขอเปลี่ยนแปลง \(facts.changeCount) รายการ"
+                ? t("\(facts.baselineVersions) baseline versions · \(facts.changeCount) change requests",
+                    "Conformance evidence. Placeholders: how many baselines and how many change requests.")
                 : nil
         case .quality:
-            facts.evidenceCount > 0 ? "หลักฐานที่ QA รับแล้ว \(facts.evidenceCount) ชิ้น" : nil
+            facts.evidenceCount > 0
+                ? t("\(facts.evidenceCount) pieces of evidence QA accepted",
+                    "Conformance evidence. Placeholder is a count.")
+                : nil
         case .stakeholder:
-            facts.boardSeats > 0 ? "ที่นั่งกำกับที่มีชื่อคน \(facts.boardSeats) ที่" : nil
+            facts.boardSeats > 0
+                ? t("\(facts.boardSeats) governance seats with a named person",
+                    "Conformance evidence. Placeholder is a count.")
+                : nil
         case .communication:
-            facts.messagesSent > 0 ? "ข้อความที่ส่งถึงคนแล้ว \(facts.messagesSent) ครั้ง" : nil
+            facts.messagesSent > 0
+                ? t("\(facts.messagesSent) messages sent to a person",
+                    "Conformance evidence. Placeholder is a count.")
+                : nil
         case .orgChange:
-            facts.orgChangeRecorded ? "บันทึกผลกระทบต่อวิธีทำงานไว้แล้ว" : nil
+            facts.orgChangeRecorded
+                ? t("The effect on how people work has been recorded", "Conformance evidence.")
+                : nil
         case .reporting:
-            facts.reportsIssued > 0 ? "รายงานที่ออกแล้ว \(facts.reportsIssued) ฉบับ" : nil
+            facts.reportsIssued > 0
+                ? t("\(facts.reportsIssued) reports issued",
+                    "Conformance evidence. Placeholder is a count.")
+                : nil
         case .information:
-            facts.dataDispositionDecided ? "ตัดสินแล้วว่าข้อมูลและไฟล์ที่เหลือจะไปทางไหน" : nil
+            facts.dataDispositionDecided
+                ? t("It has been decided where the remaining data and files go",
+                    "G4 gate condition on data disposition.")
+                : nil
         case .procurement:
-            facts.procurementRecorded ? "บันทึกการจัดซื้อจัดหาไว้แล้ว" : nil
+            facts.procurementRecorded
+                ? t("Procurement has been recorded", "Conformance evidence.")
+                : nil
         case .lessons:
-            facts.lessonCount > 0 ? "บทเรียน \(facts.lessonCount) ข้อ" : nil
+            facts.lessonCount > 0
+                ? t("\(facts.lessonCount) lessons", "Conformance evidence. Placeholder is a count.")
+                : nil
         }
     }
 

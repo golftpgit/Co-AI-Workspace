@@ -61,11 +61,18 @@ public struct ToolProficiency: Sendable, Equatable {
 
     /// The line the RACI panel shows. Says "not enough yet" rather than a
     /// number that would be read as a fact.
+    /// Worded to read the same at one as at many.
+    ///
+    /// English inflects a noun after a count and Thai does not, so "over
+    /// \(attempts) attempts" is correct in Thai and wrong at 1 in English. The
+    /// honest fix for a plural is a `.stringsdict`; the honest fix for *this*
+    /// sentence is not to put a count in front of a noun, which costs nothing
+    /// and cannot be got wrong in a language nobody here speaks.
     public var summary: String {
-        let rate = successRate.map { "สำเร็จ \(Int(($0 * 100).rounded()))% จาก \(attempts) ครั้ง" }
-            ?? "ยังใช้ไม่พอจะบอกอะไร (\(attempts) ครั้ง)"
+        let rate = successRate.map { localised("\(Int(($0 * 100).rounded()))% succeeded (attempts: \(attempts))", "How well a role uses a tool. Placeholders: the success rate and the attempt count.") }
+            ?? localised("used too little to say anything (attempts: \(attempts))", "Too few attempts to judge. Placeholder: the attempt count.")
         guard blockedByRules > 0 else { return rate }
-        return rate + " · ถูกกฎห้ามไว้อีก \(blockedByRules) ครั้ง (ไม่นับเป็นความผิดของบทบาท)"
+        return rate + localised(" · a rule blocked \(blockedByRules) more, which is not counted against the role", "Attempts a rule stopped. Placeholder: how many.")
     }
 }
 

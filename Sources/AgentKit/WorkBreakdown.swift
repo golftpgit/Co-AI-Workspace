@@ -25,12 +25,12 @@ public enum WorkPackageStatus: String, Sendable, Codable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .backlog: "รอคิว"
-        case .ready: "พร้อมเริ่ม"
-        case .inProgress: "กำลังทำ"
-        case .inReview: "รอ QA"
-        case .blocked: "ติด"
-        case .done: "เสร็จ"
+        case .backlog: localised("queued", "A work-item state.")
+        case .ready: localised("ready", "A work-item state.")
+        case .inProgress: localised("in progress", "A work-item state.")
+        case .inReview: localised("awaiting QA", "A work-item state.")
+        case .blocked: localised("blocked", "A work-item state.")
+        case .done: localised("done", "A work-item state.")
         }
     }
 

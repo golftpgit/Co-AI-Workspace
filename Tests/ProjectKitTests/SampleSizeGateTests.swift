@@ -48,7 +48,7 @@ struct SampleSizeGateTests {
             study: StudyFacts(collectsPrimaryData: true))
 
         #expect(evaluation?.passed == false)
-        #expect(evaluation?.unmet.contains { $0.contains("ขนาดตัวอย่าง") } == true)
+        #expect(evaluation?.unmet.contains { $0.contains("sample size") } == true)
     }
 
     @Test("a size with no assumption behind it does not count")
@@ -78,7 +78,7 @@ struct SampleSizeGateTests {
         let evaluation = ProjectLifecycle.evaluate(
             plannedProject(), wbs: breakdown(), study: StudyFacts())
         #expect(evaluation?.passed == true)
-        #expect(evaluation?.unmet.contains { $0.contains("ขนาดตัวอย่าง") } == false)
+        #expect(evaluation?.unmet.contains { $0.contains("sample size") } == false)
     }
 
     @Test("the question is asked at G2 and not carried into later gates")
@@ -89,6 +89,6 @@ struct SampleSizeGateTests {
             executing, wbs: breakdown(), study: StudyFacts(collectsPrimaryData: true))
         // By execution the data is being collected; asking now would be a gate
         // nobody can act on, which is the shape of a gate people route around.
-        #expect(evaluation?.unmet.contains { $0.contains("ขนาดตัวอย่าง") } == false)
+        #expect(evaluation?.unmet.contains { $0.contains("sample size") } == false)
     }
 }

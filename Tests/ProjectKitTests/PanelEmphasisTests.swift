@@ -71,8 +71,8 @@ struct PanelEmphasisTests {
     @Test("the emphasis says where it came from, in words")
     func reasonNamesTheSource() {
         let reason = PanelEmphasis.reason(for: .research)
-        #expect(reason?.contains("งานวิจัย") == true)
-        #expect(reason?.contains("ไม่ได้ปรับตามการใช้งาน") == true)
+        #expect(reason?.contains("research") == true)
+        #expect(reason?.contains("not adjusted by how you use it") == true)
     }
 
     /// Emphasis marks panels; it does not invent them. A name here that the

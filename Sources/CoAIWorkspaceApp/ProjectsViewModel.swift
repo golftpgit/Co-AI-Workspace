@@ -62,11 +62,11 @@ public final class ProjectsViewModel {
     public var readings = ToleranceReadings()
     /// Which of the six the app can actually measure today (§19.10). The rest
     /// are enforced but unread, and the screen has to say so: a row showing
-    /// "เวลา 0 / 1.50" reads as "time is being tracked and is fine", which is
+    /// "Time 0 / 1.50" reads as "time is being tracked and is fine", which is
     /// a lie by omission. Driving the screen by hand is what made that
     /// obvious — the numbers looked measured.
     /// Filled in as the readings become real. Everything not in here renders
-    /// as "ยังไม่ได้วัด" rather than as a zero somebody would read as a
+    /// as "not measured yet" rather than as a zero somebody would read as a
     /// measurement (§19.10).
     public private(set) var measured: Set<ToleranceDimension> = [.scope]
     /// Seconds spent against each leaf, from the span store (§19.7).
@@ -127,7 +127,7 @@ public final class ProjectsViewModel {
     }
 
     /// A round of work that had to be done again, with what QA said each time.
-    /// §19.2.3: "งานที่ rework แล้วกี่รอบ พร้อมเหตุผลจาก QA ทุกรอบ" — the count
+    /// §19.2.3: "how many rounds of rework, with QA's reason from each" — the count
     /// on its own is a number nobody can act on.
     public struct ReworkRow: Sendable, Equatable, Identifiable {
         public let goal: String
@@ -312,7 +312,7 @@ public final class ProjectsViewModel {
             await refreshGate()
         } catch {
             log.error("loading projects: \(error)")
-            status = Status(message: "โหลดรายการโปรเจกต์ไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not load the project list: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -353,7 +353,7 @@ public final class ProjectsViewModel {
         guard let service else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            status = Status(message: "ตั้งชื่อโปรเจกต์ก่อน", isError: true)
+            status = Status(message: t("Give the project a name first", "Status message when the name field is empty."), isError: true)
             return
         }
         do {
@@ -365,12 +365,13 @@ public final class ProjectsViewModel {
             await open(project)
             let planted = WBSTemplate.packages(template, project: project.id).count
             status = Status(message: planted > 0
-                            ? "สร้าง '\(trimmed)' แบบ\(type.label) แล้ว — อยู่ขั้นเริ่มต้น "
-                                + "พร้อมแผนตั้งต้น \(planted) รายการที่ยังต้องผูกขอบเขตและระบุผู้รับผิดชอบเอง"
-                            : "สร้าง '\(trimmed)' แล้ว — อยู่ขั้นเริ่มต้น",
+                            ? t("Created ‘\(trimmed)’ as a \(type.label) project — at the initiation stage, with \(planted) starter work packages that still need scope and an owner",
+                                "Status message after creating a typed project. Placeholders: the name, the project type, and how many packages were seeded.")
+                            : t("Created ‘\(trimmed)’ — at the initiation stage",
+                                "Status message after creating a project. Placeholder is its name."),
                             isError: false)
         } catch {
-            status = Status(message: "สร้างโปรเจกต์ไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not create the project: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -383,7 +384,7 @@ public final class ProjectsViewModel {
             try await service.update(project)
             await reload()
         } catch {
-            status = Status(message: "บันทึกไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not save: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -392,7 +393,8 @@ public final class ProjectsViewModel {
         do {
             let moved = try await service.advance(project.id)
             await reload()
-            status = Status(message: "ผ่าน \(project.stage.exitGate ?? "") แล้ว — ตอนนี้อยู่ขั้น\(moved.stage.label)",
+            status = Status(message: t("Passed \(project.stage.exitGate ?? "") — now at the \(moved.stage.label) stage",
+                                     "Status message after advancing a stage. Placeholders: the gate passed and the new stage."),
                             isError: false)
         } catch {
             // The refusal names what is missing. A gate that says only "no" is
@@ -406,10 +408,11 @@ public final class ProjectsViewModel {
         do {
             _ = try await service.terminate(project.id, reason: reason)
             await reload()
-            status = Status(message: "ยุติโครงการแล้ว — บันทึกไว้ว่า 'ยุติก่อนกำหนด' ไม่ใช่ 'สำเร็จ'",
+            status = Status(message: t("The project was terminated — recorded as ‘ended early’, not ‘succeeded’",
+                                     "Status message after terminating a project, insisting on the distinction."),
                             isError: false)
         } catch {
-            status = Status(message: "ปิดโครงการไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not close the project: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -436,11 +439,13 @@ public final class ProjectsViewModel {
             await open(project)
             status = Status(
                 message: draft.isReadyForG1
-                    ? "ยกระดับเป็นโปรเจกต์แล้ว — ตรวจขอบเขตอีกครั้งแล้วกดผ่าน G1 ได้เลย"
-                    : "ยกระดับเป็นโปรเจกต์แล้ว — ยังผ่าน G1 ไม่ได้จนกว่าจะเติมช่องที่ค้าง",
+                    ? t("Promoted to a project — check the scope once more and G1 can be passed",
+                        "Status message after promotion, when the gate is within reach.")
+                    : t("Promoted to a project — G1 cannot pass until the outstanding fields are filled in",
+                        "Status message after promotion, when fields are missing."),
                 isError: false)
         } catch {
-            status = Status(message: "ยกระดับเป็นโปรเจกต์ไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not promote it to a project: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -485,17 +490,18 @@ public final class ProjectsViewModel {
             let recorded = try await service.apply(edit, in: project.id, basis: basis())
             await refreshGate()
             if let recorded {
-                status = Status(message: "บันทึกแล้ว · เปิดคำขอเปลี่ยนแปลง #\(recorded.requestNumber) "
-                                + "รอคนตัดสิน — ประตูขั้นถัดไปยังไม่เปิดจนกว่าจะตัดสิน",
+                status = Status(message: t("Saved · change request #\(recorded.requestNumber) is open and waiting for a decision — the next gate stays shut until it is settled",
+                                           "Status message after an edit that required a change request. Placeholder is the request number."),
                                 isError: false)
             } else if proposal != nil {
                 // The proposal was computed from a plan that has since moved. Say
                 // it rather than silently applying under a stale impact estimate.
-                status = Status(message: "แก้แล้ว แต่ผลกระทบที่แสดงไว้คำนวณจากแผนก่อนหน้า — ตรวจส่วนต่างอีกครั้ง",
+                status = Status(message: t("Edited, but the impact shown was computed from the earlier plan — check the difference again",
+                                           "Status message when the displayed impact may be stale."),
                                 isError: true)
             }
         } catch {
-            status = Status(message: "แก้แผนไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not edit the plan: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -596,7 +602,7 @@ public final class ProjectsViewModel {
             await refreshGate()
             return raised.map(\.message)
         } catch {
-            status = Status(message: "ตรวจกรอบไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not check the tolerances: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
             return []
         }
     }
@@ -606,9 +612,9 @@ public final class ProjectsViewModel {
         do {
             try await service.resolve(report, decision: decision)
             await refreshGate()
-            status = Status(message: "ปิดข้อยกเว้นแล้ว — ทีมทำงานต่อได้", isError: false)
+            status = Status(message: t("The exception is closed — the team can carry on", "Status message after resolving an exception."), isError: false)
         } catch {
-            status = Status(message: "ปิดข้อยกเว้นไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not close the exception: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -619,7 +625,7 @@ public final class ProjectsViewModel {
         guard let service, let project = selected else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            status = Status(message: "ตั้งชื่อประโยชน์ที่จะได้ก่อน", isError: true)
+            status = Status(message: t("Name the benefit first", "Status message when the benefit title is empty."), isError: true)
             return
         }
         let who = owner.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -631,7 +637,7 @@ public final class ProjectsViewModel {
                 owner: who.isEmpty ? .agent(.teamLead) : .human(who)))
             await refreshGate()
         } catch {
-            status = Status(message: "บันทึกประโยชน์ไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not save the benefit: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -644,7 +650,7 @@ public final class ProjectsViewModel {
         do {
             try await service.measure(benefit, value: value, by: person, note: note)
             await refreshGate()
-            status = Status(message: "บันทึกผลการวัดแล้ว", isError: false)
+            status = Status(message: t("The measurement was recorded", "Status message after recording a benefit measurement."), isError: false)
         } catch {
             status = Status(message: "\(error)", isError: true)
         }
@@ -656,7 +662,7 @@ public final class ProjectsViewModel {
             try await service.removeBenefit(benefit.id, from: project.id)
             await refreshGate()
         } catch {
-            status = Status(message: "ลบไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not delete it: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -675,7 +681,7 @@ public final class ProjectsViewModel {
             guard let report = try await service.issueReport(kind, for: project.id) else {
                 return nil
             }
-            var note = "\(kind.label)ออกแล้ว"
+            var note = t("\(kind.label) issued", "Status message after issuing a report. Placeholder is the report kind.")
             if let paths {
                 // A row is not a deliverable. §19.13 says these go through
                 // DocGen, and a report nobody can attach to an email is a report
@@ -692,7 +698,8 @@ public final class ProjectsViewModel {
                     note += " · \(file.lastPathComponent)"
                 } catch {
                     log.error("writing report: \(error)")
-                    note += " · เก็บเป็นข้อมูลแล้ว แต่เขียนไฟล์ไม่ได้: \(error.localizedDescription)"
+                    note += t(" · stored as data, but the file could not be written: \(error.localizedDescription)",
+                              "Appended when a report was saved but not exported. Placeholder is the error.")
                 }
             }
             await refreshGate()
@@ -702,7 +709,7 @@ public final class ProjectsViewModel {
             status = Status(message: note, isError: false)
             return report.rendered
         } catch {
-            status = Status(message: "ออกรายงานไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not issue the report: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
             return nil
         }
     }
@@ -717,7 +724,8 @@ public final class ProjectsViewModel {
         do {
             try await service.tailor(practice, in: project.id, reason: reason, by: person)
             await refreshGate()
-            status = Status(message: "บันทึกไว้แล้วว่าไม่ทำ \(practice.label) — พร้อมเหตุผลและชื่อคนตัดสิน",
+            status = Status(message: t("Recorded that \(practice.label) is not being done — with the reason and who decided",
+                                       "Status message after tailoring a practice. Placeholder is the practice name."),
                             isError: false)
         } catch {
             status = Status(message: "\(error)", isError: true)
@@ -732,7 +740,8 @@ public final class ProjectsViewModel {
                 DataDisposition(action: action, policy: policy, decidedBy: person, note: note),
                 for: project.id)
             await reload()
-            status = Status(message: "บันทึกแล้วว่าข้อมูลที่เหลือจะ\(action.label) — ระบบไม่ลบไฟล์ให้เอง",
+            status = Status(message: t("Recorded that the remaining data will \(action.label) — no file is deleted for you",
+                                       "Status message after a data-disposition decision. Placeholder is the chosen action."),
                             isError: false)
         } catch {
             status = Status(message: "\(error)", isError: true)
@@ -771,10 +780,11 @@ public final class ProjectsViewModel {
         guard !trimmed.isEmpty else { return }
         do {
             try await service.record(RegisterEntry(projectID: project.id, title: trimmed,
-                                                   detail: detail, origin: .human("ผู้ใช้")))
+                                                   detail: detail, origin: .human(t("the user", "Recorded as the origin of a register entry a person made."))))
             await refreshGate()
         } catch {
-            status = Status(message: "บันทึกไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not save: \(String(describing: error))", "Status message. Placeholder is the underlying error."),
+                            isError: true)
         }
     }
 
@@ -787,8 +797,10 @@ public final class ProjectsViewModel {
             try await service.decideChange(entry, approve: approve, by: person)
             await refreshGate()
             status = Status(message: approve
-                            ? "อนุมัติแล้ว — baseline เวอร์ชันใหม่ถูก freeze ไว้ ของเดิมยังอ่านได้"
-                            : "ปฏิเสธแล้ว — baseline เดิมไม่ถูกแตะ",
+                            ? t("Approved — a new baseline version is frozen and the old one stays readable",
+                                "Status message after approving a change request.")
+                            : t("Rejected — the existing baseline is untouched",
+                                "Status message after rejecting a change request."),
                             isError: false)
         } catch {
             status = Status(message: "\(error)", isError: true)
@@ -800,7 +812,7 @@ public final class ProjectsViewModel {
     /// Each source is the one §19.10 named: spans for time, the spend ledger
     /// for cost, the task ledger's retry count for quality, and the plan's own
     /// risk classes for risk, and the benefit ledger for benefit — which reads
-    /// only once somebody has measured one, and says "ยังไม่ได้วัด" until then
+    /// only once somebody has measured one, and says "not measured yet" until then
     /// rather than showing a zero.
     private func measure(_ id: ProjectID) async {
         var reading = readings
@@ -837,7 +849,7 @@ public final class ProjectsViewModel {
         known.insert(.risk)
         // The sixth axis (§19.12, P10.10). Only counts once somebody has
         // actually measured something — benefits with no result leave the
-        // reading alone and the strip keeps saying "ยังไม่ได้วัด", because a
+        // reading alone and the strip keeps saying "not measured yet", because a
         // business case that looks fine because nobody looked is the failure
         // this dimension exists to catch.
         if let achieved = benefits.lowestAchievement {
@@ -893,7 +905,9 @@ public final class ProjectsViewModel {
         do {
             try await service.perform(action, in: project.id)
             await refreshGate()
-            status = Status(message: "\(action.title) — บันทึกลงทะเบียนแล้ว", isError: false)
+            status = Status(message: t("\(action.title) — recorded in the register",
+                                       "Status message after a status-bar action. Placeholder names the action."),
+                            isError: false)
         } catch {
             status = Status(message: "\(error)", isError: true)
         }

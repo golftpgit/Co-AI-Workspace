@@ -118,12 +118,12 @@ public struct ConflictLedger: Sendable {
 
         let tier = side.provenance.tier
         switch tier {
-        case .t1: score += 4; reasons.append("แหล่ง T1 (เอกสารทางการ)")
-        case .t2: score += 3; reasons.append("แหล่ง T2 (peer-reviewed)")
-        case .t3: score += 2; reasons.append("แหล่ง T3 (preprint/กึ่งทางการ)")
-        case .t4: score += 1; reasons.append("แหล่ง T4 (ชุมชนที่ตรวจกันเอง)")
-        case .t5: score += 0; reasons.append("แหล่ง T5 (เว็บทั่วไป)")
-        case nil: score += 1; reasons.append("ระบบเขียนเอง (ไม่มี tier ภายนอก)")
+        case .t1: score += 4; reasons.append(localised("a T1 source (official document)", "Why one side of a conflict weighs what it does."))
+        case .t2: score += 3; reasons.append(localised("a T2 source (peer-reviewed)", "Why one side of a conflict weighs what it does."))
+        case .t3: score += 2; reasons.append(localised("a T3 source (preprint or semi-official)", "Why one side of a conflict weighs what it does."))
+        case .t4: score += 1; reasons.append(localised("a T4 source (a community that reviews its own)", "Why one side of a conflict weighs what it does."))
+        case .t5: score += 0; reasons.append(localised("a T5 source (the open web)", "Why one side of a conflict weighs what it does."))
+        case nil: score += 1; reasons.append(localised("written by the system itself (no outside tier)", "Why one side of a conflict weighs what it does."))
         }
 
         if let year = side.provenance.year {
@@ -131,19 +131,19 @@ public struct ConflictLedger: Sendable {
                 .component(.year, from: now)
             let age = max(0, currentYear - year)
             switch age {
-            case 0...2: score += 1.5; reasons.append("ปี \(year) — ใหม่")
-            case 3...6: score += 0.75; reasons.append("ปี \(year) — พอสมควร")
-            default: reasons.append("ปี \(year) — เก่า")
+            case 0...2: score += 1.5; reasons.append(localised("\(year) — recent", "How old a source is. Placeholder: the year."))
+            case 3...6: score += 0.75; reasons.append(localised("\(year) — reasonably recent", "How old a source is. Placeholder: the year."))
+            default: reasons.append(localised("\(year) — old", "How old a source is. Placeholder: the year."))
             }
         } else {
-            reasons.append("ไม่ระบุปี")
+            reasons.append(localised("no year given", "Said when a source carries no year."))
         }
 
         if side.corroborations > 0 {
             // Capped: ten weak sources agreeing is not an authority.
             let bonus = min(Double(side.corroborations) * 0.5, 1.5)
             score += bonus
-            reasons.append("มีอีก \(side.corroborations) แหล่งที่สอดคล้อง")
+            reasons.append(localised("\(side.corroborations) other sources agree", "How many sources corroborate one side. Placeholder: the count."))
         }
 
         return ConflictWeight(score: score, reasons: reasons)

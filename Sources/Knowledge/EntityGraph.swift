@@ -98,11 +98,11 @@ public struct EntityGraph: Sendable, Equatable {
     /// What the screen says under the picture, including what it is not showing.
     public var summary: String {
         guard !isEmpty else {
-            return "“\(focus)” ยังไม่มีความสัมพันธ์ที่สกัดได้ในขอบเขตนี้"
+            return localised("nothing has been extracted around “\(focus)” in this scope yet", "The entity graph is empty. Placeholder: the entity in focus.")
         }
-        let base = "\(nodes.count) สิ่ง · \(edges.count) ความสัมพันธ์ รอบ “\(focus)”"
+        let base = localised("\(nodes.count) things · \(edges.count) relationships around “\(focus)”", "Summary of the entity graph. Placeholders: node count, edge count and the entity in focus.")
         guard beyondHorizon > 0 else { return base }
-        return base + " · อีก \(beyondHorizon) สิ่งอยู่ไกลกว่าที่แสดง — เพิ่มระยะเพื่อดู"
+        return base + localised(" · \(beyondHorizon) more lie beyond what is shown — widen the range to see them", "Says how much of the graph is cut off. Placeholder: the number of hidden nodes.")
     }
 
     // ─────────────────────────────────────────────────────────

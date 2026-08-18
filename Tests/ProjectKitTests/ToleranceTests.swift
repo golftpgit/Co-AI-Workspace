@@ -71,8 +71,8 @@ struct ToleranceTests {
         // The field that separates a report from a status update.
         #expect(!report.needsFromHuman.isEmpty)
         #expect(report.options.count == 3)
-        #expect(report.message.contains("เวลา"))
-        #expect(report.message.contains("ต้องการจากคุณ"))
+        #expect(report.message.contains("Time tolerance was breached"))
+        #expect(report.message.contains("What we need from you"))
         #expect(report.isOpen)
     }
 

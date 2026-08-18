@@ -1,4 +1,5 @@
 import Foundation
+import Observability
 import Observation
 import AgentKit
 import Persistence
@@ -15,6 +16,20 @@ import MLXRuntime
 // its own copy of the transcript and drifted out of sync with what had
 // actually been persisted (bug B5's sibling).
 // ─────────────────────────────────────────────────────────────
+
+/// One row of the model switch.
+///
+/// A struct rather than the tuple this used to be, and the reason is a bug that
+/// only driving the screen found: the view model had the new endpoint and the
+/// menu did not. `ForEach(_:id:)` over an array of tuples cannot diff its
+/// elements — tuples are not `Equatable` — so SwiftUI kept the rows it had
+/// already built and a saved endpoint stayed invisible, with every unit test
+/// still green (AUDIT F-1).
+struct OfferedModel: Identifiable, Equatable, Sendable {
+    let identifier: String
+    let label: String
+    var id: String { identifier }
+}
 
 @MainActor
 @Observable
@@ -41,7 +56,7 @@ final class ChatViewModel {
     /// re-fetching it.
     private(set) var matches: [ConversationMatch] = []
     var query = ""
-    /// §19.2.1 — "ค้นข้ามโปรเจกต์" is a different question, not a wider
+    /// §19.2.1 — "Search across projects" is a different question, not a wider
     /// default: inside a project the list is the project's.
     var searchesEverywhere = false
     private(set) var selected: Conversation?
@@ -55,7 +70,7 @@ final class ChatViewModel {
     var chosenModel: String?
     /// What there is to choose between, from the router itself — a list built
     /// anywhere else would offer an endpoint that is not in the chain.
-    private(set) var offeredModels: [(identifier: String, label: String)] = []
+    private(set) var offeredModels: [OfferedModel] = []
     /// The routing rule that chose that tier, from the router's own selection
     /// pass (P20.5) — shown next to the tier so "why is it using that model"
     /// has an answer that is not a guess.
@@ -204,7 +219,8 @@ final class ChatViewModel {
                 await select(first)
             }
         } catch {
-            loadError = "โหลดรายการบทสนทนาไม่สำเร็จ: \(error)"
+            loadError = t("Could not load the conversation list: \(String(describing: error))",
+                          "Status message. Placeholder is the underlying error.")
         }
     }
 
@@ -223,9 +239,13 @@ final class ChatViewModel {
             matches = try await engine.conversations.search(
                 trimmed, scope: searchesEverywhere ? nil : scope,
                 queryVector: vector)
-            loadError = matches.isEmpty ? "ไม่พบข้อความที่ตรงกับ “\(trimmed)”" : nil
+            loadError = matches.isEmpty
+                ? t("Nothing matches “\(trimmed)”",
+                    "Shown when a conversation search finds nothing. Placeholder is the search term.")
+                : nil
         } catch {
-            loadError = "ค้นบทสนทนาไม่สำเร็จ: \(error)"
+            loadError = t("Could not search the conversations: \(String(describing: error))",
+                          "Status message. Placeholder is the underlying error.")
         }
     }
 
@@ -240,7 +260,8 @@ final class ChatViewModel {
             try await engine.conversations.setPinned(conversation.id, !conversation.pinned)
             await load()
         } catch {
-            loadError = "ปักหมุดไม่สำเร็จ: \(error)"
+            loadError = t("Could not pin it: \(String(describing: error))",
+                          "Status message. Placeholder is the underlying error.")
         }
     }
 
@@ -287,7 +308,8 @@ final class ChatViewModel {
             selected = conversation
             bubbles = []
         } catch {
-            loadError = "สร้างบทสนทนาใหม่ไม่สำเร็จ: \(error)"
+            loadError = t("Could not create a new conversation: \(String(describing: error))",
+                          "Status message. Placeholder is the underlying error.")
         }
     }
 
@@ -312,7 +334,8 @@ final class ChatViewModel {
         do {
             bubbles = try await engine.conversations.history(conversationID: selected.id).map(Self.bubble(from:))
         } catch {
-            loadError = "โหลดข้อความไม่สำเร็จ: \(error)"
+            loadError = t("Could not load the messages: \(String(describing: error))",
+                          "Status message. Placeholder is the underlying error.")
         }
     }
 
@@ -321,8 +344,8 @@ final class ChatViewModel {
     /// the router falls back to its ordinary order — but offering it would
     /// still be a lie on screen.
     func refreshOfferedModels() async {
-        offeredModels = await engine.router.offered.map { entry in
-            (identifier: entry.identifier, label: "\(entry.identifier) · \(entry.tier.label)")
+        offeredModels = await engine.router.offered.map {
+            OfferedModel(identifier: $0.identifier, label: "\($0.identifier) · \($0.tier.label)")
         }
         if let chosenModel, !offeredModels.contains(where: { $0.identifier == chosenModel }) {
             self.chosenModel = nil
@@ -365,7 +388,7 @@ final class ChatViewModel {
         routedWhy = []
         bubbles.append(Bubble(id: UUID().uuidString, kind: .user, text: text))
         // Named from the first thing asked, before the answer arrives — a list
-        // of "บทสนทนาใหม่" is a list nobody can search by eye.
+        // of "New conversation" is a list nobody can search by eye.
         await titleIfUnnamed(from: text)
 
         let stream = await engine.runner.run(userText: text,

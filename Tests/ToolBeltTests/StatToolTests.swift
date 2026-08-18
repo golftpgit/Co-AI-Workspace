@@ -105,7 +105,7 @@ struct StatToolTests {
          "names": ["กลุ่ม"]}
         """)
         #expect(text.contains("rate ratio"))
-        #expect(text.contains("กระจายเกิน"))
+        #expect(text.contains("more spread out than Poisson allows"))
         #expect(text.contains("negative binomial"))
         // And the standard "this result is not usable as it stands" line, which
         // is what stops a model quoting the number anyway.
@@ -120,8 +120,8 @@ struct StatToolTests {
         {"test": "clustered", "groups": [[52,55,53,54,51],[68,71,69,70,72],[45,44,47,46,43],
                                           [61,63,60,62,64],[75,77,74,76,78],[57,58,56,59,55]]}
         """)
-        #expect(text.contains("แก้ตามการจับกลุ่มแล้ว"))
-        #expect(text.contains("ข้อมูลซ้อนชั้น"))
+        #expect(text.contains("corrected for clustering"))
+        #expect(text.contains("the data are nested"))
         #expect(text.contains("ผลนี้ยังใช้สรุปไม่ได้ตามที่เป็นอยู่"))
     }
 
@@ -136,7 +136,7 @@ struct StatToolTests {
         """)
         #expect(text.contains("random effects"))
         #expect(text.contains("I²"))
-        #expect(text.contains("funnel ไม่สมมาตร"))
+        #expect(text.contains("the funnel is asymmetric"))
         #expect(text.contains("publication bias"))
     }
 
@@ -173,15 +173,15 @@ struct StatToolTests {
                                      [2,4,3,5,4,3,4,5,3,4]]}
         """)
         #expect(text.contains("ANOVA"))
-        #expect(text.contains("การแจกแจงปกติ"))
-        #expect(text.contains("ความแปรปรวนเท่ากัน"))
+        #expect(text.contains("normal distribution"))
+        #expect(text.contains("equal variance"))
     }
 
     @Test("a chi-square with thin cells is sent to Fisher's exact")
     func thinCells() async throws {
         let text = try await run(#"{"test": "chi_square", "table": [[1,9],[8,2]]}"#)
         #expect(text.contains("Fisher"))
-        #expect(text.contains("ต่ำกว่า 5"))
+        #expect(text.contains("fewer than 5"))
     }
 
     @Test("the proposed alternative can actually be run")

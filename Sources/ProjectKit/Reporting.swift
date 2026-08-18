@@ -31,9 +31,9 @@ public enum ReportKind: String, Sendable, Codable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .highlight: "รายงานความคืบหน้า"
-        case .endStage: "รายงานปิดขั้น"
-        case .endProject: "รายงานปิดโครงการ"
+        case .highlight: t("Progress report", "Kind of report.")
+        case .endStage: t("End-of-stage report", "Kind of report.")
+        case .endProject: t("End-of-project report", "Kind of report.")
         }
     }
 }
@@ -47,7 +47,9 @@ public struct ReportSection: Sendable, Codable, Equatable {
 
     public init(heading: String, lines: [String]) {
         self.heading = heading
-        self.lines = lines.isEmpty ? ["— ไม่มีรายการที่ระบบบันทึกไว้ —"] : lines
+        self.lines = lines.isEmpty
+            ? [t("— nothing recorded —", "Stand-in for an empty report section.")]
+            : lines
     }
 }
 
@@ -85,7 +87,8 @@ public struct ProjectReport: Sendable, Codable, Equatable, Identifiable {
     /// phone is the version in the .docx.
     public var rendered: String {
         var lines = [title, ""]
-        lines.append("ขั้น\(stageAtIssue.label) · \(generatedAt.formatted(date: .abbreviated, time: .shortened))")
+        lines.append(t("Stage \(stageAtIssue.label) · \(generatedAt.formatted(date: .abbreviated, time: .shortened))",
+                       "Report header. Placeholders: the stage and when it was issued."))
         for section in sections {
             lines.append("")
             lines.append(section.heading)
@@ -94,7 +97,8 @@ public struct ProjectReport: Sendable, Codable, Equatable, Identifiable {
         lines.append("")
         // The line that makes the rest checkable. Without it a reader has no way
         // to tell this from a summary a model wrote.
-        lines.append("รายงานนี้ประกอบจากข้อมูลที่ระบบบันทึกไว้ (แผนงาน · ทะเบียน · span · baseline · ทะเบียนประโยชน์) ไม่มีประโยคที่โมเดลแต่งขึ้น")
+        lines.append(t("This report is assembled from what the system recorded (the plan · the register · spans · baselines · the benefit ledger). No sentence in it was written by a model.",
+                       "Footer on every report, stating where its content comes from."))
         return lines.joined(separator: "\n")
     }
 }
@@ -110,7 +114,7 @@ public struct ReportInputs: Sendable {
     public var drift: BaselineDiff?
     public var tolerances: [ToleranceStatus]
     /// Which tolerance dimensions the app is actually reading. The rest print as
-    /// "ยังไม่ได้วัด" — a number nobody measured is worse in a report than in a
+    /// "not measured yet" — a number nobody measured is worse in a report than in a
     /// status strip, because the report gets quoted.
     public var measured: Set<ToleranceDimension>
     public var elapsedSeconds: TimeInterval
@@ -118,7 +122,7 @@ public struct ReportInputs: Sendable {
     public var gate: GateEvaluation?
     public var conformance: [PracticeStatus]
     /// When the previous report of this kind was written. "New since last time"
-    /// is the only honest reading of "issue/risk ใหม่"; without it a highlight
+    /// is the only honest reading of "new issue/risk"; without it a highlight
     /// report repeats every risk ever raised.
     public var since: Date?
 
@@ -191,17 +195,23 @@ public enum ReportBuilder {
             return entry.createdAt >= since
         }
         return [
-            ReportSection(heading: "ทำเสร็จแล้ว", lines: done.map(delivered)),
-            ReportSection(heading: "กำลังทำและจะทำต่อ",
+            ReportSection(heading: t("Finished", "Report section heading."), lines: done.map(delivered)),
+            ReportSection(heading: t("In progress and coming next", "Report section heading."),
                           lines: running.map { "\($0.title) — \($0.status.label)" }
-                              + next.map { "\($0.title) — พร้อมเริ่ม" }),
-            ReportSection(heading: "กรอบที่ตกลงไว้ ตอนนี้อยู่ที่ไหน",
+                              + next.map { t("\($0.title) — ready to start",
+                                             "A work package that can begin. Placeholder is its title.") }),
+            ReportSection(heading: t("Where the agreed tolerances stand now", "Report section heading."),
                           lines: toleranceLines(inputs)),
             ReportSection(heading: inputs.since == nil
-                          ? "ความเสี่ยงและปัญหาที่บันทึกไว้"
-                          : "ความเสี่ยงและปัญหาใหม่ตั้งแต่รายงานฉบับก่อน",
-                          lines: fresh.map { "[\($0.kind.label)] \($0.title) — \($0.status.label) · เสนอโดย \($0.origin.label)" }),
-            ReportSection(heading: "เวลาและค่าใช้จ่ายที่ใช้ไป", lines: spendLines(inputs)),
+                          ? t("Risks and issues on record", "Report section heading for the first report.")
+                          : t("Risks and issues new since the previous report",
+                              "Report section heading for a later report."),
+                          lines: fresh.map {
+                              t("[\($0.kind.label)] \($0.title) — \($0.status.label) · raised by \($0.origin.label)",
+                                "A register line in a report. Placeholders: its kind, title, status and who raised it.")
+                          }),
+            ReportSection(heading: t("Time and money spent", "Report section heading."),
+                          lines: spendLines(inputs)),
         ]
     }
 
@@ -211,27 +221,36 @@ public enum ReportBuilder {
         let approved = inputs.registers.filter { $0.kind == .change && $0.status == .approved }
         var agreement: [String] = []
         if let latest = inputs.baselines.max(by: { $0.version < $1.version }) {
-            agreement.append("แผนที่ตกลงไว้: v\(latest.version) (\(latest.reason)) · \(latest.packages.count) ใบงาน")
+            agreement.append(t("The agreed plan: v\(latest.version) (\(latest.reason)) · \(latest.packages.count) work packages",
+                               "Report line. Placeholders: the baseline version, why it was frozen, and how many packages."))
             agreement.append(inputs.drift.map { $0.isEmpty
-                ? "แผนวันนี้ตรงกับ v\(latest.version)"
-                : "ต่างจาก v\(latest.version): \($0.summary)" } ?? "ยังอ่านส่วนต่างไม่ได้")
+                ? t("Today's plan matches v\(latest.version)",
+                    "Report line when there is no drift. Placeholder is the baseline version.")
+                : t("Differs from v\(latest.version): \($0.summary)",
+                    "Report line when the plan has drifted. Placeholders: the version and a summary.") }
+                ?? t("The difference could not be read", "Report line when drift is unavailable."))
         } else {
             // Before G2 there is no agreement to compare against, and saying so
             // is more useful than printing a variance of zero.
-            agreement.append("ยังไม่มี baseline — แผนยังไม่ได้ถูก freeze เป็นข้อตกลง")
+            agreement.append(t("No baseline yet — the plan has never been frozen into an agreement",
+                               "Shown in the scope popover when there is nothing to compare against."))
         }
         return [
-            ReportSection(heading: "ผลเทียบกับแผนที่ตกลงไว้", lines: agreement),
-            ReportSection(heading: "ส่วนต่างและเหตุผล",
+            ReportSection(heading: t("Against the agreed plan", "Report section heading."), lines: agreement),
+            ReportSection(heading: t("Differences and why", "Report section heading."),
                           lines: approved.map { entry in
-                              var line = "\(entry.title) — อนุมัติโดย \(entry.decidedBy ?? "—")"
+                              var line = t("\(entry.title) — approved by \(entry.decidedBy ?? "—")",
+                                           "A change request in a report. Placeholders: its title and who approved it.")
                               if case .change(let scope, let time, let cost) = entry.detail {
-                                  line += " · ขอบเขต: \(scope) · เวลา: \(time) · เงิน: \(cost)"
+                                  line += t(" · scope: \(scope) · time: \(time) · money: \(cost)",
+                                            "The impact of a change request. Placeholders: its scope, time and cost impact.")
                               }
                               return line
                           }),
-            ReportSection(heading: "business case ยังคุ้มไหม", lines: benefitLines(inputs)),
-            ReportSection(heading: "ขอเข้าขั้นถัดไป", lines: gateLines(inputs)),
+            ReportSection(heading: t("Is the business case still worth it?", "Report section heading."),
+                          lines: benefitLines(inputs)),
+            ReportSection(heading: t("Asking to enter the next stage", "Report section heading."),
+                          lines: gateLines(inputs)),
         ]
     }
 
@@ -244,41 +263,53 @@ public enum ReportBuilder {
             [RegisterKind.risk, .issue, .change].contains($0.kind) && $0.status.isOpen
         }
         var handover = stillOpen.map {
-            "[\($0.kind.label)] \($0.title) — ยังเปิดอยู่ · เจ้าของ \($0.owner?.label ?? "ยังไม่มีใครรับ")"
+            t("[\($0.kind.label)] \($0.title) — still open · owner \($0.owner?.label ?? t("nobody yet", "Stand-in when a register entry has no owner."))",
+              "An open register entry in a report. Placeholders: its kind, title and owner.")
         }
         // A benefit whose review date is after closing is the most commonly
         // dropped handover item there is, so it is listed as one.
         handover += inputs.benefits.unmeasured.map {
-            "ยังต้องวัด: \($0.title) — กำหนด \($0.reviewAt.formatted(date: .abbreviated, time: .omitted)) · \($0.owner.label)"
+            t("Still to be measured: \($0.title) — due \($0.reviewAt.formatted(date: .abbreviated, time: .omitted)) · \($0.owner.label)",
+              "An unmeasured benefit in a report. Placeholders: its title, due date and owner.")
         }
         if let disposition = inputs.project.dataDisposition, disposition.isDecided {
-            handover.append("ข้อมูลและไฟล์: \(disposition.action.label) ตามนโยบาย “\(disposition.policy)” · ตัดสินโดย \(disposition.decidedBy)")
+            handover.append(t("Data and files: \(disposition.action.label) under policy “\(disposition.policy)” · decided by \(disposition.decidedBy)",
+                              "The data-disposition line in a closing report. Placeholders: the action, the policy and who decided."))
         }
         let tailored = inputs.conformance.filter(\.isTailored)
         var variance: [String] = []
         if let first = inputs.baselines.min(by: { $0.version < $1.version }) {
-            variance.append("แผนแรกที่ตกลงกัน: v\(first.version) · \(first.packages.count) ใบงาน")
-            variance.append("แผนตอนปิด: \(leaves.count) ใบงาน · เปลี่ยนข้อตกลง \(inputs.baselines.count) ครั้ง")
+            variance.append(t("The first agreed plan: v\(first.version) · \(first.packages.count) work packages",
+                              "Closing report line. Placeholders: the version and how many packages."))
+            variance.append(t("The plan at closing: \(leaves.count) work packages · the agreement changed \(inputs.baselines.count) times",
+                              "Closing report line. Placeholders: how many packages and how many baselines."))
         }
         variance.append(contentsOf: spendLines(inputs))
         return [
-            ReportSection(heading: "ส่งมอบอะไรบ้าง",
+            ReportSection(heading: t("What was delivered", "Report section heading."),
                           lines: leaves.filter { $0.status == .done }.map(delivered)),
-            ReportSection(heading: "ประโยชน์ที่วัดได้", lines: benefitLines(inputs)),
-            ReportSection(heading: "ส่วนต่างรวม", lines: variance),
-            ReportSection(heading: "บทเรียน", lines: lessons.map { entry in
+            ReportSection(heading: t("Benefits measured", "Report section heading."),
+                          lines: benefitLines(inputs)),
+            ReportSection(heading: t("Total variance", "Report section heading."), lines: variance),
+            ReportSection(heading: t("Lessons", "Name of an ISO 21502 practice."),
+                          lines: lessons.map { entry in
                 var line = entry.title
                 if case .lesson(let cause, let differently, let appliesTo) = entry.detail {
-                    line += " — สาเหตุ: \(cause) · ครั้งหน้า: \(differently)"
-                    if !appliesTo.isEmpty { line += " · ใช้กับ: \(appliesTo)" }
+                    line += t(" — cause: \(cause) · next time: \(differently)",
+                              "A lesson in a report. Placeholders: its cause and what to do differently.")
+                    if !appliesTo.isEmpty {
+                        line += t(" · applies to: \(appliesTo)",
+                                  "Where a lesson applies. Placeholder is the list.")
+                    }
                 }
                 return line
             }),
-            ReportSection(heading: "สิ่งที่ยกให้คนอื่นรับต่อ", lines: handover),
-            ReportSection(heading: "practice ที่ตัดสินว่าไม่ทำ (tailoring)",
+            ReportSection(heading: t("Handed on to somebody else", "Report section heading."), lines: handover),
+            ReportSection(heading: t("Practices decided against (tailoring)", "Report section heading."),
                           lines: tailored.map {
                               "\($0.practice.label) — \($0.tailoring?.reason ?? "")"
-                                  + " · ตัดสินโดย \($0.tailoring?.decidedBy ?? "—")"
+                                  + t(" · decided by \($0.tailoring?.decidedBy ?? "—")",
+                                      "Who decided against a practice. Placeholder is their name.")
                           }),
         ]
     }
@@ -288,7 +319,7 @@ public enum ReportBuilder {
     private static func delivered(_ package: WorkPackage) -> String {
         let accepted = package.evidence.filter(\.passed)
         let evidence = accepted.isEmpty
-            ? "ยังไม่มีหลักฐานที่ QA รับ"
+            ? t("No evidence QA has accepted yet", "Report line for a package with no accepted evidence.")
             : accepted.map(\.summary).joined(separator: " · ")
         return "\(package.title) — \(evidence)"
     }
@@ -296,13 +327,17 @@ public enum ReportBuilder {
     private static func toleranceLines(_ inputs: ReportInputs) -> [String] {
         inputs.tolerances.map { status in
             guard inputs.measured.contains(status.dimension) else {
-                return "\(status.dimension.label): กรอบ \(number(status.limit)) · ยังไม่ได้วัด"
+                return t("\(status.dimension.label): limit \(number(status.limit)) · not measured yet",
+                         "A tolerance line in a report. Placeholders: which tolerance and its limit.")
             }
             return "\(status.dimension.label): \(number(status.current)) / \(number(status.limit))"
-                + (status.breached ? " — ทะลุกรอบ" : "")
+                + (status.breached
+                   ? t(" — breached", "Appended to a tolerance line that has been exceeded.")
+                   : "")
         }
         + inputs.exceptions.filter(\.isOpen).map {
-            "หยุดรอคำตัดสิน: ทะลุกรอบ\($0.dimension.label) — \($0.needsFromHuman)"
+            t("Stopped for a decision: the \($0.dimension.label) tolerance was breached — \($0.needsFromHuman)",
+              "An open exception in a report. Placeholders: which tolerance and what is needed from a person.")
         }
     }
 
@@ -310,32 +345,42 @@ public enum ReportBuilder {
         guard !inputs.benefits.isEmpty else { return [] }
         return inputs.benefits.benefits.map { benefit in
             guard let achieved = benefit.achievement, let result = benefit.result else {
-                return "\(benefit.title): ยังไม่ได้วัด (กำหนด \(benefit.reviewAt.formatted(date: .abbreviated, time: .omitted)))"
+                return t("\(benefit.title): not measured yet (due \(benefit.reviewAt.formatted(date: .abbreviated, time: .omitted)))",
+                         "An unmeasured benefit in a report. Placeholders: its title and due date.")
             }
             return "\(benefit.title): \(number(result.value)) \(benefit.measure)"
-                + " · จาก \(number(benefit.baselineValue)) เป้า \(number(benefit.target))"
-                + " · ได้ \(Int(achieved * 100))% ของเป้า · วัดโดย \(result.measuredBy)"
+                + t(" · from \(number(benefit.baselineValue)) target \(number(benefit.target)) · reached \(Int(achieved * 100))% of target · measured by \(result.measuredBy)",
+                    "A measured benefit in a report. Placeholders: the baseline, the target, the percentage reached, and who measured it.")
         }
     }
 
     private static func gateLines(_ inputs: ReportInputs) -> [String] {
-        guard let gate = inputs.gate else { return ["โครงการปิดแล้ว — ไม่มีขั้นถัดไป"] }
+        guard let gate = inputs.gate else {
+            return [t("The project is closed — there is no next stage",
+                      "Report line for a project with no next gate.")]
+        }
         return ["\(gate.gate): \(gate.from.label) → \(gate.to.label) — "
-                + (gate.passed ? "ผ่านครบทุกเงื่อนไข" : "ยังไม่ผ่าน")]
+                + (gate.passed
+                   ? t("every condition holds", "Report line: the gate passes.")
+                   : t("not yet passed", "Report line: the gate does not pass."))]
             + gate.conditions.map { "\($0.satisfied ? "✓" : "✗") \($0.text)" }
     }
 
     private static func spendLines(_ inputs: ReportInputs) -> [String] {
         var lines: [String] = []
         if inputs.elapsedSeconds > 0 {
-            lines.append("เวลาที่วัดได้จาก span: \(Int(inputs.elapsedSeconds / 60)) นาที")
+            lines.append(t("Time measured from spans: \(Int(inputs.elapsedSeconds / 60)) minutes",
+                           "Report line. Placeholder is a number of minutes."))
         } else {
-            lines.append("เวลา: ยังไม่มี span ที่ผูกกับใบงานของโครงการนี้")
+            lines.append(t("Time: no span is tied to any of this project's work packages yet",
+                           "Report line when no time has been recorded."))
         }
         if inputs.measured.contains(.cost) {
-            lines.append("ค่าใช้จ่ายที่บันทึกไว้: ฿\(number(inputs.tolerances.first { $0.dimension == .cost }?.current ?? 0))")
+            lines.append(t("Spending recorded: $\(number(inputs.tolerances.first { $0.dimension == .cost }?.current ?? 0))",
+                           "Report line. Placeholder is an amount in the endpoint's currency."))
         } else {
-            lines.append("ค่าใช้จ่าย: ยังไม่ได้ต่อกับบัญชีการใช้จ่าย")
+            lines.append(t("Spending: not connected to the ledger yet",
+                           "Report line when spending cannot be read."))
         }
         return lines
     }

@@ -32,7 +32,7 @@ struct MissingDataTests {
         #expect(worst.missing == 2)
         // Half the sample gone, from columns that are individually 12–25% missing.
         #expect(report.completeShare == 0.5)
-        #expect(report.summary.contains("ทิ้งคนไป 4 คน"))
+        #expect(report.summary.contains("throws away 4 people"))
     }
 
     @Test("columns of different lengths, or no columns at all, is refused")
@@ -55,7 +55,7 @@ struct MissingDataTests {
         #expect(signal.missingCount == 4)
         #expect(signal.meanWhenMissing > signal.meanWhenPresent)
         #expect(signal.looksRelated)
-        #expect(signal.summary.contains("ไม่ได้สุ่ม"))
+        #expect(signal.summary.contains("the missingness is not random"))
     }
 
     /// A negative result here is the one people over-read, so the sentence
@@ -67,7 +67,7 @@ struct MissingDataTests {
         let signal = try MissingData.signal(missingIn: ("ผลลัพธ์", outcome),
                                             comparedWith: ("อายุ", age))
         #expect(signal.looksRelated == false)
-        #expect(signal.summary.contains("ไม่ได้แปลว่าการขาดหายสุ่ม"))
+        #expect(signal.summary.contains("does not mean the missingness is random"))
         #expect(signal.summary.contains("MCAR"))
     }
 

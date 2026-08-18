@@ -104,7 +104,7 @@ public final class CodingViewModel {
             await refresh()
         } catch {
             log.error("loading codebooks: \(error)")
-            status = Status(message: "โหลดสมุดรหัสไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not load the codebooks: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -137,10 +137,11 @@ public final class CodingViewModel {
             try await store.save(book)
             selectedID = book.id
             await reload()
-            status = Status(message: "สร้าง “\(trimmed)” แล้ว — เพิ่มรหัสพร้อมนิยาม แล้วจึงเพิ่มช่วงข้อความ",
+            status = Status(message: t("Created “\(trimmed)” — add codes with their definitions, then add passages",
+                                       "Status message after creating a codebook. Placeholder is its name."),
                             isError: false)
         } catch {
-            status = Status(message: "บันทึกไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not save: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -203,7 +204,7 @@ public final class CodingViewModel {
             try await store.save(transcript)
             let spans = transcript.paragraphs
             guard !spans.isEmpty else {
-                status = Status(message: "ไม่พบย่อหน้าในบทถอดเทปนี้", isError: true)
+                status = Status(message: t("No paragraphs were found in this transcript", "Status message when a transcript cannot be cut into passages."), isError: true)
                 return
             }
             for span in spans {
@@ -220,11 +221,11 @@ public final class CodingViewModel {
                 try await store.save(book)
             }
             await reload()
-            status = Status(message: "เพิ่ม “\(name)” แล้ว — แบ่งเป็น \(spans.count) ช่วงตามย่อหน้า "
-                            + "· ตำแหน่งของทุกช่วงอ้างกลับไปที่ข้อความจริง ไม่ใช่เลขที่พิมพ์เอง",
+            status = Status(message: t("Added “\(name)” — cut into \(spans.count) passages by paragraph · every passage's offsets point back at the real text rather than numbers somebody typed",
+                                       "Status message after adding a transcript. Placeholders: its name and how many passages."),
                             isError: false)
         } catch {
-            status = Status(message: "บันทึกบทถอดเทปไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not save the transcript: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -239,8 +240,9 @@ public final class CodingViewModel {
         guard let store, let book = selected else { return }
         let name = coder.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else {
-            status = Status(message: "ใส่ชื่อผู้ลงรหัสก่อน — κ เป็นข้อความเกี่ยวกับคน "
-                            + "การลงรหัสที่ไม่รู้ว่าใครลงจึงคำนวณอะไรไม่ได้", isError: true)
+            status = Status(message: t("Enter the coder's name first — κ is a claim about people, so coding with nobody attached computes nothing",
+                                       "Status message when the coder name is missing."),
+                            isError: true)
             return
         }
         do {
@@ -248,7 +250,7 @@ public final class CodingViewModel {
                                  codebook: book.id)
             await refresh()
         } catch {
-            status = Status(message: "บันทึกการลงรหัสไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not save the coding: \(String(describing: error))", "Status message. Placeholder is the underlying error."), isError: true)
         }
     }
 
@@ -258,7 +260,8 @@ public final class CodingViewModel {
             try await store.save(book)
             await reload()
         } catch {
-            status = Status(message: "บันทึกไม่สำเร็จ: \(error)", isError: true)
+            status = Status(message: t("Could not save: \(String(describing: error))", "Status message. Placeholder is the underlying error."),
+                            isError: true)
         }
     }
 

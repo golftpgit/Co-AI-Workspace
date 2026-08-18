@@ -88,7 +88,7 @@ struct CodingReliabilityTests {
             codebook: book()))
         #expect(report.comparableUnits == 3)
         #expect(report.incompleteUnits == 2)
-        #expect(report.summary.contains("2 หน่วย"))
+        #expect(report.summary.contains("2 units are left out"))
     }
 
     @Test("“none of these codes” is a decision two people can agree on")
@@ -198,7 +198,7 @@ struct SaturationTests {
         #expect(curve.flattenedAfter(consecutive: 3) == 2)
         // The wording refuses to call it saturation, which is the researcher's
         // claim to make and defend.
-        #expect(curve.summary.contains("เป็นข้อสังเกต ไม่ใช่ข้อสรุปว่าอิ่มตัว"))
+        #expect(curve.summary.contains("an observation, not a finding of saturation"))
     }
 
     @Test("a curve still climbing says so rather than reporting nothing")
@@ -210,7 +210,7 @@ struct SaturationTests {
                                               assignments: assignments1 + assignments2 + assignments3,
                                               order: ["doc1", "doc2", "doc3"])
         #expect(curve.flattenedAfter() == nil)
-        #expect(curve.summary.contains("ยังมีรหัสใหม่"))
+        #expect(curve.summary.contains("new codes are still appearing"))
     }
 
     @Test("documents the codebook never ordered still appear, in the order they were coded")
@@ -233,7 +233,7 @@ struct CodebookTests {
         let vague = Code(id: "cd_x", name: Bilingual("ความรู้สึก"))
         let codebook = book([burden, vague])
         #expect(codebook.problems.count == 1)
-        #expect(codebook.problems[0].text.contains("ยังไม่มีนิยาม"))
+        #expect(codebook.problems[0].text.contains("has no definition"))
         // Reported, not refused: half-finished work has to be saveable.
         #expect(codebook.codes.count == 2)
     }
@@ -242,7 +242,7 @@ struct CodebookTests {
     func danglingParent() {
         let orphan = Code(id: "cd_y", name: Bilingual("เวรดึก"),
                           definition: "ข้อความเรื่องเวรกลางคืน", parentID: "cd_missing")
-        #expect(book([orphan]).problems.contains { $0.text.contains("รหัสแม่ที่ไม่มีอยู่") })
+        #expect(book([orphan]).problems.contains { $0.text.contains("points at a parent code that is not in the codebook") })
     }
 
     @Test("a well-formed codebook has nothing to report")

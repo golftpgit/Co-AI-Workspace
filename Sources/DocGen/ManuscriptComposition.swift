@@ -64,13 +64,13 @@ public enum SentenceCompositionError: Error, CustomStringConvertible, Equatable 
     public var description: String {
         switch self {
         case .duplicateLabel(let label):
-            "ประโยคนี้มี “\(label)” อยู่แล้ว — ชื่อซ้ำกันในประโยคเดียวทำให้เลขตัวที่สอง "
-                + "ไม่ถูกพิมพ์ลงเล่มเลย และเลขตัวแรกไปโผล่สองที่ · ตั้งชื่อให้ต่างกัน "
-                + "เช่น “ค่าเฉลี่ยกลุ่มทดลอง” กับ “ค่าเฉลี่ยกลุ่มควบคุม”"
+            localised("this sentence already has a “\(label)” — the same name twice means the second number ", "A duplicate slot name. Placeholder: the name.")
+                + localised("never reaches the page while the first appears in both places · give them different names ", "Continues the duplicate-name warning.")
+                + localised("for instance “treatment group mean” and “control group mean”", "Ends the duplicate-name warning with an example.")
         case .labelContainsBrace(let label):
-            "ชื่อ “\(label)” มีวงเล็บปีกกา ซึ่งเป็นตัวคั่นช่องเติมเลข — ใช้ในชื่อไม่ได้"
+            localised("the name “\(label)” contains a brace, which is what marks a slot — it cannot be used in a name", "An invalid slot name. Placeholder: the name.")
         case .emptyLabel:
-            "ต้องตั้งชื่อให้เลขตัวนี้ก่อน — ชื่อคือสิ่งที่ปรากฏในข้อความแจ้งเมื่อผูกไม่สำเร็จ"
+            localised("this number needs a name first — the name is what appears when binding fails", "An unnamed slot.")
         }
     }
 }
@@ -142,11 +142,11 @@ public struct SentenceComposer: Sendable, Equatable {
         var found: [String] = []
         let composed = ReportedSentence(text, references: references)
         for name in composed.unfilledPlaceholders {
-            found.append("“{\(name)}” ในประโยคยังไม่มีผลรองรับ — จะพิมพ์วงเล็บลงเล่มตามตัวอักษร")
+            found.append(localised("“{\(name)}” in the text has nothing behind it — the braces will print literally", "An unbound slot. Placeholder: the slot name."))
         }
         for orphan in composed.orphanedReferences {
-            found.append("“\(orphan.label)” ผูกไว้แล้วแต่ไม่มีช่องในประโยคแล้ว — "
-                         + "จะไม่ถูกพิมพ์ และจะไม่ขึ้นในภาคผนวกที่มาของตัวเลข")
+            found.append(localised("“\(orphan.label)” is bound but the text no longer has a slot for it — ", "An orphaned binding. Placeholder: the name.")
+                         + localised("it will not print, and will not appear in the appendix of where numbers came from", "Ends the orphaned-binding warning."))
         }
         return found
     }

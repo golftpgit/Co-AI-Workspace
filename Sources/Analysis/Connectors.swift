@@ -89,11 +89,11 @@ public enum UnsupportedConnector: String, Sendable, CaseIterable, Identifiable {
     public var reason: String {
         switch self {
         case .sqlServer:
-            "DuckDB ยังไม่มี extension ทางการสำหรับ SQL Server — §12.2 วางไว้ว่าจะไปทาง ATTACH "
-                + "เมื่อมี ตอนนี้ยังต่อไม่ได้จริง"
+            localised("DuckDB has no official SQL Server extension yet — §12.2 plans to go via ATTACH ", "Why SQL Server cannot be connected to.")
+                + localised("once one exists; for now the connection genuinely cannot be made", "Ends the explanation of why SQL Server cannot be connected to.")
         case .mongoDB:
-            "ต้องใช้ไดรเวอร์ native (v1 พิสูจน์แล้วว่า community extension \"mongo\" "
-                + "build ตาม core ไม่ทัน) — ยังไม่ได้เพิ่มเป็น dependency"
+            localised("needs a native driver (v1 showed the community \"mongo\" extension ", "Why MongoDB cannot be connected to.")
+                + localised("does not keep up with core builds) — it has not been added as a dependency", "Ends the explanation of why MongoDB cannot be connected to.")
         }
     }
 }
@@ -109,11 +109,11 @@ public enum ConnectorError: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .secretMissing(let variable):
-            "ยังไม่ได้ตั้งรหัสผ่านของแหล่งนี้ (“\(variable)”)"
+            localised("no password has been set for this source (“\(variable)”)", "The credential for a data source is missing. Placeholder: the name it would be stored under.")
         case .secretUnreadable(let variable, let detail):
-            "อ่านรหัสผ่าน “\(variable)” จาก Keychain ไม่ได้ (\(detail)) — ยังไม่ได้แปลว่ายังไม่ได้ตั้ง"
+            localised("could not read the password “\(variable)” from the Keychain (\(detail)) — which does not mean it was never set", "Reading a stored credential failed. Placeholders: the name it is stored under and the underlying reason.")
         case .connectFailed(let alias, let message):
-            "ต่อ '\(alias)' ไม่สำเร็จ: \(message)"
+            localised("could not connect to '\(alias)': \(message)", "Connecting to a data source failed. Placeholders: the source's alias and the underlying message.")
         }
     }
 }

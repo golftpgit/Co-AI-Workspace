@@ -40,17 +40,17 @@ public struct CategoryAgreement: Sendable, Equatable {
     /// which is why this returns words rather than a pass/fail.
     public var interpretation: String {
         switch kappa {
-        case ..<0.0: "แย่กว่าการเดา"
-        case ..<0.20: "ต่ำมาก (slight)"
-        case ..<0.40: "พอมี (fair)"
-        case ..<0.60: "ปานกลาง (moderate)"
-        case ..<0.80: "ดี (substantial)"
-        default: "ดีมาก (almost perfect)"
+        case ..<0.0: localised("worse than guessing", "Agreement band for a negative kappa.")
+        case ..<0.20: localised("slight", "Agreement band for kappa below 0.21.")
+        case ..<0.40: localised("fair", "Agreement band for kappa below 0.41.")
+        case ..<0.60: localised("moderate", "Agreement band for kappa below 0.61.")
+        case ..<0.80: localised("substantial", "Agreement band for kappa below 0.81.")
+        default: localised("almost perfect", "Agreement band for kappa of 0.81 and above.")
         }
     }
 
     public var summary: String {
-        String(format: "κ %.2f · ตรงกันจริง %.0f%% · %d หน่วย · %d ผู้ลงรหัส · %@",
+        String(format: localised("κ %.2f · observed agreement %.0f%% · %d units · %d coders · %@", "Summary of inter-coder agreement. Placeholders: kappa, observed agreement, unit count, coder count and the band."),
                kappa, observedAgreement * 100, subjects, raters, interpretation)
     }
 }
@@ -63,12 +63,12 @@ public enum AgreementError: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .mismatchedLengths(let first, let second):
-            "ผู้ลงรหัสสองคนลงไม่เท่ากัน (\(first) กับ \(second) หน่วย) — "
-                + "κ เทียบได้เฉพาะหน่วยที่ทั้งคู่ดูเหมือนกัน"
+            localised("the two coders did not code the same amount (\(first) units against \(second)) — ", "Why agreement cannot be computed. Placeholders: the two unit counts.")
+                + localised("κ only compares units both of them looked at", "Ends the reason agreement cannot be computed.")
         case .notEnoughData:
-            "ข้อมูลน้อยเกินกว่าจะคำนวณความสอดคล้อง"
+            localised("there is too little data to compute agreement", "Why agreement cannot be computed.")
         case .unequalRaterCounts:
-            "จำนวนผู้ลงรหัสต่อหน่วยไม่เท่ากัน — Fleiss' κ ตั้งอยู่บนสมมติฐานว่าทุกหน่วยถูกลงรหัสเท่ากัน"
+            localised("the units were not coded by the same number of coders — Fleiss' κ assumes they were", "Why agreement cannot be computed.")
         }
     }
 }
@@ -184,15 +184,15 @@ public struct IntraclassCorrelation: Sendable, Equatable {
     /// Koo & Li's convention, quoted as words for the same reason as κ's.
     public static func interpretation(_ value: Double) -> String {
         switch value {
-        case ..<0.50: "ต่ำ (poor)"
-        case ..<0.75: "พอใช้ (moderate)"
-        case ..<0.90: "ดี (good)"
-        default: "ดีมาก (excellent)"
+        case ..<0.50: localised("poor", "Reliability band for a low ICC.")
+        case ..<0.75: localised("moderate", "Reliability band for a middling ICC.")
+        case ..<0.90: localised("good", "Reliability band for a good ICC.")
+        default: localised("excellent", "Reliability band for a high ICC.")
         }
     }
 
     public var summary: String {
-        String(format: "ICC(2,1) %.2f · ICC(2,k) %.2f · %d หน่วย × %d ผู้ประเมิน · %@",
+        String(format: localised("ICC(2,1) %.2f · ICC(2,k) %.2f · %d units × %d raters · %@", "Summary of an intraclass correlation. Placeholders: the two ICCs, unit count, rater count and the band."),
                twoWayRandomSingle, twoWayRandomAverage, targets, raters,
                Self.interpretation(twoWayRandomSingle))
     }

@@ -49,7 +49,7 @@ struct LifecycleTests {
         #expect(!gate.passed)
         // The one people skip. A boundary with only an in-scope list is a
         // boundary that moves every week (§19.6).
-        #expect(gate.unmet == ["ขอบเขต 'ไม่ทำ' อย่างน้อย 1 ข้อ"])
+        #expect(gate.unmet == ["At least one thing out of scope"])
     }
 
     @Test("G1 refuses a project with no reason to exist")
@@ -58,7 +58,7 @@ struct LifecycleTests {
         project.brief = "   "
 
         let gate = try #require(ProjectLifecycle.evaluate(project))
-        #expect(gate.unmet == ["มีเหตุผลที่ทำ (brief)"])
+        #expect(gate.unmet == ["There is a reason for doing it (the brief)"])
     }
 
     @Test("a complete brief passes G1 and lands in Planning")
@@ -118,7 +118,7 @@ struct LifecycleTests {
 
         let gate = try #require(ProjectLifecycle.evaluate(project, hasLessons: false))
         #expect(gate.conditions.count == 8)
-        #expect(gate.unmet.contains { $0.contains("บันทึกบทเรียน") })
+        #expect(gate.unmet.contains { $0.contains("lesson recorded") })
         // Writing the lesson is necessary and not sufficient — the other seven
         // are in ClosingTests, one case each (§19.12).
         #expect(ProjectLifecycle.evaluate(project, hasLessons: true)?.passed == false)

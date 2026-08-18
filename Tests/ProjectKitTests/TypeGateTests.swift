@@ -87,7 +87,7 @@ struct TypeGateTests {
         let theirs = evaluation.conditions.filter { $0.text.contains("G-saturation") }
         #expect(theirs.count == 1)
         #expect(theirs.count { $0.vacuous } == 1)
-        #expect(theirs[0].text.contains("ระบบยังตรวจข้อนี้เองไม่ได้"))
+        #expect(theirs[0].text.contains("this cannot be checked automatically"))
         // It names the phase rather than saying "later".
         #expect(theirs[0].text.contains("P11.8"))
     }
@@ -103,7 +103,7 @@ struct TypeGateTests {
         let evaluation = try #require(ProjectLifecycle.evaluate(
             project, wbs: wbs, typeGates: [coding]))
         #expect(!evaluation.passed)
-        #expect(evaluation.unmet[0].contains("ระบบตรวจข้อนี้ได้ แต่ยังไม่ได้ตรวจ"))
+        #expect(evaluation.unmet[0].contains("this can be checked but has not been"))
         #expect(!evaluation.unmet[0].contains("ไม่รู้จักเงื่อนไข"))
     }
 
@@ -115,7 +115,7 @@ struct TypeGateTests {
         let evaluation = try #require(ProjectLifecycle.evaluate(
             project, wbs: wbs, typeGates: [typo]))
         #expect(!evaluation.passed)
-        #expect(evaluation.unmet[0].contains("ไม่รู้จักเงื่อนไขชื่อนี้"))
+        #expect(evaluation.unmet[0].contains("this condition name is unknown"))
         #expect(evaluation.unmet[0].contains("content_validty_passed"))
     }
 

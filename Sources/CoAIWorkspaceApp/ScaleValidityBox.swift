@@ -21,7 +21,8 @@ struct ScaleValidityBox: View {
     let instrument: Instrument
 
     var body: some View {
-        GroupBox("ความเที่ยงและความตรงเชิงโครงสร้าง (§20.4)") {
+        GroupBox(t("Reliability and construct validity (§20.4)",
+                   "Box heading over α, ω and the factor analysis.")) {
             VStack(alignment: .leading, spacing: 10) {
                 controls
                 if let analysis = model.scaleReport {
@@ -31,8 +32,8 @@ struct ScaleValidityBox: View {
                         // throws away work somebody waited for, and redrawing it
                         // unmarked would put these numbers beside answers they
                         // were not computed from.
-                        Label("มีคำตอบเปลี่ยนไปหลังจากคำนวณครั้งนี้ — ตัวเลขข้างล่างมาจากผู้ตอบ "
-                              + "\(analysis.respondents) คนที่คำนวณไว้ กดคำนวณอีกครั้งเพื่อรวมของใหม่",
+                        Label(t("Responses changed after this was computed — the numbers below come from the \(analysis.respondents) respondents it used. Compute again to include the new ones.",
+                                "Warning that the analysis is stale. Placeholder is how many respondents it used."),
                               systemImage: "clock.arrow.circlepath")
                             .font(.caption).foregroundStyle(.orange)
                             .fixedSize(horizontal: false, vertical: true)
@@ -51,8 +52,8 @@ struct ScaleValidityBox: View {
                     }
                     if !analysis.skippedItems.isEmpty { skipped(analysis) }
                 } else {
-                    Text("คำนวณจากคำตอบที่เก็บได้จริงในเวอร์ชันนี้ — α และ ω รายมาตรวัด "
-                         + "แล้ววิเคราะห์องค์ประกอบเชิงสำรวจกับข้อทุกข้อรวมกัน")
+                    Text(localised: "Computed from the answers really collected for this version — α and ω per subscale, then an exploratory factor analysis across all items together",
+                         "Explains what the reliability box computes and from what.")
                         .font(.callout).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -66,14 +67,15 @@ struct ScaleValidityBox: View {
     @ViewBuilder
     private var controls: some View {
         HStack(spacing: 10) {
-            Button("คำนวณความเที่ยงและองค์ประกอบ") {
+            Button(t("Compute reliability and factors", "Button that runs the psychometric analysis.")) {
                 Task { await model.analyseScale() }
             }
             .disabled(model.isAnalysingScale || model.responseRows.isEmpty)
 
             if model.isAnalysingScale {
                 ProgressView().controlSize(.small)
-                Text("กำลังคำนวณ — parallel analysis สุ่มข้อมูลเทียบ 100 รอบ")
+                Text(localised: "Computing — parallel analysis draws 100 random comparison sets",
+                     "Progress note, saying why the computation takes a while.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -84,7 +86,9 @@ struct ScaleValidityBox: View {
         // visible below — a solution that changes with the rule is a finding, not
         // a setting.
         if model.scaleReport?.solution != nil {
-            Picker("เกณฑ์จำนวนองค์ประกอบ", selection: Binding(
+            Picker(t("Rule for how many factors",
+                     "Picker over the criteria for choosing the number of factors."),
+                   selection: Binding(
                 get: { RuleChoice(model.retentionRule) },
                 set: { choice in Task { await model.analyseScale(rule: choice.rule) } })) {
                 ForEach(RuleChoice.allCases) { choice in
@@ -93,7 +97,7 @@ struct ScaleValidityBox: View {
             }
             .pickerStyle(.segmented)
             .controlSize(.small)
-            .accessibilityLabel("เกณฑ์ที่ใช้ตัดสินจำนวนองค์ประกอบ")
+            .accessibilityLabel(t("Rule used to decide the number of factors", "Screen-reader label."))
         }
     }
 
@@ -128,12 +132,15 @@ struct ScaleValidityBox: View {
     }
 
     private func sampleLine(_ analysis: ScaleReport) -> String {
-        var parts = ["ผู้ตอบที่นำมาคำนวณ \(analysis.respondents) คน",
-                     "ข้อที่ให้คะแนนได้ \(analysis.scoredItemIDs.count) ข้อ"]
+        var parts = [t("\(analysis.respondents) respondents used",
+                       "Part of the analysis summary. Placeholder is a count of respondents."),
+                     t("\(analysis.scoredItemIDs.count) scorable items",
+                       "Part of the analysis summary. Placeholder is a count of items.")]
         if analysis.droppedRespondents > 0 {
             // Said rather than absorbed: listwise deletion that nobody mentions
             // is how a sample of 120 becomes 78 between two paragraphs.
-            parts.append("ตัดออก \(analysis.droppedRespondents) คนที่ตอบไม่ครบทุกข้อ")
+            parts.append(t("\(analysis.droppedRespondents) dropped for not answering every item",
+                           "Part of the analysis summary. Placeholder is a count of respondents."))
         }
         return parts.joined(separator: " · ")
     }
@@ -143,12 +150,14 @@ struct ScaleValidityBox: View {
     @ViewBuilder
     private func reliability(_ analysis: ScaleReport) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("ความเที่ยงรายมาตรวัด").font(.callout).bold()
+            Text(localised: "Reliability per subscale", "Heading over α and ω for each subscale.")
+                .font(.callout).bold()
             ForEach(analysis.subscales) { subscale in
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 8) {
                         Text(subscale.name).font(.callout)
-                        Text("\(subscale.itemIDs.count) ข้อ")
+                        Text(localised: "\(subscale.itemIDs.count) items",
+                             "How many items a subscale holds. Placeholder is a count.")
                             .font(.caption2).foregroundStyle(.secondary)
                         Spacer()
                         if let alpha = subscale.alpha {
@@ -156,7 +165,8 @@ struct ScaleValidityBox: View {
                                 .font(.callout)
                                 .foregroundStyle(alpha.passes ? Color.green : Color.orange)
                         } else {
-                            Text("α คำนวณไม่ได้").font(.caption).foregroundStyle(.secondary)
+                            Text(localised: "α cannot be computed", "Shown when a subscale has too little data.")
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                         if let omega = subscale.omega {
                             Text(String(format: "ω %.3f", omega.omega))
@@ -165,21 +175,23 @@ struct ScaleValidityBox: View {
                         }
                     }
                     if let weakest = subscale.weakestItem {
-                        Text(String(format: "ข้อ %@ สัมพันธ์กับข้ออื่นในมาตรวัดนี้เพียง %.2f — ",
+                        Text(String(format: t("Item %@ correlates with the rest of this subscale at only %.2f — ",
+                                              "Warning about a weak item. Placeholders: the item and its correlation."),
                                     prompt(weakest.item), weakest.correlation)
-                             + "ต่ำกว่า .30 ซึ่งเป็นเกณฑ์ที่มักใช้ตัดสินว่าข้อนี้วัดคนละเรื่องกับข้ออื่น")
+                             + t("below .30, the threshold usually taken to mean it measures something else",
+                                 "Completes the weak-item warning."))
                             .font(.caption2).foregroundStyle(.orange)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if subscale.alpha != nil && subscale.omega == nil {
-                        Text("ω ต้องการอย่างน้อย 3 ข้อและผู้ตอบมากกว่าจำนวนข้อ — "
-                             + "มาตรวัดนี้ยังไม่ถึง จึงมีแต่ α")
+                        Text(localised: "ω needs at least 3 items and more respondents than items — this subscale has neither, so only α is shown",
+                             "Explains why ω is missing for a subscale.")
                             .font(.caption2).foregroundStyle(.secondary)
                     }
                 }
             }
-            Text("α ตั้งอยู่บนสมมติฐานว่าทุกข้อดีเท่ากัน ซึ่งแทบไม่จริง · ω ไม่ต้องใช้สมมติฐานนั้น "
-                 + "จึงรายงานคู่กัน และถ้าสองค่าต่างกันมากแปลว่ามีข้อที่วัดได้ดีกว่าข้ออื่นชัดเจน")
+            Text(localised: "α assumes every item is equally good, which is almost never true · ω does not, so both are reported — and a large gap between them means some items measure noticeably better than others",
+                 "Explains why both α and ω are shown.")
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -190,13 +202,15 @@ struct ScaleValidityBox: View {
     @ViewBuilder
     private func adequacy(_ solution: FactorSolution) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("ข้อมูลเหมาะกับการวิเคราะห์องค์ประกอบไหม").font(.callout).bold()
+            Text(localised: "Is the data suitable for factor analysis?",
+                 "Heading over the KMO and Bartlett checks.")
+                .font(.callout).bold()
             Text(solution.adequacy.summary)
                 .font(.caption)
                 .foregroundStyle(solution.adequacy.isFactorable ? .secondary : Color.orange)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("ค่าลักษณะเฉพาะ: "
-                 + solution.eigenvalues.map { String(format: "%.2f", $0) }.joined(separator: " · "))
+            Text(localised: "Eigenvalues: \(solution.eigenvalues.map { String(format: "%.2f", $0) }.joined(separator: " · "))",
+                 "The eigenvalues of the factor solution. Placeholder is the list of them.")
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -210,7 +224,8 @@ struct ScaleValidityBox: View {
             Text(solution.summary).font(.callout).bold()
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
-                Text("ข้อ").font(.caption2).foregroundStyle(.secondary)
+                Text(localised: "Item", "Column heading in the factor loading table.")
+                    .font(.caption2).foregroundStyle(.secondary)
                     .frame(width: 220, alignment: .leading)
                 ForEach(0..<solution.retained, id: \.self) { factor in
                     Text(String(format: "F%d (%.0f%%)", factor + 1,
@@ -241,10 +256,8 @@ struct ScaleValidityBox: View {
                         .frame(width: 46, alignment: .trailing)
                 }
             }
-            Text("ตัวหนา = |น้ำหนัก| ≥ \(String(format: "%.2f", FactorLoading.salient)) "
-                 + "· h² = ส่วนของความแปรปรวนของข้อนั้นที่องค์ประกอบอธิบายได้ "
-                 + "· หมุนแกนแบบ varimax หลังสกัดด้วย principal axis factoring "
-                 + "· ข้อที่ถามกลับด้านจะได้น้ำหนักติดลบ ซึ่งเป็นวิธีสังเกตว่ายังไม่ได้กลับคะแนน")
+            Text(localised: "Bold = |loading| ≥ \(String(format: "%.2f", FactorLoading.salient)) · h² = the share of that item's variance the factors explain · varimax rotation after principal axis factoring · a reverse-worded item loads negative, which is how you notice it has not been reverse-scored",
+                 "Legend under the factor loading table. Placeholder is the salience threshold.")
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -255,27 +268,32 @@ struct ScaleValidityBox: View {
     @ViewBuilder
     private func constructFit(_ fit: ConstructFit) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("ข้อลงตรงกับ construct ที่ประกาศไว้ไหม").font(.callout).bold()
+            Text(localised: "Do the items land on the constructs they were declared for?",
+                 "Heading over the construct alignment table.")
+                .font(.callout).bold()
             ForEach(fit.constructs) { row in
                 HStack(spacing: 6) {
                     Image(systemName: row.isClean ? "checkmark.circle" : "exclamationmark.circle")
                         .foregroundStyle(row.isClean ? Color.green : Color.orange)
                     Text(constructName(row.constructID)).font(.caption)
-                    Text(row.factor.map { "→ F\($0 + 1) · \(row.itemsOnFactor)/\(row.itemsDeclared) ข้อ" }
-                         ?? "ไม่มีองค์ประกอบไหนที่ข้อของ construct นี้เกาะร่วมกัน")
+                    Text(row.factor.map {
+                        t("→ F\($0 + 1) · \(row.itemsOnFactor)/\(row.itemsDeclared) items",
+                          "Which factor a construct's items landed on. Placeholders: the factor number, how many landed there, and how many were declared.")
+                    } ?? t("no factor holds this construct's items together",
+                           "Shown when a construct's items did not group."))
                         .font(.caption2).foregroundStyle(.secondary)
                     Spacer()
                 }
             }
             if !fit.misplaced.isEmpty {
-                Text("ข้อที่ลงคนละองค์ประกอบกับที่ประกาศไว้: "
-                     + fit.misplaced.map { prompt($0) }.joined(separator: " · "))
+                Text(localised: "Items that landed on a different factor than declared: \(fit.misplaced.map { prompt($0) }.joined(separator: " · "))",
+                     "Names the cross-loading items. Placeholder is the list of them.")
                     .font(.caption2).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
             ForEach(Array(fit.mergedConstructs.enumerated()), id: \.offset) { _, merged in
-                Text("ข้อมูลแยก construct เหล่านี้ออกจากกันไม่ได้: "
-                     + merged.map { constructName($0) }.joined(separator: " + "))
+                Text(localised: "The data cannot separate these constructs: \(merged.map { constructName($0) }.joined(separator: " + "))",
+                     "Names constructs the factor solution merged. Placeholder is the list of them.")
                     .font(.caption2).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -300,7 +318,9 @@ struct ScaleValidityBox: View {
     @ViewBuilder
     private func skipped(_ analysis: ScaleReport) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("ข้อที่ไม่ได้นำมาคำนวณ").font(.caption).bold().foregroundStyle(.secondary)
+            Text(localised: "Items not included in the computation",
+                 "Heading over items excluded from the analysis.")
+                .font(.caption).bold().foregroundStyle(.secondary)
             ForEach(analysis.skippedItems) { item in
                 Text("• \(item.prompt) — \(item.reason)")
                     .font(.caption2).foregroundStyle(.secondary)

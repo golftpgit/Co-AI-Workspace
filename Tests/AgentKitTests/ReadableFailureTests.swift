@@ -40,7 +40,7 @@ struct ReadableFailureTests {
         let failure = ReadableFailure.explain(cocoa, doing: "บันทึกรายการแหล่งข้อมูล")
         #expect(failure.kind == .outOfSpace)
         // The question a person actually has: did I lose it?
-        #expect(failure.what.contains("ยังไม่ถูกบันทึก"))
+        #expect(failure.what.contains("has not been saved"))
         // Retrying a write to a full disk is a loop, so nothing may offer it.
         #expect(failure.isTransient == false)
         #expect(failure.whatToDo.contains("ลองใหม่อีกครั้ง") == false)
@@ -97,7 +97,7 @@ struct ReadableFailureTests {
         let kept = ReadableFailure.unreadableFile(doing: "รายชื่อบอท",
                                                   backup: "channels.unreadable.json")
         #expect(kept.whatToDo.contains("channels.unreadable.json"))
-        #expect(kept.whatToDo.contains("ยังไม่มีอะไรหาย"))
+        #expect(kept.whatToDo.contains("nothing is lost"))
     }
 
     // Real: port 1 on loopback, where nothing listens.

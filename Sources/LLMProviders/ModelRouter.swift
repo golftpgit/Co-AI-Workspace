@@ -134,7 +134,15 @@ public struct RoutingError: Error, CustomStringConvertible {
 }
 
 public actor ModelRouter {
-    private let executors: [any LLMExecutor]
+    /// The chain, in the order it is tried.
+    ///
+    /// A `var` because the person can change it: endpoints are added, edited
+    /// and deleted on the settings screen, and this used to be a `let` built
+    /// once during boot — so an endpoint somebody had just saved was written to
+    /// `bootstrap.plist` and then ignored until the app was restarted, with
+    /// nothing on screen saying so (AUDIT F-1). The chat composer offers what
+    /// `offered` returns, so the GX10 they had just added simply was not there.
+    private var executors: [any LLMExecutor]
     private let sink: (any SpanSink)?
     /// Availability is probed rarely, not per call: a probe on the hot path
     /// would cost more than the request it is guarding.
@@ -150,10 +158,28 @@ public actor ModelRouter {
                 governor: BudgetGovernor? = nil,
                 availabilityTTL: Duration = .seconds(30)) {
         self.governor = governor
-        // Cheapest first; escalation walks up the tiers.
-        self.executors = executors.sorted { $0.tier < $1.tier }
+        self.executors = Self.ordered(executors)
         self.sink = spanSink
         self.availabilityTTL = availabilityTTL
+    }
+
+    /// Cheapest first; escalation walks up the tiers (§9.2). One function so the
+    /// order cannot come out differently depending on which door the chain
+    /// arrived through.
+    private static func ordered(_ executors: [any LLMExecutor]) -> [any LLMExecutor] {
+        executors.sorted { $0.tier < $1.tier }
+    }
+
+    /// Swaps the whole chain — what the settings screen calls after saving.
+    ///
+    /// **The availability cache is cleared, always.** It is keyed by identifier,
+    /// and an identifier can now point at a different server than it did thirty
+    /// seconds ago: keeping the old verdict means the endpoint somebody has just
+    /// corrected goes on being skipped, for no reason anybody can see on screen.
+    /// Clearing it costs one probe.
+    public func replaceExecutors(_ new: [any LLMExecutor]) {
+        executors = Self.ordered(new)
+        availability.removeAll()
     }
 
     /// What a person may choose between, in the order the chain would try them

@@ -44,22 +44,22 @@ public struct BlueprintProblem: Sendable, Equatable, Identifiable {
     public var text: String {
         switch kind {
         case .itemMeasuresNothing:
-            "“\(subject)” ไม่ได้ผูกกับ construct และไม่ได้ติดป้ายว่าเป็นข้อมูลพื้นฐาน — "
-                + "ข้อที่ไม่วัดอะไรเลยคือคอลัมน์ที่วิเคราะห์ไม่ได้ (§20.3)"
+            localised("“\(subject)” is tied to no construct and is not marked as background data — ", "A gate failure. Placeholder: the item.")
+                + localised("an item that measures nothing is a column nothing can be done with (§20.3)", "Ends a gate failure.")
         case .demographicWithConstruct:
-            "“\(subject)” ติดป้ายข้อมูลพื้นฐานแต่ผูกกับ construct ด้วย — เลือกอย่างใดอย่างหนึ่ง"
+            localised("“\(subject)” is marked as background data and tied to a construct — it must be one or the other", "A gate failure. Placeholder: the item.")
         case .constructWithoutItems:
-            "construct “\(subject)” ยังไม่มีข้อคำถามวัดมันเลย"
+            localised("no item measures the construct “\(subject)”", "A gate failure. Placeholder: the construct.")
         case .constructWithoutResearchQuestion:
-            "construct “\(subject)” ไม่ได้ผูกกับคำถามวิจัยข้อใด"
+            localised("the construct “\(subject)” is tied to no research question", "A gate failure. Placeholder: the construct.")
         case .researchQuestionWithoutConstruct:
-            "คำถามวิจัย “\(subject)” ไม่มี construct ใดตอบมัน"
+            localised("no construct answers the research question “\(subject)”", "A gate failure. Placeholder: the research question.")
         case .skipTargetInvalid:
-            "เงื่อนไขข้ามของ “\(subject)” ชี้ไปที่ข้อที่ไม่มีอยู่ หรืออยู่หลังตัวมันเอง"
+            localised("the skip condition on “\(subject)” points at an item that does not exist, or at one before itself", "A gate failure. Placeholder: the item.")
         case .constructNotScorable:
-            "construct “\(subject)” วัดด้วยข้อที่ให้คะแนนไม่ได้ทั้งหมด — คำนวณความเที่ยงไม่ได้เลย"
+            localised("every item measuring the construct “\(subject)” is unscorable — its reliability cannot be computed at all", "A gate failure. Placeholder: the construct.")
         case .noItems:
-            "แบบสอบถามยังไม่มีข้อคำถาม"
+            localised("the questionnaire has no items yet", "A gate failure.")
         }
     }
 }
@@ -155,7 +155,7 @@ public enum InstrumentError: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .notReady(let unmet):
-            "ยังเผยแพร่เครื่องมือนี้ไม่ได้ — ค้าง: " + unmet.joined(separator: " · ")
+            localised("this instrument cannot be published yet — outstanding: ", "Introduces the unmet gate conditions.") + unmet.joined(separator: " · ")
         }
     }
 }
@@ -192,7 +192,7 @@ public struct InstrumentApproval: Sendable, Codable, Equatable, Identifiable {
     }
 
     public var summary: String {
-        "ผ่านประตูแล้วโดย \(approvedBy) · "
+        localised("through the gate, approved by \(approvedBy) · ", "Says who approved an instrument. Placeholder: the approver.")
             + approvedAt.formatted(date: .abbreviated, time: .shortened)
     }
 }
@@ -236,16 +236,16 @@ public enum InstrumentGate {
                                 validity: ContentValidity?) -> InstrumentEvaluation {
         let problems = Blueprint.problems(in: instrument)
         var conditions: [InstrumentCondition] = [
-            InstrumentCondition(text: "ผังข้อคำถามครบ (ทุกข้อผูก construct หรือติดป้ายข้อมูลพื้นฐาน)",
+            InstrumentCondition(text: localised("the item map is complete (every item is tied to a construct or marked as background data)", "A gate condition."),
                                 satisfied: problems.isEmpty,
                                 detail: problems.isEmpty
                                     ? nil
                                     : problems.map(\.text).joined(separator: " · ")),
             // §20.5 — checked at the gate, not in the UI, because a UI check is
             // a check that a second entry point skips.
-            InstrumentCondition(text: "มีหน้าความยินยอมครบทุกช่อง",
+            InstrumentCondition(text: localised("the consent page is complete", "A gate condition."),
                                 satisfied: instrument.consent?.isComplete == true),
-            InstrumentCondition(text: "มีบันทึกจริยธรรม (เลขรับรอง หรือคำประกาศว่าไม่เข้าข่าย) พร้อมชื่อผู้แจ้ง",
+            InstrumentCondition(text: localised("an ethics record exists (an approval number or a declaration of exemption) naming who recorded it", "A gate condition."),
                                 satisfied: instrument.ethics?.isComplete == true,
                                 detail: instrument.ethics?.summary),
         ]
@@ -262,15 +262,15 @@ public enum InstrumentGate {
             let assessed = Set(validity.items.map(\.itemID))
             let coversTheInstrument = reviewed == assessed
             conditions.append(InstrumentCondition(
-                text: "ความตรงเชิงเนื้อหาผ่านเกณฑ์ (IOC ≥ 0.5 ทุกข้อ · I-CVI ≥ 0.78 · S-CVI/Ave ≥ 0.90)",
+                text: localised("content validity meets the thresholds (IOC ≥ 0.5 on every item · I-CVI ≥ 0.78 · S-CVI/Ave ≥ 0.90)", "A gate condition."),
                 satisfied: validity.passes && coversTheInstrument,
                 detail: coversTheInstrument
                     ? validity.summary
-                    : "ผลประเมินที่ส่งมาไม่ตรงกับชุดข้อคำถามของเครื่องมือนี้ "
-                        + "(ประเมิน \(assessed.count) ข้อ จากที่ต้องประเมิน \(reviewed.count) ข้อ)"))
+                    : localised("the assessment submitted does not match this instrument's items ", "Why a gate condition is unmet.")
+                        + localised("(\(assessed.count) items assessed of the \(reviewed.count) that need it)", "Ends the mismatch reason. Placeholders: the assessed and required counts.")))
         } else {
             conditions.append(InstrumentCondition(
-                text: "ยังไม่มีผลประเมินความตรงเชิงเนื้อหาจากผู้เชี่ยวชาญ",
+                text: localised("no expert content-validity assessment has been made yet", "Why a gate condition is unmet."),
                 satisfied: false))
         }
         return InstrumentEvaluation(conditions: conditions)
@@ -287,7 +287,7 @@ public enum InstrumentGate {
                                at date: Date = Date()) throws -> PublishedInstrument {
         var unmet = evaluate(instrument, validity: validity).unmet
         if person.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            unmet.append("ต้องมีชื่อผู้อนุมัติ")
+            unmet.append(localised("an approver has to be named", "Why a gate condition is unmet."))
         }
         guard unmet.isEmpty, let validity else {
             throw InstrumentError.notReady(unmet: unmet)

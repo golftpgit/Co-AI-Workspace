@@ -52,12 +52,15 @@ public struct Notebook: Sendable, Codable, Equatable, Identifiable {
     public var updatedAt: Date
 
     public init(id: String = OpaqueID.make("nb"),
-                title: String = "สมุดงานใหม่",
+                // Defaulted to nil rather than to the looked-up name: a default
+                // argument cannot call an internal function, and the catalogue
+                // helper is internal.
+                title: String? = nil,
                 scope: Scope = .central,
                 cells: [NotebookCell] = [NotebookCell(kind: .sql)],
                 updatedAt: Date = Date()) {
         self.id = id
-        self.title = title
+        self.title = title ?? localised("Untitled notebook", "Default name for a new notebook.")
         self.scope = scope
         self.cells = cells
         self.updatedAt = updatedAt
@@ -87,8 +90,8 @@ public enum NotebookError: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .needsConfirmation(let assessment):
-            "ต้องยืนยันก่อนรัน: \(assessment.summary)"
-        case .emptyCell: "เซลล์ว่าง"
+            localised("needs confirming before it runs: \(assessment.summary)", "Why a cell did not run. Placeholder: what the statements would do.")
+        case .emptyCell: localised("the cell is empty", "Why a cell did not run.")
         }
     }
 }

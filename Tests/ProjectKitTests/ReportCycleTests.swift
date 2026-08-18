@@ -70,8 +70,8 @@ struct ReportCycleTests {
         // One report, covering the whole gap, and it says so.
         #expect(due.since == day(1))
         let note = try #require(due.gapNote)
-        #expect(note.contains("2 รอบ"))
-        #expect(note.contains("ไม่ได้ย้อนออกทีละรอบ"))
+        #expect(note.contains("2 cycles"))
+        #expect(note.contains("rather than backfilling each"))
     }
 
     @Test("an ordinary report carries no apology")

@@ -21,14 +21,19 @@ import ExecutorContract
 
 /// Where Tier 1 is, for this machine.
 ///
-/// LM Studio on the loopback by default, because that is what a laptop has.
-/// `COAI_TEST_ENDPOINT` points the whole contract at another one — the GX10 on
-/// the LAN, say — which is the only way these cases run against the model the
-/// app will actually use in anger (§17.1, P15.2). Same shape as
-/// `COAI_TEST_MODEL` below: which endpoint exists is a property of the machine,
-/// not of the repo.
+/// The GX10 by default — it is the main brain (§17.1, P15), and these cases are
+/// the only ones that run against the model the app will actually use in anger.
+/// `COAI_TEST_ENDPOINT` points the contract somewhere else when the machine has
+/// somewhere else; `scripts/check.sh` sets it after probing, so a run started
+/// from there never has to guess.
+///
+/// **The default used to be LM Studio on the loopback** and that is worth
+/// keeping in mind rather than in a commit message: on the day it was audited
+/// the loopback was dead and the GX10 was up, so the whole Tier 1 suite had been
+/// skipping in every round while the summary said everything passed (AUDIT F-2).
+/// LM Studio is no longer part of any path (C7).
 private let tierOne: URL = ProcessInfo.processInfo.environment["COAI_TEST_ENDPOINT"]
-    .flatMap { URL(string: $0) } ?? URL(string: "http://127.0.0.1:1234/v1")!
+    .flatMap { URL(string: $0) } ?? URL(string: "http://192.168.1.205:8000/v1")!
 
 /// Which model to test against is a property of the machine, not of the repo —
 /// the same per-machine setting as `selfHostedEndpoint` in `bootstrap.plist`.
@@ -64,6 +69,19 @@ private func skipped(_ message: String) {
     print("SKIPPED: \(message)")
 }
 
+/// A skip that leaves the main brain unchecked.
+///
+/// The two kinds used to print the same word, and that is the whole of AUDIT
+/// F-2: "no Python, so the notebook cases did not run" and "Tier 1 was never
+/// exercised at all" are not the same sentence, but they read as the same
+/// sentence, and `ALL CHECKS PASSED` was printed on top of both. Tier 1 has
+/// been the main brain since P15 went to the head of the queue, so its absence
+/// is a hole in the round. `check.sh` counts these separately and `--full`
+/// turns them red.
+private func skippedCritical(_ message: String) {
+    print("SKIPPED-CRITICAL: \(message)")
+}
+
 /// Runs the shared contract and reports each outcome as itself: a failure
 /// fails, and a case that could not be checked is announced. A case that does
 /// not apply is neither: an executor that declares no tool calling and has no
@@ -76,6 +94,12 @@ private func runContract(against executor: any LLMExecutor) async {
         case .skipped:
             skipped("[\(executor.identifier)] \(outcome.name) — \(outcome.detail)")
         case .failed:
+            // Printed *as well as* recorded. Swift Testing's compact output
+            // shows "Issue recorded" and swallows the comment, so three rounds
+            // of this failing (F-11) said nothing about which case or what it
+            // saw — a failure that cannot name itself is the same silence as a
+            // skip that reads like a pass (M5).
+            print("CONTRACT-FAILED: [\(executor.identifier)] \(outcome.name) — \(outcome.detail)")
             Issue.record("\(executor.identifier) — \(outcome.name): \(outcome.detail)")
         }
     }
@@ -109,7 +133,7 @@ struct VLLMExecutorTests {
     @Test("keeps the executor contract", .timeLimit(.minutes(10)))
     func keepsTheContract() async {
         guard let model = await servedModel() else {
-            skipped("no OpenAI-compatible endpoint at \(tierOne.absoluteString) — Tier 1 unchecked")
+            skippedCritical("no OpenAI-compatible endpoint at \(tierOne.absoluteString) — Tier 1 unchecked")
             return
         }
         await runContract(against: executor(model))
@@ -118,7 +142,7 @@ struct VLLMExecutorTests {
     @Test("availability also validates the configured model name", .timeLimit(.minutes(1)))
     func availabilityChecksModel() async {
         guard let model = await servedModel() else {
-            skipped("no OpenAI-compatible endpoint at \(tierOne.absoluteString) — Tier 1 unchecked")
+            skippedCritical("no OpenAI-compatible endpoint at \(tierOne.absoluteString) — Tier 1 unchecked")
             return
         }
         #expect(await executor(model).isAvailable())
@@ -145,7 +169,7 @@ struct LiveRoutingTests {
     @Test("a live chain answers even when Tier 0 refuses", .timeLimit(.minutes(4)))
     func liveChain() async throws {
         guard let model = await servedModel() else {
-            skipped("no OpenAI-compatible endpoint at \(tierOne.absoluteString) — Tier 1 unchecked")
+            skippedCritical("no OpenAI-compatible endpoint at \(tierOne.absoluteString) — Tier 1 unchecked")
             return
         }
         let router = ModelRouter(executors: [

@@ -156,19 +156,26 @@ await check("endpoint ที่ตั้งไว้ต่อไม่ได้�
     try await OfflineFloor.endpointIsDown()
 }
 
-// The floor cannot be demonstrated with a model that will not fit — and on a
-// 16 GB machine that happens for an honest reason: the *app* is holding the
-// same weights. Skipped loudly rather than failed, exactly as elsewhere.
-let floorAdmission = AdmissionControl.admit(model, memory: MachineMemory.current())
+// The floor is demonstrated with the *smallest* model that fits, not the one
+// chosen to do real work. Those were the same value until now, which is why
+// this check passed or skipped depending on how much memory happened to be free
+// at the moment it ran (E.46) — a floor decided by auction is not a floor.
+let floorModel = await LocalModelCatalog
+    .standard(appModelsDirectory: nil)
+    .floorModel() ?? model
+if floorModel.name != model.name {
+    print("   พื้นรับประกันวัดกับ: \(floorModel.name)")
+}
+let floorAdmission = AdmissionControl.admit(floorModel, memory: MachineMemory.current())
 if floorAdmission.isBlocking {
     print("   ⊘ ข้ามเช็คพื้นรับประกัน — \(floorAdmission.reason)")
 } else {
     await check("งาน high-impact ยังทำงานได้ ตกลงมาที่โมเดลบนเครื่อง") {
-        try await OfflineFloor.routesConsequentialWork(model)
+        try await OfflineFloor.routesConsequentialWork(floorModel)
     }
 
     await check("ตรวจข้อขัดแย้งได้โดยไม่มีเน็ต — ไม่ใช่เงียบว่าไม่มีข้อขัดแย้ง") {
-        try await OfflineFloor.detectsConflictsOffline(model)
+        try await OfflineFloor.detectsConflictsOffline(floorModel)
     }
 }
 

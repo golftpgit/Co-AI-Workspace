@@ -27,20 +27,21 @@ struct ParticipantsBox: View {
     @State private var who = ""
 
     var body: some View {
-        GroupBox("ผู้เข้าร่วม (รหัสนิรนาม สำหรับงานหลายรอบ)") {
+        GroupBox(t("Participants (anonymous codes, for multi-wave studies)",
+                   "Box heading over the participant register.")) {
             VStack(alignment: .leading, spacing: 8) {
                 enrolRow
                 if !model.attrition.isEmpty { attritionRows }
                 if model.participants.isEmpty {
-                    Text("ยังไม่มีผู้เข้าร่วมที่ลงทะเบียน — งานที่เก็บรอบเดียวแบบนิรนามไม่ต้องใช้ส่วนนี้")
+                    Text(localised: "No participant registered — an anonymous one-shot study does not need this section",
+                         "Empty state in the participant register.")
                         .font(.callout).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
                     codes
                 }
-                Text(markdown: "ตัวตนของผู้เข้าร่วมถูกเข้ารหัสไว้ใน **ไฟล์คนละไฟล์กับคำตอบ** "
-                     + "ด้วยคีย์ใน Keychain ของโปรเจกต์นี้ — สำเนาข้อมูลคำตอบจึงไม่มีตัวตนติดไปเลย · "
-                     + "การเปิดดูว่ารหัสไหนเป็นใคร **ถูกบันทึกทุกครั้ง** พร้อมเหตุผลและชื่อคนที่เปิด (§20.7)")
+                Text(markdown: t("Participant identities are encrypted in **a different file from the answers**, with a key in this project's Keychain — so a copy of the response data carries no identity at all · looking up who a code belongs to **is recorded every time**, with the reason and the name of whoever looked (§20.7)",
+                                 "Explains where identities live and that lookups are audited."))
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -50,15 +51,19 @@ struct ParticipantsBox: View {
 
     private var enrolRow: some View {
         HStack {
-            TextField("อีเมลหรือชื่อผู้เข้าร่วม (เก็บแบบเข้ารหัส)", text: $identity)
+            TextField(t("Email or name of the participant (stored encrypted)",
+                        "Text field for the identity that will be encrypted."),
+                      text: $identity)
                 .textFieldStyle(.roundedBorder)
-            Button("ลงทะเบียนและออกรหัส") {
+            Button(t("Register and issue a code", "Button that registers a participant.")) {
                 let value = identity
                 identity = ""
                 Task { await model.enrol(identity: value) }
             }
             .disabled(identity.trimmingCharacters(in: .whitespaces).isEmpty)
-            Button("เชิญทุกคนเข้ารอบนี้") { Task { await model.inviteAllToCurrentWave() } }
+            Button(t("Invite everybody into this wave", "Button that adds every participant to the open wave.")) {
+                Task { await model.inviteAllToCurrentWave() }
+            }
                 .disabled(model.participants.isEmpty || !model.waveIsOpen)
         }
         .controlSize(.small)
@@ -72,8 +77,8 @@ struct ParticipantsBox: View {
                         .foregroundStyle(.secondary)
                     // The number a longitudinal study has to report, and the one
                     // that decides whether its later waves mean anything.
-                    Text("รอบนี้: เชิญ \(row.invited) คน · ตอบกลับ \(row.responded) คน "
-                         + String(format: "(%.0f%%)", row.rate * 100))
+                    Text(localised: "This wave: \(row.invited) invited · \(row.responded) responded \(String(format: "(%.0f%%)", row.rate * 100))",
+                         "Attrition row. Placeholders: how many were invited, how many answered, and the rate in brackets.")
                         .font(.caption)
                 }
                 .accessibilityElement(children: .combine)
@@ -90,19 +95,21 @@ struct ParticipantsBox: View {
                     Text(participant.enrolledAt.formatted(date: .abbreviated, time: .omitted))
                         .font(.caption2).foregroundStyle(.secondary)
                     Spacer()
-                    Button("คัดลอกลิงก์") {
+                    Button(t("Copy the link", "Button that copies a participant's survey link.")) {
                         let base = model.serving?.urls.first ?? ""
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString("\(base)?code=\(participant.code)",
                                                        forType: .string)
                     }
                     .disabled(model.serving == nil)
-                    .accessibilityLabel("คัดลอกลิงก์แบบสอบถามของรหัส \(participant.code)")
-                    Button("ดูว่าเป็นใคร") {
+                    .accessibilityLabel(t("Copy the survey link for code \(participant.code)",
+                                          "Screen-reader label. Placeholder is the participant code."))
+                    Button(t("See who this is", "Button that reveals a participant's identity, which is audited.")) {
                         reason = ""
                         revealing = participant.code
                     }
-                    .accessibilityLabel("เปิดดูตัวตนของรหัส \(participant.code) — จะถูกบันทึก")
+                    .accessibilityLabel(t("Reveal the identity behind code \(participant.code) — this is recorded",
+                                          "Screen-reader label. Placeholder is the participant code."))
                 }
                 .controlSize(.small)
             }
@@ -116,15 +123,17 @@ struct ParticipantsBox: View {
     @ViewBuilder
     private var revealSheet: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("เปิดดูตัวตนของรหัส \(revealing ?? "")").font(.headline)
-            Text("การเปิดดูนี้จะถูกบันทึกไว้พร้อมเหตุผลและชื่อของคุณ ไม่ว่าจะพบรหัสนี้หรือไม่ — "
-                 + "คำถามที่บันทึกตอบคือ “ใครเปิดดู” ไม่ใช่ “ใครเปิดดูสำเร็จ”")
+            Text(localised: "Reveal the identity behind code \(revealing ?? "")",
+                 "Title of the reveal sheet. Placeholder is the participant code.")
+                .font(.headline)
+            Text(localised: "This lookup is recorded with your reason and your name whether or not the code is found — the question the record answers is “who looked”, not “who looked successfully”",
+                 "Explains that the audit records attempts, not just successes.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            TextField("เหตุผลที่ต้องเปิดดู", text: $reason)
+            TextField(t("Reason for looking", "Text field: why the identity is being revealed."), text: $reason)
                 .textFieldStyle(.roundedBorder)
-            TextField("ชื่อคุณ", text: $who)
+            TextField(t("Your name", "Text field: who is looking."), text: $who)
                 .textFieldStyle(.roundedBorder)
 
             if let revealed = model.revealed, revealed.code == revealing {
@@ -137,8 +146,10 @@ struct ParticipantsBox: View {
 
             HStack {
                 Spacer()
-                Button("ปิด") { revealing = nil; model.hideRevealed() }
-                Button("เปิดดู") {
+                Button(t("Close", "Button that dismisses the endpoint sheet without saving.")) {
+                    revealing = nil; model.hideRevealed()
+                }
+                Button(t("Reveal it", "Button that performs the audited identity lookup.")) {
                     guard let code = revealing else { return }
                     Task { await model.reveal(code: code, reason: reason, by: who) }
                 }

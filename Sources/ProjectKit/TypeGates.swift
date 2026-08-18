@@ -108,25 +108,34 @@ public enum TypeGateConditions {
     /// blocks the gate and says so; this table is what keeps the gap in front of
     /// a person instead of in a backlog.
     public static let notAnswerableYet: [String: String] = [
-        "guide_reviewed": "P11.8 — แนวสัมภาษณ์ยังไม่มีที่เก็บและยังไม่มีขั้นตอนตรวจ",
+        "guide_reviewed": t("P11.8 — an interview guide has nowhere to live yet and no review step",
+                            "Why a project-type gate condition cannot be checked automatically."),
         // `intercoder_agreement` moved to `answerable` with P11.8: the codings
         // have a store, so "did this study do the check" is a question the
         // database answers. Whether κ was *good* stays out of the gate — see
         // `ProjectTypeGateReader.hasIntercoderAgreement`.
-        "saturation_reached": "P11.8 — เส้นโค้งความอิ่มตัวคำนวณและแสดงแล้ว แต่การ*ประกาศ*ว่าอิ่มตัวเป็นข้อสรุปของผู้วิจัย ไม่ใช่ของซอฟต์แวร์",
-        "assumptions_checked": "P6.6 — StatGate ตรวจ assumption แล้ว แต่ยังไม่ได้ผูกผลกลับมาที่ประตูของโปรเจกต์",
-        "source_recorded": "P6 — ยังไม่ได้ผูกที่มาของชุดข้อมูลกลับมาที่ประตู",
-        "quantitative_done": "P11 — งานผสมวิธียังไม่มีตัวชี้ว่าฝั่งปริมาณจบแล้ว",
-        "qualitative_done": "P11.8 — เช่นเดียวกันกับฝั่งคุณภาพ",
-        "integration_stated": "P11.9 — ยังไม่มีที่ให้เขียนว่าสองฝั่งบรรจบกันตรงไหน",
-        "tests_green": "P9 — ยังไม่ได้ผูกผลเทสของโปรเจกต์ปลายทางกลับมาที่ประตู",
-        "reviewed_by_person": "P10 — QA รับงานรายใบแล้ว แต่ยังไม่มีข้อสรุประดับ increment",
+        "saturation_reached": t("P11.8 — the saturation curve is computed and drawn, but *declaring* saturation is the researcher's conclusion, not the software's",
+                                "Why a project-type gate condition cannot be checked automatically."),
+        "assumptions_checked": t("P6.6 — StatGate checks assumptions, but the result is not wired back to the project gate",
+                                 "Why a project-type gate condition cannot be checked automatically."),
+        "source_recorded": t("P6 — a dataset's provenance is not wired back to the gate yet",
+                             "Why a project-type gate condition cannot be checked automatically."),
+        "quantitative_done": t("P11 — mixed-methods work has no marker for the quantitative side being finished",
+                               "Why a project-type gate condition cannot be checked automatically."),
+        "qualitative_done": t("P11.8 — the same for the qualitative side",
+                              "Why a project-type gate condition cannot be checked automatically."),
+        "integration_stated": t("P11.9 — there is nowhere yet to write where the two sides meet",
+                                "Why a project-type gate condition cannot be checked automatically."),
+        "tests_green": t("P9 — the target project's test results are not wired back to the gate yet",
+                         "Why a project-type gate condition cannot be checked automatically."),
+        "reviewed_by_person": t("P10 — QA accepts work package by package, but there is no conclusion at the increment level",
+                                "Why a project-type gate condition cannot be checked automatically."),
     ]
 
     /// Turns the type's gates into gate conditions.
     ///
     /// One condition per requirement rather than one per gate: "G-instrument
-    /// ยังไม่ผ่าน" sends somebody hunting for which of three things is missing,
+    /// not passed" sends somebody hunting for which of three things is missing,
     /// which is the same mistake the closing gate already learned not to make
     /// with the seventeen practices.
     public static func conditions(for gates: [ProjectTypeGate],
@@ -140,35 +149,39 @@ public enum TypeGateConditions {
 
     static func condition(gate: ProjectTypeGate, requirement: String,
                           facts: TypeGateFacts) -> GateCondition {
-        let prefix = "\(gate.id) (หลัง \(gate.after)): \(requirement)"
+        let prefix = t("\(gate.id) (after \(gate.after)): \(requirement)",
+                       "Prefix of a project-type gate condition. Placeholders: the gate id, what it comes after, and the requirement.")
         if let known = facts.known[requirement] {
-            return GateCondition(text: known ? prefix : "\(prefix) — ยังไม่ผ่าน",
+            return GateCondition(text: known
+                                 ? prefix
+                                 : t("\(prefix) — not passed",
+                                     "A project-type gate condition that fails. Placeholder is the condition."),
                                  satisfied: known)
         }
         if answerable.contains(requirement) {
             // The check exists and nothing ran it — the reader is not wired, or
             // it could not reach the store it needed. §19.12's rule again:
-            // ไม่มีทางถาม ไม่เท่ากับอนุญาต. It blocks, and it says which of the
+            // No way to ask is not the same as permission. It blocks, and it says which of the
             // two situations this is, because "we cannot check" and "we do not
             // know that word" send somebody to different places.
-            return GateCondition(text: "\(prefix) — ระบบตรวจข้อนี้ได้ แต่ยังไม่ได้ตรวจ "
-                                 + "(ยังไม่ได้ต่อกับที่เก็บข้อมูลที่ต้องใช้)",
+            return GateCondition(text: t("\(prefix) — this can be checked but has not been (not connected to the store it needs)",
+                                         "A checkable but unchecked gate condition. Placeholder is the condition."),
                                  satisfied: false)
         }
         if let gap = notAnswerableYet[requirement] {
             // Vacuous, not passed. It does not block — see the note at the top of
             // this file — but it renders as unchecked, so nobody reads the gate
             // as having confirmed something no build can confirm.
-            return GateCondition(text: "\(prefix) — ระบบยังตรวจข้อนี้เองไม่ได้ (\(gap)) "
-                                 + "· ต้องยืนยันด้วยตาคนก่อนปิดขั้น",
+            return GateCondition(text: t("\(prefix) — this cannot be checked automatically (\(gap)) · a person has to confirm it before the stage closes",
+                                         "A gate condition needing human confirmation. Placeholders: the condition and why it cannot be automated."),
                                  satisfied: true, vacuous: true)
         }
         // A name no table knows. Blocking is the point: a condition that could be
         // invented and quietly do nothing would make the whole `gate:` line
         // decorative again.
         return GateCondition(
-            text: "\(prefix) — ไม่รู้จักเงื่อนไขชื่อนี้ · สะกดผิดในไฟล์ชนิดโปรเจกต์ "
-                + "หรือเป็นเงื่อนไขใหม่ที่ยังไม่ได้ขึ้นทะเบียนใน `TypeGateConditions`",
+            text: t("\(prefix) — this condition name is unknown · a typo in the project-type file, or a new condition not yet registered in `TypeGateConditions`",
+                    "A gate condition nobody recognises. Placeholder is the condition."),
             satisfied: false)
     }
 }
